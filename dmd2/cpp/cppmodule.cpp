@@ -570,16 +570,17 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D)
                         wrapInTemp = false;
                         break;
                     }
-                    case clang::OO_PlusEqual: op = "+";
-                    case clang::OO_MinusEqual: op = "-";
-                    case clang::OO_StarEqual: op = "*";
-                    case clang::OO_SlashEqual: op = "/";
-                    case clang::OO_PercentEqual: op = "%";
-                    case clang::OO_CaretEqual: op = "^";
-                    case clang::OO_AmpEqual: op = "&";
-                    case clang::OO_PipeEqual: op = "|";
-                    case clang::OO_LessLessEqual: op = "<<";
+                    case clang::OO_PlusEqual: op = "+"; goto end_opOpAssign;
+                    case clang::OO_MinusEqual: op = "-"; goto end_opOpAssign;
+                    case clang::OO_StarEqual: op = "*"; goto end_opOpAssign;
+                    case clang::OO_SlashEqual: op = "/"; goto end_opOpAssign;
+                    case clang::OO_PercentEqual: op = "%"; goto end_opOpAssign;
+                    case clang::OO_CaretEqual: op = "^"; goto end_opOpAssign;
+                    case clang::OO_AmpEqual: op = "&"; goto end_opOpAssign;
+                    case clang::OO_PipeEqual: op = "|"; goto end_opOpAssign;
+                    case clang::OO_LessLessEqual: op = "<<"; goto end_opOpAssign;
                     case clang::OO_GreaterGreaterEqual: op = ">>";
+end_opOpAssign:
                         opIdent = Id::opOpAssign;
                         break;
                     default:
