@@ -46,6 +46,7 @@ Expression* ExprMapper::fromUnaExp(const clang::UnaryOperator *E)
         case clang::UO_Minus: return new NegExp(loc, sub);
         case clang::UO_Not: return new NotExp(loc, sub);
         case clang::UO_LNot: return new NotExp(loc, sub);
+        case clang::UO_Deref: return new PtrExp(loc, sub);
     }
 
     llvm::llvm_unreachable_internal("Unhandled C++ unary operation exp");
@@ -90,6 +91,8 @@ Expression* ExprMapper::fromBinExp(const clang::BinaryOperator* E)
         case clang::BO_DivAssign: return new DivAssignExp(loc, lhs, rhs);
 
         case clang::BO_Comma: return new CommaExp(loc, lhs, rhs);
+        case clang::BO_PtrMemD: return new DelegateFuncptrExp(loc, rhs);
+        case clang::BO_PtrMemI: return new DelegateFuncptrExp(loc, rhs);
     }
 
     llvm::llvm_unreachable_internal("Unhandled C++ binary operation exp");
