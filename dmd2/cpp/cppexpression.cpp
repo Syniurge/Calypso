@@ -268,6 +268,56 @@ Expression* ExprMapper::fromExpression(const clang::Expr* E, Type *destType,
         else
             return fromExpression(SNTTP->getReplacement());
     }
+    else if (auto CDSME = dyn_cast<clang::CXXDependentScopeMemberExpr>(E))
+    {
+        Expression *e1 = nullptr;
+        Identifier *ident;
+        ::TemplateInstance *tempinst = nullptr;
+        TypeQualified *tqual = nullptr;
+
+        if (auto NNS = CDSME->getQualifier())
+        {
+            tqual = TypeMapper::FromType(tymap).fromNestedNameSpecifier(NNS);
+            e1 = new TypeExp(loc, tqual);
+        }
+
+        if (CDSME->getMember().isIdentifier())
+        {
+            ident = fromIdentifier(CDSME->getMember().getAsIdentifierInfo());
+            if (tqual)
+            {
+                tqual->addIdent(ident);
+                auto base = CDSME->getBase();
+                e1 = new DotTypeExp(loc, fromExpression(base, tymap.fromType(base->getType())), new Dsymbol(ident));
+            }
+        }
+        else
+            assert(false && "Unhandled Member Expr");
+
+        if (CDSME->hasExplicitTemplateArgs())
+        {
+            auto tiargs = fromASTTemplateArgumentListInfo(
+                        CDSME->getExplicitTemplateArgs(), tymap);
+
+            tempinst = new ::TemplateInstance(loc, ident);
+            tempinst->tiargs = tiargs;
+        }
+
+        if (e1)
+        {
+            if (tempinst)
+                return new DotTemplateInstanceExp(loc, e1, tempinst);
+            else
+                return new DotIdExp(loc, e1, ident);
+        }
+        else
+        {
+            if (tempinst)
+                return new TypeExp(loc, new TypeInstance(loc, tempinst));
+            else
+                return new IdentifierExp(loc, ident);
+        }
+    }
     else if (auto DSDR = dyn_cast<clang::DependentScopeDeclRefExpr>(E))
     {
         Expression *e1 = nullptr;
