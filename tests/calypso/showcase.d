@@ -107,6 +107,7 @@ void main()
     writeln("cls.priv.f = ", cls.priv.f);
     writeln("cls.echo(9, 8) = ", cls.echo(9, 8)); // 42 * 5 == 210 expected if the ctor was called
     writeln("cls.echo2(2.5) = ", cls.echo2(2.5));
+    //writeln("cls.testWideString() = ", cls.testWideString());  // FAILURE
 
     testMultipleInherit mul = new testMultipleInherit;
     mul.pointerToStruct = &cs;

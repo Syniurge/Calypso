@@ -26,6 +26,11 @@ float testClass::echo2(float f)
     return -1.0;
 }
 
+const wchar_t* testClass::testWideString(const wchar_t* defaultNotFound)
+{
+    return defaultNotFound;
+}
+
 int testInherit::echo(int a, int b)
 {
     return 42 * (a-b) * n;

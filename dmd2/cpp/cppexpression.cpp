@@ -217,12 +217,25 @@ Expression* ExprMapper::fromExpression(const clang::Expr* E, Type *destType,
     }
     else if (auto SL = dyn_cast<clang::StringLiteral>(E))
     {
+        char* data;
         utf8_t postfix = 0;
+
+        data = const_cast<char *>(SL->getBytes().data());
+
         if (SL->getCharByteWidth() == 2)
+	{
             postfix = 'w';
+            return new CastExp(loc, new StringExp(loc, data, SL->getLength(), postfix),
+                               new TypePointer(Type::tint16->constOf()));
+        }
         else if (SL->getCharByteWidth() == 4)
+	{
             postfix = 'd';
-        else assert(SL->getCharByteWidth() == 1);
+            return new CastExp(loc, new StringExp(loc, data, SL->getLength(), postfix),
+                               new TypePointer(Type::tint32->constOf()));
+        }
+        else
+            assert(SL->getCharByteWidth() == 1);
 
         return new StringExp(loc, const_cast<char*>(SL->getBytes().data()),
                              SL->getLength(), postfix);

@@ -26,6 +26,7 @@ namespace test {
         unsigned n;
         virtual int echo(int a, int b);
         virtual float echo2(float f);
+        virtual const wchar_t* testWideString(const wchar_t* defaultNotFound = L"unknown");
 
         testClass() { n = 1000; }
     };
