@@ -37,6 +37,7 @@
 #include "gen/structs.h"
 #include "gen/tollvm.h"
 #include "ir/irdsymbol.h"
+#include "ir/irfunction.h"
 #include "ir/irmodule.h"
 #include "ir/irtype.h"
 #include "ir/irvar.h"
@@ -169,15 +170,6 @@ File* Module::buildFilePath(const char* forcename, const char* path, const char*
     FileName::ensurePathExists(FileName::path(argobj));
 
     // always append the extension! otherwise hard to make output switches consistent
-    //   if (forcename)
-    //     return new File(argobj);
-    //   else
-    //     allow for .o and .obj on windows
-#if _WIN32
-    if (ext == global.params.objdir && FileName::ext(argobj)
-        && Port::stricmp(FileName::ext(argobj), global.obj_ext_alt) == 0)
-    return new File((char*)argobj);
-#endif
     return new File(FileName::forceExt(argobj, ext));
 }
 
@@ -433,8 +425,7 @@ static void build_dso_ctor_dtor_body(
 static void build_module_ref(std::string moduleMangle, llvm::Constant* thisModuleInfo)
 {
     // Build the ModuleInfo reference and bracketing symbols.
-    llvm::Type* const moduleInfoPtrTy =
-        getPtrToType(DtoType(Module::moduleinfo->type));
+    llvm::Type* const moduleInfoPtrTy = DtoPtrToType(Module::moduleinfo->type);
 
     std::string thismrefname = "_D";
     thismrefname += moduleMangle;
@@ -454,8 +445,7 @@ static void build_module_ref(std::string moduleMangle, llvm::Constant* thisModul
 static void build_dso_registry_calls(std::string moduleMangle, llvm::Constant* thisModuleInfo)
 {
     // Build the ModuleInfo reference and bracketing symbols.
-    llvm::Type* const moduleInfoPtrTy =
-        getPtrToType(DtoType(Module::moduleinfo->type));
+    llvm::Type* const moduleInfoPtrTy = DtoPtrToType(Module::moduleinfo->type);
 
     // Order is important here: We must create the symbols in the
     // bracketing sections right before/after the ModuleInfo reference
@@ -788,7 +778,8 @@ static void genModuleInfo(Module *m, bool emitFullModuleInfo)
         // The base struct should consist only of _flags/_index.
         if (Module::moduleinfo->structsize != 4 + 4)
         {
-            m->error("object.d ModuleInfo class is incorrect");
+            m->error("Unexpected size of struct object.ModuleInfo; "
+                "druntime version does not match compiler (see -v)");
             fatal();
         }
     }
@@ -797,8 +788,7 @@ static void genModuleInfo(Module *m, bool emitFullModuleInfo)
     RTTIBuilder b(Module::moduleinfo);
 
     // some types
-    llvm::Type* const moduleInfoPtrTy =
-        getPtrToType(DtoType(Module::moduleinfo->type));
+    llvm::Type* const moduleInfoPtrTy = DtoPtrToType(Module::moduleinfo->type);
     LLType* classinfoTy = Type::typeinfoclass->type->ctype->getLLType();
 
     // importedModules[]

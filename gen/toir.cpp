@@ -39,9 +39,9 @@
 #include "gen/tollvm.h"
 #include "gen/typeinf.h"
 #include "gen/warnings.h"
+#include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
 #include "ir/irtypestruct.h"
-#include "ir/irlandingpad.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
 #include <fstream>
@@ -189,16 +189,136 @@ static void write_struct_literal(Loc loc, LLValue *mem, StructDeclaration *sd, E
         voidptr = write_zeroes(voidptr, offset, sd->structsize);
 }
 
+namespace
+{
+void pushVarDtorCleanup(IRState* p, VarDeclaration* vd)
+{
+    llvm::BasicBlock *beginBB = llvm::BasicBlock::Create(
+        p->context(), llvm::Twine("dtor.") + vd->toChars(), p->topfunc());
+
+    // TODO: Clean this up with push/pop insertion point methods.
+    IRScope oldScope = p->scope();
+    p->scope() = IRScope(beginBB);
+    toElemDtor(vd->edtor);
+    p->func()->scopes->pushCleanup(beginBB, p->scopebb());
+    p->scope() = oldScope;
+}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+// Tries to find the proper lvalue subexpression of an assign/binassign expression.
+// Returns null if none is found.
+static Expression* findLvalueExp(Expression* e)
+{
+    class FindLvalueVisitor : public Visitor
+    {
+    public:
+        Expression* result;
+
+        FindLvalueVisitor() : result(NULL) {}
+
+        void visit(Expression* e) LLVM_OVERRIDE{}
+
+    #define FORWARD(TYPE)   void visit(TYPE* e) LLVM_OVERRIDE { e->e1->accept(this); }
+        FORWARD(AssignExp)
+        FORWARD(BinAssignExp)
+        FORWARD(CastExp)
+    #undef FORWARD
+
+    #define IMPLEMENT(TYPE) void visit(TYPE* e) LLVM_OVERRIDE { result = e; }
+        IMPLEMENT(VarExp)
+        IMPLEMENT(CallExp)
+        IMPLEMENT(PtrExp)
+        IMPLEMENT(DotVarExp)
+        IMPLEMENT(IndexExp)
+        IMPLEMENT(CommaExp)
+    #undef IMPLEMENT
+    };
+
+    FindLvalueVisitor v;
+    e->accept(&v);
+    return v.result;
+}
+
+// Evaluates an lvalue expression e and prevents further
+// evaluations as long as e->cachedLvalue isn't reset to null.
+static DValue* toElemAndCacheLvalue(Expression* e)
+{
+    DValue* value = toElem(e);
+    e->cachedLvalue = value->getLVal();
+    return value;
+}
+
+// Evaluates e and, if tryGetLvalue is true, returns the
+// (casted) nested lvalue if one is found.
+// Otherwise simply returns the expression's result.
+DValue* toElem(Expression* e, bool tryGetLvalue)
+{
+    if (!tryGetLvalue)
+        return toElem(e);
+
+    Expression* lvalExp = findLvalueExp(e); // may be null
+    Expression* nestedLvalExp = (lvalExp == e ? NULL : lvalExp);
+
+    DValue* nestedLval = NULL;
+    if (nestedLvalExp)
+    {
+        IF_LOG Logger::println("Caching l-value of %s => %s",
+            e->toChars(), nestedLvalExp->toChars());
+
+        LOG_SCOPE;
+        nestedLval = toElemAndCacheLvalue(nestedLvalExp);
+    }
+
+    DValue* value = toElem(e);
+
+    if (nestedLvalExp)
+        nestedLvalExp->cachedLvalue = NULL;
+
+    return !nestedLval ? value : DtoCast(e->loc, nestedLval, e->type);
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 class ToElemVisitor : public Visitor
 {
     IRState *p;
+    bool destructTemporaries;
+    CleanupCursor initialCleanupScope;
     DValue *result;
 public:
-    ToElemVisitor(IRState *p_) : p(p_), result(0) { }
+    ToElemVisitor(IRState *p_, bool destructTemporaries_)
+        : p(p_), destructTemporaries(destructTemporaries_), result(NULL)
+    {
+        initialCleanupScope = p->func()->scopes->currentCleanupScope();
+    }
 
-    DValue *getResult() { return result; }
+    DValue *getResult() {
+        if (destructTemporaries &&
+            p->func()->scopes->currentCleanupScope() != initialCleanupScope
+        ) {
+            // If the results is an (LLVM) r-value, temporarily store it in an
+            // alloca slot to avoid running into instruction dominance issues
+            // if we share the cleanups with another exit path (e.g. unwinding).
+            if (result && result->getType()->ty != Tvoid &&
+                (result->isIm() || result->isSlice())
+            ) {
+                LLValue* alloca = DtoAllocaDump(result);
+                result = new DVarValue(result->getType(), alloca);
+            }
+
+            llvm::BasicBlock* endbb = llvm::BasicBlock::Create(
+                p->context(), "toElem.success", p->topfunc());
+            p->func()->scopes->runCleanups(initialCleanupScope, endbb);
+            p->func()->scopes->popCleanups(initialCleanupScope);
+            p->scope() = IRScope(endbb);
+
+            destructTemporaries = false;
+        }
+
+        return result;
+    }
 
     //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -207,52 +327,25 @@ public:
 
     //////////////////////////////////////////////////////////////////////////////////////////
 
-    class CacheLValueVisitor : public Visitor
-    {
-    public:
-        // Import all functions from class Visitor
-        using Visitor::visit;
-
-        template<typename T>
-        void cacheLvalue(T *e)
-        {
-            IF_LOG Logger::println("Caching l-value of %s", e->toChars());
-            LOG_SCOPE;
-            e->cachedLvalue = toElem(e)->getLVal();
-        }
-
-        void visit(Expression *e)
-        {
-            e->error("expression %s does not mask any l-value", e->toChars());
-            fatal();
-        }
-
-    #define IMPLEMENT(TYPE) void visit(TYPE *e) { cacheLvalue(e); }
-
-        IMPLEMENT(VarExp)
-        IMPLEMENT(CallExp)
-        IMPLEMENT(PtrExp)
-        IMPLEMENT(DotVarExp)
-        IMPLEMENT(IndexExp)
-        IMPLEMENT(CommaExp)
-
-    #undef IMPLEMENT
-    };
-
-    void cacheLvalue(Expression *e)
-    {
-        CacheLValueVisitor v;
-        e->accept(&v);
-    }
-\
-    //////////////////////////////////////////////////////////////////////////////////////////
-
     void visit(DeclarationExp *e)
     {
-        IF_LOG Logger::print("DeclarationExp::toElem: %s | T=%s\n", e->toChars(), e->type->toChars());
+        IF_LOG Logger::print("DeclarationExp::toElem: %s | T=%s\n", e->toChars(),
+            e->type ? e->type->toChars() : "(null)");
         LOG_SCOPE;
 
         result = DtoDeclarationExp(e->declaration);
+
+        if (result)
+        {
+            if (DVarValue* varValue = result->isVar())
+            {
+                VarDeclaration* vd = varValue->var;
+                if (!vd->isDataseg() && vd->edtor && !vd->noscope)
+                {
+                    pushVarDtorCleanup(p, vd);
+                }
+            }
+        }
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -339,14 +432,10 @@ public:
         Type* dtype = e->type->toBasetype();
         Type* cty = dtype->nextOf()->toBasetype();
 
-        LLType* ct = voidToI8(DtoType(cty));
+        LLType* ct = DtoMemType(cty);
         LLArrayType* at = LLArrayType::get(ct, e->len+1);
 
-#if LDC_LLVM_VER >= 305
         llvm::StringMap<llvm::GlobalVariable*>* stringLiteralCache = 0;
-#else
-        std::map<llvm::StringRef, llvm::GlobalVariable*>* stringLiteralCache = 0;
-#endif
         LLConstant* _init;
         switch (cty->size())
         {
@@ -480,7 +569,7 @@ public:
             }
         }
 
-        DValue* l = toElem(e->e1);
+        DValue* l = toElem(e->e1, true);
 
         // NRVO for object field initialization in constructor
         if (l->isVar() && e->op == TOKconstruct && e->e2->op == TOKcall)
@@ -510,101 +599,87 @@ public:
             return;
         }
 
-        bool canSkipPostblit = false;
-        if (!(e->e2->op == TOKslice && ((UnaExp *)e->e2)->e1->isLvalue()) &&
-            !(e->e2->op == TOKcast && ((UnaExp *)e->e2)->e1->isLvalue()) &&
-            (e->e2->op == TOKslice || !e->e2->isLvalue()))
+        // This matches the logic in AssignExp::semantic.
+        // TODO: Should be cached in the frontend to avoid issues with the code
+        // getting out of sync?
+        bool lvalueElem = false;
+        if ((e->e2->op == TOKslice && static_cast<UnaExp*>(e->e2)->e1->isLvalue()) ||
+            (e->e2->op == TOKcast  && static_cast<UnaExp*>(e->e2)->e1->isLvalue()) ||
+            (e->e2->op != TOKslice && e->e2->isLvalue()))
         {
-            canSkipPostblit = true;
+            lvalueElem = true;
         }
 
-        Logger::println("performing normal assignment (canSkipPostblit = %d)", canSkipPostblit);
-        DtoAssign(e->loc, l, r, e->op, canSkipPostblit);
+        Logger::println("performing normal assignment (rhs has lvalue elems = %d)", lvalueElem);
+        DtoAssign(e->loc, l, r, e->op, !lvalueElem);
 
         result = l;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
 
-    /// Finds the proper lvalue for a binassign expressions.
-    /// Makes sure the given LHS expression is only evaluated once.
-    Expression* findLvalue(Expression* exp)
+    template <typename BinExp, bool useLvalForBinExpLhs>
+    static DValue* binAssign(BinAssignExp* e)
     {
-        Expression* e = exp;
+        Loc loc = e->loc;
 
-        // skip past any casts
-        while(e->op == TOKcast)
-            e = static_cast<CastExp*>(e)->e1;
+        // find the lhs' lvalue expression
+        Expression* lvalExp = findLvalueExp(e->e1);
+        if (!lvalExp)
+        {
+            e->error("expression %s does not mask any l-value", e->e1->toChars());
+            fatal();
+        }
 
-        // cache lvalue and return
-        cacheLvalue(e);
-        return e;
+        // pre-evaluate and cache the lvalue subexpression
+        DValue* lval = NULL;
+        {
+            IF_LOG Logger::println("Caching l-value of %s => %s",
+                e->toChars(), lvalExp->toChars());
+
+            LOG_SCOPE;
+            lval = toElemAndCacheLvalue(lvalExp);
+        }
+
+        // evaluate the underlying binary expression
+        Expression* lhsForBinExp = (useLvalForBinExpLhs ? lvalExp : e->e1);
+        BinExp binExp(loc, lhsForBinExp, e->e2);
+        binExp.type = lhsForBinExp->type;
+        DValue* result = toElem(&binExp);
+
+        lvalExp->cachedLvalue = NULL;
+
+        // assign the (casted) result to lval
+        DValue* assignedResult = DtoCast(loc, result, lval->type);
+        DtoAssign(loc, lval, assignedResult);
+
+        // return the (casted) result
+        return e->type == assignedResult->type
+            ? assignedResult
+            : DtoCast(loc, result, e->type);
     }
 
-    template <typename Exp>
-    DValue *binAssign(BinAssignExp *be)
-    {
-        // Evaluate the expression
-        Loc loc = be->loc;
-        Exp e3(loc, be->e1, be->e2);
-        e3.type = be->e1->type;
-        DValue* dst = toElem(findLvalue(be->e1));
-        DValue* res = toElem(&e3);
-
-        // Now that we are done with the expression, clear the cached lvalue
-        Expression* e = be->e1;
-        while(e->op == TOKcast)
-            e = static_cast<CastExp*>(e)->e1;
-        e->cachedLvalue = NULL;
-
-        // Assign the (casted) value and return it
-        DValue* stval = DtoCast(loc, res, dst->getType());
-        DtoAssign(loc, dst, stval);
-        return DtoCast(loc, res, be->type);
-    }
-
-    template <typename Exp>
-    DValue *binShiftAssign(BinAssignExp *be)
-    {
-        Loc loc = be->loc;
-        // Find the lvalue for the expression
-        Expression *e1 = findLvalue(be->e1);
-
-        // Evaluate the expression
-        Exp e3(loc, e1, be->e2);
-        e3.type = e1->type;
-        DValue* dst = toElem(e1);
-        DValue* res = toElem(&e3);
-
-        // Now that we are done with the expression, clear the cached lvalue
-        e1->cachedLvalue = NULL;
-
-        // Assign the value and return it
-        DtoAssign(loc, dst, res);
-        return DtoCast(loc, res, be->type);
-    }
-
-    #define BIN_ASSIGN(X, op) \
-    void visit(X##AssignExp *e) \
+#define BIN_ASSIGN(Op, useLvalForBinExpLhs) \
+    void visit(Op##AssignExp *e) \
     { \
-        IF_LOG Logger::print(#X"AssignExp::toElem: %s @ %s\n", e->toChars(), e->type->toChars()); \
+        IF_LOG Logger::print(#Op"AssignExp::toElem: %s @ %s\n", e->toChars(), e->type->toChars()); \
         LOG_SCOPE; \
-        result = op <X##Exp>(e);\
+        result = binAssign<Op##Exp, useLvalForBinExpLhs>(e); \
     }
 
-    BIN_ASSIGN(Add,  binAssign)
-    BIN_ASSIGN(Min,  binAssign)
-    BIN_ASSIGN(Mul,  binAssign)
-    BIN_ASSIGN(Div,  binAssign)
-    BIN_ASSIGN(Mod,  binAssign)
-    BIN_ASSIGN(And,  binAssign)
-    BIN_ASSIGN(Or,   binAssign)
-    BIN_ASSIGN(Xor,  binAssign)
-    BIN_ASSIGN(Shl,  binShiftAssign)
-    BIN_ASSIGN(Shr,  binShiftAssign)
-    BIN_ASSIGN(Ushr, binShiftAssign)
+    BIN_ASSIGN(Add,  false)
+    BIN_ASSIGN(Min,  false)
+    BIN_ASSIGN(Mul,  false)
+    BIN_ASSIGN(Div,  false)
+    BIN_ASSIGN(Mod,  false)
+    BIN_ASSIGN(And,  false)
+    BIN_ASSIGN(Or,   false)
+    BIN_ASSIGN(Xor,  false)
+    BIN_ASSIGN(Shl,  true)
+    BIN_ASSIGN(Shr,  true)
+    BIN_ASSIGN(Ushr, true)
 
-    #undef BIN_ASSIGN
+#undef BIN_ASSIGN
 
     //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -839,6 +914,41 @@ public:
             }
         }
 
+        // Check if we are about to construct a just declared temporary. DMD
+        // unfortunately rewrites this as
+        //   MyStruct(myArgs) => (MyStruct tmp; tmp).this(myArgs),
+        // which would lead us to invoke the dtor even if the ctor throws. To
+        // work around this, we hold on to the cleanup and push it only after
+        // making the function call.
+        //
+        // The correct fix for this (DMD issue 13095) would have been to adapt
+        // the AST, but we are stuck with this as DMD also patched over it with
+        // a similar hack.
+        VarDeclaration* delayedDtorVar = NULL;
+        Expression* delayedDtorExp = NULL;
+        if (e->f && e->f->isCtorDeclaration() && e->e1->op == TOKdotvar)
+        {
+            DotVarExp* dve = static_cast<DotVarExp*>(e->e1);
+            if (dve->e1->op == TOKcomma)
+            {
+                CommaExp* ce = static_cast<CommaExp*>(dve->e1);
+                if (ce->e1->op == TOKdeclaration && ce->e2->op == TOKvar)
+                {
+                    VarExp* ve = static_cast<VarExp*>(ce->e2);
+                    if (VarDeclaration* vd = ve->var->isVarDeclaration())
+                    {
+                        if (vd->edtor && !vd->noscope)
+                        {
+                            Logger::println("Delaying edtor");
+                            delayedDtorVar = vd;
+                            delayedDtorExp = vd->edtor;
+                            vd->edtor = NULL;
+                        }
+                    }
+                }
+            }
+        }
+
         // get the callee value
         DValue* fnval = toElem(e->e1);
 
@@ -859,235 +969,17 @@ public:
                 }
             }
 
-            // va_start instruction
-            if (fndecl->llvmInternal == LLVMva_start) {
-                if (e->arguments->dim < 1 || e->arguments->dim > 2) {
-                    e->error("va_start instruction expects 1 (or 2) arguments");
-                    fatal();
-                }
-                LLValue* pAp = toElem((*e->arguments)[0])->getLVal(); // va_list*
-                // variadic extern(D) function with implicit _argptr?
-                if (LLValue* pArgptr = p->func()->_argptr) {
-                    DtoStore(DtoLoad(pArgptr), pAp); // ap = _argptr
-                    result = new DImValue(e->type, pAp);
-                } else {
-                    LLValue* vaStartArg = gABI->prepareVaStart(pAp);
-                    result = new DImValue(e->type, gIR->ir->CreateCall(
-                        GET_INTRINSIC_DECL(vastart), vaStartArg, ""));
-                }
-            }
-            // va_copy instruction
-            else if (fndecl->llvmInternal == LLVMva_copy) {
-                if (e->arguments->dim != 2) {
-                    e->error("va_copy instruction expects 2 arguments");
-                    fatal();
-                }
-                LLValue* pDest = toElem((*e->arguments)[0])->getLVal(); // va_list*
-                LLValue* src   = toElem((*e->arguments)[1])->getRVal(); // va_list
-                gABI->vaCopy(pDest, src);
-                result = new DVarValue(e->type, pDest);
-            }
-            // va_arg instruction
-            else if (fndecl->llvmInternal == LLVMva_arg) {
-                if (e->arguments->dim != 1) {
-                    e->error("va_arg instruction expects 1 argument");
-                    fatal();
-                }
-                LLValue* pAp = toElem((*e->arguments)[0])->getLVal(); // va_list*
-                LLValue* vaArgArg = gABI->prepareVaArg(pAp);
-                LLType* llType = DtoType(e->type);
-                if (DtoIsPassedByRef(e->type))
-                    llType = getPtrToType(llType);
-                result = new DImValue(e->type, gIR->ir->CreateVAArg(vaArgArg, llType));
-            }
-            // C alloca
-            else if (fndecl->llvmInternal == LLVMalloca) {
-                if (e->arguments->dim != 1) {
-                    e->error("alloca expects 1 arguments");
-                    fatal();
-                }
-                Expression* exp = (*e->arguments)[0];
-                DValue* expv = toElem(exp);
-                if (expv->getType()->toBasetype()->ty != Tint32)
-                    expv = DtoCast(e->loc, expv, Type::tint32);
-                result = new DImValue(e->type, p->ir->CreateAlloca(LLType::getInt8Ty(gIR->context()), expv->getRVal(), ".alloca"));
-            }
-            // fence instruction
-            else if (fndecl->llvmInternal == LLVMfence) {
-                if (e->arguments->dim != 1) {
-                    e->error("fence instruction expects 1 arguments");
-                    fatal();
-                }
-                gIR->ir->CreateFence(llvm::AtomicOrdering((*e->arguments)[0]->toInteger()));
+            if (DtoLowerMagicIntrinsic(p, fndecl, e, result))
                 return;
-            }
-            // atomic store instruction
-            else if (fndecl->llvmInternal == LLVMatomic_store) {
-                if (e->arguments->dim != 3) {
-                    e->error("atomic store instruction expects 3 arguments");
-                    fatal();
-                }
-                Expression* exp1 = (*e->arguments)[0];
-                Expression* exp2 = (*e->arguments)[1];
-                int atomicOrdering = (*e->arguments)[2]->toInteger();
-                LLValue* val = toElem(exp1)->getRVal();
-                LLValue* ptr = toElem(exp2)->getRVal();
-
-                if (!val->getType()->isIntegerTy()) {
-                    e->error("atomic store only supports integer types, not '%s'", exp1->type->toChars());
-                    fatal();
-                }
-
-                llvm::StoreInst* ret = gIR->ir->CreateStore(val, ptr);
-                ret->setAtomic(llvm::AtomicOrdering(atomicOrdering));
-                ret->setAlignment(getTypeAllocSize(val->getType()));
-                return;
-            }
-            // atomic load instruction
-            else if (fndecl->llvmInternal == LLVMatomic_load) {
-                if (e->arguments->dim != 2) {
-                    e->error("atomic load instruction expects 2 arguments");
-                    fatal();
-                }
-
-                Expression* exp = (*e->arguments)[0];
-                int atomicOrdering = (*e->arguments)[1]->toInteger();
-
-                LLValue* ptr = toElem(exp)->getRVal();
-                Type* retType = exp->type->nextOf();
-
-                if (!ptr->getType()->getContainedType(0)->isIntegerTy()) {
-                    e->error("atomic load only supports integer types, not '%s'", retType->toChars());
-                    fatal();
-                }
-
-                llvm::LoadInst* val = gIR->ir->CreateLoad(ptr);
-                val->setAlignment(getTypeAllocSize(val->getType()));
-                val->setAtomic(llvm::AtomicOrdering(atomicOrdering));
-                result = new DImValue(retType, val);
-            }
-            // cmpxchg instruction
-            else if (fndecl->llvmInternal == LLVMatomic_cmp_xchg) {
-                if (e->arguments->dim != 4) {
-                    e->error("cmpxchg instruction expects 4 arguments");
-                    fatal();
-                }
-                Expression* exp1 = (*e->arguments)[0];
-                Expression* exp2 = (*e->arguments)[1];
-                Expression* exp3 = (*e->arguments)[2];
-                int atomicOrdering = (*e->arguments)[3]->toInteger();
-                LLValue* ptr = toElem(exp1)->getRVal();
-                LLValue* cmp = toElem(exp2)->getRVal();
-                LLValue* val = toElem(exp3)->getRVal();
-    #if LDC_LLVM_VER >= 305
-                LLValue* ret = gIR->ir->CreateAtomicCmpXchg(ptr, cmp, val, llvm::AtomicOrdering(atomicOrdering), llvm::AtomicOrdering(atomicOrdering));
-                // Use the same quickfix as for dragonegg - see r210956
-                ret = gIR->ir->CreateExtractValue(ret, 0);
-    #else
-                LLValue* ret = gIR->ir->CreateAtomicCmpXchg(ptr, cmp, val, llvm::AtomicOrdering(atomicOrdering));
-    #endif
-                result = new DImValue(exp3->type, ret);
-            }
-            // atomicrmw instruction
-            else if (fndecl->llvmInternal == LLVMatomic_rmw) {
-                if (e->arguments->dim != 3) {
-                    e->error("atomic_rmw instruction expects 3 arguments");
-                    fatal();
-                }
-
-                static const char *ops[] = {
-                    "xchg",
-                    "add",
-                    "sub",
-                    "and",
-                    "nand",
-                    "or",
-                    "xor",
-                    "max",
-                    "min",
-                    "umax",
-                    "umin",
-                    0
-                };
-
-                int op = 0;
-                for (; ; ++op) {
-                    if (ops[op] == 0) {
-                        e->error("unknown atomic_rmw operation %s", fndecl->intrinsicName.c_str());
-                        fatal();
-                    }
-                    if (fndecl->intrinsicName == ops[op])
-                        break;
-                }
-
-                Expression* exp1 = (*e->arguments)[0];
-                Expression* exp2 = (*e->arguments)[1];
-                int atomicOrdering = (*e->arguments)[2]->toInteger();
-                LLValue* ptr = toElem(exp1)->getRVal();
-                LLValue* val = toElem(exp2)->getRVal();
-                LLValue* ret = gIR->ir->CreateAtomicRMW(llvm::AtomicRMWInst::BinOp(op), ptr, val,
-                                                        llvm::AtomicOrdering(atomicOrdering));
-                result = new DImValue(exp2->type, ret);
-            }
-            // bitop
-            else if (fndecl->llvmInternal == LLVMbitop_bt ||
-                       fndecl->llvmInternal == LLVMbitop_btr ||
-                       fndecl->llvmInternal == LLVMbitop_btc ||
-                       fndecl->llvmInternal == LLVMbitop_bts)
-            {
-                if (e->arguments->dim != 2) {
-                    e->error("bitop intrinsic expects 2 arguments");
-                    fatal();
-                }
-
-                Expression* exp1 = (*e->arguments)[0];
-                Expression* exp2 = (*e->arguments)[1];
-                LLValue* ptr = toElem(exp1)->getRVal();
-                LLValue* bitnum = toElem(exp2)->getRVal();
-
-                unsigned bitmask = DtoSize_t()->getBitWidth() - 1;
-                assert(bitmask == 31 || bitmask == 63);
-                // auto q = cast(size_t*)ptr + (bitnum >> (64bit ? 6 : 5));
-                LLValue* q = DtoBitCast(ptr, DtoSize_t()->getPointerTo());
-                q = DtoGEP1(q, p->ir->CreateLShr(bitnum, bitmask == 63 ? 6 : 5), "bitop.q");
-
-                // auto mask = 1 << (bitnum & bitmask);
-                LLValue* mask = p->ir->CreateAnd(bitnum, DtoConstSize_t(bitmask), "bitop.tmp");
-                mask = p->ir->CreateShl(DtoConstSize_t(1), mask, "bitop.mask");
-
-                // auto result = (*q & mask) ? -1 : 0;
-                LLValue* val = p->ir->CreateZExt(DtoLoad(q, "bitop.tmp"), DtoSize_t(), "bitop.val");
-                LLValue* ret = p->ir->CreateAnd(val, mask, "bitop.tmp");
-                ret = p->ir->CreateICmpNE(ret, DtoConstSize_t(0), "bitop.tmp");
-                ret = p->ir->CreateSelect(ret, DtoConstInt(-1), DtoConstInt(0), "bitop.result");
-
-                if (fndecl->llvmInternal != LLVMbitop_bt) {
-                    llvm::Instruction::BinaryOps op;
-                    if (fndecl->llvmInternal == LLVMbitop_btc) {
-                        // *q ^= mask;
-                        op = llvm::Instruction::Xor;
-                    } else if (fndecl->llvmInternal == LLVMbitop_btr) {
-                        // *q &= ~mask;
-                        mask = p->ir->CreateNot(mask);
-                        op = llvm::Instruction::And;
-                    } else if (fndecl->llvmInternal == LLVMbitop_bts) {
-                        // *q |= mask;
-                        op = llvm::Instruction::Or;
-                    } else {
-                        llvm_unreachable("Unrecognized bitop intrinsic.");
-                    }
-
-                    LLValue *newVal = p->ir->CreateBinOp(op, val, mask, "bitop.new_val");
-                    newVal = p->ir->CreateTrunc(newVal, DtoSize_t(), "bitop.tmp");
-                    DtoStore(newVal, q);
-                }
-
-                result = new DImValue(e->type, ret);
-            }
         }
 
-        if (!result)
-            result = DtoCallFunction(e->loc, e->type, fnval, e->arguments);
+        result = DtoCallFunction(e->loc, e->type, fnval, e->arguments);
+
+        if (delayedDtorVar)
+        {
+            delayedDtorVar->edtor = delayedDtorExp;
+            pushVarDtorCleanup(p, delayedDtorVar);
+        }
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1102,7 +994,7 @@ public:
 
         // handle cast to void (usually created by frontend to avoid "has no effect" error)
         if (e->to == Type::tvoid) {
-            result = new DImValue(Type::tvoid, llvm::UndefValue::get(voidToI8(DtoType(Type::tvoid))));
+            result = new DImValue(Type::tvoid, llvm::UndefValue::get(DtoMemType(Type::tvoid)));
             return;
         }
 
@@ -1146,7 +1038,7 @@ public:
         }
         else
         {
-            uint64_t elemSize = gDataLayout->getTypeStoreSize(
+            uint64_t elemSize = gDataLayout->getTypeAllocSize(
                 baseValue->getType()->getContainedType(0));
             if (e->offset % elemSize == 0)
             {
@@ -1178,21 +1070,16 @@ public:
         // for that instead of re-codegening the literal.
         if (e->e1->op == TOKstructliteral)
         {
-            IF_LOG Logger::println("is struct literal");
-            StructLiteralExp* se = static_cast<StructLiteralExp*>(e->e1);
-
-            // DMD uses origin here as well, necessary to handle messed-up AST on
-            // forward references.
-            if (se->origin->globalVar)
-            {
-                IF_LOG Logger::cout() << "returning address of global: " <<
-                    *se->globalVar << '\n';
-                result = new DImValue(e->type, DtoBitCast(se->origin->globalVar, DtoType(e->type)));
-                return;
-            }
+            // lvalue literal must be a global, hence we can just use
+            // toConstElem on the AddrExp to get the address.
+            LLConstant *addr = toConstElem(e, p);
+            IF_LOG Logger::cout() << "returning address of struct literal global: " <<
+                addr << '\n';
+            result = new DImValue(e->type, DtoBitCast(addr, DtoType(e->type)));
+            return;
         }
 
-        DValue* v = toElem(e->e1);
+        DValue* v = toElem(e->e1, true);
         if (v->isField()) {
             Logger::println("is field");
             result = v;
@@ -1221,9 +1108,7 @@ public:
         else
         {
             assert(v->isSlice());
-            LLValue* rval = v->getRVal();
-            lval = DtoRawAlloca(rval->getType(), 0, ".tmp_slice_storage");
-            DtoStore(rval, lval);
+            lval = DtoAllocaDump(v, ".tmp_slice_storage");
         }
 
         IF_LOG Logger::cout() << "lval: " << *lval << '\n';
@@ -1346,25 +1231,6 @@ public:
                 (fdecl->isAbstract() || fdecl->isVirtual()) &&
                 fdecl->prot() != PROTprivate;
 
-            // If we are calling a non-final interface function, we need to get
-            // the pointer to the underlying object instead of passing the
-            // interface pointer directly.
-            // Unless it is a cpp interface, in that case, we have to match
-            // C++ behavior and pass the interface pointer.
-            LLValue* passedThis = 0;
-            if (e1type->ty == Tclass)
-            {
-                TypeClass* tc = static_cast<TypeClass*>(e1type);
-                if (tc->sym->isInterfaceDeclaration() && nonFinal && !tc->sym->isCPPinterface())
-                    passedThis = DtoCastInterfaceToObject(e->loc, l, NULL)->getRVal();
-            }
-            LLValue* vthis;
-            if (e1type->ty == Tclass)
-                vthis = DtoClassHandle(l); // CALYPSO
-            else
-                vthis = l->getRVal();
-            if (!passedThis) passedThis = vthis;
-
             // Decide whether this function needs to be looked up in the vtable.
             // Even virtual functions are looked up directly if super or DotTypeExp
             // are used, thus we need to walk through the this expression and check.
@@ -1384,7 +1250,8 @@ public:
             LLValue* funcval = 0;
             if (vtbllookup)
             {
-                funcval = DtoVirtualFunctionPointer(DtoClassDValue(e1type, vthis), fdecl, e->toChars()); // CALYPSO
+                LLValue* vthis = DtoClassHandle(l); // CALYPSO
+                funcval = DtoVirtualFunctionPointer(DtoClassDValue(e1type, vthis), fdecl, e->toChars());
             }
             else
             {
@@ -1392,7 +1259,7 @@ public:
             }
             assert(funcval);
 
-            result = new DFuncValue(fdecl, funcval, passedThis);
+            result = new DFuncValue(fdecl, funcval, l->getRVal());
         } else {
             llvm_unreachable("Unknown target for VarDeclaration.");
         }
@@ -1472,13 +1339,13 @@ public:
             arrptr = DtoGEP1(l->getRVal(),r->getRVal());
         }
         else if (e1type->ty == Tsarray) {
-            if (p->emitArrayBoundsChecks() && !e->skipboundscheck)
-                DtoArrayBoundsCheck(e->loc, l, r);
+            if (p->emitArrayBoundsChecks() && !e->indexIsInBounds)
+                DtoIndexBoundsCheck(e->loc, l, r);
             arrptr = DtoGEP(l->getRVal(), zero, r->getRVal());
         }
         else if (e1type->ty == Tarray) {
-            if (p->emitArrayBoundsChecks() && !e->skipboundscheck)
-                DtoArrayBoundsCheck(e->loc, l, r);
+            if (p->emitArrayBoundsChecks() && !e->indexIsInBounds)
+                DtoIndexBoundsCheck(e->loc, l, r);
             arrptr = DtoArrayPtr(l);
             arrptr = DtoGEP1(arrptr,r->getRVal());
         }
@@ -1536,8 +1403,38 @@ public:
             LLValue* vlo = lo->getRVal();
             LLValue* vup = up->getRVal();
 
-            if (gIR->emitArrayBoundsChecks())
-                DtoArrayBoundsCheck(e->loc, v, up, lo);
+            const bool needCheckUpper = (etype->ty != Tpointer) &&
+                !e->upperIsInBounds;
+            const bool needCheckLower = !e->lowerIsLessThanUpper;
+            if (p->emitArrayBoundsChecks() && (needCheckUpper || needCheckLower))
+            {
+                llvm::BasicBlock* failbb = llvm::BasicBlock::Create(p->context(),
+                    "bounds.fail", p->topfunc());
+                llvm::BasicBlock* okbb = llvm::BasicBlock::Create(p->context(),
+                    "bounds.ok", p->topfunc());
+
+                llvm::Value *okCond = NULL;
+                if (needCheckUpper)
+                {
+                    okCond = p->ir->CreateICmp(llvm::ICmpInst::ICMP_ULE, vup,
+                        DtoArrayLen(v), "bounds.cmp.lo");
+                }
+
+                if (needCheckLower)
+                {
+                    llvm::Value *cmp = p->ir->CreateICmp(llvm::ICmpInst::ICMP_ULE,
+                        vlo, vup, "bounds.cmp.up");
+                    if (okCond) okCond = p->ir->CreateAnd(okCond, cmp);
+                    else okCond = cmp;
+                }
+
+                p->ir->CreateCondBr(okCond, okbb, failbb);
+
+                p->scope() = IRScope(failbb);
+                DtoBoundsCheckFailCall(p, e->loc);
+
+                p->scope() = IRScope(okbb);
+            }
 
             // offset by lower
             eptr = DtoGEP1(eptr, vlo, "lowerbound");
@@ -1663,13 +1560,12 @@ public:
                 llvm::Value* lhs = l->getRVal();
                 llvm::Value* rhs = r->getRVal();
 
-                llvm::BasicBlock* oldend = p->scopeend();
                 llvm::BasicBlock* fptreq = llvm::BasicBlock::Create(
-                    gIR->context(), "fptreq", gIR->topfunc(), oldend);
+                    gIR->context(), "fptreq", gIR->topfunc());
                 llvm::BasicBlock* fptrneq = llvm::BasicBlock::Create(
-                    gIR->context(), "fptrneq", gIR->topfunc(), oldend);
+                    gIR->context(), "fptrneq", gIR->topfunc());
                 llvm::BasicBlock* dgcmpend = llvm::BasicBlock::Create(
-                    gIR->context(), "dgcmpend", gIR->topfunc(), oldend);
+                    gIR->context(), "dgcmpend", gIR->topfunc());
 
                 llvm::Value* lfptr = p->ir->CreateExtractValue(lhs, 1, ".lfptr");
                 llvm::Value* rfptr = p->ir->CreateExtractValue(rhs, 1, ".rfptr");
@@ -1678,17 +1574,17 @@ public:
                     lfptr, rfptr, ".fptreqcmp");
                 llvm::BranchInst::Create(fptreq, fptrneq, fptreqcmp, p->scopebb());
 
-                p->scope() = IRScope(fptreq, fptrneq);
+                p->scope() = IRScope(fptreq);
                 llvm::Value* lctx = p->ir->CreateExtractValue(lhs, 0, ".lctx");
                 llvm::Value* rctx = p->ir->CreateExtractValue(rhs, 0, ".rctx");
                 llvm::Value* ctxcmp = p->ir->CreateICmp(icmpPred, lctx, rctx, ".ctxcmp");
                 llvm::BranchInst::Create(dgcmpend,p->scopebb());
 
-                p->scope() = IRScope(fptrneq, dgcmpend);
+                p->scope() = IRScope(fptrneq);
                 llvm::Value* fptrcmp = p->ir->CreateICmp(icmpPred, lfptr, rfptr, ".fptrcmp");
                 llvm::BranchInst::Create(dgcmpend,p->scopebb());
 
-                p->scope() = IRScope(dgcmpend, oldend);
+                p->scope() = IRScope(dgcmpend);
                 llvm::PHINode* phi = p->ir->CreatePHI(ctxcmp->getType(), 2, ".dgcmp");
                 phi->addIncoming(ctxcmp, fptreq);
                 phi->addIncoming(fptrcmp, fptrneq);
@@ -1844,6 +1740,8 @@ public:
         IF_LOG Logger::print("NewExp::toElem: %s @ %s\n", e->toChars(), e->type->toChars());
         LOG_SCOPE;
 
+        bool isArgprefixHandled = false;
+
         assert(e->newtype);
         Type* ntype = e->newtype->toBasetype();
 
@@ -1851,11 +1749,13 @@ public:
         if (ntype->ty == Tclass) {
             Logger::println("new class");
             result = DtoNewClass(e->loc, static_cast<TypeClass*>(ntype), e);
+            isArgprefixHandled = true; // by DtoNewClass()
         }
         // new dynamic array
         else if (ntype->ty == Tarray)
         {
             IF_LOG Logger::println("new dynamic array: %s", e->newtype->toChars());
+            assert(e->argprefix == NULL);
             // get dim
             assert(e->arguments);
             assert(e->arguments->dim >= 1);
@@ -1872,7 +1772,7 @@ public:
                 dims.reserve(ndims);
                 for (size_t i=0; i<ndims; ++i)
                     dims.push_back(toElem((*e->arguments)[i]));
-                result = DtoNewMulDimDynArray(e->loc, e->newtype, &dims[0], ndims, true);
+                result = DtoNewMulDimDynArray(e->loc, e->newtype, &dims[0], ndims);
             }
         }
         // new static array
@@ -1884,6 +1784,9 @@ public:
         else if (ntype->ty == Tstruct)
         {
             IF_LOG Logger::println("new struct on heap: %s\n", e->newtype->toChars());
+
+            TypeStruct* ts = static_cast<TypeStruct*>(ntype);
+
             // allocate
             LLValue* mem = 0;
             if (e->allocator)
@@ -1897,10 +1800,8 @@ public:
             else
             {
                 // default allocator
-                mem = DtoNew(e->loc, e->newtype);
+                mem = DtoNewStruct(e->loc, ts);
             }
-
-            TypeStruct* ts = static_cast<TypeStruct*>(ntype);
 
             if (!e->member && e->arguments)
             {
@@ -1909,16 +1810,6 @@ public:
             }
             else
             {
-                // init
-                if (ts->isZeroInit(ts->sym->loc)) {
-                    DtoAggrZeroInit(mem);
-                }
-                else {
-                    assert(ts->sym);
-                    DtoResolveStruct(ts->sym, e->loc);
-                    DtoAggrCopy(mem, getIrAggr(ts->sym)->getInitSymbol());
-                }
-
                 // set nested context
                 if (ts->sym->isNested() && ts->sym->vthis)
                     DtoResolveNestedContext(e->loc, ts->sym, mem);
@@ -1926,6 +1817,13 @@ public:
                 // call constructor
                 if (e->member)
                 {
+                    // evaluate argprefix
+                    if (e->argprefix)
+                    {
+                        toElemDtor(e->argprefix);
+                        isArgprefixHandled = true;
+                    }
+
                     IF_LOG Logger::println("Calling constructor");
                     assert(e->arguments != NULL);
                     DtoResolveFunction(e->member);
@@ -1940,6 +1838,7 @@ public:
         else
         {
             IF_LOG Logger::println("basic type on heap: %s\n", e->newtype->toChars());
+            assert(e->argprefix == NULL);
 
             // allocate
             LLValue* mem = DtoNew(e->loc, e->newtype);
@@ -1965,6 +1864,8 @@ public:
             // return as pointer-to
             result = new DImValue(e->type, mem);
         }
+
+        assert(e->argprefix == NULL || isArgprefixHandled);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1977,10 +1878,14 @@ public:
         DValue* dval = toElem(e->e1);
         Type* et = e->e1->type->toBasetype();
 
-        // simple pointer
+        // pointer
         if (et->ty == Tpointer)
         {
-            DtoDeleteMemory(e->loc, dval->isLVal() ? dval->getLVal() : makeLValue(e->loc, dval));
+            Type* elementType = et->nextOf()->toBasetype();
+            if (elementType->ty == Tstruct && elementType->needsDestruction())
+                DtoDeleteStruct(e->loc, dval);
+            else
+                DtoDeleteMemory(e->loc, dval);
         }
         // class
         else if (et->ty == Tclass)
@@ -1989,8 +1894,7 @@ public:
             TypeClass* tc = static_cast<TypeClass*>(et);
             if (tc->sym->isInterfaceDeclaration())
             {
-                LLValue *val = dval->getLVal();
-                DtoDeleteInterface(e->loc, val);
+                DtoDeleteInterface(e->loc, dval);
                 onstack = true;
             }
             else if (DVarValue* vv = dval->isVar()) {
@@ -1999,11 +1903,10 @@ public:
                     onstack = true;
                 }
             }
-            if (!onstack) {
-                LLValue* rval = dval->getRVal();
-                DtoDeleteClass(e->loc, rval);
-            }
-            if (dval->isVar()) {
+
+            if (!onstack)
+                DtoDeleteClass(e->loc, dval); // sets dval to null
+            else if (dval->isVar()) {
                 LLValue* lval = dval->getLVal();
                 DtoStore(LLConstant::getNullValue(lval->getType()->getContainedType(0)), lval);
             }
@@ -2040,6 +1943,10 @@ public:
         IF_LOG Logger::print("AssertExp::toElem: %s\n", e->toChars());
         LOG_SCOPE;
 
+        // DMD allows syntax like this:
+        // f() == 0 || assert(false)
+        result = new DImValue(e->type, DtoConstBool(false));
+
         if (!global.params.useAssert)
             return;
 
@@ -2063,18 +1970,17 @@ public:
         }
 
         // create basic blocks
-        llvm::BasicBlock* oldend = p->scopeend();
-        llvm::BasicBlock* assertbb = llvm::BasicBlock::Create(gIR->context(), "assert", p->topfunc(), oldend);
-        llvm::BasicBlock* endbb = llvm::BasicBlock::Create(gIR->context(), "noassert", p->topfunc(), oldend);
+        llvm::BasicBlock* passedbb = llvm::BasicBlock::Create(gIR->context(), "assertPassed", p->topfunc());
+        llvm::BasicBlock* failedbb = llvm::BasicBlock::Create(gIR->context(), "assertFailed", p->topfunc());
 
         // test condition
         LLValue* condval = DtoCast(e->loc, cond, Type::tbool)->getRVal();
 
         // branch
-        llvm::BranchInst::Create(endbb, assertbb, condval, p->scopebb());
+        llvm::BranchInst::Create(passedbb, failedbb, condval, p->scopebb());
 
-        // call assert runtime functions
-        p->scope() = IRScope(assertbb, endbb);
+        // failed: call assert runtime function
+        p->scope() = IRScope(failedbb);
 
         /* DMD Bugzilla 8360: If the condition is evaluated to true,
          * msg is not evaluated at all. So should use toElemDtor()
@@ -2082,16 +1988,17 @@ public:
          */
         DtoAssert(p->func()->decl->getModule(), e->loc, e->msg ? toElemDtor(e->msg) : NULL);
 
-        // rewrite the scope
-        p->scope() = IRScope(endbb, oldend);
+        // passed:
+        p->scope() = IRScope(passedbb);
 
         FuncDeclaration* invdecl;
         // class invariants
         if(
             global.params.useInvariants &&
             condty->ty == Tclass &&
-            !(static_cast<TypeClass*>(condty)->sym->isInterfaceDeclaration())
-            && !(static_cast<TypeClass*>(condty)->sym->langPlugin()) /* CALYPSO HACK */)
+            !(static_cast<TypeClass*>(condty)->sym->isInterfaceDeclaration()) &&
+            !(static_cast<TypeClass*>(condty)->sym->isCPPclass()) &&
+            !(static_cast<TypeClass*>(condty)->sym->langPlugin()) /* CALYPSO HACK */)
         {
             Logger::println("calling class invariant");
             llvm::Function* fn = LLVM_D_GetRuntimeFunction(e->loc, gIR->module,
@@ -2110,10 +2017,6 @@ public:
             DFuncValue invfunc(invdecl, getIrFunc(invdecl)->func, cond->getRVal());
             DtoCallFunction(e->loc, NULL, &invfunc, NULL);
         }
-
-        // DMD allows syntax like this:
-        // f() == 0 || assert(false)
-        result = new DImValue(e->type, DtoConstBool(false));
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -2142,16 +2045,15 @@ public:
 
         DValue* u = toElem(e->e1);
 
-        llvm::BasicBlock* oldend = p->scopeend();
-        llvm::BasicBlock* andand = llvm::BasicBlock::Create(gIR->context(), "andand", gIR->topfunc(), oldend);
-        llvm::BasicBlock* andandend = llvm::BasicBlock::Create(gIR->context(), "andandend", gIR->topfunc(), oldend);
+        llvm::BasicBlock* andand = llvm::BasicBlock::Create(gIR->context(), "andand", gIR->topfunc());
+        llvm::BasicBlock* andandend = llvm::BasicBlock::Create(gIR->context(), "andandend", gIR->topfunc());
 
         LLValue* ubool = DtoCast(e->loc, u, Type::tbool)->getRVal();
 
         llvm::BasicBlock* oldblock = p->scopebb();
         llvm::BranchInst::Create(andand, andandend, ubool, p->scopebb());
 
-        p->scope() = IRScope(andand, andandend);
+        p->scope() = IRScope(andand);
         emitCoverageLinecountInc(e->e2->loc);
         DValue* v = toElemDtor(e->e2);
 
@@ -2163,7 +2065,7 @@ public:
 
         llvm::BasicBlock* newblock = p->scopebb();
         llvm::BranchInst::Create(andandend,p->scopebb());
-        p->scope() = IRScope(andandend, oldend);
+        p->scope() = IRScope(andandend);
 
         LLValue* resval = 0;
         if (ubool == vbool || !vbool) {
@@ -2190,16 +2092,15 @@ public:
 
         DValue* u = toElem(e->e1);
 
-        llvm::BasicBlock* oldend = p->scopeend();
-        llvm::BasicBlock* oror = llvm::BasicBlock::Create(gIR->context(), "oror", gIR->topfunc(), oldend);
-        llvm::BasicBlock* ororend = llvm::BasicBlock::Create(gIR->context(), "ororend", gIR->topfunc(), oldend);
+        llvm::BasicBlock* oror = llvm::BasicBlock::Create(gIR->context(), "oror", gIR->topfunc());
+        llvm::BasicBlock* ororend = llvm::BasicBlock::Create(gIR->context(), "ororend", gIR->topfunc());
 
         LLValue* ubool = DtoCast(e->loc, u, Type::tbool)->getRVal();
 
         llvm::BasicBlock* oldblock = p->scopebb();
         llvm::BranchInst::Create(ororend,oror,ubool,p->scopebb());
 
-        p->scope() = IRScope(oror, ororend);
+        p->scope() = IRScope(oror);
         emitCoverageLinecountInc(e->e2->loc);
         DValue* v = toElemDtor(e->e2);
 
@@ -2211,7 +2112,7 @@ public:
 
         llvm::BasicBlock* newblock = p->scopebb();
         llvm::BranchInst::Create(ororend,p->scopebb());
-        p->scope() = IRScope(ororend, oldend);
+        p->scope() = IRScope(ororend);
 
         LLValue* resval = 0;
         if (ubool == vbool || !vbool) {
@@ -2282,9 +2183,8 @@ public:
         // this terminated the basicblock, start a new one
         // this is sensible, since someone might goto behind the assert
         // and prevents compiler errors if a terminator follows the assert
-        llvm::BasicBlock* oldend = gIR->scopeend();
-        llvm::BasicBlock* bb = llvm::BasicBlock::Create(gIR->context(), "afterhalt", p->topfunc(), oldend);
-        p->scope() = IRScope(bb,oldend);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(gIR->context(), "afterhalt", p->topfunc());
+        p->scope() = IRScope(bb);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -2310,17 +2210,7 @@ public:
             uval = DtoBitCast(contextptr, getVoidPtrType());
         }
         else {
-            DValue* src = u;
-            if (ClassDeclaration* cd = u->getType()->isClassHandle())
-            {
-                Logger::println("context type is class handle");
-                if (cd->isInterfaceDeclaration())
-                {
-                    Logger::println("context type is interface");
-                    src = DtoCastInterfaceToObject(e->loc, u, ClassDeclaration::object->type);
-                }
-            }
-            uval = src->getRVal();
+            uval = u->getRVal();
         }
 
         IF_LOG Logger::cout() << "context = " << *uval << '\n';
@@ -2459,16 +2349,15 @@ public:
             retPtr = DtoAlloca(dtype->pointerTo(), "condtmp");
         }
 
-        llvm::BasicBlock* oldend = p->scopeend();
-        llvm::BasicBlock* condtrue = llvm::BasicBlock::Create(gIR->context(), "condtrue", gIR->topfunc(), oldend);
-        llvm::BasicBlock* condfalse = llvm::BasicBlock::Create(gIR->context(), "condfalse", gIR->topfunc(), oldend);
-        llvm::BasicBlock* condend = llvm::BasicBlock::Create(gIR->context(), "condend", gIR->topfunc(), oldend);
+        llvm::BasicBlock* condtrue = llvm::BasicBlock::Create(gIR->context(), "condtrue", gIR->topfunc());
+        llvm::BasicBlock* condfalse = llvm::BasicBlock::Create(gIR->context(), "condfalse", gIR->topfunc());
+        llvm::BasicBlock* condend = llvm::BasicBlock::Create(gIR->context(), "condend", gIR->topfunc());
 
         DValue* c = toElem(e->econd);
         LLValue* cond_val = DtoCast(e->loc, c, Type::tbool)->getRVal();
         llvm::BranchInst::Create(condtrue, condfalse, cond_val, p->scopebb());
 
-        p->scope() = IRScope(condtrue, condfalse);
+        p->scope() = IRScope(condtrue);
         DValue* u = toElemDtor(e->e1);
         if (retPtr) {
             LLValue* lval = makeLValue(e->loc, u);
@@ -2476,7 +2365,7 @@ public:
         }
         llvm::BranchInst::Create(condend, p->scopebb());
 
-        p->scope() = IRScope(condfalse, condend);
+        p->scope() = IRScope(condfalse);
         DValue* v = toElemDtor(e->e2);
         if (retPtr) {
             LLValue* lval = makeLValue(e->loc, v);
@@ -2484,11 +2373,11 @@ public:
         }
         llvm::BranchInst::Create(condend, p->scopebb());
 
-        p->scope() = IRScope(condend, oldend);
+        p->scope() = IRScope(condend);
         if (retPtr)
             result = new DVarValue(e->type, DtoLoad(retPtr));
         else
-            result = new DConstValue(e->type, getNullValue(voidToI8(DtoType(dtype))));
+            result = new DConstValue(e->type, getNullValue(DtoMemType(dtype)));
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -2566,7 +2455,7 @@ public:
                 DtoAppendDCharToUnicodeString(e->loc, result, e->e2);
         }
         else if (e1type->equals(e2type)) {
-            // apeend array
+            // append array
             DSliceValue* slice = DtoCatAssignArray(e->loc, result, e->e2);
             DtoAssign(e->loc, result, slice);
         }
@@ -2669,7 +2558,7 @@ public:
         IF_LOG Logger::cout() << (dyn?"dynamic":"static") << " array literal with length " << len << " of D type: '" << arrayType->toChars() << "' has llvm type: '" << *llType << "'\n";
 
         // llvm storage type
-        LLType* llElemType = i1ToI8(voidToI8(DtoType(elemType)));
+        LLType* llElemType = DtoMemType(elemType);
         LLType* llStoType = LLArrayType::get(llElemType, len);
         IF_LOG Logger::cout() << "llvm storage type: '" << *llStoType << "'\n";
 
@@ -2705,7 +2594,7 @@ public:
         }
         else
         {
-            llvm::Value* storage = DtoRawAlloca(llStoType, 0, "arrayliteral");
+            llvm::Value* storage = DtoRawAlloca(llStoType, DtoAlignment(e->type), "arrayliteral");
             initializeArrayLiteral(p, e, storage);
             result = new DImValue(e->type, storage);
         }
@@ -2744,7 +2633,7 @@ public:
         DtoResolveStruct(e->sd);
 
         // alloca a stack slot
-        e->inProgressMemory = DtoRawAlloca(DtoType(e->type), 0, ".structliteral");
+        e->inProgressMemory = DtoAlloca(e->type, ".structliteral");
 
         // fill the allocated struct literal
         write_struct_literal(e->loc, e->inProgressMemory, e->sd, e->elements);
@@ -2896,7 +2785,7 @@ public:
             slice = DtoConstSlice(DtoConstSize_t(e->keys->dim), slice);
             LLValue* valuesArray = DtoAggrPaint(slice, funcTy->getParamType(2));
 
-            LLValue* aa = gIR->CreateCallOrInvoke3(func, aaTypeInfo, keysArray, valuesArray, "aa").getInstruction();
+            LLValue* aa = gIR->CreateCallOrInvoke(func, aaTypeInfo, keysArray, valuesArray, "aa").getInstruction();
             if (basetype->ty != Taarray) {
                 LLValue *tmp = DtoAlloca(e->type, "aaliteral");
                 DtoStore(aa, DtoGEPi(tmp, 0, 0));
@@ -2911,9 +2800,8 @@ public:
     LruntimeInit:
 
         // it should be possible to avoid the temporary in some cases
-        LLValue* tmp = DtoAlloca(e->type, "aaliteral");
+        LLValue* tmp = DtoAllocaDump(LLConstant::getNullValue(DtoType(e->type)), e->type, "aaliteral");
         result = new DVarValue(e->type, tmp);
-        DtoStore(LLConstant::getNullValue(DtoType(e->type)), tmp);
 
         const size_t n = e->keys->dim;
         for (size_t i = 0; i<n; ++i)
@@ -2940,7 +2828,7 @@ public:
         // (&a.foo).funcptr is a case where toElem(e1) is genuinely not an l-value.
         LLValue* val = makeLValue(exp->loc, toElem(exp->e1));
         LLValue* v = DtoGEPi(val, 0, index);
-        return new DVarValue(exp->type, DtoBitCast(v, getPtrToType(DtoType(exp->type))));
+        return new DVarValue(exp->type, DtoBitCast(v, DtoPtrToType(exp->type)));
     }
 
     void visit(DelegatePtrExp *e)
@@ -3004,9 +2892,9 @@ public:
         types.reserve(e->exps->dim);
         for (size_t i = 0; i < e->exps->dim; i++)
         {
-            types.push_back(i1ToI8(voidToI8(DtoType((*e->exps)[i]->type))));
+            types.push_back(DtoMemType((*e->exps)[i]->type));
         }
-        LLValue *val = DtoRawAlloca(LLStructType::get(gIR->context(), types),0, "tuple");
+        LLValue *val = DtoRawAlloca(LLStructType::get(gIR->context(), types), 0, ".tuple");
         for (size_t i = 0; i < e->exps->dim; i++)
         {
             Expression *el = (*e->exps)[i];
@@ -3019,7 +2907,7 @@ public:
             else
                 DtoStore(LLConstantInt::get(LLType::getInt8Ty(p->context()), 0, false), gep);
         }
-        result = new DImValue(e->type, val);
+        result = new DVarValue(e->type, val);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -3082,227 +2970,32 @@ public:
 
 DValue *toElem(Expression *e)
 {
-    ToElemVisitor v(gIR);
+    ToElemVisitor v(gIR, false);
     e->accept(&v);
     return v.getResult();
 }
 
-// Search for temporaries for which the destructor must be called.
-// was in toElemDtor but that triggered bug 978911 in VS
-class SearchVarsWithDestructors : public Visitor
-{
-public:
-    std::vector<Expression*> edtors;
-
-    // Import all functions from class Visitor
-    using Visitor::visit;
-
-    void applyTo(Expression *e)
-    {
-        if (e)
-            e->accept(this);
-    }
-
-    void applyTo(Expressions *e)
-    {
-        if (!e)
-            return;
-        for (size_t i = 0; i < e->dim; i++)
-            applyTo((*e)[i]);
-    }
-
-    virtual void visit(Expression* e)
-    {
-    }
-
-    virtual void visit(NewExp *e)
-    {
-        applyTo(e->thisexp);
-        applyTo(e->newargs);
-        applyTo(e->arguments);
-    }
-
-    virtual void visit(NewAnonClassExp *e)
-    {
-        applyTo(e->thisexp);
-        applyTo(e->newargs);
-        applyTo(e->arguments);
-    }
-
-    virtual void visit(UnaExp *e)
-    {
-        applyTo(e->e1);
-    }
-
-    virtual void visit(BinExp *e)
-    {
-        applyTo(e->e1);
-        applyTo(e->e2);
-    }
-
-    virtual void visit(CallExp *e)
-    {
-        applyTo(e->e1);
-        applyTo(e->arguments);
-    }
-
-    virtual void visit(ArrayExp *e)
-    {
-        applyTo(e->e1);
-        applyTo(e->arguments);
-    }
-
-    virtual void visit(SliceExp *e)
-    {
-        applyTo(e->e1);
-        applyTo(e->lwr);
-        applyTo(e->upr);
-    }
-
-    virtual void visit(ArrayLiteralExp *e)
-    {
-        applyTo(e->elements);
-    }
-
-    virtual void visit(AssocArrayLiteralExp *e)
-    {
-        applyTo(e->keys);
-        applyTo(e->values);
-    }
-
-    virtual void visit(StructLiteralExp *e)
-    {
-        if (e->stageflags & stageApply) return;
-        int old = e->stageflags;
-        e->stageflags |= stageApply;
-        applyTo(e->elements);
-        e->stageflags = old;
-    }
-
-    virtual void visit(TupleExp *e)
-    {
-        applyTo(e->e0);
-        applyTo(e->exps);
-    }
-
-    virtual void visit(AndAndExp *e)
-    {
-        applyTo(e->e1);
-        // Don't visit the expression, because later ToElemVisitor will
-        // call toElemDtor on it. Otherwise, there will be multiple
-        // destructor calls on any temporary created by the expression.
-        // See issue #795.
-        //applyTo(e->e2);
-    }
-
-    virtual void visit(OrOrExp *e)
-    {
-        applyTo(e->e1);
-        // same as above
-        //applyTo(e->e2);
-    }
-
-    virtual void visit(CondExp *e)
-    {
-        applyTo(e->econd);
-        // same as above
-        //applyTo(e->e1);
-        //applyTo(e->e2);
-    }
-
-    virtual void visit(AssertExp *e)
-    {
-        // If assertions are turned off e.g. in release mode then
-        // the expression is ignored. Only search for destructors
-        // inside the assert expression if assertions are turned on.
-        // See GitHub issue #953.
-        if (global.params.useAssert)
-            applyTo(e->e1);
-        // same as above
-        // applyTo(e->msg);
-    }
-
-    virtual void visit(DeclarationExp* e)
-    {
-        VarDeclaration* vd = e->declaration->isVarDeclaration();
-        if (!vd)
-            return;
-
-        while (vd->aliassym) {
-            vd = vd->aliassym->isVarDeclaration();
-            if (!vd)
-                return;
-        }
-
-        if (vd->init) {
-            if (ExpInitializer* ex = vd->init->isExpInitializer())
-                applyTo(ex->exp);
-        }
-
-        if (!vd->isDataseg() && vd->edtor && !vd->noscope)
-            edtors.push_back(vd->edtor);
-    }
-};
-
-// Evaluate Expression, then call destructors on any temporaries in it.
 DValue *toElemDtor(Expression *e)
 {
-    IF_LOG Logger::println("Expression::toElemDtor(): %s", e->toChars());
-    LOG_SCOPE
+    ToElemVisitor v(gIR, true);
+    e->accept(&v);
+    return v.getResult();
+}
 
-    class CallDestructors : public IRLandingPadCatchFinallyInfo
-    {
-    public:
-        CallDestructors(const std::vector<Expression*> &edtors_)
-            : edtors(edtors_)
-        {}
+// FIXME: Implement & place in right module
+Symbol *toModuleAssert(Module *m)
+{
+    return NULL;
+}
 
-        const std::vector<Expression*> &edtors;
+// FIXME: Implement & place in right module
+Symbol *toModuleUnittest(Module *m)
+{
+    return NULL;
+}
 
-        void toIR(LLValue* /*eh_ptr*/ = NULL)
-        {
-            std::vector<Expression*>::const_reverse_iterator itr, end = edtors.rend();
-            for (itr = edtors.rbegin(); itr != end; ++itr)
-                toElem(*itr);
-        }
-    };
-
-    // find destructors that must be called
-    SearchVarsWithDestructors visitor;
-    visitor.applyTo(e);
-
-    if (!visitor.edtors.empty()) {
-        if (e->op == TOKcall || e->op == TOKassert) {
-            // create finally block that calls destructors on temporaries
-            CallDestructors *callDestructors = new CallDestructors(visitor.edtors);
-
-            // create landing pad
-            llvm::BasicBlock *oldend = gIR->scopeend();
-            llvm::BasicBlock *landingpadbb = llvm::BasicBlock::Create(gIR->context(), "landingpad", gIR->topfunc(), oldend);
-
-            // set up the landing pad
-            IRLandingPad &pad = gIR->func()->gen->landingPadInfo;
-            pad.addFinally(callDestructors);
-            pad.push(landingpadbb);
-
-            // evaluate the expression
-            DValue *val = toElem(e);
-
-            // build the landing pad
-            llvm::BasicBlock *oldbb = gIR->scopebb();
-            pad.pop();
-
-            gIR->scope() = IRScope(oldbb, oldend);
-
-            callDestructors->toIR();
-            delete callDestructors;
-            return val;
-        } else {
-            DValue *val = toElem(e);
-            CallDestructors(visitor.edtors).toIR();
-            return val;
-        }
-    }
-
-    return toElem(e);
+// FIXME: Implement & place in right module
+Symbol *toModuleArray(Module *m)
+{
+    return NULL;
 }

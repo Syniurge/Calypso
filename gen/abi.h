@@ -44,14 +44,14 @@ struct ABIRewrite
     virtual ~ABIRewrite() {}
 
     /// get a rewritten value back to its original form
-    virtual llvm::Value* get(Type* dty, DValue* v) = 0;
+    virtual llvm::Value* get(Type* dty, llvm::Value* v) = 0;
 
     /// get a rewritten value back to its original form and store result in provided lvalue
     /// this one is optional and defaults to calling the one above
-    virtual void getL(Type* dty, DValue* v, llvm::Value* lval);
+    virtual void getL(Type* dty, llvm::Value* v, llvm::Value* lval);
 
     /// put out rewritten value
-    virtual llvm::Value* put(Type* dty, DValue* v) = 0;
+    virtual llvm::Value* put(DValue* v) = 0;
 
     /// should return the transformed type for this rewrite
     virtual llvm::Type* type(Type* dty, llvm::Type* t) = 0;
@@ -61,10 +61,6 @@ protected:
 
     // Returns the address of a D value, storing it to memory first if need be.
     static llvm::Value* getAddressOf(DValue* v);
-
-    // Stores a LL value to memory and returns its address.
-    static llvm::Value* storeToMemory(llvm::Value* rval, size_t alignment = 0,
-        const char* name = ".store_result");
 
     // Stores a LL value to a specified memory address. The element type of the provided
     // pointer doesn't need to match the value type (=> suited for bit-casting).
@@ -110,6 +106,9 @@ struct TargetABI
     /// Returns true if the type is passed by value
     virtual bool passByVal(Type* t) = 0;
 
+    // Returns true if the 'this' argument is to be passed before the 'sret' argument.
+    virtual bool passThisBeforeSret(TypeFunction* tf) { return false; }
+
     /// Called to give ABI the chance to rewrite the types
     virtual void rewriteFunctionType(TypeFunction* t, IrFuncTy& fty) = 0;
     virtual void rewriteVarargs(IrFuncTy& fty, std::vector<IrFuncTyArg*>& args);
@@ -128,6 +127,11 @@ struct TargetABI
     // Input:  pointer to passed ap argument (va_list*)
     // Output: value to be passed to LLVM's va_arg intrinsic (void*)
     virtual llvm::Value* prepareVaArg(llvm::Value* pAp);
+
+    /// Returns the D type to be used for va_list.
+    ///
+    /// Must match the alias in druntime.
+    virtual Type* vaListType();
 };
 
 #endif

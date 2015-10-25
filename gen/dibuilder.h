@@ -206,7 +206,7 @@ private:
     DIType CreateEnumType(Type *type);
     DIType CreatePointerType(Type *type);
     DIType CreateVectorType(Type *type);
-    DIType CreateMemberType(unsigned linnum, Type *type, DIFile file, const char* c_name, unsigned offset, PROT);
+    DIType CreateMemberType(unsigned linnum, Type *type, DIFile file, const char* c_name, unsigned offset, PROTKIND);
     DIType CreateCompositeType(Type *type);
     DIType CreateArrayType(Type *type);
     DIType CreateSArrayType(Type *type);

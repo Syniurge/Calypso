@@ -37,13 +37,20 @@ namespace llvm {
     class FunctionType;
 }
 
-// represents a function type argument
-// both explicit and implicit as well as return values
+/// Represents a function type argument (both explicit and implicit as well as
+/// return values).
+///
+/// Instances of this only exist for arguments that are actually lowered to an
+/// LLVM parameter (e.g. not for empty structs).
 struct IrFuncTyArg
 {
     /** This is the original D type as the frontend knows it
      *  May NOT be rewritten!!! */
     Type* const type;
+
+    /// The index of the declaration in the FuncDeclaration::parameters array
+    /// corresponding to this argument.
+    size_t parametersIdx;
 
     /// This is the final LLVM Type used for the parameter/return value type
     llvm::Type* ltype;
@@ -126,13 +133,13 @@ struct IrFuncTy
         tag(NULL)
     {}
 
-    llvm::Value* putRet(Type* dty, DValue* dval);
-    llvm::Value* getRet(Type* dty, DValue* dval);
-    void getRet(Type* dty, DValue* dval, llvm::Value* lval);
+    llvm::Value* putRet(DValue* dval);
+    llvm::Value* getRet(Type* dty, llvm::Value* val);
+    void getRet(Type* dty, llvm::Value* val, llvm::Value* address);
 
-    llvm::Value* putParam(Type* dty, size_t idx, DValue* dval);
-    llvm::Value* putParam(Type* dty, const IrFuncTyArg& arg, DValue* dval);
-    void getParam(Type* dty, size_t idx, DValue* dval, llvm::Value* lval);
+    llvm::Value* putParam(size_t idx, DValue* dval);
+    llvm::Value* putParam(const IrFuncTyArg& arg, DValue* dval);
+    void getParam(Type* dty, size_t idx, llvm::Value* val, llvm::Value* address);
 };
 
 #endif

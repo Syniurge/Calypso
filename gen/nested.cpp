@@ -15,9 +15,9 @@
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/tollvm.h"
+#include "ir/irfunction.h"
+#include "ir/irtypeaggr.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Support/CommandLine.h"
-namespace cl = llvm::cl;
 
 /****************************************************************************************/
 /*////////////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +65,7 @@ DValue* DtoNestedVariable(Loc& loc, Type* astype, VarDeclaration* vd, bool byref
     while (fd != vdparent) {
         if (fd->isStatic()) {
             error(loc, "function %s cannot access frame of function %s", irfunc->decl->toPrettyChars(), vdparent->toPrettyChars());
-            return new DVarValue(astype, vd, llvm::UndefValue::get(getPtrToType(DtoType(astype))));
+            return new DVarValue(astype, vd, llvm::UndefValue::get(DtoPtrToType(astype)));
         }
         fd = getParentFunc(fd, false);
         assert(fd);
@@ -159,7 +159,7 @@ DValue* DtoNestedVariable(Loc& loc, Type* astype, VarDeclaration* vd, bool byref
         Logger::cout() << "Addr: " << *val << '\n';
         Logger::cout() << "of type: " << *val->getType() << '\n';
     }
-    if (byref || (vd->isParameter() && getIrParameter(vd)->arg->byref)) {
+    if (byref || (vd->isParameter() && getIrParameter(vd)->arg && getIrParameter(vd)->arg->byref)) {
         val = DtoAlignedLoad(val);
         //dwarfOpDeref(dwarfAddr);
         IF_LOG {
@@ -296,15 +296,23 @@ LLValue* DtoNestedContext(Loc& loc, Dsymbol* sym)
     return val;
 }
 
-static void DtoCreateNestedContextType(FuncDeclaration* fd) {
-    IF_LOG Logger::println("DtoCreateNestedContextType for %s", fd->toChars());
+static void DtoCreateNestedContextType(FuncDeclaration* fd)
+{
+    IF_LOG Logger::println("DtoCreateNestedContextType for %s", fd->toPrettyChars());
     LOG_SCOPE
 
     DtoDeclareFunction(fd);
 
-    if (getIrFunc(fd)->nestedContextCreated)
+    IrFunction& irFunc = *getIrFunc(fd);
+
+    if (irFunc.nestedContextCreated)
         return;
-    getIrFunc(fd)->nestedContextCreated = true;
+    irFunc.nestedContextCreated = true;
+
+    FuncDeclaration* parentFunc = getParentFunc(fd, true);
+    // Make sure the parent has already been analyzed.
+    if (parentFunc)
+        DtoCreateNestedContextType(parentFunc);
 
     // construct nested variables array
     if (fd->closureVars.dim > 0)
@@ -313,96 +321,102 @@ static void DtoCreateNestedContextType(FuncDeclaration* fd) {
         // start with adding all enclosing parent frames until a static parent is reached
 
         LLStructType* innerFrameType = NULL;
-        unsigned depth = -1;
+        unsigned depth = 0;
 
-        // Static functions and function (not delegate) literals don't allow
-        // access to a parent context, even if they are nested.
-        const bool certainlyNewRoot = fd->isStatic() ||
-            (fd->isFuncLiteralDeclaration() &&
-            static_cast<FuncLiteralDeclaration*>(fd)->tok == TOKfunction);
-        if (!certainlyNewRoot) {
-            if (FuncDeclaration* parfd = getParentFunc(fd, true)) {
-                // Make sure the parent has already been analyzed.
-                DtoCreateNestedContextType(parfd);
-
-                innerFrameType = getIrFunc(parfd)->frameType;
-                if (innerFrameType)
-                    depth = getIrFunc(parfd)->depth;
-            }
+        if (parentFunc)
+        {
+            IrFunction& parentIrFunc = *getIrFunc(parentFunc);
+            innerFrameType = parentIrFunc.frameType;
+            if (innerFrameType)
+                depth = parentIrFunc.depth + 1;
         }
-        getIrFunc(fd)->depth = ++depth;
+
+        irFunc.depth = depth;
 
         IF_LOG Logger::cout() << "Function " << fd->toChars() << " has depth " << depth << '\n';
 
-        typedef std::vector<LLType*> TypeVec;
-        TypeVec types;
-        if (depth != 0) {
-            assert(innerFrameType);
-            // Add frame pointer types for all but last frame
-            if (depth > 1) {
-                for (unsigned i = 0; i < (depth - 1); ++i) {
-                    types.push_back(innerFrameType->getElementType(i));
-                }
-            }
-            // Add frame pointer type for last frame
-            types.push_back(LLPointerType::getUnqual(innerFrameType));
-        }
+        AggrTypeBuilder builder(false);
 
-        if (Logger::enabled() && depth != 0) {
-            Logger::println("Frame types: ");
-            LOG_SCOPE;
-            for (TypeVec::iterator i = types.begin(); i != types.end(); ++i)
-                Logger::cout() << **i << '\n';
+        if (depth != 0)
+        {
+            assert(innerFrameType);
+            unsigned ptrSize = gDataLayout->getPointerSize();
+            // Add frame pointer types for all but last frame
+            for (unsigned i = 0; i < (depth - 1); ++i)
+                builder.addType(innerFrameType->getElementType(i), ptrSize);
+            // Add frame pointer type for last frame
+            builder.addType(LLPointerType::getUnqual(innerFrameType), ptrSize);
         }
 
         // Add the direct nested variables of this function, and update their indices to match.
         // TODO: optimize ordering for minimal space usage?
         for (VarDeclarations::iterator I = fd->closureVars.begin(),
                                        E = fd->closureVars.end();
-                                       I != E; ++I) {
+                                       I != E; ++I)
+        {
             VarDeclaration* vd = *I;
-            IrLocal *irLocal = getIrLocal(vd, true);
-            irLocal->nestedIndex = types.size();
-            irLocal->nestedDepth = depth;
 
-            if (vd->isParameter()) {
-                // Parameters will have storage associated with them (to handle byref etc.),
-                // so handle those cases specially by storing a pointer instead of a value.
+            unsigned alignment = DtoAlignment(vd);
+            if (alignment > 1)
+                builder.alignCurrentOffset(alignment);
+
+            IrLocal& irLocal = *getIrLocal(vd, true);
+            irLocal.nestedIndex = builder.currentFieldIndex();
+            irLocal.nestedDepth = depth;
+
+            LLType* t = NULL;
+            if (vd->isParameter() && getIrParameter(vd)->arg)
+            {
+                // Parameters that are part of the LLVM signature will have
+                // storage associated with them (to handle byref etc.), so
+                // handle those cases specially by storing a pointer instead
+                // of a value.
                 const IrParameter* irparam = getIrParameter(vd);
                 const bool refout = vd->storage_class & (STCref | STCout);
                 const bool lazy = vd->storage_class & STClazy;
                 const bool byref = irparam->arg->byref;
                 const bool isVthisPtr = irparam->isVthis && !byref;
-                if (!(refout || (byref && !lazy)) || isVthisPtr) {
+                if (!(refout || (byref && !lazy)) || isVthisPtr)
+                {
                     // This will be copied to the nesting frame.
                     if (lazy)
-                        types.push_back(irparam->value->getType()->getContainedType(0));
+                        t = irparam->value->getType()->getContainedType(0);
                     else
-                        types.push_back(i1ToI8(DtoType(vd->type)));
-                } else {
-                    types.push_back(irparam->value->getType());
+                        t = DtoMemType(vd->type);
                 }
-            } else if (isSpecialRefVar(vd)) {
-                types.push_back(DtoType(vd->type->pointerTo()));
-            } else {
-                types.push_back(i1ToI8(DtoType(vd->type)));
+                else
+                    t = irparam->value->getType();
             }
+            else if (isSpecialRefVar(vd))
+                t = DtoType(vd->type->pointerTo());
+            else
+                t = DtoMemType(vd->type);
+
+            builder.addType(t, getTypeAllocSize(t));
+
             IF_LOG Logger::cout() << "Nested var '" << vd->toChars()
-                                  << "' of type " << *types.back() << "\n";
+                                  << "' of type " << *t << "\n";
         }
 
-        LLStructType* frameType = LLStructType::create(gIR->context(), types,
+        LLStructType* frameType = LLStructType::create(gIR->context(), builder.defaultTypes(),
                                                        std::string("nest.") + fd->toChars());
 
         IF_LOG Logger::cout() << "frameType = " << *frameType << '\n';
 
         // Store type in IrFunction
-        getIrFunc(fd)->frameType = frameType;
-    } else if (FuncDeclaration* parFunc = getParentFunc(fd, true)) {
-        // Propagate context arg properties if the context arg is passed on unmodified.
-        DtoCreateNestedContextType(parFunc);
-        getIrFunc(fd)->frameType = getIrFunc(parFunc)->frameType;
-        getIrFunc(fd)->depth = getIrFunc(parFunc)->depth;
+        irFunc.frameType = frameType;
+        irFunc.frameTypeAlignment = builder.overallAlignment();
+    }
+    else // no captured variables
+    {
+        if (parentFunc)
+        {
+            // Propagate context arg properties if the context arg is passed on unmodified.
+            IrFunction& parentIrFunc = *getIrFunc(parentFunc);
+            irFunc.frameType = parentIrFunc.frameType;
+            irFunc.frameTypeAlignment = parentIrFunc.frameTypeAlignment;
+            irFunc.depth = parentIrFunc.depth;
+        }
     }
 }
 
@@ -420,13 +434,18 @@ void DtoCreateNestedContext(FuncDeclaration* fd) {
         unsigned depth = irfunction->depth;
         LLStructType *frameType = irfunction->frameType;
         // Create frame for current function and append to frames list
-        // FIXME: alignment ?
         LLValue* frame = 0;
         bool needsClosure = fd->needsClosure();
         if (needsClosure)
+        {
+            // FIXME: alignment ?
             frame = DtoGcMalloc(fd->loc, frameType, ".frame");
+        }
         else
-            frame = DtoRawAlloca(frameType, 0, ".frame");
+        {
+            unsigned alignment = std::max(getABITypeAlign(frameType), irfunction->frameTypeAlignment);
+            frame = DtoRawAlloca(frameType, alignment, ".frame");
+        }
 
         // copy parent frames into beginning
         if (depth != 0) {
@@ -480,7 +499,7 @@ void DtoCreateNestedContext(FuncDeclaration* fd) {
                 LOG_SCOPE
                 IrParameter* parm = getIrParameter(vd);
 
-                if (parm->arg->byref)
+                if (parm->arg && parm->arg->byref)
                 {
                     storeVariable(vd, gep);
                 }
@@ -507,7 +526,7 @@ void DtoCreateNestedContext(FuncDeclaration* fd) {
                 LLSmallVector<LLValue*, 2> addr;
 #endif
                 gIR->DBuilder.OpOffset(addr, frameType, irLocal->nestedIndex);
-                gIR->DBuilder.EmitLocalVariable(frame, vd, 0, false, addr);
+                gIR->DBuilder.EmitLocalVariable(gep, vd, 0, false, addr);
             }
         }
     }

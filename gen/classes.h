@@ -27,20 +27,18 @@ class TypeClass;
 /// CALYPSO
 llvm::Value* DtoClassHandle(DValue* val);
 DValue *DtoClassDValue(Type *t, LLValue *v);
+LLType* DtoClassHandleType(TypeClass *tc);
+
+void DtoResolveAggregate(AggregateDeclaration* ad);
 
 /// Resolves the llvm type for a class declaration
 void DtoResolveClass(ClassDeclaration* cd);
 
-// CALYPSO
-void DtoResolveAggregate(AggregateDeclaration* ad);
-
-LLType* DtoClassHandleType(TypeClass *tc);
-
 /// Provides the llvm declaration for a class declaration
-void DtoDeclareClass(ClassDeclaration* cd);
+// void DtoDeclareClass(ClassDeclaration* cd);
 
 /// Constructs the constant initializer for a class declaration
-void DtoConstInitClass(ClassDeclaration* cd);
+// void DtoConstInitClass(ClassDeclaration* cd);
 
 /// Provides the llvm definition for a class declaration
 void DtoDefineClass(ClassDeclaration* cd);
@@ -56,7 +54,6 @@ void DtoFinalizeClass(Loc& loc, llvm::Value* inst);
 DValue* DtoCastClass(Loc& loc, DValue* val, Type* to);
 DValue* DtoDynamicCastObject(Loc& loc, DValue* val, Type* to);
 
-DValue* DtoCastInterfaceToObject(Loc& loc, DValue* val, Type* to);
 DValue* DtoDynamicCastInterface(Loc& loc, DValue* val, Type* to);
 
 llvm::Value* DtoVirtualFunctionPointer(DValue* inst, FuncDeclaration* fdecl, char* name);

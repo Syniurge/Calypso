@@ -110,13 +110,6 @@ ClassDeclaration::ClassDeclaration(Loc loc, Identifier *id, BaseClasses *basecla
                 Type::typeinfostruct = this;
             }
 
-            if (id == Id::TypeInfo_Typedef)
-            {
-                if (!inObject)
-                    error("%s", msg);
-                Type::typeinfotypedef = this;
-            }
-
             if (id == Id::TypeInfo_Pointer)
             {
                 if (!inObject)
@@ -248,13 +241,10 @@ ClassDeclaration::ClassDeclaration(Loc loc, Identifier *id, BaseClasses *basecla
 
 Dsymbol *ClassDeclaration::syntaxCopy(Dsymbol *s)
 {
-    ClassDeclaration *cd;
-
     //printf("ClassDeclaration::syntaxCopy('%s')\n", toChars());
-    if (s)
-        cd = (ClassDeclaration *)s;
-    else
-        cd = new ClassDeclaration(loc, ident, NULL);
+    ClassDeclaration *cd =
+        s ? (ClassDeclaration *)s
+          : new ClassDeclaration(loc, ident, NULL);
 
     cd->storage_class |= storage_class;
 
@@ -266,8 +256,7 @@ Dsymbol *ClassDeclaration::syntaxCopy(Dsymbol *s)
         (*cd->baseclasses)[i] = b2;
     }
 
-    ScopeDsymbol::syntaxCopy(cd);
-    return cd;
+    return ScopeDsymbol::syntaxCopy(cd);
 }
 
 void ClassDeclaration::semantic(Scope *sc)
@@ -367,7 +356,7 @@ void ClassDeclaration::semantic(Scope *sc)
             if (tb->ty == Ttuple)
             {
                 TypeTuple *tup = (TypeTuple *)tb;
-                PROT protection = b->protection;
+                Prot protection = b->protection;
                 baseclasses->remove(i);
                 size_t dim = Parameter::dim(tup->arguments);
                 for (size_t j = 0; j < dim; j++)
@@ -558,7 +547,7 @@ void ClassDeclaration::semantic(Scope *sc)
             assert(t->ty == Tclass);
             TypeClass *tc = (TypeClass *)t;
 
-            BaseClass *b = new BaseClass(tc, PROTpublic);
+            BaseClass *b = new BaseClass(tc, Prot(PROTpublic));
             baseclasses->shift(b);
 
             baseClass = tc->sym;
@@ -592,6 +581,10 @@ void ClassDeclaration::semantic(Scope *sc)
             ClassDeclaration *cb = b->base->isClassDeclaration(); // CALYPSO
             if (cb && cb->isCOMinterface())
                 com = true;
+            if (cpp && !b->base->isCPPinterface())
+            {
+                ::error(loc, "C++ class '%s' cannot implement D interface '%s'", toPrettyChars(), b->base->toPrettyChars());
+            }
         }
     }
 Lancestorsdone:
@@ -724,7 +717,7 @@ Lancestorsdone:
             sc2->linkage = LINKc;
         }
     }
-    sc2->protection = PROTpublic;
+    sc2->protection = Prot(PROTpublic);
     sc2->explicitProtection = 0;
     sc2->structalign = STRUCTALIGN_DEFAULT;
     sc2->userAttribDecl = NULL;
@@ -836,7 +829,7 @@ Lancestorsdone:
         }
         else
         {
-            error("Cannot implicitly generate a default ctor when base class %s is missing a default ctor", baseClass->toPrettyChars());
+            error("cannot implicitly generate a default ctor when base class %s is missing a default ctor", baseClass->toPrettyChars());
         }
     }
 
@@ -907,43 +900,6 @@ Lancestorsdone:
     //printf("-ClassDeclaration::semantic(%s), type = %p, sizeok = %d, this = %p\n", toChars(), type, sizeok, this);
 }
 
-void ClassDeclaration::toCBuffer(OutBuffer *buf, HdrGenState *hgs)
-{
-    if (!isAnonymous())
-    {
-        buf->printf("%s ", kind());
-        buf->writestring(toChars());
-        if (baseclasses->dim)
-            buf->writestring(" : ");
-    }
-    for (size_t i = 0; i < baseclasses->dim; i++)
-    {
-        BaseClass *b = (*baseclasses)[i];
-
-        if (i)
-            buf->writestring(", ");
-        //buf->writestring(b->base->ident->toChars());
-        b->type->toCBuffer(buf, NULL, hgs);
-    }
-    if (members)
-    {
-        buf->writenl();
-        buf->writeByte('{');
-        buf->writenl();
-        buf->level++;
-        for (size_t i = 0; i < members->dim; i++)
-        {
-            Dsymbol *s = (*members)[i];
-            s->toCBuffer(buf, hgs);
-        }
-        buf->level--;
-        buf->writestring("}");
-    }
-    else
-        buf->writeByte(';');
-    buf->writenl();
-}
-
 /*********************************************
  * Determine if 'this' is a base class of cd.
  * This is used to detect circular inheritance only.
@@ -1003,14 +959,18 @@ bool ClassDeclaration::isBaseInfoComplete()
 
 Dsymbol *ClassDeclaration::search(Loc loc, Identifier *ident, int flags)
 {
-    Dsymbol *s;
     //printf("%s.ClassDeclaration::search('%s')\n", toChars(), ident->toChars());
 
     //if (scope) printf("%s doAncestorsSemantic = %d\n", toChars(), doAncestorsSemantic);
-    if (scope && doAncestorsSemantic == SemanticStart)
+    if (scope && doAncestorsSemantic < SemanticDone)
     {
-        // must semantic on base class/interfaces
-        semantic(NULL);
+        if (!inuse)
+        {
+            // must semantic on base class/interfaces
+            ++inuse;
+            semantic(NULL);
+            --inuse;
+        }
     }
 
     if (!members || !symtab)    // opaque or addMember is not yet done
@@ -1020,7 +980,7 @@ Dsymbol *ClassDeclaration::search(Loc loc, Identifier *ident, int flags)
         return NULL;
     }
 
-    s = ScopeDsymbol::search(loc, ident, flags);
+    Dsymbol *s = ScopeDsymbol::search(loc, ident, flags);
     if (!s)
     {
         // Search bases classes in depth-first, left to right order
@@ -1389,23 +1349,15 @@ InterfaceDeclaration::InterfaceDeclaration(Loc loc, Identifier *id, BaseClasses 
 
 Dsymbol *InterfaceDeclaration::syntaxCopy(Dsymbol *s)
 {
-    InterfaceDeclaration *id;
-
-    if (s)
-        id = (InterfaceDeclaration *)s;
-    else
-        id = new InterfaceDeclaration(loc, ident, NULL);
-
-    ClassDeclaration::syntaxCopy(id);
-    return id;
+    InterfaceDeclaration *id =
+        s ? (InterfaceDeclaration *)s
+          : new InterfaceDeclaration(loc, ident, NULL);
+    return ClassDeclaration::syntaxCopy(id);
 }
 
 void InterfaceDeclaration::semantic(Scope *sc)
 {
     //printf("InterfaceDeclaration::semantic(%s), type = %p\n", toChars(), type);
-    if (inuse)
-        return;
-
     if (semanticRun >= PASSsemanticdone)
         return;
     int errors = global.errors;
@@ -1475,7 +1427,7 @@ void InterfaceDeclaration::semantic(Scope *sc)
             if (tb->ty == Ttuple)
             {
                 TypeTuple *tup = (TypeTuple *)tb;
-                PROT protection = b->protection;
+                Prot protection = b->protection;
                 baseclasses->remove(i);
                 size_t dim = Parameter::dim(tup->arguments);
                 for (size_t j = 0; j < dim; j++)
@@ -1548,7 +1500,7 @@ void InterfaceDeclaration::semantic(Scope *sc)
 
             if (tc->sym->scope && tc->sym->doAncestorsSemantic != SemanticDone)
                 tc->sym->semantic(NULL);    // Try to resolve forward reference
-            if (tc->sym->inuse || tc->sym->doAncestorsSemantic != SemanticDone)
+            if (tc->sym->doAncestorsSemantic != SemanticDone)
             {
                 //printf("\ttry later, forward reference of base %s\n", tc->sym->toChars());
                 if (tc->sym->scope)
@@ -1667,13 +1619,12 @@ Lancestorsdone:
         sc2->linkage = LINKwindows;
     else if (cpp)
         sc2->linkage = LINKcpp;
-    sc2->protection = PROTpublic;
+    sc2->protection = Prot(PROTpublic);
     sc2->explicitProtection = 0;
     sc2->structalign = STRUCTALIGN_DEFAULT;
     sc2->userAttribDecl = NULL;
 
     structsize = Target::ptrsize * 2;
-    inuse++;
 
     /* Set scope so if there are forward references, we still might be able to
      * resolve individual members like enums.
@@ -1711,7 +1662,6 @@ Lancestorsdone:
         type = Type::terror;
     }
 
-    inuse--;
     //members->print();
     sc2->pop();
     //printf("-InterfaceDeclaration::semantic(%s), type = %p\n", toChars(), type);
@@ -1845,7 +1795,7 @@ BaseClass::BaseClass()
     memset(this, 0, sizeof(BaseClass));
 }
 
-BaseClass::BaseClass(Type *type, PROT protection)
+BaseClass::BaseClass(Type *type, Prot protection)
 {
     //printf("BaseClass(this = %p, '%s')\n", this, type->toChars());
     this->type = type;
@@ -1937,7 +1887,7 @@ void BaseClass::copyBaseInterfaces(BaseClasses *vtblInterfaces)
         return;
 
     baseInterfaces_dim = cb->interfaces_dim;
-    baseInterfaces = (BaseClass *)mem.calloc(baseInterfaces_dim, sizeof(BaseClass));
+    baseInterfaces = (BaseClass *)mem.xcalloc(baseInterfaces_dim, sizeof(BaseClass));
 
     //printf("%s.copyBaseInterfaces()\n", base->toChars());
     for (size_t i = 0; i < baseInterfaces_dim; i++)

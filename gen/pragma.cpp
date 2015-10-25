@@ -70,6 +70,8 @@ Pragma DtoGetPragma(Scope *sc, PragmaDeclaration *decl, std::string &arg1str)
             { "bitop.btc", LLVMbitop_btc },
             { "bitop.btr", LLVMbitop_btr },
             { "bitop.bts", LLVMbitop_bts },
+            { "bitop.vld", LLVMbitop_vld },
+            { "bitop.vst", LLVMbitop_vst },
         };
 
         static std::string prefix = "ldc.";
@@ -422,6 +424,8 @@ void DtoCheckPragma(PragmaDeclaration *decl, Dsymbol *s,
     case LLVMbitop_btc:
     case LLVMbitop_btr:
     case LLVMbitop_bts:
+    case LLVMbitop_vld:
+    case LLVMbitop_vst:
         if (FuncDeclaration* fd = s->isFuncDeclaration())
         {
             fd->llvmInternal = llvm_internal;
@@ -563,7 +567,26 @@ void DtoCheckPragma(PragmaDeclaration *decl, Dsymbol *s,
 
 bool DtoIsIntrinsic(FuncDeclaration *fd)
 {
-    return (fd->llvmInternal == LLVMintrinsic || DtoIsVaIntrinsic(fd));
+    switch (fd->llvmInternal)
+    {
+    case LLVMintrinsic:
+    case LLVMalloca:
+    case LLVMfence:
+    case LLVMatomic_store:
+    case LLVMatomic_load:
+    case LLVMatomic_cmp_xchg:
+    case LLVMatomic_rmw:
+    case LLVMbitop_bt:
+    case LLVMbitop_btc:
+    case LLVMbitop_btr:
+    case LLVMbitop_bts:
+    case LLVMbitop_vld:
+    case LLVMbitop_vst:
+        return true;
+
+    default:
+        return DtoIsVaIntrinsic(fd);
+    }
 }
 
 bool DtoIsVaIntrinsic(FuncDeclaration *fd)

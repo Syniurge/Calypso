@@ -92,7 +92,7 @@ namespace AsmParserx8664
         std::string gccName; // GAS will take upper case, but GCC won't (needed for the clobber list)
         Identifier * ident;
         char size;
-        char baseReg; // %% todo: Reg, Reg_XX
+        signed char baseReg; // %% todo: Reg, Reg_XX
     } regInfo[N_Regs] =
     {
         { "EAX",   NULL_TREE, NULL,  4, Reg_EAX },
@@ -1913,15 +1913,15 @@ namespace AsmParserx8664
                         *p = std::tolower ( *p );
                     regInfo[i].gccName = std::string ( buf, p - buf );
                     if ( ( i <= Reg_ST || i > Reg_ST7 ) && i != Reg_EFLAGS )
-                        regInfo[i].ident = Lexer::idPool ( regInfo[i].name );
+                        regInfo[i].ident = Identifier::idPool ( regInfo[i].name );
                 }
 
                 for ( int i = 0; i < N_PtrNames; i++ )
-                    ptrTypeIdentTable[i] = Lexer::idPool ( ptrTypeNameTable[i] );
+                  ptrTypeIdentTable[i] = Identifier::idPool(ptrTypeNameTable[i]);
 
                 Handled = new Expression ( Loc(), TOKvoid, sizeof ( Expression ) );
 
-                ident_seg = Lexer::idPool ( "seg" );
+                ident_seg = Identifier::idPool("seg");
 
                 eof_tok.value = TOKeof;
                 eof_tok.next = 0;
@@ -2103,7 +2103,7 @@ namespace AsmParserx8664
                 }
                 else if ( token->value != TOKeof )
                 {
-                    stmt->error ( "expected comma after operand" );
+                    stmt->error ( "end of instruction expected, not '%s'", token->toChars() );
                     return;
                 }
             }
@@ -2816,8 +2816,13 @@ namespace AsmParserx8664
                         }
                         if ( operand->segmentPrefix != Reg_Invalid )
                         {
-                            writeReg ( operand->segmentPrefix );
-                            insnTemplate << ':';
+                            if (op != Op_Branch)
+                            {
+                                writeReg(operand->segmentPrefix);
+                                insnTemplate << ':';
+                            }
+                            else
+                                stmt->error("Cannot generate a segment prefix for a branching instruction");
                         }
                         if ( (operand->segmentPrefix != Reg_Invalid && operand->symbolDisplacement.dim == 0)
                             || operand->constDisplacement )
@@ -2978,7 +2983,7 @@ namespace AsmParserx8664
         }
         bool isDollar ( Expression * exp )
         {
-            return exp->op == TOKidentifier && ( ( IdentifierExp * ) exp )->ident == Id::__dollar;
+            return exp->op == TOKidentifier && ( ( IdentifierExp * ) exp )->ident == Id::dollar;
         }
 
         Expression * newRegExp ( int regno )
@@ -3163,6 +3168,31 @@ namespace AsmParserx8664
                     case TOKtilde:
                         e = new ComExp ( stmt->loc, e1 );
                         break;
+                    case TOKoror:
+                        e = new OrOrExp(stmt->loc, e1, e2);
+                        break;
+                    case TOKandand:
+                        e = new AndAndExp(stmt->loc, e1, e2);
+                        break;
+                    case TOKor:
+                        e = new OrExp(stmt->loc, e1, e2);
+                        break;
+                    case TOKand:
+                        e = new AndExp(stmt->loc, e1, e2);
+                        break;
+                    case TOKxor:
+                        e = new XorExp(stmt->loc, e1, e2);
+                        break;
+                    case TOKequal:
+                    case TOKnotequal:
+                        e = new EqualExp(op, stmt->loc, e1, e2);
+                        break;
+                    case TOKgt:
+                    case TOKge:
+                    case TOKlt:
+                    case TOKle:
+                        e = new CmpExp(op, stmt->loc, e1, e2);
+                        break;
                     default:
                         llvm_unreachable("Unknown integer operation.");
                 }
@@ -3186,7 +3216,150 @@ namespace AsmParserx8664
 
         Expression * parseAsmExp()
         {
-            return parseShiftExp();
+            return parseCondExp();
+        }
+
+        Expression * parseCondExp()
+        {
+            Expression * exp = parseLogOrExp();
+            if (token->value == TOKquestion)
+            {
+                nextToken();
+                Expression * exp2 = parseCondExp();
+                if (token->value != TOKcolon)
+                    return exp;
+                nextToken();
+                Expression * exp3 = parseCondExp();
+                exp = exp->toUInteger() ? exp2 : exp3;
+            }
+            return exp;
+        }
+
+        Expression * parseLogOrExp()
+        {
+            Expression * exp = parseLogAndExp();
+            while (token->value == TOKoror)
+            {
+                nextToken();
+                Expression * exp2 = parseLogAndExp();
+                if (isIntExp(exp) && isIntExp(exp2))
+                    exp = intOp(TOKandand, exp, exp2);
+                else
+                    stmt->error("bad integral operand");
+            }
+            return exp;
+        }
+
+        Expression * parseLogAndExp()
+        {
+            Expression * exp = parseIncOrExp();
+            while (token->value == TOKoror)
+            {
+                nextToken();
+                Expression * exp2 = parseIncOrExp();
+                if (isIntExp(exp) && isIntExp(exp2))
+                    exp = intOp(TOKoror, exp, exp2);
+                else
+                    stmt->error("bad integral operand");
+            }
+            return exp;
+        }
+
+        Expression * parseIncOrExp()
+        {
+            Expression * exp = parseXOrExp();
+            while (token->value == TOKor)
+            {
+                nextToken();
+                Expression * exp2 = parseXOrExp();
+                if (isIntExp(exp) && isIntExp(exp2))
+                    exp = intOp(TOKor, exp, exp2);
+                else
+                    stmt->error("bad integral operand");
+            }
+            return exp;
+        }
+
+        Expression * parseXOrExp()
+        {
+            Expression * exp = parseAndExp();
+            while (token->value == TOKxor)
+            {
+                nextToken();
+                Expression * exp2 = parseAndExp();
+                if (isIntExp(exp) && isIntExp(exp2))
+                    exp = intOp(TOKxor, exp, exp2);
+                else
+                    stmt->error("bad integral operand");
+            }
+            return exp;
+        }
+
+        Expression * parseAndExp()
+        {
+            Expression * exp = parseEqualExp();
+            while (token->value == TOKand)
+            {
+                nextToken();
+                Expression * exp2 = parseEqualExp();
+                if (isIntExp(exp) && isIntExp(exp2))
+                    exp = intOp(TOKand, exp, exp2);
+                else
+                    stmt->error("bad integral operand");
+            }
+            return exp;
+        }
+
+        Expression * parseEqualExp()
+        {
+            Expression * exp = parseRelExp();
+            while (1)
+            {
+                switch (token->value)
+                {
+                    case TOKequal:
+                    case TOKnotequal:
+                    {
+                        TOK tok = token->value;
+                        nextToken();
+                        Expression * exp2 = parseRelExp();
+                        if (isIntExp(exp) && isIntExp(exp2))
+                            exp = intOp(tok, exp, exp2);
+                        else
+                            stmt->error("bad integral operand");
+                    }
+                    default:
+                        return exp;
+                }
+            }
+            return exp;
+        }
+
+        Expression * parseRelExp()
+        {
+            Expression * exp = parseShiftExp();
+            while (1)
+            {
+                switch (token->value)
+                {
+                    case TOKgt:
+                    case TOKge:
+                    case TOKlt:
+                    case TOKle:
+                    {
+                        TOK tok = token->value;
+                        nextToken();
+                        Expression * exp2 = parseShiftExp();
+                        if (isIntExp(exp) && isIntExp(exp2))
+                            exp = intOp(tok, exp, exp2);
+                        else
+                            stmt->error("bad integral operand");
+                    }
+                    default:
+                        return exp;
+                }
+            }
+            return exp;
         }
 
         Expression * parseShiftExp()
@@ -3499,7 +3672,7 @@ namespace AsmParserx8664
                     {
                         return new IdentifierExp ( stmt->loc, ident );
                     }
-                    else if ( ident == Id::__dollar )
+                    else if ( ident == Id::dollar )
                     {
                     do_dollar:
                         return new IdentifierExp ( stmt->loc, ident );
@@ -3582,15 +3755,21 @@ namespace AsmParserx8664
                         }
                     }
 
-                    if ( opTakesLabel() && e->op == TOKidentifier )
+                    if ( e->op == TOKidentifier )
                     {
                         // DMD uses labels secondarily to other symbols, so check
                         // if IdentifierExp::semantic won't find anything.
                         Dsymbol *scopesym;
-
                         if ( ! sc->search ( stmt->loc, ident, & scopesym ) )
-                            return new DsymbolExp ( stmt->loc,
-                                                    sc->func->searchLabel ( ident ) );
+                        {
+                            if ( LabelDsymbol *labelsym = sc->func->searchLabel ( ident ) )
+                            {
+                                e = new DsymbolExp ( stmt->loc, labelsym );
+                                if ( opTakesLabel() )
+                                    return e;
+                                return new AddrExp ( stmt->loc, e );
+                            }
+                        }
                     }
 
                     e = e->semantic ( sc );
@@ -3616,13 +3795,14 @@ namespace AsmParserx8664
                 break;
                 case TOKdollar:
                     nextToken();
-                    ident = Id::__dollar;
+                    ident = Id::dollar;
                     goto do_dollar;
                     break;
                 default:
                     if ( op == Op_FMath0 || op == Op_FdST0ST1 || op == Op_FMath )
                         return Handled;
-                    invalidExpression();
+                    // DMD does not emit an error message here.
+                    // invalidExpression();
                     return Handled;
             }
             return e;

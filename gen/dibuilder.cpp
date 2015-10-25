@@ -15,6 +15,7 @@
 #include "gen/logger.h"
 #include "gen/tollvm.h"
 #include "gen/optimizer.h"
+#include "ir/irfunction.h"
 #include "ir/irtypeaggr.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
@@ -80,16 +81,17 @@ void ldc::DIBuilder::Declare(const Loc &loc, llvm::Value *var, ldc::DILocalVaria
 #endif
     )
 {
+    unsigned charnum = (loc.linnum ? loc.charnum : 0);
     llvm::Instruction *instr = DBuilder.insertDeclare(var, divar,
 #if LDC_LLVM_VER >= 306
         diexpr,
 #endif
 #if LDC_LLVM_VER >= 307
-        llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()),
+        llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()),
 #endif
         IR->scopebb());
 #if LDC_LLVM_VER < 307
-    instr->setDebugLoc(llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()));
+    instr->setDebugLoc(llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()));
 #endif
 }
 
@@ -259,7 +261,7 @@ ldc::DIType ldc::DIBuilder::CreateMemberType(unsigned linnum, Type *type,
                                              ldc::DIFile file,
                                              const char* c_name,
                                              unsigned offset,
-                                             PROT prot)
+                                             PROTKIND prot)
 {
     llvm::Type *T = DtoType(type);
     Type *t = type->toBasetype();
@@ -317,7 +319,7 @@ void ldc::DIBuilder::AddBaseFields(AggregateDeclaration *ad, ldc::DIFile file,
                                    I != E; ++I)
     {
         VarDeclaration* vd = *I;
-        elems.push_back(CreateMemberType(vd->loc.linnum, vd->type, file, vd->toChars(), vd->offset, vd->prot()));
+        elems.push_back(CreateMemberType(vd->loc.linnum, vd->type, file, vd->toChars(), vd->offset, vd->prot().kind));
     }
 }
 
@@ -402,7 +404,7 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type)
                                            I != E; ++I)
             {
                 VarDeclaration* vd = *I;
-                ldc::DIType dt = CreateMemberType(vd->loc.linnum, vd->type, file, vd->toChars(), vd->offset, vd->prot());
+                ldc::DIType dt = CreateMemberType(vd->loc.linnum, vd->type, file, vd->toChars(), vd->offset, vd->prot().kind);
                 elems.push_back(dt);
             }
         }
@@ -468,7 +470,7 @@ ldc::DIType ldc::DIBuilder::CreateArrayType(Type *type)
 
     assert(t->ty == Tarray && "Only arrays allowed for debug info in DIBuilder::CreateArrayType");
 
-    Loc loc(IR->dmodule, 0, 0);
+    Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
     ldc::DIFile file(CreateFile(loc));
 
 #if LDC_LLVM_VER >= 306
@@ -550,7 +552,7 @@ ldc::DISubroutineType ldc::DIBuilder::CreateFunctionType(Type *type)
     TypeFunction *t = static_cast<TypeFunction*>(type);
     Type *retType = t->next;
 
-    Loc loc(IR->dmodule, 0, 0);
+    Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
     ldc::DIFile file(CreateFile(loc));
 
     // Create "dummy" subroutine type for the return type
@@ -567,7 +569,11 @@ ldc::DISubroutineType ldc::DIBuilder::CreateFunctionType(Type *type)
 #else
     llvm::DIArray EltTypeArray = DBuilder.getOrCreateArray(Elts);
 #endif
-    return DBuilder.createSubroutineType(file, EltTypeArray);
+#if LDC_LLVM_VER >= 308
+    return DBuilder.createSubroutineType(EltTypeArray);
+#else
+  return DBuilder.createSubroutineType(file, EltTypeArray);
+#endif
 }
 
 ldc::DISubroutineType ldc::DIBuilder::CreateDelegateType(Type *type)
@@ -575,7 +581,7 @@ ldc::DISubroutineType ldc::DIBuilder::CreateDelegateType(Type *type)
     // FIXME: Implement
     TypeDelegate *t = static_cast<TypeDelegate*>(type);
 
-    Loc loc(IR->dmodule, 0, 0);
+    Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
     ldc::DIFile file(CreateFile(loc));
 
     // Create "dummy" subroutine type for the return type
@@ -598,7 +604,11 @@ ldc::DISubroutineType ldc::DIBuilder::CreateDelegateType(Type *type)
 #else
     llvm::DIArray EltTypeArray = DBuilder.getOrCreateArray(Elts);
 #endif
+#if LDC_LLVM_VER >= 308
+    return DBuilder.createSubroutineType(EltTypeArray);
+#else
     return DBuilder.createSubroutineType(file, EltTypeArray);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -663,6 +673,10 @@ void ldc::DIBuilder::EmitCompileUnit(Module *m)
     llvm::SmallString<128> srcpath(m->srcfile->name->toChars());
     llvm::sys::fs::make_absolute(srcpath);
 
+#if LDC_LLVM_VER >= 308
+    if (global.params.targetTriple.isWindowsMSVCEnvironment())
+        IR->module.addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+#endif
 #if LDC_LLVM_VER >= 304
     // Metadata without a correct version will be stripped by UpgradeDebugInfo.
     IR->module.addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
@@ -737,7 +751,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function* Fn,
     ldc::DICompileUnit CU(GetCU());
     assert(CU && "Compilation unit missing or corrupted in DIBuilder::EmitSubProgram");
 
-    Loc loc(IR->dmodule, 0, 0);
+    Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
     ldc::DIFile file(CreateFile(loc));
 
     // Create "dummy" subroutine type for the return type
@@ -754,7 +768,11 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function* Fn,
 #else
     llvm::DIArray EltTypeArray = DBuilder.getOrCreateArray(Elts);
 #endif
+#if LDC_LLVM_VER >= 308
+    ldc::DISubroutineType DIFnType = DBuilder.createSubroutineType(EltTypeArray);
+#else
     ldc::DISubroutineType DIFnType = DBuilder.createSubroutineType(file, EltTypeArray);
+#endif
 
     // FIXME: duplicates ?
     return DBuilder.createFunction(
@@ -809,7 +827,7 @@ void ldc::DIBuilder::EmitBlockStart(Loc& loc)
             GetCurrentScope(), // scope
             CreateFile(loc), // file
             loc.linnum, // line
-            loc.charnum // column
+            loc.linnum ? loc.charnum : 0 // column
 #if LDC_LLVM_VER == 305
             , 0 // DWARF path discriminator value
 #endif
@@ -840,16 +858,18 @@ void ldc::DIBuilder::EmitStopPoint(Loc& loc)
     // (line 0), then we can just ignore it (see GitHub issue #998 for why we
     // cannot do this in all cases).
     if (!loc.linnum &&
-          !IR->ir->getCurrentDebugLocation()
-#if LDC_LLVM_VER < 307
-              .isUnknown()
+#if LDC_LLVM_VER >= 307
+          IR->ir->getCurrentDebugLocation()
+#else
+          !IR->ir->getCurrentDebugLocation().isUnknown()
 #endif
         )
         return;
 
-    Logger::println("D to dwarf stoppoint at line %u, column %u", loc.linnum, loc.charnum);
+    unsigned charnum = (loc.linnum ? loc.charnum : 0);
+    Logger::println("D to dwarf stoppoint at line %u, column %u", loc.linnum, charnum);
     LOG_SCOPE;
-    IR->ir->SetCurrentDebugLocation(llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()));
+    IR->ir->SetCurrentDebugLocation(llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()));
 }
 
 void ldc::DIBuilder::EmitValue(llvm::Value *val, VarDeclaration *vd)
@@ -901,11 +921,13 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
     // get variable description
     assert(!vd->isDataseg() && "static variable");
 
+#if LDC_LLVM_VER < 308
     unsigned tag;
     if (vd->isParameter())
         tag = llvm::dwarf::DW_TAG_arg_variable;
     else
         tag = llvm::dwarf::DW_TAG_auto_variable;
+#endif
 
     ldc::DILocalVariable debugVariable;
     unsigned Flags = 0;
@@ -921,7 +943,48 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
 #if LDC_LLVM_VER < 306
     if (addr.empty()) {
 #endif
-        debugVariable = DBuilder.createLocalVariable(
+#if LDC_LLVM_VER >= 308
+      if (vd->isParameter())
+      {
+          FuncDeclaration* fd = vd->parent->isFuncDeclaration();
+          assert(fd);
+          int argNo;
+          if (fd->vthis == vd)
+              argNo = 0;
+          else
+          {
+              assert(fd->parameters);
+              for (argNo = 0; argNo < fd->parameters->dim; argNo++)
+                if ((*fd->parameters)[argNo] == vd)
+                  break;
+              assert(argNo < fd->parameters->dim);
+              if (fd->vthis)
+                  argNo++;
+          }
+
+          debugVariable = DBuilder.createParameterVariable(
+              GetCurrentScope(), // scope
+              vd->toChars(), // name
+              argNo + 1,
+              CreateFile(vd->loc), // file
+              vd->loc.linnum, // line num
+              TD, // type
+              true, // preserve
+              Flags // flags
+              );
+      }
+      else
+          debugVariable = DBuilder.createAutoVariable(
+              GetCurrentScope(), // scope
+              vd->toChars(), // name
+              CreateFile(vd->loc), // file
+              vd->loc.linnum, // line num
+              TD, // type
+              true, // preserve
+              Flags // flags
+              );
+#else
+      debugVariable = DBuilder.createLocalVariable(
             tag, // tag
             GetCurrentScope(), // scope
             vd->toChars(), // name
@@ -931,6 +994,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
             true, // preserve
             Flags // flags
         );
+#endif
 #if LDC_LLVM_VER < 306
     }
     else {

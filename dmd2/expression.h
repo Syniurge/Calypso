@@ -14,10 +14,10 @@
 
 #include "mars.h"
 #include "identifier.h"
-#include "lexer.h"
 #include "arraytypes.h"
 #include "intrange.h"
 #include "visitor.h"
+#include "tokens.h"
 
 class Type;
 class TypeVector;
@@ -40,9 +40,7 @@ class StructDeclaration;
 class TemplateInstance;
 class TemplateDeclaration;
 class ClassDeclaration;
-struct HdrGenState;
 class BinExp;
-struct InterState;
 #if IN_DMD
 struct Symbol;          // back end symbol
 #endif
@@ -56,21 +54,7 @@ class AssignExp;
 class SymbolDeclaration;
 #endif
 
-enum TOK;
-
-#if IN_DMD
-// Back end
-struct IRState;
-struct dt_t;
-#endif
-
-#ifdef IN_GCC
-typedef union tree_node elem;
-#elif IN_LLVM
-class DValue; typedef class DValue elem;
-#else
-struct elem;
-#endif
+struct UnionExp;
 
 #if IN_LLVM
 struct IRState;
@@ -87,15 +71,12 @@ Expression *resolvePropertiesOnly(Scope *sc, Expression *e1);
 void accessCheck(Loc loc, Scope *sc, Expression *e, Declaration *d);
 Expression *build_overload(Loc loc, Scope *sc, Expression *ethis, Expression *earg, Dsymbol *d);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
-void argExpTypesToCBuffer(OutBuffer *buf, Expressions *arguments, HdrGenState *hgs);
-void argsToCBuffer(OutBuffer *buf, Expressions *arguments, HdrGenState *hgs);
 void expandTuples(Expressions *exps);
 TupleDeclaration *isAliasThisTuple(Expression *e);
 int expandAliasThisTuples(Expressions *exps, size_t starti = 0);
 FuncDeclaration *hasThis(Scope *sc);
 Expression *fromConstInitializer(int result, Expression *e);
 bool arrayExpressionSemantic(Expressions *exps, Scope *sc);
-int arrayExpressionCanThrow(Expressions *exps, FuncDeclaration *func, bool mustNotThrow);
 TemplateDeclaration *getFuncTemplateDecl(Dsymbol *s);
 Expression *valueNoDtor(Expression *e);
 int modifyFieldVar(Loc loc, Scope *sc, VarDeclaration *var, Expression *e1);
@@ -108,21 +89,22 @@ void discardValue(Expression *e);
 bool isTrivialExp(Expression *e);
 
 int isConst(Expression *e);
-Expression *toDelegate(Expression *e, Scope *sc);
+Expression *toDelegate(Expression *e, Type* t, Scope *sc);
 AggregateDeclaration *isAggregate(Type *t);
 IntRange getIntRange(Expression *e);
-bool isArrayOperand(Expression *e);
+bool checkNonAssignmentArrayOp(Expression *e, bool suggestion = false);
+bool isUnaArrayOp(TOK op);
+bool isBinArrayOp(TOK op);
+bool isBinAssignArrayOp(TOK op);
+bool isArrayOpOperand(Expression *e);
 Expression *arrayOp(BinExp *e, Scope *sc);
 Expression *arrayOp(BinAssignExp *e, Scope *sc);
 bool hasSideEffect(Expression *e);
 bool canThrow(Expression *e, FuncDeclaration *func, bool mustNotThrow);
 Expression *Expression_optimize(Expression *e, int result, bool keepLvalue);
-dt_t **Expression_toDt(Expression *e, dt_t **pdt);
-elem *toElem(Expression *e, IRState *irs);
 MATCH implicitConvTo(Expression *e, Type *t);
 Expression *implicitCastTo(Expression *e, Scope *sc, Type *t);
 Expression *castTo(Expression *e, Scope *sc, Type *t);
-void toCBuffer(Expression *e, OutBuffer *buf, HdrGenState *hgs);
 Expression *ctfeInterpret(Expression *);
 Expression *inlineCopy(Expression *e, Scope *sc);
 Expression *op_overload(Expression *e, Scope *sc);
@@ -135,27 +117,16 @@ Type *getIndirection(Type *t);
 
 Expression *checkGC(Scope *sc, Expression *e);
 
+bool checkEscape(Scope *sc, Expression *e, bool gag);
+bool checkEscapeRef(Scope *sc, Expression *e, bool gag);
+
 /* Run CTFE on the expression, but allow the expression to be a TypeExp
  * or a tuple containing a TypeExp. (This is required by pragma(msg)).
  */
 Expression *ctfeInterpretForPragmaMsg(Expression *e);
 
-/* Interpreter: what form of return value expression is required?
- */
-enum CtfeGoal
-{   ctfeNeedRvalue,   // Must return an Rvalue
-    ctfeNeedLvalue,   // Must return an Lvalue
-    ctfeNeedAnyValue, // Can return either an Rvalue or an Lvalue
-    ctfeNeedLvalueRef,// Must return a reference to an Lvalue (for ref types)
-    ctfeNeedNothing   // The return value is not required
-};
-
-Expression *interpret(Expression *e, InterState *istate, CtfeGoal goal);
-
-#define WANTflags   1
-#define WANTvalue   2
-// Same as WANTvalue, but also expand variables as far as possible
-#define WANTexpand  8
+#define WANTvalue   0   // default
+#define WANTexpand  1   // expand const/immutable variables if possible
 
 class Expression : public RootObject
 {
@@ -196,12 +167,7 @@ public:
     virtual real_t toImaginary();
     virtual complex_t toComplex();
     virtual StringExp *toStringExp();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs)
-    {
-        ::toCBuffer(this, buf, hgs);
-    }
-    virtual void toMangleBuffer(OutBuffer *buf);
-    virtual int isLvalue();
+    virtual bool isLvalue();
     virtual Expression *toLvalue(Scope *sc, Expression *e);
     virtual Expression *modifiableLvalue(Scope *sc, Expression *e);
     Expression *implicitCastTo(Scope *sc, Type *t)
@@ -216,8 +182,6 @@ public:
     {
         return ::castTo(this, sc, t);
     }
-    virtual void checkEscape();
-    virtual void checkEscapeRef();
     virtual Expression *resolveLoc(Loc loc, Scope *sc);
     void checkScalar();
     void checkNoBool();
@@ -233,7 +197,6 @@ public:
     virtual int checkModifiable(Scope *sc, int flag = 0);
     virtual Expression *checkToBoolean(Scope *sc);
     virtual Expression *addDtorHook(Scope *sc);
-    Expression *checkToPointer();
     Expression *addressOf();
     Expression *deref();
 
@@ -248,23 +211,14 @@ public:
     {
         return ::ctfeInterpret(this);
     }
-    Expression *interpret(InterState *istate, CtfeGoal goal = ctfeNeedRvalue)
-    {
-        return ::interpret(this, istate, goal);
-    }
 
     int isConst() { return ::isConst(this); }
-    virtual int isBool(int result);
+    virtual bool isBool(bool result);
     Expression *op_overload(Scope *sc)
     {
         return ::op_overload(this, sc);
     }
 
-#if IN_DMD
-    // Back end
-    elem *toElem(IRState *irs) { return ::toElem(this, irs); }
-    dt_t **toDt(dt_t **pdt) { return ::Expression_toDt(this, pdt); }
-#endif
     virtual void accept(Visitor *v) { v->visit(this); }
 #if IN_LLVM
     llvm::Value* cachedLvalue;
@@ -273,21 +227,18 @@ public:
 
 class IntegerExp : public Expression
 {
-private:
+public:
     dinteger_t value;
 
-public:
     IntegerExp(Loc loc, dinteger_t value, Type *type);
     IntegerExp(dinteger_t value);
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    char *toChars();
     dinteger_t toInteger();
     real_t toReal();
     real_t toImaginary();
     complex_t toComplex();
-    int isBool(int result);
-    void toMangleBuffer(OutBuffer *buf);
+    bool isBool(bool result);
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
     dinteger_t getInteger() { return value; }
@@ -304,6 +255,8 @@ public:
 
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
+
+    static ErrorExp *errorexp; // handy shared value
 };
 
 class RealExp : public Expression
@@ -314,14 +267,12 @@ public:
     RealExp(Loc loc, real_t value, Type *type);
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    char *toChars();
     dinteger_t toInteger();
     uinteger_t toUInteger();
     real_t toReal();
     real_t toImaginary();
     complex_t toComplex();
-    int isBool(int result);
-    void toMangleBuffer(OutBuffer *buf);
+    bool isBool(bool result);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -333,14 +284,12 @@ public:
     ComplexExp(Loc loc, complex_t value, Type *type);
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    char *toChars();
     dinteger_t toInteger();
     uinteger_t toUInteger();
     real_t toReal();
     real_t toImaginary();
     complex_t toComplex();
-    int isBool(int result);
-    void toMangleBuffer(OutBuffer *buf);
+    bool isBool(bool result);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -353,8 +302,7 @@ public:
     IdentifierExp(Loc loc, Identifier *ident);
     static IdentifierExp *create(Loc loc, Identifier *ident);
     Expression *semantic(Scope *sc);
-    char *toChars();
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -374,8 +322,7 @@ public:
 
     DsymbolExp(Loc loc, Dsymbol *s, bool hasOverloads = false);
     Expression *semantic(Scope *sc);
-    char *toChars();
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -387,10 +334,9 @@ public:
 
     ThisExp(Loc loc);
     Expression *semantic(Scope *sc);
-    int isBool(int result);
-    int isLvalue();
+    bool isBool(bool result);
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
-    Expression *modifiableLvalue(Scope *sc, Expression *e);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -412,9 +358,8 @@ public:
     NullExp(Loc loc, Type *t = NULL);
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    int isBool(int result);
+    bool isBool(bool result);
     StringExp *toStringExp();
-    void toMangleBuffer(OutBuffer *buf);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -426,25 +371,23 @@ public:
     unsigned char sz;   // 1: char, 2: wchar, 4: dchar
     unsigned char committed;    // !=0 if type is committed
     utf8_t postfix;      // 'c', 'w', 'd'
-    bool ownedByCtfe;   // true = created in CTFE
+    int ownedByCtfe;    // 1: created in CTFE, 2: constant cached for CTFE
 
     StringExp(Loc loc, char *s);
     StringExp(Loc loc, void *s, size_t len);
     StringExp(Loc loc, void *s, size_t len, utf8_t postfix);
     static StringExp *create(Loc loc, char *s);
-    //Expression *syntaxCopy();
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    size_t length();
+    size_t length(int encSize = 4);
     StringExp *toStringExp();
     StringExp *toUTF8(Scope *sc);
     int compare(RootObject *obj);
-    int isBool(int result);
-    int isLvalue();
+    bool isBool(bool result);
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
     unsigned charAt(uinteger_t i);
-    void toMangleBuffer(OutBuffer *buf);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -469,7 +412,6 @@ public:
     Expression *syntaxCopy();
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    void checkEscape();
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -478,7 +420,7 @@ class ArrayLiteralExp : public Expression
 {
 public:
     Expressions *elements;
-    bool ownedByCtfe;   // true = created in CTFE
+    int ownedByCtfe;    // 1: created in CTFE, 2: constant cached for CTFE
 
     ArrayLiteralExp(Loc loc, Expressions *elements);
     ArrayLiteralExp(Loc loc, Expression *e);
@@ -486,9 +428,8 @@ public:
     Expression *syntaxCopy();
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    int isBool(int result);
+    bool isBool(bool result);
     StringExp *toStringExp();
-    void toMangleBuffer(OutBuffer *buf);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -498,14 +439,13 @@ class AssocArrayLiteralExp : public Expression
 public:
     Expressions *keys;
     Expressions *values;
-    bool ownedByCtfe;   // true = created in CTFE
+    int ownedByCtfe;    // 1: created in CTFE, 2: constant cached for CTFE
 
     AssocArrayLiteralExp(Loc loc, Expressions *keys, Expressions *values);
     bool equals(RootObject *o);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    int isBool(int result);
-    void toMangleBuffer(OutBuffer *buf);
+    bool isBool(bool result);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -537,7 +477,7 @@ public:
 #endif
     size_t soffset;             // offset from start of s
     int fillHoles;              // fill alignment 'holes' with zero
-    bool ownedByCtfe;           // true = created in CTFE
+    int ownedByCtfe;            // 1: created in CTFE, 2: constant cached for CTFE
 
     // pointer to the origin instance of the expression.
     // once a new expression is created, origin is set to 'this'.
@@ -561,7 +501,6 @@ public:
     Expression *semantic(Scope *sc);
     Expression *getField(Type *type, unsigned offset);
     int getFieldIndex(Type *type, unsigned offset);
-    void toMangleBuffer(OutBuffer *buf);
     Expression *addDtorHook(Scope *sc);
 #if IN_LLVM
     // With the introduction of pointers returned from CTFE, struct literals can
@@ -578,8 +517,6 @@ public:
     // LDC_FIXME: Figure out whether this, i.e. imitating the DMD behavior, is
     // really the best way to fix the nested struct constant folding issue.
     SymbolDeclaration *sinit;
-#else
-    Symbol *toSymbol();
 #endif
 
     void accept(Visitor *v) { v->visit(this); }
@@ -617,7 +554,7 @@ public:
 
     TemplateExp(Loc loc, TemplateDeclaration *td, FuncDeclaration *fd = NULL);
     bool rvalue();
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -631,6 +568,8 @@ public:
     Expressions *newargs;       // Array of Expression's to call new operator
     Type *newtype;
     Expressions *arguments;     // Array of Expression's
+
+    Expression *argprefix;      // expression to be evaluated just before arguments[]
 
     CtorDeclaration *member;    // constructor function
     NewDeclaration *allocator;  // allocator function
@@ -681,8 +620,7 @@ public:
 
     SymOffExp(Loc loc, Declaration *var, dinteger_t offset, bool hasOverloads = false);
     Expression *semantic(Scope *sc);
-    void checkEscape();
-    int isBool(int result);
+    bool isBool(bool result);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -696,12 +634,9 @@ public:
     static VarExp *create(Loc loc, Declaration *var, bool hasOverloads = false);
     bool equals(RootObject *o);
     Expression *semantic(Scope *sc);
-    char *toChars();
-    void checkEscape();
-    void checkEscapeRef();
     int checkModifiable(Scope *sc, int flag);
     bool checkReadModifyWrite();
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
 
@@ -716,7 +651,7 @@ public:
     OverloadSet *vars;
 
     OverExp(Loc loc, OverloadSet *s);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -828,7 +763,7 @@ public:
     void accept(Visitor *v) { v->visit(this); }
 };
 
-typedef Expression *(*fp_t)(Type *, Expression *, Expression *);
+typedef UnionExp (*fp_t)(Type *, Expression *, Expression *);
 typedef int (*fp2_t)(Loc loc, TOK, Expression *, Expression *);
 
 class BinExp : public Expression
@@ -846,7 +781,6 @@ public:
     Expression *binSemantic(Scope *sc);
     Expression *binSemanticProp(Scope *sc);
     Expression *checkComplexOpAssign(Scope *sc);
-    int isunsigned();
     Expression *incompatibleTypes();
 
     Expression *reorderSettingAAElem(Scope *sc);
@@ -864,7 +798,7 @@ public:
 
     Expression *semantic(Scope *sc);
 
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *ex);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
@@ -933,7 +867,7 @@ public:
     Expression *semantic(Scope *sc);
     int checkModifiable(Scope *sc, int flag);
     bool checkReadModifyWrite();
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
@@ -992,7 +926,7 @@ public:
 
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *addDtorHook(Scope *sc);
 
@@ -1004,7 +938,7 @@ class AddrExp : public UnaExp
 public:
     AddrExp(Loc loc, Expression *e);
     Expression *semantic(Scope *sc);
-    void checkEscape();
+
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -1014,9 +948,8 @@ public:
     PtrExp(Loc loc, Expression *e);
     PtrExp(Loc loc, Expression *e, Type *t);
     Expression *semantic(Scope *sc);
-    void checkEscapeRef();
     int checkModifiable(Scope *sc, int flag);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
 
@@ -1086,7 +1019,6 @@ public:
     CastExp(Loc loc, Expression *e, unsigned char mod);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    void checkEscape();
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1109,17 +1041,17 @@ public:
     Expression *upr;            // NULL if implicit 0
     Expression *lwr;            // NULL if implicit [length - 1]
     VarDeclaration *lengthVar;
+    bool upperIsInBounds;       // true if upr <= e1.length
+    bool lowerIsLessThanUpper;  // true if lwr <= upr
 
     SliceExp(Loc loc, Expression *e1, Expression *lwr, Expression *upr);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    void checkEscape();
-    void checkEscapeRef();
     int checkModifiable(Scope *sc, int flag);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
-    int isBool(int result);
+    bool isBool(bool result);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1151,7 +1083,7 @@ class DelegatePtrExp : public UnaExp
 public:
     DelegatePtrExp(Loc loc, Expression *e1);
     Expression *semantic(Scope *sc);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1161,7 +1093,7 @@ class DelegateFuncptrExp : public UnaExp
 public:
     DelegateFuncptrExp(Loc loc, Expression *e1);
     Expression *semantic(Scope *sc);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1178,7 +1110,7 @@ public:
     ArrayExp(Loc loc, Expression *e1, Expressions *arguments);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
 
     void accept(Visitor *v) { v->visit(this); }
@@ -1199,13 +1131,11 @@ class CommaExp : public BinExp
 public:
     CommaExp(Loc loc, Expression *e1, Expression *e2);
     Expression *semantic(Scope *sc);
-    void checkEscape();
-    void checkEscapeRef();
     int checkModifiable(Scope *sc, int flag);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
-    int isBool(int result);
+    bool isBool(bool result);
     Expression *addDtorHook(Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1214,16 +1144,18 @@ class IndexExp : public BinExp
 {
 public:
     VarDeclaration *lengthVar;
-    int modifiable;
-    bool skipboundscheck;
+    bool modifiable;
+    bool indexIsInBounds;       // true if 0 <= e2 && e2 <= e1.length - 1
 
     IndexExp(Loc loc, Expression *e1, Expression *e2);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
     int checkModifiable(Scope *sc, int flag);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
+
+    Expression *markSettingAAElem();
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1255,7 +1187,7 @@ public:
 
     AssignExp(Loc loc, Expression *e1, Expression *e2);
     Expression *semantic(Scope *sc);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *ex);
     Expression *checkToBoolean(Scope *sc);
 
@@ -1561,10 +1493,8 @@ public:
     CondExp(Loc loc, Expression *econd, Expression *e1, Expression *e2);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
-    void checkEscape();
-    void checkEscapeRef();
     int checkModifiable(Scope *sc, int flag);
-    int isLvalue();
+    bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
     Expression *modifiableLvalue(Scope *sc, Expression *e);
     Expression *checkToBoolean(Scope *sc);
@@ -1630,44 +1560,86 @@ public:
 
 /****************************************************************/
 
+/* A type meant as a union of all the Expression types,
+ * to serve essentially as a Variant that will sit on the stack
+ * during CTFE to reduce memory consumption.
+ */
+struct UnionExp
+{
+    UnionExp() { }  // yes, default constructor does nothing
+
+    UnionExp(Expression *e)
+    {
+        memcpy(this, (void *)e, e->size);
+    }
+
+    /* Extract pointer to Expression
+     */
+    Expression *exp() { return (Expression *)&u; }
+
+    /* Convert to an allocated Expression
+     */
+    Expression *copy();
+
+private:
+    union
+    {
+        char exp       [sizeof(Expression)];
+        char integerexp[sizeof(IntegerExp)];
+        char errorexp  [sizeof(ErrorExp)];
+        char realexp   [sizeof(RealExp)];
+        char complexexp[sizeof(ComplexExp)];
+        char symoffexp [sizeof(SymOffExp)];
+        char stringexp [sizeof(StringExp)];
+        char arrayliteralexp [sizeof(ArrayLiteralExp)];
+        char assocarrayliteralexp [sizeof(AssocArrayLiteralExp)];
+        char structliteralexp [sizeof(StructLiteralExp)];
+        char nullexp   [sizeof(NullExp)];
+        char dotvarexp [sizeof(DotVarExp)];
+        char addrexp   [sizeof(AddrExp)];
+        char indexexp  [sizeof(IndexExp)];
+        char sliceexp  [sizeof(SliceExp)];
+
+        // Ensure that the union is suitably aligned.
+        longdouble for_alignment_only;
+    } u;
+};
+
+/****************************************************************/
+
 /* Special values used by the interpreter
  */
-extern Expression *EXP_CANT_INTERPRET;
-extern Expression *EXP_CONTINUE_INTERPRET;
-extern Expression *EXP_BREAK_INTERPRET;
-extern Expression *EXP_GOTO_INTERPRET;
-extern Expression *EXP_VOID_INTERPRET;
 
 Expression *expType(Type *type, Expression *e);
 
-Expression *Neg(Type *type, Expression *e1);
-Expression *Com(Type *type, Expression *e1);
-Expression *Not(Type *type, Expression *e1);
-Expression *Bool(Type *type, Expression *e1);
-Expression *Cast(Type *type, Type *to, Expression *e1);
-Expression *ArrayLength(Type *type, Expression *e1);
-Expression *Ptr(Type *type, Expression *e1);
+UnionExp Neg(Type *type, Expression *e1);
+UnionExp Com(Type *type, Expression *e1);
+UnionExp Not(Type *type, Expression *e1);
+UnionExp Bool(Type *type, Expression *e1);
+UnionExp Cast(Type *type, Type *to, Expression *e1);
+UnionExp ArrayLength(Type *type, Expression *e1);
+UnionExp Ptr(Type *type, Expression *e1);
 
-Expression *Add(Type *type, Expression *e1, Expression *e2);
-Expression *Min(Type *type, Expression *e1, Expression *e2);
-Expression *Mul(Type *type, Expression *e1, Expression *e2);
-Expression *Div(Type *type, Expression *e1, Expression *e2);
-Expression *Mod(Type *type, Expression *e1, Expression *e2);
-Expression *Pow(Type *type, Expression *e1, Expression *e2);
-Expression *Shl(Type *type, Expression *e1, Expression *e2);
-Expression *Shr(Type *type, Expression *e1, Expression *e2);
-Expression *Ushr(Type *type, Expression *e1, Expression *e2);
-Expression *And(Type *type, Expression *e1, Expression *e2);
-Expression *Or(Type *type, Expression *e1, Expression *e2);
-Expression *Xor(Type *type, Expression *e1, Expression *e2);
-Expression *Index(Type *type, Expression *e1, Expression *e2);
-Expression *Cat(Type *type, Expression *e1, Expression *e2);
+UnionExp Add(Type *type, Expression *e1, Expression *e2);
+UnionExp Min(Type *type, Expression *e1, Expression *e2);
+UnionExp Mul(Type *type, Expression *e1, Expression *e2);
+UnionExp Div(Type *type, Expression *e1, Expression *e2);
+UnionExp Mod(Type *type, Expression *e1, Expression *e2);
+UnionExp Pow(Type *type, Expression *e1, Expression *e2);
+UnionExp Shl(Type *type, Expression *e1, Expression *e2);
+UnionExp Shr(Type *type, Expression *e1, Expression *e2);
+UnionExp Ushr(Type *type, Expression *e1, Expression *e2);
+UnionExp And(Type *type, Expression *e1, Expression *e2);
+UnionExp Or(Type *type, Expression *e1, Expression *e2);
+UnionExp Xor(Type *type, Expression *e1, Expression *e2);
+UnionExp Index(Type *type, Expression *e1, Expression *e2);
+UnionExp Cat(Type *type, Expression *e1, Expression *e2);
 
-Expression *Equal(TOK op, Type *type, Expression *e1, Expression *e2);
-Expression *Cmp(TOK op, Type *type, Expression *e1, Expression *e2);
-Expression *Identity(TOK op, Type *type, Expression *e1, Expression *e2);
+UnionExp Equal(TOK op, Type *type, Expression *e1, Expression *e2);
+UnionExp Cmp(TOK op, Type *type, Expression *e1, Expression *e2);
+UnionExp Identity(TOK op, Type *type, Expression *e1, Expression *e2);
 
-Expression *Slice(Type *type, Expression *e1, Expression *lwr, Expression *upr);
+UnionExp Slice(Type *type, Expression *e1, Expression *lwr, Expression *upr);
 
 // Const-folding functions used by CTFE
 

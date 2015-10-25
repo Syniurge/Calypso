@@ -17,6 +17,7 @@
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/tollvm.h"
+#include "ir/irfunction.h"
 #if LDC_LLVM_VER >= 303
 #include "llvm/IR/InlineAsm.h"
 #else
@@ -51,21 +52,6 @@ public:
 
     void visit(AsmStatement *stmt) LLVM_OVERRIDE {
         AsmStatement_toNakedIR(stmt, irs);
-    }
-
-    //////////////////////////////////////////////////////////////////////////
-
-    void visit(AsmBlockStatement *stmt) LLVM_OVERRIDE {
-        IF_LOG Logger::println("AsmBlockStatement::toNakedIR(): %s", stmt->loc.toChars());
-        LOG_SCOPE;
-
-        for (Statements::iterator I = stmt->statements->begin(),
-                                  E = stmt->statements->end();
-                                  I != E; ++I)
-        {
-            Statement *s = *I;
-            if (s) s->accept(this);
-        }
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -501,14 +487,3 @@ DValue * DtoInlineAsmExpr(Loc& loc, FuncDeclaration * fd, Expressions * argument
     // return call as im value
     return new DImValue(fd->type->nextOf(), rv);
 }
-
-
-
-
-
-
-
-
-
-
-

@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "module.h"
-#include "color.h"
+#include "errors.h"
 #include "doc.h"
 #include "id.h"
 #include "hdrgen.h"
@@ -25,6 +25,7 @@
 #include "driver/cl_options.h"
 #include "driver/codegenerator.h"
 #include "driver/configfile.h"
+#include "driver/exe_path.h"
 #include "driver/ldc-version.h"
 #include "driver/linker.h"
 #include "driver/targetmachine.h"
@@ -92,27 +93,18 @@ static cl::list<std::string, StringsAdapter> importPaths("I",
     cl::Prefix);
 
 static cl::opt<std::string> defaultLib("defaultlib",
-    cl::desc("Default libraries for non-debug-info build (overrides previous)"),
+    cl::desc("Default libraries to link with (overrides previous)"),
     cl::value_desc("lib1,lib2,..."),
     cl::ZeroOrMore);
 
 static cl::opt<std::string> debugLib("debuglib",
-    cl::desc("Default libraries for debug info build (overrides previous)"),
+    cl::desc("Debug versions of default libraries (overrides previous)"),
     cl::value_desc("lib1,lib2,..."),
     cl::ZeroOrMore);
 
-
-#if LDC_LLVM_VER < 304
-namespace llvm {
-namespace sys {
-namespace fs {
-static std::string getMainExecutable(const char *argv0, void *MainExecAddr) {
-  return llvm::sys::Path::GetMainExecutable(argv0, MainExecAddr).str();
-}
-}
-}
-}
-#endif
+static cl::opt<bool> linkDebugLib("link-debuglib",
+    cl::desc("Link with libraries specified in -debuglib, not -defaultlib"),
+    cl::ZeroOrMore);
 
 void printVersion() {
     printf("LDC - the LLVM D compiler (%s):\n", global.ldc_version);
@@ -154,7 +146,7 @@ static void processVersions(std::vector<std::string>& list, const char* type,
                 setLevel((unsigned)level);
             }
         } else {
-            char* cstr = mem.strdup(value);
+            char* cstr = mem.xstrdup(value);
             if (Lexer::isValidIdentifier(cstr)) {
                 addIdent(cstr);
                 continue;
@@ -171,7 +163,7 @@ static void initFromString(const char*& dest, const cl::opt<std::string>& src) {
     if (src.getNumOccurrences() != 0) {
         if (src.empty())
             error(Loc(), "Expected argument to '-%s'", src.ArgStr);
-        dest = mem.strdup(src.c_str());
+        dest = mem.xstrdup(src.c_str());
     }
 }
 
@@ -182,6 +174,17 @@ static void hide(llvm::StringMap<cl::Option *>& map, const char* name) {
     // between versions.
     if (map.count(name))
         map[name]->setHiddenFlag(cl::Hidden);
+}
+
+static void rename(llvm::StringMap<cl::Option *>& map, const char* from, const char *to) {
+    llvm::StringMap<cl::Option*>::iterator i = map.find(from);
+    if (i != map.end())
+    {
+        cl::Option *opt = i->getValue();
+        map.erase(i);
+        opt->setArgStr(to);
+        map[to] = opt;
+    }
 }
 
 /// Removes command line options exposed from within LLVM that are unlikely
@@ -252,26 +255,36 @@ static void hideLLVMOptions() {
     // line has been parsed).
     hide(map, "fdata-sections");
     hide(map, "ffunction-sections");
+
+#if LDC_LLVM_VER >= 307
+    // LLVM 3.7 introduces compiling as shared library. The result
+    // is a clash in the command line options.
+    rename(map, "color", "llvm-color");
+    hide(map, "llvm-color");
+    opts::CreateColorOption();
+#endif
 }
 #endif
 
 int main(int argc, char **argv);
+
+static const char* tryGetExplicitConfFile(int argc, char** argv)
+{
+    // begin at the back => use latest -conf= specification
+    for (int i = argc - 1; i >= 1; --i)
+    {
+        if (strncmp(argv[i], "-conf=", 6) == 0)
+            return argv[i] + 6;
+    }
+    return 0;
+}
 
 /// Parses switches from the command line, any response files and the global
 /// config file and sets up global.params accordingly.
 ///
 /// Returns a list of source file names.
 static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &helpOnly) {
-#if _WIN32
-    char buf[MAX_PATH];
-    GetModuleFileName(NULL, buf, MAX_PATH);
-    const char* argv0 = &buf[0];
-    // FIXME: We cannot set params.argv0 here, as we would escape a stack
-    // reference, but it is unused anyway.
-    global.params.argv0 = NULL;
-#else
-    const char* argv0 = global.params.argv0 = argv[0];
-#endif
+    global.params.argv0 = exe_path::getExePath().data();
 
     // Set some default values.
     global.params.useSwitchError = 1;
@@ -291,8 +304,9 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
     final_args.push_back(argv[0]);
 
     ConfigFile cfg_file;
+    const char* explicitConfFile = tryGetExplicitConfFile(argc, argv);
     // just ignore errors for now, they are still printed
-    cfg_file.read(argv0, (void*)main, "ldc2.conf");
+    cfg_file.read(explicitConfFile);
     final_args.insert(final_args.end(), cfg_file.switches_begin(), cfg_file.switches_end());
 
     final_args.insert(final_args.end(), &argv[1], &argv[argc]);
@@ -301,7 +315,7 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
 #if LDC_LLVM_VER >= 303
     hideLLVMOptions();
 #endif
-    cl::ParseCommandLineOptions(final_args.size(), const_cast<char**>(&final_args[0]),
+    cl::ParseCommandLineOptions(final_args.size(), const_cast<char**>(final_args.data()),
         "LDC - the LLVM D compiler\n"
 #if LDC_LLVM_VER < 302
         , true
@@ -316,7 +330,7 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
     // - version number
     // - used config file
     if (global.params.verbose) {
-        fprintf(global.stdmsg, "binary    %s\n", llvm::sys::fs::getMainExecutable(argv0, (void*)main).c_str());
+        fprintf(global.stdmsg, "binary    %s\n", exe_path::getExePath().c_str());
         fprintf(global.stdmsg, "version   %s (DMD %s, LLVM %s)\n", global.ldc_version, global.version, global.llvm_version);
         const std::string& path = cfg_file.path();
         if (!path.empty())
@@ -392,7 +406,7 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
                 error(Loc(), "-run must be followed by a source file, not '%s'", name);
             }
 
-            sourceFiles.push(mem.strdup(name));
+            sourceFiles.push(mem.xstrdup(name));
             runargs.erase(runargs.begin());
         } else {
             global.params.run = false;
@@ -403,8 +417,16 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
     sourceFiles.reserve(fileList.size());
     typedef std::vector<std::string>::iterator It;
     for(It I = fileList.begin(), E = fileList.end(); I != E; ++I)
+    {
         if (!I->empty())
-            sourceFiles.push(mem.strdup(I->c_str()));
+        {
+            char* copy = mem.xstrdup(I->c_str());
+#ifdef _WIN32
+            std::replace(copy, copy + I->length(), '/', '\\');
+#endif
+            sourceFiles.push(copy);
+        }
+    }
 
     if (noDefaultLib)
     {
@@ -415,15 +437,14 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
     else
     {
         // Parse comma-separated default library list.
-        std::stringstream libNames(
-            global.params.symdebug ? debugLib : defaultLib);
+        std::stringstream libNames(linkDebugLib ? debugLib : defaultLib);
         while (libNames.good())
         {
             std::string lib;
             std::getline(libNames, lib, ',');
             if (lib.empty()) continue;
 
-            char *arg = static_cast<char *>(mem.malloc(lib.size() + 3));
+            char *arg = static_cast<char *>(mem.xmalloc(lib.size() + 3));
             strcpy(arg, "-l");
             strcpy(arg+2, lib.c_str());
             global.params.linkswitches->push(arg);
@@ -461,7 +482,7 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles, bool &
         } else {
             // append dot, so forceExt won't change existing name even if it contains dots
             size_t len = strlen(global.params.objname);
-            char* s = static_cast<char *>(mem.malloc(len + 1 + 1));
+            char* s = static_cast<char *>(mem.xmalloc(len + 1 + 1));
             memcpy(s, global.params.objname, len);
             s[len] = '.';
             s[len+1] = 0;
@@ -517,7 +538,9 @@ static void initializePasses() {
     initializeVectorization(Registry);
     initializeIPO(Registry);
     initializeAnalysis(Registry);
+#if LDC_LLVM_VER < 308
     initializeIPA(Registry);
+#endif
     initializeTransformUtils(Registry);
     initializeInstCombine(Registry);
     initializeInstrumentation(Registry);
@@ -674,6 +697,13 @@ static void registerPredefinedTargetVersions() {
             VersionCondition::addPredefinedGlobalIdent("D_HardFloat");
             break;
 #endif
+#if LDC_LLVM_VER >= 303
+        case llvm::Triple::systemz:
+            VersionCondition::addPredefinedGlobalIdent("SystemZ");
+            VersionCondition::addPredefinedGlobalIdent("S390X"); // For backwards compatibility.
+            VersionCondition::addPredefinedGlobalIdent("D_HardFloat");
+            break;
+#endif
         default:
             error(Loc(), "invalid cpu architecture specified: %s", global.params.targetTriple.getArchName().str().c_str());
             fatal();
@@ -704,6 +734,14 @@ static void registerPredefinedTargetVersions() {
         case llvm::Triple::Win32:
             VersionCondition::addPredefinedGlobalIdent("Windows");
             VersionCondition::addPredefinedGlobalIdent(global.params.is64bit ? "Win64" : "Win32");
+#if LDC_LLVM_VER >= 305
+            if (global.params.targetTriple.isKnownWindowsMSVCEnvironment())
+            {
+                VersionCondition::addPredefinedGlobalIdent("CRuntime_Microsoft");
+            }
+#else
+            VersionCondition::addPredefinedGlobalIdent("CRuntime_Microsoft");
+#endif
 #if LDC_LLVM_VER >= 305
             if (global.params.targetTriple.isWindowsGNUEnvironment())
             {
@@ -736,12 +774,14 @@ static void registerPredefinedTargetVersions() {
             if (global.params.targetTriple.getEnvironment() == llvm::Triple::Android)
             {
                 VersionCondition::addPredefinedGlobalIdent("Android");
+                VersionCondition::addPredefinedGlobalIdent("CRuntime_Bionic");
             }
             else
 #endif
             {
                 VersionCondition::addPredefinedGlobalIdent("linux");
                 VersionCondition::addPredefinedGlobalIdent("Posix");
+                VersionCondition::addPredefinedGlobalIdent("CRuntime_Glibc");
             }
             break;
         case llvm::Triple::Haiku:
@@ -917,6 +957,8 @@ int main(int argc, char **argv)
     // stack trace on signals
     llvm::sys::PrintStackTraceOnErrorSignal();
 
+    exe_path::initialize(argv[0], reinterpret_cast<void*>(main));
+
     global.init();
     global.version = ldc::dmd_version;
     global.ldc_version = ldc::ldc_version;
@@ -966,7 +1008,10 @@ int main(int argc, char **argv)
         bitness, mFloatABI, mRelocModel, mCodeModel, codeGenOptLevel(),
         global.params.symdebug || disableFpElim, disableLinkerStripDead);
 
-#if LDC_LLVM_VER >= 307
+#if LDC_LLVM_VER >= 308
+    static llvm::DataLayout DL = gTargetMachine->createDataLayout();
+    gDataLayout = &DL;
+#elif LDC_LLVM_VER >= 307
     gDataLayout = gTargetMachine->getDataLayout();
 #elif LDC_LLVM_VER >= 306
     gDataLayout = gTargetMachine->getSubtargetImpl()->getDataLayout();
@@ -1005,6 +1050,7 @@ int main(int argc, char **argv)
     }
 
     // Initialization
+    Lexer::initLexer();
     Type::init();
     Id::initialize();
     Module::init();
@@ -1064,7 +1110,7 @@ int main(int argc, char **argv)
         const char *ext;
         const char *name;
 
-        const char *p = static_cast<const char *>(files.data[i]);
+        const char *p = files.data[i];
 
         p = FileName::name(p);      // strip path
         ext = FileName::ext(p);
@@ -1134,7 +1180,7 @@ int main(int argc, char **argv)
             {
                 ext--;          // skip onto '.'
                 assert(*ext == '.');
-                char *tmp = static_cast<char *>(mem.malloc((ext - p) + 1));
+                char *tmp = static_cast<char *>(mem.xmalloc((ext - p) + 1));
                 memcpy(tmp, p, ext - p);
                 tmp[ext - p] = 0;      // strip extension
                 name = tmp;
@@ -1162,8 +1208,8 @@ int main(int argc, char **argv)
             name = p;
         }
 
-        id = Lexer::idPool(name);
-        Module *m = new Module(static_cast<const char *>(files.data[i]), id, global.params.doDocComments, global.params.doHdrGeneration);
+        id = Identifier::idPool(name);
+        Module *m = new Module(files.data[i], id, global.params.doDocComments, global.params.doHdrGeneration);
         modules.push(m);
     }
 
@@ -1351,7 +1397,7 @@ int main(int argc, char **argv)
         if (global.params.link)
             status = linkObjToBinary(createSharedLib);
         else if (createStaticLib)
-            createStaticLibrary();
+            status = createStaticLibrary();
 
         if (global.params.run && status == EXIT_SUCCESS)
         {

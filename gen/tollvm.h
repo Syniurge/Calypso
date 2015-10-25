@@ -32,6 +32,11 @@
  * DtoTypeFunction(FuncDeclaration*) is to be used instead.
  */
 LLType* DtoType(Type* t);
+// Uses DtoType(), but promotes i1 and void to i8.
+LLType* DtoMemType(Type* t);
+// Returns a pointer to the type returned by DtoMemType(t).
+LLPointerType* DtoPtrToType(Type* t);
+
 LLType* voidToI8(LLType* t);
 LLType* i1ToI8(LLType* t);
 
@@ -56,7 +61,8 @@ LLValue* DtoDelegateEquals(TOK op, LLValue* lhs, LLValue* rhs);
 
 // Returns the LLVM linkage to use for the definition of the given symbol,
 // based on whether it is a template or not.
-LLGlobalValue::LinkageTypes DtoLinkage(Dsymbol* sym);
+typedef std::pair<llvm::GlobalValue::LinkageTypes, bool> LinkageWithCOMDAT;
+LinkageWithCOMDAT DtoLinkage(Dsymbol* sym);
 
 // some types
 LLIntegerType* DtoSize_t();
@@ -83,8 +89,10 @@ LLConstant* DtoConstBool(bool);
 
 // llvm wrappers
 LLValue* DtoLoad(LLValue* src, const char* name = "");
+LLValue* DtoVolatileLoad(LLValue* src, const char* name = "");
 LLValue* DtoAlignedLoad(LLValue* src, const char* name = "");
 void DtoStore(LLValue* src, LLValue* dst);
+void DtoVolatileStore(LLValue* src, LLValue* dst);
 void DtoStoreZextI8(LLValue* src, LLValue* dst);
 void DtoAlignedStore(LLValue* src, LLValue* dst);
 LLValue* DtoBitCast(LLValue* v, LLType* t, const char* name = "");
@@ -123,7 +131,7 @@ size_t getTypePaddedSize(LLType* t);
 size_t getTypeAllocSize(LLType* t);
 
 // type alignments
-unsigned char getABITypeAlign(LLType* t);
+unsigned int getABITypeAlign(LLType* t);
 
 // pair type helpers
 LLValue* DtoAggrPair(LLType* type, LLValue* V1, LLValue* V2, const char* name = "");

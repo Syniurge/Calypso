@@ -21,11 +21,9 @@
 
 class Identifier;
 struct Scope;
-struct OutBuffer;
 class Module;
 class Package;
 class AliasDeclaration;
-struct HdrGenState;
 class StringExp;
 
 class Import : public Dsymbol
@@ -38,7 +36,7 @@ public:
     Identifier *id;             // module Identifier
     Identifier *aliasId;
     int isstatic;               // !=0 if static import
-    PROT protection;
+    PROTKIND protection;
 
     // Pairs of alias=name to bind into current namespace
     Identifiers names;
@@ -54,7 +52,7 @@ public:
     void setSymIdent(); // CALYPSO
     void addAlias(Identifier *name, Identifier *alias);
     const char *kind();
-    PROT prot();
+    Prot prot();
     Dsymbol *syntaxCopy(Dsymbol *s);    // copy only syntax trees
     virtual void load(Scope *sc); // CALYPSO
     void importAll(Scope *sc);
@@ -64,7 +62,6 @@ public:
     int addMember(Scope *sc, ScopeDsymbol *sds, int memnum);
     Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone);
     bool overloadInsert(Dsymbol *s);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     // CALYPSO
     virtual Module *loadModule(Loc loc, Identifiers *packages, Identifier *id);

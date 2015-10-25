@@ -30,8 +30,11 @@ llvm::StructType* DtoArrayType(Type* arrayTy);
 llvm::StructType* DtoArrayType(LLType* elemTy);
 llvm::ArrayType* DtoStaticArrayType(Type* sarrayTy);
 
-LLType* DtoConstArrayInitializerType(ArrayInitializer* arrinit);
-LLConstant* DtoConstArrayInitializer(ArrayInitializer* si);
+/// Creates a (global) constant with the element data for the given arary
+/// initializer. targetType is explicit because the frontend sometimes emits
+/// ArrayInitializers for vectors typed as static arrays.
+LLConstant* DtoConstArrayInitializer(ArrayInitializer* si, Type* targetType);
+
 LLConstant* DtoConstSlice(LLConstant* dim, LLConstant* ptr, Type *type = 0);
 
 /// Returns whether the array literal can be evaluated to a (LLVM) constant.
@@ -45,19 +48,11 @@ llvm::Constant* arrayLiteralToConst(IRState* p, ArrayLiteralExp* ale);
 /// dstMem is expected to be a pointer to the array allocation.
 void initializeArrayLiteral(IRState* p, ArrayLiteralExp* ale, LLValue* dstMem);
 
-void DtoArrayCopySlices(Loc& loc, DSliceValue* dst, DSliceValue* src);
-void DtoArrayCopyToSlice(Loc& loc, DSliceValue* dst, DValue* src);
-
-void DtoArrayInit(Loc& loc, DValue* array, DValue* value, int op);
-Type *DtoArrayElementType(Type *arrayType);
-bool arrayNeedsPostblit(Type *t);
-void DtoArrayAssign(Loc& loc, DValue *from, DValue *to, int op);
-void DtoArraySetAssign(Loc& loc, DValue *array, DValue *value, int op);
-void DtoSetArray(DValue* array, LLValue* dim, LLValue* ptr);
+void DtoArrayAssign(Loc& loc, DValue* lhs, DValue* rhs, int op, bool canSkipPostblit);
 void DtoSetArrayToNull(LLValue* v);
 
 DSliceValue* DtoNewDynArray(Loc& loc, Type* arrayType, DValue* dim, bool defaultInit=true);
-DSliceValue* DtoNewMulDimDynArray(Loc& loc, Type* arrayType, DValue** dims, size_t ndims, bool defaultInit=true);
+DSliceValue* DtoNewMulDimDynArray(Loc& loc, Type* arrayType, DValue** dims, size_t ndims);
 DSliceValue* DtoResizeDynArray(Loc& loc, Type* arrayType, DValue* array, llvm::Value* newdim);
 
 void DtoCatAssignElement(Loc& loc, Type* type, DValue* arr, Expression* exp);
@@ -65,8 +60,6 @@ DSliceValue* DtoCatAssignArray(Loc& loc, DValue* arr, Expression* exp);
 DSliceValue* DtoCatArrays(Loc& loc, Type* type, Expression* e1, Expression* e2);
 DSliceValue* DtoAppendDCharToString(Loc& loc, DValue* arr, Expression* exp);
 DSliceValue* DtoAppendDCharToUnicodeString(Loc& loc, DValue* arr, Expression* exp);
-
-void DtoStaticArrayCopy(LLValue* dst, LLValue* src);
 
 LLValue* DtoArrayEquals(Loc& loc, TOK op, DValue* l, DValue* r);
 LLValue* DtoArrayCompare(Loc& loc, TOK op, DValue* l, DValue* r);
@@ -81,6 +74,10 @@ LLValue* DtoArrayPtr(DValue* v);
 DValue* DtoCastArray(Loc& loc, DValue* val, Type* to);
 
 // generates an array bounds check
-void DtoArrayBoundsCheck(Loc& loc, DValue* arr, DValue* index, DValue* lowerBound = 0);
+void DtoIndexBoundsCheck(Loc& loc, DValue* arr, DValue* index);
+
+/// Inserts a call to the druntime function that throws the range error, with
+/// the given location.
+void DtoBoundsCheckFailCall(IRState* p, Loc& loc);
 
 #endif // LDC_GEN_ARRAYS_H

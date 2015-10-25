@@ -77,7 +77,7 @@ namespace opts {
     extern cl::opt<bool> linkonceTemplates;
     extern cl::opt<bool> disableLinkerStripDead;
 
-    extern BoundsCheck boundsCheck;
+    extern cl::opt<BoundsCheck> boundsCheck;
     extern bool nonSafeBoundsChecks;
 
     extern cl::opt<unsigned, true> nestedTemplateDepth;
@@ -88,5 +88,9 @@ namespace opts {
     // Arguments to -d-debug
     extern std::vector<std::string> debugArgs;
     // Arguments to -run
+
+#if LDC_LLVM_VER >= 307
+    void CreateColorOption();
+#endif
 }
 #endif

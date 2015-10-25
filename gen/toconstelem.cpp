@@ -16,6 +16,7 @@
 #include "gen/logger.h"
 #include "gen/structs.h"
 #include "gen/tollvm.h"
+#include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
 #include "ir/irtypestruct.h"
 
@@ -174,14 +175,10 @@ public:
         bool nullterm = (t->ty != Tsarray);
         size_t endlen = nullterm ? e->len+1 : e->len;
 
-        LLType* ct = voidToI8(DtoType(cty));
+        LLType* ct = DtoMemType(cty);
         LLArrayType* at = LLArrayType::get(ct,endlen);
 
-#if LDC_LLVM_VER >= 305
         llvm::StringMap<llvm::GlobalVariable*>* stringLiteralCache = 0;
-#else
-        std::map<llvm::StringRef, llvm::GlobalVariable*>* stringLiteralCache = 0;
-#endif
         LLConstant* _init;
         switch (cty->size())
         {
@@ -410,7 +407,7 @@ public:
                 // We can turn this into a "nice" GEP.
                 result = llvm::ConstantExpr::getGetElementPtr(
 #if LDC_LLVM_VER >= 307
-                    LLType::getInt8Ty(gIR->context()),
+                    NULL,
 #endif
                     base,
                     DtoConstSize_t(e->offset / elemSize));
@@ -421,7 +418,7 @@ public:
                 // apply the byte offset.
                 result = llvm::ConstantExpr::getGetElementPtr(
 #if LDC_LLVM_VER >= 307
-                    getVoidPtrType(),
+                    NULL,
 #endif
                     DtoBitCast(base, getVoidPtrType()),
                     DtoConstSize_t(e->offset));
@@ -506,7 +503,7 @@ public:
                 se->globalVar = finalGlobalVar;
             }
             se->globalVar->setInitializer(constValue);
-            se->globalVar->setAlignment(e->e1->type->alignsize());
+            se->globalVar->setAlignment(DtoAlignment(se->type));
 
             result = se->globalVar;
         }
@@ -574,7 +571,7 @@ public:
         Type* elemt = bt->nextOf();
 
         // build llvm array type
-        LLArrayType* arrtype = LLArrayType::get(i1ToI8(voidToI8(DtoType(elemt))), e->elements->dim);
+        LLArrayType* arrtype = LLArrayType::get(DtoMemType(elemt), e->elements->dim);
 
         // dynamic arrays can occur here as well ...
         bool dyn = (bt->ty != Tsarray);

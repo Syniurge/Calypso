@@ -25,7 +25,7 @@
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-// FIXME A similar function is in ir/iraggr.cpp
+// FIXME A similar function is in ir/iraggr.cpp and RTTIBuilder::push().
 static inline
 size_t add_zeros(std::vector<llvm::Type*>& defaultTypes,
     size_t startOffset, size_t endOffset)
@@ -50,7 +50,7 @@ bool var_offset_sort_cb(const VarDeclaration* v1, const VarDeclaration* v2)
 }
 
 AggrTypeBuilder::AggrTypeBuilder(bool packed) :
-    m_offset(0), m_fieldIndex(0), m_packed(packed)
+    m_offset(0), m_fieldIndex(0), m_overallAlignment(0), m_packed(packed)
 {
     m_defaultTypes.reserve(32);
 }
@@ -170,26 +170,19 @@ void AggrTypeBuilder::addAggregate(AggregateDeclaration *ad)
         if (vd == NULL)
             continue;
 
-        assert(vd->offset >= m_offset && "it's a bug... most likely DMD bug 2481");
+        assert(vd->offset >= m_offset && "Variable overlaps previous field.");
 
-        // get next aligned offset for this type
-        size_t alignedoffset = m_offset;
-        if (!m_packed)
-        {
-            alignedoffset = realignOffset(alignedoffset, vd->type);
-        }
-
-        // insert explicit padding?
-        if (alignedoffset < vd->offset)
-        {
-            m_fieldIndex += add_zeros(m_defaultTypes, alignedoffset, vd->offset);
+        // Add an explicit field for any padding so we can zero it, as per TDPL §7.1.1.
+        if (m_offset < vd->offset) {
+            m_fieldIndex += add_zeros(m_defaultTypes, m_offset, vd->offset);
+            m_offset = vd->offset;
         }
 
         // add default type
-        m_defaultTypes.push_back(DtoType(vd->type));
+        m_defaultTypes.push_back(DtoMemType(vd->type));
 
         // advance offset to right past this field
-        m_offset = vd->offset + vd->type->size();
+        m_offset += getMemberSize(vd->type);
 
         // set the field index
         m_varGEPIndices[vd] = m_fieldIndex;
@@ -199,7 +192,13 @@ void AggrTypeBuilder::addAggregate(AggregateDeclaration *ad)
 
 void AggrTypeBuilder::alignCurrentOffset(unsigned alignment)
 {
-    m_offset = (m_offset + alignment - 1) & ~(alignment - 1);
+    m_overallAlignment = std::max(alignment, m_overallAlignment);
+
+    unsigned aligned = (m_offset + alignment - 1) & ~(alignment - 1);
+    if (m_offset < aligned) {
+        m_fieldIndex += add_zeros(m_defaultTypes, m_offset, aligned);
+        m_offset = aligned;
+    }
 }
 
 void AggrTypeBuilder::addTailPadding(unsigned aggregateSize)

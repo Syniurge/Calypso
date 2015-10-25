@@ -31,6 +31,7 @@
 #include "gen/tollvm.h"
 #include "gen/typeinf.h"
 #include "gen/abi.h"
+#include "ir/irfunction.h"
 #include "ir/irmodule.h"
 #include "ir/irtypeaggr.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -56,6 +57,8 @@ llvm::cl::opt<llvm::GlobalVariable::ThreadLocalMode> clThreadModel("fthread-mode
         clEnumValEnd));
 #endif
 
+Expression *getTypeInfo(Type *t, Scope *sc);
+
 /****************************************************************************************/
 /*////////////////////////////////////////////////////////////////////////////////////////
 // DYNAMIC MEMORY HELPERS
@@ -71,60 +74,84 @@ LLValue* DtoNew(Loc& loc, Type* newtype)
     // call runtime allocator
     LLValue* mem = gIR->CreateCallOrInvoke(fn, ti, ".gc_mem").getInstruction();
     // cast
-    return DtoBitCast(mem, getPtrToType(i1ToI8(DtoType(newtype))), ".gc_mem");
+    return DtoBitCast(mem, DtoPtrToType(newtype), ".gc_mem");
 }
 
-void DtoDeleteMemory(Loc& loc, LLValue* ptr)
+LLValue* DtoNewStruct(Loc& loc, TypeStruct* newtype)
 {
-    // get runtime function
+    llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module,
+        newtype->isZeroInit(newtype->sym->loc) ? "_d_newitemT" : "_d_newitemiT");
+    LLConstant* ti = DtoTypeInfoOf(newtype);
+    LLValue* mem = gIR->CreateCallOrInvoke(fn, ti, ".gc_struct").getInstruction();
+    return DtoBitCast(mem, DtoPtrToType(newtype), ".gc_struct");
+}
+
+void DtoDeleteMemory(Loc& loc, DValue* ptr)
+{
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delmemory");
-    // build args
-    LLValue* arg[] = { DtoBitCast(ptr, getVoidPtrType(), ".tmp") };
-    // call
-    gIR->CreateCallOrInvoke(fn, arg);
+    LLValue* lval = (ptr->isLVal() ? ptr->getLVal() : makeLValue(loc, ptr));
+    gIR->CreateCallOrInvoke(fn, DtoBitCast(lval, fn->getFunctionType()->getParamType(0)));
 }
 
-void DtoDeleteClass(Loc& loc, LLValue* inst)
+void DtoDeleteStruct(Loc& loc, DValue* ptr)
 {
-    // get runtime function
+    llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delstruct");
+    LLValue* lval = (ptr->isLVal() ? ptr->getLVal() : makeLValue(loc, ptr));
+    gIR->CreateCallOrInvoke(
+        fn,
+        DtoBitCast(lval, fn->getFunctionType()->getParamType(0)),
+        DtoBitCast(DtoTypeInfoOf(ptr->type->nextOf()), fn->getFunctionType()->getParamType(1))
+    );
+}
+
+void DtoDeleteClass(Loc& loc, DValue* inst)
+{
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delclass");
-    // druntime wants a pointer to object
-    LLValue *ptr = DtoRawAlloca(inst->getType(), 0, "objectPtr");
-    DtoStore(inst, ptr);
-    inst = ptr;
-    // build args
-    LLValue* arg[] = {
-        DtoBitCast(inst, fn->getFunctionType()->getParamType(0), ".tmp")
-    };
-    // call
-    gIR->CreateCallOrInvoke(fn, arg);
+    LLValue* lval = (inst->isLVal() ? inst->getLVal() : makeLValue(loc, inst));
+    gIR->CreateCallOrInvoke(fn, DtoBitCast(lval, fn->getFunctionType()->getParamType(0)));
 }
 
-void DtoDeleteInterface(Loc& loc, LLValue* inst)
+void DtoDeleteInterface(Loc& loc, DValue* inst)
 {
-    // get runtime function
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delinterface");
-    // build args
-    LLValue* arg[] = {
-        DtoBitCast(inst, fn->getFunctionType()->getParamType(0), ".tmp")
-    };
-    // call
-    gIR->CreateCallOrInvoke(fn, arg);
+    LLValue* lval = (inst->isLVal() ? inst->getLVal() : makeLValue(loc, inst));
+    gIR->CreateCallOrInvoke(fn, DtoBitCast(lval, fn->getFunctionType()->getParamType(0)));
 }
 
 void DtoDeleteArray(Loc& loc, DValue* arr)
 {
-    // get runtime function
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delarray_t");
+    llvm::FunctionType* fty = fn->getFunctionType();
 
-    // build args
-    LLValue* arg[] = {
-        DtoBitCast(arr->getLVal(), fn->getFunctionType()->getParamType(0)),
-        DtoBitCast(DtoTypeInfoOf(arr->type->nextOf()), fn->getFunctionType()->getParamType(1))
-    };
+    // the TypeInfo argument must be null if the type has no dtor
+    Type* elementType = arr->type->nextOf();
+    bool hasDtor = (elementType->toBasetype()->ty == Tstruct && elementType->needsDestruction());
+    LLValue* typeInfo = (!hasDtor ? getNullPtr(fty->getParamType(1)) : DtoTypeInfoOf(elementType));
 
-    // call
-    gIR->CreateCallOrInvoke(fn, arg);
+    LLValue* lval = (arr->isLVal() ? arr->getLVal() : makeLValue(loc, arr));
+    gIR->CreateCallOrInvoke(
+        fn,
+        DtoBitCast(lval, fty->getParamType(0)),
+        DtoBitCast(typeInfo, fty->getParamType(1))
+    );
+}
+
+/****************************************************************************************/
+/*////////////////////////////////////////////////////////////////////////////////////////
+// ALIGNMENT HELPERS
+////////////////////////////////////////////////////////////////////////////////////////*/
+
+unsigned DtoAlignment(Type* type)
+{
+    structalign_t alignment = type->alignment();
+    if (alignment == STRUCTALIGN_DEFAULT)
+        alignment = type->alignsize();
+    return (alignment == STRUCTALIGN_DEFAULT ? 0 : alignment);
+}
+
+unsigned DtoAlignment(VarDeclaration* vd)
+{
+    return vd->alignment == STRUCTALIGN_DEFAULT ? DtoAlignment(vd->type) : vd->alignment;
 }
 
 /****************************************************************************************/
@@ -132,13 +159,14 @@ void DtoDeleteArray(Loc& loc, DValue* arr)
 // ALLOCA HELPERS
 ////////////////////////////////////////////////////////////////////////////////////////*/
 
-
 llvm::AllocaInst* DtoAlloca(Type* type, const char* name)
 {
-    LLType* lltype = i1ToI8(DtoType(type));
-    llvm::AllocaInst* ai = new llvm::AllocaInst(lltype, name, gIR->topallocapoint());
-    ai->setAlignment(type->alignsize());
-    return ai;
+    return DtoRawAlloca(DtoMemType(type), DtoAlignment(type), name);
+}
+
+llvm::AllocaInst* DtoAlloca(VarDeclaration* vd, const char* name)
+{
+    return DtoRawAlloca(DtoMemType(vd->type), DtoAlignment(vd), name);
 }
 
 llvm::AllocaInst* DtoArrayAlloca(Type* type, unsigned arraysize, const char* name)
@@ -146,7 +174,7 @@ llvm::AllocaInst* DtoArrayAlloca(Type* type, unsigned arraysize, const char* nam
     LLType* lltype = DtoType(type);
     llvm::AllocaInst* ai = new llvm::AllocaInst(
         lltype, DtoConstUint(arraysize), name, gIR->topallocapoint());
-    ai->setAlignment(type->alignsize());
+    ai->setAlignment(DtoAlignment(type));
     return ai;
 }
 
@@ -168,6 +196,42 @@ LLValue* DtoGcMalloc(Loc& loc, LLType* lltype, const char* name)
     LLValue* mem = gIR->CreateCallOrInvoke(fn, size, name).getInstruction();
     // cast
     return DtoBitCast(mem, getPtrToType(lltype), name);
+}
+
+LLValue* DtoAllocaDump(DValue* val, const char* name)
+{
+    return DtoAllocaDump(val->getRVal(), val->getType(), name);
+}
+
+LLValue* DtoAllocaDump(DValue* val, Type* asType, const char* name)
+{
+    return DtoAllocaDump(val->getRVal(), asType, name);
+}
+
+LLValue* DtoAllocaDump(DValue* val, LLType* asType, int alignment, const char* name)
+{
+    return DtoAllocaDump(val->getRVal(), asType, alignment, name);
+}
+
+LLValue* DtoAllocaDump(LLValue* val, int alignment, const char* name)
+{
+    return DtoAllocaDump(val, val->getType(), alignment, name);
+}
+
+LLValue* DtoAllocaDump(LLValue* val, Type* asType, const char* name)
+{
+    return DtoAllocaDump(val, DtoType(asType), DtoAlignment(asType), name);
+}
+
+LLValue* DtoAllocaDump(LLValue* val, LLType* asType, int alignment, const char* name)
+{
+    LLType* valType = i1ToI8(voidToI8(val->getType()));
+    asType = i1ToI8(voidToI8(asType));
+    LLType* allocaType = (
+        getTypeStoreSize(valType) <= getTypeAllocSize(asType) ? asType : valType);
+    LLValue* mem = DtoRawAlloca(allocaType, alignment, name);
+    DtoStoreZextI8(val, DtoBitCast(mem, valType->getPointerTo()));
+    return DtoBitCast(mem, asType->getPointerTo());
 }
 
 /****************************************************************************************/
@@ -197,7 +261,7 @@ void DtoAssert(Module* M, Loc& loc, DValue* msg)
     args.push_back(DtoConstUint(loc.linnum));
 
     // call
-    gIR->CreateCallOrInvoke(fn, args);
+    gIR->func()->scopes->callOrInvoke(fn, args);
 
     // after assert is always unreachable
     gIR->ir->CreateUnreachable();
@@ -218,7 +282,7 @@ LLValue *DtoModuleFileName(Module* M, const Loc& loc)
 /*////////////////////////////////////////////////////////////////////////////////////////
 // GOTO HELPER
 ////////////////////////////////////////////////////////////////////////////////////////*/
-void DtoGoto(Loc &loc, LabelDsymbol *target, TryFinallyStatement *sourceFinally)
+void DtoGoto(Loc &loc, LabelDsymbol *target)
 {
     assert(!gIR->scopereturned());
 
@@ -229,87 +293,9 @@ void DtoGoto(Loc &loc, LabelDsymbol *target, TryFinallyStatement *sourceFinally)
         fatal();
     }
 
-    // find target basic block
-    std::string labelname = gIR->func()->gen->getScopedLabelName(target->ident->toChars());
-    llvm::BasicBlock* &targetBB = gIR->func()->gen->labelToBB[labelname];
-    if (targetBB == NULL)
-        targetBB = llvm::BasicBlock::Create(gIR->context(), "label_" + labelname, gIR->topfunc());
-
-    // emit code for finallys between goto and label
-    DtoEnclosingHandlers(loc, lblstmt);
-
-    // goto into finally blocks is forbidden by the spec
-    // but should work fine
-    if (lblstmt->tf != sourceFinally)
-    {
-        error(loc, "spec disallows goto into or out of finally block");
-        fatal();
-    }
-
-    llvm::BranchInst::Create(targetBB, gIR->scopebb());
+    gIR->func()->scopes->jumpToLabel(loc, target->ident);
 }
 
-/****************************************************************************************/
-/*////////////////////////////////////////////////////////////////////////////////////////
-// TRY-FINALLY
-////////////////////////////////////////////////////////////////////////////////////////*/
-
-void EnclosingTryFinally::emitCode(IRState * p)
-{
-    if (tf->finalbody)
-    {
-        llvm::BasicBlock* oldpad = p->func()->gen->landingPad;
-        p->func()->gen->landingPad = landingPad;
-        Statement_toIR(tf->finalbody, p);
-        p->func()->gen->landingPad = oldpad;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////
-
-void DtoEnclosingHandlers(Loc& loc, Statement* target)
-{
-    // labels are a special case: they are not required to enclose the current scope
-    // for them we use the enclosing scope handler as a reference point
-    LabelStatement* lblstmt = target ? target->isLabelStatement() : 0;
-    if (lblstmt)
-        target = lblstmt->enclosingScopeExit;
-
-    // figure out up until what handler we need to emit
-    FuncGen::TargetScopeVec::reverse_iterator targetit = gIR->func()->gen->targetScopes.rbegin();
-    FuncGen::TargetScopeVec::reverse_iterator it_end = gIR->func()->gen->targetScopes.rend();
-    while(targetit != it_end) {
-        if (targetit->s == target) {
-            break;
-        }
-        ++targetit;
-    }
-
-    if (target && targetit == it_end) {
-        if (lblstmt)
-            error(loc, "cannot goto into try, volatile or synchronized statement at %s", target->loc.toChars());
-        else
-            error(loc, "internal error, cannot find jump path to statement at %s", target->loc.toChars());
-        return;
-    }
-
-    //
-    // emit code for enclosing handlers
-    //
-
-    // since the labelstatements possibly inside are private
-    // and might already exist push a label scope
-    gIR->func()->gen->pushUniqueLabelScope("enclosing");
-    FuncGen::TargetScopeVec::reverse_iterator it = gIR->func()->gen->targetScopes.rbegin();
-    while (it != targetit) {
-        if (it->enclosinghandler)
-            it->enclosinghandler->emitCode(gIR);
-        ++it;
-    }
-    gIR->func()->gen->popLabelScope();
-}
-
-/****************************************************************************************/
 /*////////////////////////////////////////////////////////////////////////////////////////
 // ASSIGNMENT HELPER (store this in that)
 ////////////////////////////////////////////////////////////////////////////////////////*/
@@ -330,75 +316,20 @@ void DtoAssign(Loc& loc, DValue* lhs, DValue* rhs, int op, bool canSkipPostblit)
         DtoStoreZextI8(rhs->getRVal(), lhs->getLVal());
     }
     else if (t->ty == Tstruct || isClassValue(t)) { // CALYPSO
-        llvm::Value* src = rhs->getRVal();
-        llvm::Value* dst = lhs->getLVal();
+        // don't copy anything to empty structs
+        if (getAggregateSym(t)->fields.dim > 0) {
+            llvm::Value* src = rhs->getRVal();
+            llvm::Value* dst = lhs->getLVal();
 
-        // Check whether source and destination values are the same at compile
-        // time as to not emit an invalid (overlapping) memcpy on trivial
-        // struct self-assignments like 'A a; a = a;'.
-        if (src != dst)
-            DtoAggrCopy(dst, src);
-    }
-    else if (t->ty == Tarray) {
-        // lhs is slice
-        if (DSliceValue* s = lhs->isSlice()) {
-            if (t->nextOf()->toBasetype()->equals(t2)) {
-                DtoArrayInit(loc, lhs, rhs, op);
-            }
-            else if (DtoArrayElementType(t)->equals(stripModifiers(t2))) {
-                DtoArrayInit(loc, s, rhs, op);
-            }
-            else if (op != -1 && op != TOKblit && !canSkipPostblit &&
-                arrayNeedsPostblit(t)
-            ) {
-                DtoArrayAssign(loc, s, rhs, op);
-            }
-            else if (DSliceValue *s2 = rhs->isSlice()) {
-                DtoArrayCopySlices(loc, s, s2);
-            }
-            else {
-                DtoArrayCopyToSlice(loc, s, rhs);
-            }
-        }
-        // rhs is slice
-        else if (DSliceValue* s = rhs->isSlice()) {
-            //assert(s->getType()->toBasetype() == lhs->getType()->toBasetype());
-            DtoSetArray(lhs,DtoArrayLen(s),DtoArrayPtr(s));
-        }
-        // null
-        else if (rhs->isNull()) {
-            DtoSetArrayToNull(lhs->getLVal());
-        }
-        // reference assignment
-        else if (t2->ty == Tarray) {
-            DtoStore(rhs->getRVal(), lhs->getLVal());
-        }
-        // some implicitly converting ref assignment
-        else {
-            DtoSetArray(lhs, DtoArrayLen(rhs), DtoArrayPtr(rhs));
+            // Check whether source and destination values are the same at compile
+            // time as to not emit an invalid (overlapping) memcpy on trivial
+            // struct self-assignments like 'A a; a = a;'.
+            if (src != dst)
+                DtoAggrCopy(dst, src);
         }
     }
-    else if (t->ty == Tsarray) {
-        // T[n] = T
-        if (t->nextOf()->toBasetype()->equals(t2)) {
-            DtoArrayInit(loc, lhs, rhs, op);
-        }
-        else if (DtoArrayElementType(t)->equals(stripModifiers(t2))) {
-            DtoArrayInit(loc, lhs, rhs, op);
-        }
-        else if (op != -1 && op != TOKblit && !canSkipPostblit &&
-            arrayNeedsPostblit(t)
-        ) {
-            DtoArrayAssign(loc, lhs, rhs, op);
-        }
-        // T[n] = T[n]
-        else if (DtoType(lhs->getType()) == DtoType(rhs->getType())) {
-            DtoStaticArrayCopy(lhs->getLVal(), rhs->getRVal());
-        }
-        // T[n] = T[] - generally only generated by frontend in rare cases
-        else if (t2->ty == Tarray && t->nextOf()->toBasetype()->equals(t2->nextOf()->toBasetype())) {
-            DtoMemCpy(lhs->getLVal(), DtoArrayPtr(rhs), DtoArrayLen(rhs));
-        } else llvm_unreachable("Unimplemented static array assign!");
+    else if (t->ty == Tarray || t->ty == Tsarray) {
+        DtoArrayAssign(loc, lhs, rhs, op, canSkipPostblit);
     }
     else if (t->ty == Tdelegate) {
         LLValue* l = lhs->getLVal();
@@ -484,7 +415,7 @@ DValue* DtoNullValue(Type* type, Loc loc)
     else if (basety == Tarray)
     {
         LLValue* len = DtoConstSize_t(0);
-        LLValue* ptr = getNullPtr(getPtrToType(DtoType(basetype->nextOf())));
+        LLValue* ptr = getNullPtr(DtoPtrToType(basetype->nextOf()));
         return new DSliceValue(type, len, ptr);
     }
     else
@@ -820,7 +751,7 @@ DValue* DtoPaintType(Loc& loc, DValue* val, Type* to)
         {
             LLValue* ptr = val->getLVal();
             assert(isaPointer(ptr));
-            ptr = DtoBitCast(ptr, getPtrToType(DtoType(dgty)));
+            ptr = DtoBitCast(ptr, DtoPtrToType(dgty));
             IF_LOG Logger::cout() << "dg ptr: " << *ptr << '\n';
             return new DVarValue(to, ptr);
         }
@@ -966,15 +897,13 @@ void DtoResolveVariable(VarDeclaration* vd)
         }
 
         llvm::GlobalVariable* gvar = getOrCreateGlobal(vd->loc, gIR->module,
-            i1ToI8(DtoType(vd->type)), isLLConst, linkage, 0, llName,
+            DtoMemType(vd->type), isLLConst, linkage, 0, llName,
             vd->isThreadlocal());
         getIrGlobal(vd)->value = gvar;
 
-        // Set the alignment (it is important not to use type->alignsize because
-        // VarDeclarations can have an align() attribute independent of the type
-        // as well).
-        if (vd->alignment != STRUCTALIGN_DEFAULT)
-            gvar->setAlignment(vd->alignment);
+        // Set the alignment and use the target pointer size as lower bound.
+        unsigned alignment = std::max(DtoAlignment(vd), gDataLayout->getPointerSize());
+        gvar->setAlignment(alignment);
 
         IF_LOG Logger::cout() << *gvar << '\n';
     }
@@ -1031,8 +960,10 @@ void DtoVarDeclaration(VarDeclaration* vd)
         LLType* lltype = DtoType(type);
         if(gDataLayout->getTypeSizeInBits(lltype) == 0)
             allocainst = llvm::ConstantPointerNull::get(getPtrToType(lltype));
-        else
+        else if (type != vd->type)
             allocainst = DtoAlloca(type, vd->toChars());
+        else
+            allocainst = DtoAlloca(vd, vd->toChars());
 
         irLocal->value = allocainst;
 
@@ -1041,20 +972,30 @@ void DtoVarDeclaration(VarDeclaration* vd)
         /* NRVO again:
             T t = f();    // t's memory address is taken hidden pointer
         */
+        Type *vdBasetype = vd->type->toBasetype();
         ExpInitializer *ei = 0;
-        if ((vd->type->toBasetype()->ty == Tstruct || isClassValue(tb) || // CALYPSO
-             vd->type->toBasetype()->ty == Tsarray /* new in 2.064*/) &&
+        if ((vdBasetype->ty == Tstruct || isClassValue(vdBasetype) || vdBasetype->ty == Tsarray) && // CALYPSO 
             vd->init &&
             (ei = vd->init->isExpInitializer()))
         {
             if (ei->exp->op == TOKconstruct) {
                 AssignExp *ae = static_cast<AssignExp*>(ei->exp);
-                // The return value can be casted to a different type.
-                // Just look at the original expression in this case.
-                // Happens with runnable/sdtor, test10094().
                 Expression *rhs = ae->e2;
-                if (rhs->op == TOKcast)
-                    rhs = static_cast<CastExp *>(rhs)->e1;
+
+                // Allow casts only emitted because of differing static array
+                // constness. See runnable.sdtor.test10094.
+                if (rhs->op == TOKcast && vdBasetype->ty == Tsarray) {
+                    Expression *castSource = ((CastExp *)rhs)->e1;
+                    Type *rhsElem = castSource->type->toBasetype()->nextOf();
+                    if (rhsElem) {
+                        Type *l = vdBasetype->nextOf()->arrayOf()->immutableOf();
+                        Type *r = rhsElem->arrayOf()->immutableOf();
+                        if (l->equals(r)) {
+                            rhs = castSource;
+                        }
+                    }
+                }
+
                 if (rhs->op == TOKcall) {
                     CallExp *ce = static_cast<CallExp *>(rhs);
                     if (DtoIsReturnInArg(ce))
@@ -1146,12 +1087,6 @@ DValue* DtoDeclarationExp(Dsymbol* declaration)
         Logger::println("ClassDeclaration");
         Declaration_codegen(e);
     }
-    // typedef
-    else if (TypedefDeclaration* tdef = declaration->isTypedefDeclaration())
-    {
-        Logger::println("TypedefDeclaration");
-        DtoTypeInfoOf(tdef->type, false);
-    }
     // attribute declaration
     else if (AttribDeclaration* a = declaration->isAttribDeclaration())
     {
@@ -1211,7 +1146,7 @@ LLValue* DtoRawVarDeclaration(VarDeclaration* var, LLValue* addr)
     // alloca if necessary
     if (!addr && (!irLocal || !irLocal->value))
     {
-        addr = DtoAlloca(var->type, var->toChars());
+        addr = DtoAlloca(var, var->toChars());
         // add debug info
         if (!irLocal)
             irLocal = getIrLocal(var, true);
@@ -1272,8 +1207,6 @@ LLConstant* DtoConstInitializer(Loc& loc, Type* type, Initializer* init)
     {
         IF_LOG Logger::println("const default initializer for %s", type->toChars());
         Expression *initExp = type->defaultInit();
-        if (type->ty == Ttypedef)
-            initExp->type = type; // This carries the typedef type into toConstElem.
         _init = DtoConstExpInit(loc, type, initExp);
     }
     else if (ExpInitializer* ex = init->isExpInitializer())
@@ -1284,12 +1217,12 @@ LLConstant* DtoConstInitializer(Loc& loc, Type* type, Initializer* init)
     else if (ArrayInitializer* ai = init->isArrayInitializer())
     {
         Logger::println("const array initializer");
-        _init = DtoConstArrayInitializer(ai);
+        _init = DtoConstArrayInitializer(ai, type);
     }
     else if (init->isVoidInitializer())
     {
         Logger::println("const void initializer");
-        LLType* ty = voidToI8(DtoType(type));
+        LLType* ty = DtoMemType(type);
         _init = LLConstant::getNullValue(ty);
     }
     else
@@ -1336,7 +1269,7 @@ LLConstant* DtoConstExpInit(Loc& loc, Type* targetType, Expression* exp)
     }
 
     llvm::Type* llType = val->getType();
-    llvm::Type* targetLLType = i1ToI8(DtoType(targetBase));
+    llvm::Type* targetLLType = DtoMemType(targetBase);
     if (llType == targetLLType)
     {
         Logger::println("Matching LLVM types, ignoring frontend glitch.");
@@ -1345,12 +1278,9 @@ LLConstant* DtoConstExpInit(Loc& loc, Type* targetType, Expression* exp)
 
     if (targetBase->ty == Tsarray)
     {
-        if (targetBase->nextOf()->toBasetype()->ty == Tvoid) {
-           error(loc, "static arrays of voids have no default initializer");
-           fatal();
-        }
         Logger::println("Building constant array initializer to single value.");
 
+        assert(expBase->size() > 0);
         d_uns64 elemCount = targetBase->size() / expBase->size();
         assert(targetBase->size() % expBase->size() == 0);
 
@@ -1394,7 +1324,7 @@ LLConstant* DtoTypeInfoOf(Type* type, bool base)
     LOG_SCOPE
 
     type = type->merge2(); // needed.. getTypeInfo does the same
-    type->getTypeInfo(NULL);
+    getTypeInfo(type, NULL);
     TypeInfoDeclaration* tidecl = type->vtinfo;
     assert(tidecl);
     Declaration_codegen(tidecl);
@@ -1499,41 +1429,20 @@ bool hasUnalignedFields(Type* t)
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
-size_t realignOffset(size_t offset, Type* type)
+size_t getMemberSize(Type* type)
 {
-    size_t alignsize = type->alignsize();
-    size_t alignedoffset = (offset + alignsize - 1) & ~(alignsize - 1);
-
-    // if the aligned offset already matches the input offset
-    // don't waste time checking things are ok!
-    if (alignedoffset == offset)
-        return alignedoffset;
-
-    // we cannot get the llvm alignment if the type is still opaque, this can happen in some
-    // forward reference situations, so when this happens we fall back to manual padding.
-    // also handle arbitrary "by-value" opaques nested inside aggregates.
-    LLType* T = DtoType(type);
-    if (!T->isSized())
-    {
-        return offset;
+    const dinteger_t dSize = type->size();
+    llvm::Type * const llType = DtoType(type);
+    if (!llType->isSized()) {
+        // Forward reference in a cycle or similar, we need to trust the D type.
+        return dSize;
     }
 
-    // then we check against the llvm alignment
-    size_t alignsize2 = gDataLayout->getABITypeAlignment(T);
+    const uint64_t llSize = gDataLayout->getTypeAllocSize(llType);
+    assert(llSize <= dSize && "LLVM type is bigger than the corresponding D type, "
+        "might lead to aggregate layout mismatch.");
 
-    // if it differs we need to insert manual padding as well
-    if (alignsize != alignsize2)
-    {
-        // FIXME: this assert fails on std.typecons
-        //assert(alignsize > alignsize2 && "this is not good, the D and LLVM "
-        //    "type alignments differ, but LLVM's is bigger! This will break "
-        //    "aggregate type mapping");
-        // don't try and align the offset, and let the mappers pad 100% manually
-        return offset;
-    }
-
-    // ok, we're good, llvm will align properly!
-    return alignedoffset;
+    return llSize;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -1575,11 +1484,8 @@ LLValue* makeLValue(Loc& loc, DValue* value)
         needsMemory = false;
     }
 
-    if (needsMemory) {
-        LLValue* tmp = DtoAlloca(valueType, ".makelvaluetmp");
-        DtoStoreZextI8(valuePointer, tmp);
-        valuePointer = tmp;
-    }
+    if (needsMemory)
+        valuePointer = DtoAllocaDump(value, ".makelvaluetmp");
 
     return valuePointer;
 }
@@ -1791,7 +1697,7 @@ DValue* DtoSymbolAddress(Loc& loc, Type* type, Declaration* decl)
 
             if (isGlobal)
             {
-                llvm::Type* expectedType = llvm::PointerType::getUnqual(i1ToI8(DtoType(type)));
+                llvm::Type* expectedType = llvm::PointerType::getUnqual(DtoMemType(type));
                 // The type of globals is determined by their initializer, so
                 // we might need to cast. Make sure that the type sizes fit -
                 // '==' instead of '<=' should probably work as well.
@@ -1920,29 +1826,43 @@ FuncDeclaration* getParentFunc(Dsymbol* sym, bool stopOnStatic)
     if (!sym)
         return NULL;
 
-    Dsymbol* parent = sym->parent;
-    assert(parent);
-
-    while (parent && !parent->isFuncDeclaration())
+    // check if symbol is itself a static function/aggregate
+    if (stopOnStatic)
     {
+        // Static functions and function (not delegate) literals don't allow
+        // access to a parent context, even if they are nested.
+        if (FuncDeclaration* fd = sym->isFuncDeclaration())
+        {
+            bool certainlyNewRoot = fd->isStatic() ||
+                (fd->isFuncLiteralDeclaration() &&
+                    static_cast<FuncLiteralDeclaration*>(fd)->tok == TOKfunction);
+            if (certainlyNewRoot)
+                return NULL;
+        }
+        // Fun fact: AggregateDeclarations are not Declarations.
+        else if (AggregateDeclaration* ad = sym->isAggregateDeclaration())
+        {
+            if (!ad->isNested())
+                return NULL;
+        }
+    }
+
+    for (Dsymbol* parent = sym->parent; parent; parent = parent->parent)
+    {
+        if (FuncDeclaration* fd = parent->isFuncDeclaration())
+            return fd;
+
         if (stopOnStatic)
         {
-            // Fun fact: AggregateDeclarations are not Declarations.
-            if (FuncDeclaration* decl = parent->isFuncDeclaration())
+            if (AggregateDeclaration* ad = parent->isAggregateDeclaration())
             {
-                if (decl->isStatic())
-                    return NULL;
-            }
-            else if (AggregateDeclaration* decl = parent->isAggregateDeclaration())
-            {
-                if (!decl->isNested())
+                if (!ad->isNested())
                     return NULL;
             }
         }
-        parent = parent->parent;
     }
 
-    return parent ? parent->isFuncDeclaration() : NULL;
+    return NULL;
 }
 
 LLValue* DtoIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaration* vd)
@@ -1982,7 +1902,7 @@ LLValue* DtoIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaratio
     }
 
     // Cast the (possibly void*) pointer to the canonical variable type.
-    val = DtoBitCast(val, getPtrToType(i1ToI8(DtoType(vd->type))));
+    val = DtoBitCast(val, DtoPtrToType(vd->type));
 
     IF_LOG Logger::cout() << "Value: " << *val << '\n';
     return val;
@@ -1998,3 +1918,10 @@ unsigned getFieldGEPIndex(AggregateDeclaration* ad, VarDeclaration* vd)
     assert(byteOffset == 0 && "Cannot address field by a simple GEP.");
     return fieldIndex;
 }
+
+#if LDC_LLVM_VER >= 307
+bool supportsCOMDAT()
+{
+    return !global.params.targetTriple.isOSBinFormatMachO();
+}
+#endif

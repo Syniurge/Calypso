@@ -37,6 +37,7 @@
 #include "gen/logger.h"
 #include "gen/llvmhelpers.h"
 #include "gen/functions.h"
+#include "ir/irfunction.h"
 
 typedef enum {
     Arg_Integer,
@@ -134,9 +135,6 @@ static void replace_func_name(IRState* p, std::string& insnt)
 
 Statement* asmSemantic(AsmStatement *s, Scope *sc)
 {
-    if (sc->func && sc->func->isSafe())
-        s->error("inline assembler not allowed in @safe function %s", sc->func->toChars());
-
     bool err = false;
     llvm::Triple const t = global.params.targetTriple;
     if (!(t.getArch() == llvm::Triple::x86 || t.getArch() == llvm::Triple::x86_64))
@@ -430,15 +428,6 @@ void AsmStatement_toIR(AsmStatement *stmt, IRState * irs)
 
 //////////////////////////////////////////////////////////////////////////////
 
-AsmBlockStatement::AsmBlockStatement(Loc loc, Statements* s)
-:   CompoundStatement(loc, s)
-{
-    enclosingFinally = NULL;
-    enclosingScopeExit = NULL;
-
-    abiret = NULL;
-}
-
 // rewrite argument indices to the block scope indices
 static void remap_outargs(std::string& insnt, size_t nargs, size_t idx)
 {
@@ -489,9 +478,9 @@ static void remap_inargs(std::string& insnt, size_t nargs, size_t idx)
     }
 }
 
-void AsmBlockStatement_toIR(AsmBlockStatement *stmt, IRState* p)
+void CompoundAsmStatement_toIR(CompoundAsmStatement *stmt, IRState* p)
 {
-    IF_LOG Logger::println("AsmBlockStatement::toIR(): %s", stmt->loc.toChars());
+    IF_LOG Logger::println("CompoundAsmStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
     // disable inlining by default
@@ -523,7 +512,7 @@ void AsmBlockStatement_toIR(AsmBlockStatement *stmt, IRState* p)
 
     // location of the special value determining the goto label
     // will be set if post-asm dispatcher block is needed
-    llvm::AllocaInst* jump_target = 0;
+    LLValue* jump_target = 0;
 
     {
         FuncDeclaration* fd = gIR->func()->decl;
@@ -588,8 +577,7 @@ void AsmBlockStatement_toIR(AsmBlockStatement *stmt, IRState* p)
             outSetterStmt->code += asmGotoEndLabel.str()+":\n";
 
             // create storage for and initialize the temporary
-            jump_target = DtoAlloca(Type::tint32, "__llvm_jump_target");
-            gIR->ir->CreateStore(DtoConstUint(0), jump_target);
+            jump_target = DtoAllocaDump(DtoConstUint(0), 0, "__llvm_jump_target");
             // setup variable for output from asm
             outSetterStmt->out_c = "=*m,";
             outSetterStmt->out.push_back(jump_target);
@@ -745,8 +733,7 @@ void AsmBlockStatement_toIR(AsmBlockStatement *stmt, IRState* p)
         assert(jump_target);
 
         // make new blocks
-        llvm::BasicBlock* oldend = gIR->scopeend();
-        llvm::BasicBlock* bb = llvm::BasicBlock::Create(gIR->context(), "afterasmgotoforwarder", p->topfunc(), oldend);
+        llvm::BasicBlock* bb = llvm::BasicBlock::Create(gIR->context(), "afterasmgotoforwarder", p->topfunc());
 
         llvm::LoadInst* val = p->ir->CreateLoad(jump_target, "__llvm_jump_target_value");
         llvm::SwitchInst* sw = p->ir->CreateSwitch(val, bb, gotoToVal.size());
@@ -758,52 +745,23 @@ void AsmBlockStatement_toIR(AsmBlockStatement *stmt, IRState* p)
             llvm::BasicBlock* casebb = llvm::BasicBlock::Create(gIR->context(), "case", p->topfunc(), bb);
             sw->addCase(LLConstantInt::get(llvm::IntegerType::get(gIR->context(), 32), it->second), casebb);
 
-            p->scope() = IRScope(casebb,bb);
-            DtoGoto(stmt->loc, it->first, stmt->enclosingFinally);
+            p->scope() = IRScope(casebb);
+            DtoGoto(stmt->loc, it->first);
         }
 
-        p->scope() = IRScope(bb,oldend);
+        p->scope() = IRScope(bb);
     }
-}
-
-// the whole idea of this statement is to avoid the flattening
-Statements* AsmBlockStatement::flatten(Scope* sc)
-{
-    return NULL;
-}
-
-Statement *AsmBlockStatement::syntaxCopy()
-{
-    Statements *a = new Statements();
-    a->setDim(statements->dim);
-    for (size_t i = 0; i < statements->dim; i++)
-    {
-        Statement *s = (*statements)[i];
-        if (s)
-            s = s->syntaxCopy();
-        a->data[i] = s;
-    }
-    AsmBlockStatement *cs = new AsmBlockStatement(loc, a);
-    return cs;
-}
-
-// necessary for in-asm branches
-Statement *AsmBlockStatement::semantic(Scope *sc)
-{
-    enclosingFinally = sc->tf;
-
-    return CompoundStatement::semantic(sc);
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-AsmBlockStatement* Statement::endsWithAsm()
+CompoundAsmStatement* Statement::endsWithAsm()
 {
     // does not end with inline asm
     return NULL;
 }
 
-AsmBlockStatement* CompoundStatement::endsWithAsm()
+CompoundAsmStatement* CompoundStatement::endsWithAsm()
 {
     // make the last inner statement decide
     if (statements && statements->dim)
@@ -815,7 +773,7 @@ AsmBlockStatement* CompoundStatement::endsWithAsm()
     return NULL;
 }
 
-AsmBlockStatement* AsmBlockStatement::endsWithAsm()
+CompoundAsmStatement* CompoundAsmStatement::endsWithAsm()
 {
     // yes this is inline asm
     return this;

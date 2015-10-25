@@ -50,7 +50,7 @@ RET retStyle(TypeFunction *tf)
 bool DtoIsReturnInArg(CallExp *ce)
 {
     TypeFunction *tf = static_cast<TypeFunction *>(ce->e1->type->toBasetype());
-    if (tf->ty == Tfunction && (!ce->f || ce->f->llvmInternal != LLVMintrinsic))
+    if (tf->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f)))
         return retStyle(tf) == RETstack;
     return false;
 }
@@ -104,6 +104,8 @@ LLType* DtoType(Type* t)
     case Tuns32:
     case Tint64:
     case Tuns64:
+    case Tint128:
+    case Tuns128:
     case Tfloat32:
     case Tfloat64:
     case Tfloat80:
@@ -184,7 +186,6 @@ LLType* DtoType(Type* t)
     // enum
 
     // FIXME: maybe just call toBasetype first ?
-    case Ttypedef:
     case Tenum:
     {
         Type* bt = t->toBasetype();
@@ -201,44 +202,21 @@ LLType* DtoType(Type* t)
         return IrTypeVector::get(t)->getLLType();
     }
 
-/*
-    Not needed atm as VarDecls for tuples are rewritten as a string of
-    VarDecls for the fields (u -> _u_field_0, ...)
-
-    case Ttuple:
-    {
-        TypeTuple* ttupl = static_cast<TypeTuple*>(t);
-        return DtoStructTypeFromArguments(ttupl->arguments);
-    }
-*/
-
     default:
         llvm_unreachable("Unknown class of D Type!");
     }
     return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-LLType* DtoStructTypeFromArguments(Arguments* arguments)
+LLType* DtoMemType(Type* t)
 {
-    if (!arguments)
-        return LLType::getVoidTy(gIR->context());
-
-    std::vector<LLType*> types;
-    for (size_t i = 0; i < arguments->dim; i++)
-    {
-        Argument *arg = (*arguments)[i];
-        assert(arg && arg->type);
-
-        types.push_back(DtoType(arg->type));
-    }
-    return LLStructType::get(types);
+    return i1ToI8(voidToI8(DtoType(t)));
 }
-*/
 
-//////////////////////////////////////////////////////////////////////////////////////////
+LLPointerType* DtoPtrToType(Type* t)
+{
+    return DtoMemType(t)->getPointerTo();
+}
 
 LLType* voidToI8(LLType* t)
 {
@@ -246,8 +224,6 @@ LLType* voidToI8(LLType* t)
         return LLType::getInt8Ty(gIR->context());
     return t;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////
 
 LLType* i1ToI8(LLType* t)
 {
@@ -285,11 +261,11 @@ LLValue* DtoDelegateEquals(TOK op, LLValue* lhs, LLValue* rhs)
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
-llvm::GlobalValue::LinkageTypes DtoLinkage(Dsymbol* sym)
+LinkageWithCOMDAT DtoLinkage(Dsymbol* sym)
 {
     if (DtoIsTemplateInstance(sym))
-        return templateLinkage;
-    return llvm::GlobalValue::ExternalLinkage;
+        return LinkageWithCOMDAT(templateLinkage, supportsCOMDAT());
+    return LinkageWithCOMDAT(llvm::GlobalValue::ExternalLinkage, false);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -543,12 +519,26 @@ LLValue* DtoAlignedLoad(LLValue* src, const char* name)
     return ld;
 }
 
+LLValue* DtoVolatileLoad(LLValue* src, const char* name)
+{
+    llvm::LoadInst* ld = gIR->ir->CreateLoad(src, name);
+    ld->setVolatile(true);
+    return ld;
+}
+
 
 void DtoStore(LLValue* src, LLValue* dst)
 {
     assert(src->getType() != llvm::Type::getInt1Ty(gIR->context()) &&
         "Should store bools as i8 instead of i1.");
     gIR->ir->CreateStore(src,dst);
+}
+
+void DtoVolatileStore(LLValue* src, LLValue* dst)
+{
+    assert(src->getType() != llvm::Type::getInt1Ty(gIR->context()) &&
+        "Should store bools as i8 instead of i1.");
+    gIR->ir->CreateStore(src, dst)->setVolatile(true);
 }
 
 void DtoStoreZextI8(LLValue* src, LLValue* dst)
@@ -733,7 +723,7 @@ size_t getTypeAllocSize(LLType* t)
     return gDataLayout->getTypeAllocSize(t);
 }
 
-unsigned char getABITypeAlign(LLType* t)
+unsigned int getABITypeAlign(LLType* t)
 {
     return gDataLayout->getABITypeAlignment(t);
 }

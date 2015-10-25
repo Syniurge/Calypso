@@ -27,7 +27,7 @@ namespace opts {
  * i.e.:  -cov    --> value = 0
  *        -cov=9  --> value = 9
  *        -cov=101 --> error, value must be in range [0..100]
- */ 
+ */
 struct CoverageParser : public cl::parser<unsigned char> {
 #if LDC_LLVM_VER >= 307
     CoverageParser(cl::Option &O) : cl::parser<unsigned char>(O) {}
@@ -93,10 +93,24 @@ static cl::opt<bool, true> verbose("v",
     cl::ZeroOrMore,
     cl::location(global.params.verbose));
 
+static cl::opt<bool, true> vcolumns("vcolumns",
+    cl::desc("print character (column) numbers in diagnostics"),
+    cl::ZeroOrMore,
+    cl::location(global.params.showColumns));
+
+static cl::opt<bool, true> vgc("vgc",
+    cl::desc("list all gc allocations including hidden ones"),
+    cl::ZeroOrMore,
+    cl::location(global.params.vgc));
+
 static cl::opt<bool, true> verbose_cg("v-cg",
     cl::desc("Verbose codegen"),
     cl::ZeroOrMore,
     cl::location(global.params.verbose_cg));
+
+static cl::opt<unsigned, true> errorLimit("verrors",
+    cl::desc("limit the number of error messages (0 means unlimited)"),
+    cl::location(global.errorLimit));
 
 static cl::opt<ubyte, true> warnings(
     cl::desc("Warnings:"),
@@ -360,26 +374,14 @@ static cl::opt<bool, true, FlagParser<bool> > asserts("asserts",
     cl::location(global.params.useAssert),
     cl::init(true));
 
-BoundsCheck boundsCheck = BC_Default;
-
-class BoundsChecksAdapter {
-public:
-    void operator=(bool val) {
-        boundsCheck = (val ? BC_On : BC_Off);
-    }
-};
-
-cl::opt<BoundsChecksAdapter, false, FlagParser<bool> > boundsChecksOld("boundscheck",
-    cl::desc("(*) Enable array bounds check (deprecated, use -boundscheck=on|off)"));
-
-cl::opt<BoundsCheck, true> boundsChecksNew("boundscheck",
+cl::opt<BoundsCheck> boundsCheck("boundscheck",
     cl::desc("Enable array bounds check"),
-    cl::location(boundsCheck),
     cl::values(
         clEnumValN(BC_Off, "off", "no array bounds checks"),
         clEnumValN(BC_SafeOnly, "safeonly", "array bounds checks for safe functions only"),
         clEnumValN(BC_On, "on", "array bounds checks for all functions"),
-        clEnumValEnd));
+        clEnumValEnd),
+    cl::init(BC_Default));
 
 static cl::opt<bool, true, FlagParser<bool> > invariants("invariants",
     cl::desc("(*) Enable invariants"),
@@ -433,17 +435,22 @@ cl::opt<unsigned, true> nestedTemplateDepth("template-depth",
     cl::location(global.params.nestedTmpl),
     cl::init(500));
 
-cl::opt<bool, true> vcolumns("vcolumns",
-    cl::desc("print character (column) numbers in diagnostics"),
-    cl::location(global.params.showColumns));
-
-cl::opt<bool, true> vgc("vgc",
-    cl::desc("list all gc allocations including hidden ones"),
-    cl::location(global.params.vgc));
-
+#if LDC_LLVM_VER < 307
 cl::opt<bool, true, FlagParser<bool> > color("color",
     cl::desc("Force colored console output"),
     cl::location(global.params.color));
+#else
+void CreateColorOption()
+{
+    new cl::opt<bool, true, FlagParser<bool> >("color",
+    cl::desc("Force colored console output"),
+    cl::location(global.params.color));
+}
+#endif
+
+cl::opt<bool, true> useDIP25("dip25",
+    cl::desc("implement http://wiki.dlang.org/DIP25 (experimental)"),
+    cl::location(global.params.useDIP25));
 
 cl::opt<unsigned char, true, CoverageParser> coverageAnalysis("cov",
     cl::desc("Compile-in code coverage analysis\n(use -cov=n for n% minimum required coverage)"),

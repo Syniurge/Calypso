@@ -22,28 +22,31 @@
 #include "gen/llvm.h"
 #include "ir/irfuncty.h"
 
-// this is used for tracking try-finally scopes
-struct EnclosingTryFinally
-{
-    TryFinallyStatement* tf;
-    llvm::BasicBlock* landingPad;
-    void emitCode(IRState* p);
-    EnclosingTryFinally(TryFinallyStatement* _tf, llvm::BasicBlock* _pad)
-    : tf(_tf), landingPad(_pad) {}
-};
-
 // dynamic memory helpers
 LLValue* DtoNew(Loc& loc, Type* newtype);
-void DtoDeleteMemory(Loc& loc, LLValue* ptr);
-void DtoDeleteClass(Loc& loc, LLValue* inst);
-void DtoDeleteInterface(Loc& loc, LLValue* inst);
+LLValue* DtoNewStruct(Loc& loc, TypeStruct* newtype);
+void DtoDeleteMemory(Loc& loc, DValue* ptr);
+void DtoDeleteStruct(Loc& loc, DValue* ptr);
+void DtoDeleteClass(Loc& loc, DValue* inst);
+void DtoDeleteInterface(Loc& loc, DValue* inst);
 void DtoDeleteArray(Loc& loc, DValue* arr);
+
+unsigned DtoAlignment(Type* type);
+unsigned DtoAlignment(VarDeclaration* vd);
 
 // emit an alloca
 llvm::AllocaInst* DtoAlloca(Type* type, const char* name = "");
+llvm::AllocaInst* DtoAlloca(VarDeclaration* vd, const char* name = "");
 llvm::AllocaInst* DtoArrayAlloca(Type* type, unsigned arraysize, const char* name = "");
 llvm::AllocaInst* DtoRawAlloca(LLType* lltype, size_t alignment, const char* name = "");
 LLValue* DtoGcMalloc(Loc& loc, LLType* lltype, const char* name = "");
+
+LLValue* DtoAllocaDump(DValue* val, const char* name = "");
+LLValue* DtoAllocaDump(DValue* val, Type* asType, const char* name = "");
+LLValue* DtoAllocaDump(DValue* val, LLType* asType, int alignment = 0, const char* name = "");
+LLValue* DtoAllocaDump(LLValue* val, int alignment = 0, const char* name = "");
+LLValue* DtoAllocaDump(LLValue* val, Type* asType, const char* name = "");
+LLValue* DtoAllocaDump(LLValue* val, LLType* asType, int alignment = 0, const char* name = "");
 
 // assertion generator
 void DtoAssert(Module* M, Loc& loc, DValue* msg);
@@ -52,12 +55,7 @@ void DtoAssert(Module* M, Loc& loc, DValue* msg);
 LLValue* DtoModuleFileName(Module* M, const Loc& loc);
 
 /// emits goto to LabelStatement with the target identifier
-/// the sourceFinally is only used for error checking
-void DtoGoto(Loc &loc, LabelDsymbol *target, TryFinallyStatement *sourceFinally);
-
-// Generates IR for enclosing handlers between the current state and
-// the scope created by the 'target' statement.
-void DtoEnclosingHandlers(Loc& loc, Statement* target);
+void DtoGoto(Loc &loc, LabelDsymbol *target);
 
 /// Enters a critical section.
 void DtoEnterCritical(Loc& loc, LLValue* g);
@@ -148,9 +146,9 @@ unsigned getFieldGEPIndex(AggregateDeclaration* ad, VarDeclaration* vd);
 ///
 DValue* DtoInlineAsmExpr(Loc& loc, FuncDeclaration* fd, Expressions* arguments);
 
-/// Update an offset to make sure it follows both the D and LLVM alignments.
-/// Returns the offset rounded up to the closest safely aligned offset.
-size_t realignOffset(size_t offset, Type* type);
+/// Returns the size the LLVM type for a member variable of the given type will
+/// take up in a struct (in bytes). This does not include padding in any way.
+size_t getMemberSize(Type* type);
 
 /// Returns the llvm::Value of the passed DValue, making sure that it is an
 /// lvalue (has a memory address), so it can be passed to the D runtime
@@ -194,6 +192,12 @@ LLValue* DtoCallableValue(DValue* fn);
 ///
 LLFunctionType* DtoExtractFunctionType(LLType* type);
 
+/// Checks whether fndecl is an intrinsic that requires special lowering. If so,
+/// emits the code for it and returns true, settings result to the resulting
+/// DValue (if any). If the call does not correspond to a "magic" intrinsic,
+/// i.e. should be turned into a normal function call, returns false.
+bool DtoLowerMagicIntrinsic(IRState* p, FuncDeclaration* fndecl, CallExp *e, DValue*& result);
+
 ///
 DValue* DtoCallFunction(Loc& loc, Type* resulttype, DValue* fnval, Expressions* arguments, LLValue* retvar = 0);
 
@@ -233,7 +237,20 @@ void Declaration_codegen(Dsymbol *decl);
 void Declaration_codegen(Dsymbol *decl, IRState *irs);
 
 DValue *toElem(Expression *e);
+DValue *toElem(Expression *e, bool tryGetLvalue);
 DValue *toElemDtor(Expression *e);
 LLConstant *toConstElem(Expression *e, IRState *p);
+
+#if LDC_LLVM_VER >= 307
+bool supportsCOMDAT();
+
+#define SET_COMDAT(x,m) if (supportsCOMDAT()) x->setComdat(m.getOrInsertComdat(x->getName()))
+
+#else
+
+#define supportsCOMDAT() false
+#define SET_COMDAT(x,m)
+
+#endif
 
 #endif

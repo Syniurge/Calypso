@@ -48,19 +48,19 @@ struct Array
     ~Array()
     {
         if (data != &smallarray[0])
-            mem.free(data);
+            mem.xfree(data);
     }
 
     char *toChars()
     {
-        char **buf = (char **)mem.malloc(dim * sizeof(char *));
+        char **buf = (char **)mem.xmalloc(dim * sizeof(char *));
         size_t len = 2;
         for (size_t u = 0; u < dim; u++)
         {
             buf[u] = ((RootObject *)data[u])->toChars();
             len += strlen(buf[u]) + 1;
         }
-        char *str = (char *)mem.malloc(len);
+        char *str = (char *)mem.xmalloc(len);
 
         str[0] = '[';
         char *p = str + 1;
@@ -74,7 +74,7 @@ struct Array
         }
         *p++ = ']';
         *p = 0;
-        mem.free(buf);
+        mem.xfree(buf);
         return str;
     }
 
@@ -91,18 +91,18 @@ struct Array
                 }
                 else
                 {   allocdim = nentries;
-                    data = (TYPE *)mem.malloc(allocdim * sizeof(*data));
+                    data = (TYPE *)mem.xmalloc(allocdim * sizeof(*data));
                 }
             }
             else if (allocdim == SMALLARRAYCAP)
             {
                 allocdim = dim + nentries;
-                data = (TYPE *)mem.malloc(allocdim * sizeof(*data));
+                data = (TYPE *)mem.xmalloc(allocdim * sizeof(*data));
                 memcpy(data, &smallarray[0], dim * sizeof(*data));
             }
             else
             {   allocdim = dim + nentries;
-                data = (TYPE *)mem.realloc(data, allocdim * sizeof(*data));
+                data = (TYPE *)mem.xrealloc(data, allocdim * sizeof(*data));
             }
         }
     }
@@ -125,10 +125,10 @@ struct Array
                 if (dim <= SMALLARRAYCAP)
                 {
                     memcpy(&smallarray[0], data, dim * sizeof(*data));
-                    mem.free(data);
+                    mem.xfree(data);
                 }
                 else
-                    data = (TYPE *)mem.realloc(data, dim * sizeof(*data));
+                    data = (TYPE *)mem.xrealloc(data, dim * sizeof(*data));
             }
             allocdim = dim;
         }
@@ -174,8 +174,13 @@ struct Array
     #endif
             Array_sort_compare(const void *x, const void *y)
             {
+#if IN_LLVM
+                RootObject *ox = *static_cast<RootObject **>(const_cast<void *>(x));
+                RootObject *oy = *static_cast<RootObject **>(const_cast<void *>(y));
+#else
                 RootObject *ox = *(RootObject **)x;
                 RootObject *oy = *(RootObject **)y;
+#endif
 
                 return ox->compare(oy);
             }
@@ -262,7 +267,7 @@ struct Array
     Array(Array<TYPE> &&a)
     {
         if (data != &smallarray[0])
-            mem.free(data);
+            mem.xfree(data);
         dim = a.dim;
         allocdim = a.allocdim;
         if (a.data == &a.smallarray[0])
@@ -282,7 +287,7 @@ struct Array
     Array &operator=(Array<TYPE> &&a)
     {
         if (data != &smallarray[0])
-            mem.free(data);
+            mem.xfree(data);
         dim = a.dim;
         allocdim = a.allocdim;
         if (a.data == &a.smallarray[0])
@@ -354,6 +359,12 @@ struct Array
         return reverse_iterator(begin());
     }
 
+    iterator erase(iterator pos)
+    {
+        size_t index = pos - &data[0];
+        remove(index);
+        return static_cast<iterator>(&data[index]);
+    }
 #endif
 };
 
