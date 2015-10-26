@@ -668,16 +668,10 @@ void PCH::update()
 
         // Initialize a compiler invocation object from the clang (-cc1) arguments.
         const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
-        std::unique_ptr<clang::CompilerInvocation> CI(new clang::CompilerInvocation);
-        clang::CompilerInvocation::CreateFromArgs(*CI,
-                                            const_cast<const char **>(CCArgs.data()),
-                                            const_cast<const char **>(CCArgs.data()) +
-                                            CCArgs.size(),
-                                            *CC1Diags);
-
         clang::CompilerInstance Clang;
-        Clang.setInvocation(CI.release());
-        Clang.setDiagnostics(CC1Diags.get());
+        clang::CompilerInvocation::CreateFromArgs(Clang.getInvocation(), CCArgs.begin(), CCArgs.end(), *CC1Diags);
+        Clang.createDiagnostics();
+        assert(Clang.hasDiagnostics());
 
         // Infer the builtin include path if unspecified.
         if (Clang.getHeaderSearchOpts().UseBuiltinIncludes &&
