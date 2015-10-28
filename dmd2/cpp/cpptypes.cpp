@@ -397,17 +397,18 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     // Pointer and reference types
     auto Pointer = dyn_cast<clang::PointerType>(T);
     auto Reference = dyn_cast<clang::ReferenceType>(T);
+    auto BlockPointer = dyn_cast<clang::BlockPointerType>(T); // OS X extension
 
-    if (Pointer || Reference)
+    if (Pointer || Reference || BlockPointer)
     {
-        auto pointeeT = Reference ?
-                Reference->getPointeeTypeAsWritten() : Pointer->getPointeeType();
+        auto pointeeT = Reference ? Reference->getPointeeTypeAsWritten() :
+                (Pointer ? Pointer->getPointeeType() : BlockPointer->getPointeeType());
         auto pt = fromType(pointeeT);
         if (!pt)
             return nullptr;
 
         Type *t;
-        if (Pointer)
+        if (Pointer || BlockPointer)
             t = new TypePointer(pt);
         else
             t = new TypeReference(pt);
