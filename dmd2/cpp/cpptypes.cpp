@@ -19,8 +19,6 @@
 #include "clang/AST/Type.h"
 #include "clang/Sema/Sema.h"
 
-extern void MODtoDecoBuffer(OutBuffer *buf, MOD mod);
-
 namespace cpp
 {
 
@@ -31,14 +29,6 @@ using llvm::isa;
 // Internal Calypso types (unlike TypeValueof which might used by normal D code) essential for template arguments matching.
 // D's const being transitive and since Calypso only needs logical const internally, keeping it outside of DMD seemed like the better idea..
 
-MOD getMOD(const clang::QualType T)
-{
-    if (T.isConstQualified())
-        return MODconst;
-
-    return 0;
-}
-
 class TypePointer : public ::TypePointer
 {
 public:
@@ -46,13 +36,6 @@ public:
 
     TypePointer(Type *t)
         : ::TypePointer(t) {}
-
-    void toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv) override
-    {
-        if (!forEquiv)
-            buf->writeByte('~');
-        ::TypePointer::toDecoBuffer(buf, flag, forEquiv);
-    }
 
     Type *syntaxCopy(Type *o = nullptr) override
     {
@@ -79,13 +62,6 @@ public:
 
     TypeReference(Type *t)
         : ::TypeReference(t) {}
-
-    void toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv) override
-    {
-        if (!forEquiv)
-            buf->writeByte('~');
-        ::TypeReference::toDecoBuffer(buf, flag, forEquiv);
-    }
 
     Type *syntaxCopy(Type *o = nullptr) override
     {
@@ -114,22 +90,12 @@ public:
     const clang::BuiltinType *T;
 
     TypeBasic(TY ty, const clang::BuiltinType *T = nullptr);
-    void toDecoBuffer(OutBuffer *buf, int flag = 0, bool forEquiv = false) override;
     unsigned short sizeType() override;
 };
 
 TypeBasic::TypeBasic(TY ty, const clang::BuiltinType *T)
     : ::TypeBasic(ty), T(T)
 {
-}
-
-void TypeBasic::toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv)
-{
-    Type::toDecoBuffer(buf, flag, forEquiv);
-
-    buf->writeByte('#');
-    buf->writeByte('0' + unsigned(T->getKind()));
-    buf->writeByte('#');
 }
 
 unsigned short TypeBasic::sizeType()
@@ -249,6 +215,51 @@ Type *BuiltinTypes::toInt(clang::TargetInfo::IntType intTy)
 
     assert(false && "unexpected int type size");
     return nullptr;
+}
+
+/***** Mangler extension for Calypso-specific types *****/
+
+// Fortunately the DMD ::Mangler always call visit((Type *)t); for every type.
+// However the visitor pattern is pretty much useless since it's always visit(Type *t) which gets called, ugly but will do for now..
+
+class ManglerExt : public Visitor
+{
+public:
+    OutBuffer *buf;
+    Visitor *base;
+    bool forEquiv;
+
+    ManglerExt(OutBuffer *buf, bool forEquiv, Visitor *base)
+    {
+        this->buf = buf;
+        this->forEquiv = forEquiv;
+        this->base = base;
+    }
+
+    void visit(Type *t)
+    {
+        if (forEquiv)
+            return;
+
+        if (t->isTypeBasic())
+        {
+            buf->writeByte('#');
+            buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind()));
+            buf->writeByte('#');
+        }
+        else if (t->ty == Tpointer || t->ty == Treference)
+            buf->writeByte('~');
+    }
+};
+
+Visitor *LangPlugin::getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base)
+{
+    // FIXME
+    static ManglerExt manglerExt(nullptr, false, nullptr);
+    manglerExt.buf = buf;
+    manglerExt.forEquiv = forEquiv;
+    manglerExt.base = base;
+    return &manglerExt;
 }
 
 /***** Clang -> DMD types *****/

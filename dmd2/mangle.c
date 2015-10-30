@@ -30,7 +30,7 @@
 #include "utf.h"
 
 char *toCppMangle(Dsymbol *s);
-void mangleToBuffer(Type *t, OutBuffer *buf);
+void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv = false); // CALYPSO
 
 static const char *mangleChar[TMAX];
 
@@ -137,10 +137,12 @@ class Mangler : public Visitor
 {
 public:
     OutBuffer *buf;
+    bool forEquiv; // CALYPSO
 
-    Mangler(OutBuffer *buf)
+    Mangler(OutBuffer *buf, bool forEquiv = false)
     {
         this->buf = buf;
+        this->forEquiv = forEquiv;
     }
 
 
@@ -161,6 +163,8 @@ public:
 
     void visit(Type *t)
     {
+        if (auto langPlugin = t->langPlugin()) // CALYPSO
+            langPlugin->getForeignMangler(buf, forEquiv, this)->visit(t);
         buf->writestring(mangleChar[t->ty]);
     }
 
@@ -897,9 +901,9 @@ const char *mangleExact(FuncDeclaration *fd)
     return buf.extractString();
 }
 
-void mangleToBuffer(Type *t, OutBuffer *buf)
+void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv)
 {
-    Mangler v(buf);
+    Mangler v(buf, forEquiv); // CALYPSO
     v.visitWithMask(t, 0);
 }
 

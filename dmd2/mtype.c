@@ -129,7 +129,7 @@ unsigned char Type::sizeTy[TMAX];
 StringTable Type::stringtable;
 
 void initTypeMangle();
-void mangleToBuffer(Type *t, OutBuffer *buf);
+void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv = false);
 void mangleToBuffer(Type *t, OutBuffer *buf, bool internal);
 
 Type::Type(TY ty)
@@ -1711,7 +1711,7 @@ Type *Type::merge()
 
             // CALYPSO
             buf.reset();
-            toDecoBuffer(&buf, 0, true);
+            mangleToBuffer(this, &buf, true);
             sv = stringtable.update((char *)buf.data, buf.offset);
             equivDeco = t->equivDeco = (char *)sv->toDchars();
         }
