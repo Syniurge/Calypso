@@ -3188,6 +3188,7 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
             Type *tt;
             if (unsigned char wx = wm ? deduceWildHelper(t, &tt, tparam) : 0)
             {
+                // type vs (none)
                 if (!at)
                 {
                     (*dedtypes)[i] = tt;
@@ -3195,13 +3196,22 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                     return MATCHconst;
                 }
 
-                if (at && at->ty == Tnone)  // type vs expressions
+                // type vs expressions
+                if (at->ty == Tnone)
                 {
                     TypeDeduced *xt = (TypeDeduced *)at;
-                    at = xt->tded;
+                    MATCH r = xt->matchAll(tt);
+                    if (r > MATCHnomatch)
+                    {
+                        (*dedtypes)[i] = tt;
+                        if (r > MATCHconst)
+                            r = MATCHconst;    // limit level for inout matches
+                    }
                     delete xt;
+                    return r;
                 }
 
+                // type vs type
                 if (tt->equals(at))
                 {
                     (*dedtypes)[i] = tt;    // Prefer current type match
@@ -3227,35 +3237,20 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                 if (!at)
                 {
                     (*dedtypes)[i] = tt;
-                    if (m == MATCHexact)
-                        return MATCHexact;
-                    else
-                        return MATCHconst;
+                    return m;
                 }
 
                 // type vs expressions
                 if (at->ty == Tnone)
                 {
                     TypeDeduced *xt = (TypeDeduced *)at;
-                    MATCH r = MATCHexact;
-                    for (size_t j = 0; j < xt->argexps.dim; j++)
-                    {
-                        Expression *e = xt->argexps[j];
-                        if (e == emptyArrayElement)
-                            continue;
-                        m = e->implicitConvTo(tt->addMod(xt->tparams[j]->mod));
-                        if (r > m)
-                            r = m;
-                        if (r <= MATCHnomatch)
-                            break;
-                    }
+                    MATCH r = xt->matchAll(tt);
                     if (r > MATCHnomatch)
                     {
                         (*dedtypes)[i] = tt;
-                        return r;
                     }
-
-                    at = xt->tded;
+                    delete xt;
+                    return r;
                 }
 
                 // type vs type
@@ -3358,41 +3353,50 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                     o1 = (*tempinst->tiargs)[i];
                 else if (i < tempinst->tdtypes.dim && i < tpti->tiargs->dim)
                 {
-                    // type vs (none)
-                    if (!at)
-                    {
-                        (*dedtypes)[i] = tt;
-                        *wm |= wx;
-                        result = MATCHconst;
-                        return;
-                    }
+                    // Pick up default arg
+                    o1 = tempinst->tdtypes[i];
+                }
+                else if (i >= tpti->tiargs->dim)
+                    break;
 
-                    // type vs expressions
-                    if (at->ty == Tnone)
+                if (i >= tpti->tiargs->dim)
+                {
+                    size_t dim = tempdecl->parameters->dim - (tempdecl->isVariadic() ? 1 : 0);
+                    while (i < dim && ((*tempdecl->parameters)[i]->dependent ||
+                                        (*tempdecl->parameters)[i]->hasDefaultArg()))
                     {
-                        TypeDeduced *xt = (TypeDeduced *)at;
-                        result = xt->matchAll(tt);
-                        if (result > MATCHnomatch)
-                        {
-                            (*dedtypes)[i] = tt;
-                            if (result > MATCHconst)
-                                result = MATCHconst;    // limit level for inout matches
-                        }
-                        delete xt;
-                        return;
+                        i++;
                     }
                     if (i >= dim)
                         break;  // match if all remained parameters are dependent
                     return MATCHnomatch;
                 }
 
-                    // type vs type
-                    if (tt->equals(at))
-                    {
-                        (*dedtypes)[i] = tt;    // Prefer current type match
-                        goto Lconst;
-                    }
-                    if (tt->implicitConvTo(at->constOf()))
+                RootObject *o2 = (*tpti->tiargs)[i];
+                Type *t2 = isType(o2);
+
+                size_t j;
+                if (t2 &&
+                    t2->ty == Tident &&
+                    i == tpti->tiargs->dim - 1 &&
+                    (j = templateParameterLookup(t2, parameters), j != IDX_NOTFOUND) &&
+                    j == parameters->dim - 1 &&
+                    (*parameters)[j]->isTemplateTupleParameter())
+                {
+                    /* Given:
+                        *  struct A(B...) {}
+                        *  alias A!(int, float) X;
+                        *  static if (is(X Y == A!(Z), Z...)) {}
+                        * deduce that Z is a tuple(int, float)
+                        */
+
+                    /* Create tuple from remaining args
+                        */
+                    Tuple *vt = new Tuple();
+                    size_t vtdim = (tempdecl->isVariadic()
+                                    ? tempinst->tiargs->dim : tempinst->tdtypes.dim) - i;
+                    vt->objects.setDim(vtdim);
+                    for (size_t k = 0; k < vtdim; k++)
                     {
                         RootObject *o;
                         if (k < tempinst->tiargs->dim)
@@ -3449,23 +3453,18 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                     if (e2->op == TOKvar &&
                         (((VarExp *)e2)->var->storage_class & STCtemplateparameter))
                     {
-                        (*dedtypes)[i] = tt;
-                        result = m;
-                        return;
+                        /*
+                            * (T:Number!(e2), int e2)
+                            */
+                        j = templateIdentifierLookup(((VarExp *)e2)->var->ident, parameters);
+                        if (j != IDX_NOTFOUND)
+                            goto L1;
+                        // The template parameter was not from this template
+                        // (it may be from a parent template, for example)
                     }
 
-                    // type vs expressions
-                    if (at->ty == Tnone)
-                    {
-                        TypeDeduced *xt = (TypeDeduced *)at;
-                        result = xt->matchAll(tt);
-                        if (result > MATCHnomatch)
-                        {
-                            (*dedtypes)[i] = tt;
-                        }
-                        delete xt;
-                        return;
-                    }
+                    e2 = e2->semantic(sc);      // Bugzilla 13417
+                    e2 = e2->ctfeInterpret();
 
                     //printf("e1 = %s, type = %s %d\n", e1->toChars(), e1->type->toChars(), e1->type->ty);
                     //printf("e2 = %s, type = %s %d\n", e2->toChars(), e2->type->toChars(), e2->type->ty);
@@ -4077,7 +4076,6 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                 return;
             }
             visitTypeSymbol(t->sym, t->mod);
-//             visit((Type *)t);
         }
 
         void visit(TypeEnum *t)
@@ -4100,7 +4098,6 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                 return;
             }
             visitTypeSymbol(t->sym, t->mod);
-//             visit((Type *)t);
         }
 
         /* Helper for TypeClass::deduceType().
