@@ -907,7 +907,7 @@ void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv)
     v.visitWithMask(t, 0);
 }
 
-void mangleToBuffer(Type *t, OutBuffer *buf, bool internal)
+void mangleToBufferInternal(Type *t, OutBuffer *buf, bool internal)
 {
     if (internal)
     {

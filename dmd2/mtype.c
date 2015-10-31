@@ -130,7 +130,7 @@ StringTable Type::stringtable;
 
 void initTypeMangle();
 void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv = false);
-void mangleToBuffer(Type *t, OutBuffer *buf, bool internal);
+void mangleToBufferInternal(Type *t, OutBuffer *buf, bool internal);
 
 Type::Type(TY ty)
 {
@@ -2370,7 +2370,7 @@ Identifier *Type::getTypeInfoIdent(int internal)
     // _init_10TypeInfo_%s
     OutBuffer buf;
     buf.reserve(32);
-    mangleToBuffer(this, &buf, internal != 0);
+    mangleToBufferInternal(this, &buf, internal != 0);
 
     size_t len = buf.offset;
     buf.writeByte(0);
