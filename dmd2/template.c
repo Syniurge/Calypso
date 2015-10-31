@@ -4133,8 +4133,7 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                 tmpdedtypes->setDim(dedtypes->dim);
                 memcpy(tmpdedtypes->tdata(), dedtypes->tdata(), dedtypes->dim * sizeof(void *));
 
-                TypeInstance *t = new TypeInstance(Loc(), parti);
-                MATCH m = deduceType(t, sc, tparam, parameters, tmpdedtypes);
+                MATCH m = deduceType(b->base->type, sc, tparam, parameters, tmpdedtypes);
                 if (m > MATCHnomatch)
                 {
                     // If this is the first ever match, it becomes our best estimate
