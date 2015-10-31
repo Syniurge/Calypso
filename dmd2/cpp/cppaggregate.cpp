@@ -306,6 +306,11 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
     return e1;
 }
 
+Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
+{
+    // TODO
+}
+
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
 {
     assert(ad->dtors.dim < 2);
@@ -314,11 +319,6 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
         return nullptr; // forward reference
 
     return ad->dtors[0];
-}
-
-::FuncDeclaration *LangPlugin::buildCpCtor(::StructDeclaration *sd, Scope *sc)
-{
-    return static_cast<::FuncDeclaration*>(sd->searchCpCtor());
 }
 
 ::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)

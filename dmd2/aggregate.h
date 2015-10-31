@@ -119,7 +119,6 @@ public:
     virtual void makeNested();  // CALYPSO
     bool isExport();
     Dsymbol *searchCtor();
-    Dsymbol *searchCpCtor();  // CALYPSO
 
     Prot prot();
 

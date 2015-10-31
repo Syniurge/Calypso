@@ -641,28 +641,6 @@ Dsymbol *AggregateDeclaration::searchCtor()
     return s;
 }
 
-Dsymbol *AggregateDeclaration::searchCpCtor() // CALYPSO
-{
-    Dsymbol *s = search(Loc(), Id::cpctor);
-    if (s)
-    {
-        s = s->toAlias();
-        if (s->parent && s->parent != this)
-            s = NULL; // only look in the most derived class
-    }
-    if (s)
-    {
-        if (!(s->isFuncDeclaration() ||
-              s->isOverloadSet()))
-        {
-            error("%s %s is not a function; identifiers starting with __ are reserved for the implementation", s->kind(), s->toChars());
-            errors = true;
-            s = NULL;
-        }
-    }
-    return s;
-}
-
 /********************************* StructDeclaration ****************************/
 
 StructDeclaration::StructDeclaration(Loc loc, Identifier *id)
