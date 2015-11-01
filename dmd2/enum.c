@@ -46,9 +46,18 @@ EnumDeclaration::EnumDeclaration(Loc loc, Identifier *id, Type *memtype)
 
 Dsymbol *EnumDeclaration::syntaxCopy(Dsymbol *s)
 {
-    assert(!s);
-    EnumDeclaration *ed = new EnumDeclaration(loc, ident,
-        memtype ? memtype->syntaxCopy() : NULL);
+    EnumDeclaration *ed;
+    if (s) // CALYPSO
+    {
+        assert(s->isEnumDeclaration());
+        ed = (EnumDeclaration*) s;
+        ed->loc = loc;
+        ed->ident = ident;
+        ed->memtype = memtype ? memtype->syntaxCopy() : NULL;
+    }
+    else
+        ed = new EnumDeclaration(loc, ident,
+            memtype ? memtype->syntaxCopy() : NULL);
     return ScopeDsymbol::syntaxCopy(ed);
 }
 
