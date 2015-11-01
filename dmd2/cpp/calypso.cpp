@@ -402,9 +402,17 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
 }
 
 Loc fromLoc(clang::SourceLocation L)
-{    Loc loc;
+{
+    auto& SrcMgr = ast()->getSourceManager();
+    Loc loc;
 
-    clang::StringRef S(ast()->getSourceManager().getFilename(L));
+    if (L.isInvalid())
+        return loc;
+
+    if (L.isMacroID())
+        L = SrcMgr.getExpansionLoc(L);
+
+    auto S = SrcMgr.getFilename(L);
     loc.filename = S.data();
     assert(*(S.data() + S.size()) == '\0'); // TEMPORARY assert to confirm that StringRef isn't needed anymore
     loc.linnum = ast()->getSourceManager().getSpellingLineNumber(L);
