@@ -5311,7 +5311,7 @@ bool TemplateValueParameter::declareParameter(Scope *sc)
 
 bool TemplateValueParameter::semantic(Scope *sc, TemplateParameters *parameters)
 {
-    valType = valType->semantic(loc, sc); // CALYPSO WARNING/FIXME?: was commented before merge 0.16
+//     valType = valType->semantic(loc, sc);
 
 #if 0   // defer semantic analysis to arg match
     if (specValue)
