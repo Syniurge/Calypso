@@ -75,8 +75,8 @@ Expression *getRightThis(Loc loc, Scope *sc, AggregateDeclaration *ad,
 {
     //printf("\ngetRightThis(e1 = %s, ad = %s, var = %s)\n", e1->toChars(), ad->toChars(), var->toChars());
 
-    if (auto lp = ad->langPlugin()) // CALYPSO
-        if (auto result = lp->getRightThis(loc, sc, ad, e1, var, flag))
+    if (ad && ad->langPlugin()) // CALYPSO
+        if (auto result = ad->langPlugin()->getRightThis(loc, sc, ad, e1, var, flag))
             return result;
 
  L1:
