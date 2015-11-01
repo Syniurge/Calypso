@@ -406,7 +406,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             members->append(field);
     }
 
-    if (CRD && !D->isUnion())
+    if (CRD && !D->isUnion() && !isPOD)
     {
         if (!CRD->isDependentType())
         {

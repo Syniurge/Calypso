@@ -876,11 +876,14 @@ void LangPlugin::toDefineStruct(::StructDeclaration* sd)
         }
     };
 
-    assert(RD->hasDefaultConstructor() &&
-            RD->hasCopyConstructorWithConstParam());
+    if (!RD->isPOD())
+    {
+        assert(RD->hasDefaultConstructor() &&
+                RD->hasCopyConstructorWithConstParam());
 
-    EmitStructor(S.LookupDefaultConstructor(_RD));
-    EmitStructor(S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const));
+        EmitStructor(S.LookupDefaultConstructor(_RD));
+        EmitStructor(S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const));
+    }
 
     EmitInternalDeclsForFields(RD);
 }
