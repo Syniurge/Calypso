@@ -784,11 +784,22 @@ VarDeclaration::VarDeclaration(Loc loc, Type *type, Identifier *id, Initializer 
 Dsymbol *VarDeclaration::syntaxCopy(Dsymbol *s)
 {
     //printf("VarDeclaration::syntaxCopy(%s)\n", toChars());
-    assert(!s);
-    VarDeclaration *v = new VarDeclaration(loc,
+    VarDeclaration *v;
+    if (s) // CALYPSO
+    {
+        assert(s->isVarDeclaration());
+        v = (VarDeclaration*) s;
+        v->loc = loc;
+        v->type = type ? type->syntaxCopy() : NULL;
+        v->ident = ident;
+        v->init = init ? init->syntaxCopy() : NULL;
+    }
+    else
+        v = new VarDeclaration(loc,
             type ? type->syntaxCopy() : NULL,
             ident,
             init ? init->syntaxCopy() : NULL);
+
     v->storage_class = storage_class;
     return v;
 }
