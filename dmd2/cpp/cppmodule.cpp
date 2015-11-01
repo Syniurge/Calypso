@@ -122,7 +122,7 @@ void Module::addPreambule()
 // {
 // }
 
-inline PROT DeclMapper::toPROT(clang::AccessSpecifier AS)
+inline Prot DeclMapper::toProt(clang::AccessSpecifier AS)
 {
     switch(AS) {
         case clang::AS_public:
@@ -376,7 +376,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                     auto brt = fromType(B->getType(), loc);
 
                     baseclasses->push(new BaseClass(brt,
-                                                    toPROT(B->getAccessSpecifier())));
+                                                    toProt(B->getAccessSpecifier())));
                 }
             }
 
