@@ -620,14 +620,11 @@ public:
 
     void visit(Module *m) // CALYPSO
     {
-        OutBuffer buf;
-        mangleParent(&buf, m);
+        mangleParent(m);
 
         if (const char *prefix = m->manglePrefix())
-            buf.writestring(prefix);
-        toBuffer(&buf, m->ident->toChars(), m);
-
-        result = buf.extractString();
+            buf->writestring(prefix);
+        toBuffer(m->ident->toChars(), m);
     }
 
     void visit(Dsymbol *s)

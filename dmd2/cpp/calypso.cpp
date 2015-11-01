@@ -59,7 +59,7 @@ RootObject *SpecValue::toTemplateArg(Loc loc)
 
 Identifier *fromIdentifier(const clang::IdentifierInfo *II)
 {
-    return Lexer::idPool(II->getNameStart());
+    return Identifier::idPool(II->getNameStart());
         // NOTE: Every C++ identifier passing through DMD gets its own redundant copy in memory
         // Is this the cost of interfacing with Clang or is there another way? (probably not an easy one)
 }
@@ -103,7 +103,7 @@ static Identifier *fullOperatorMapIdent(Identifier *baseIdent,
     fullName += "_";
     fullName += getOperatorName(OO);
 
-    return Lexer::idPool(fullName.c_str());
+    return Identifier::idPool(fullName.c_str());
 }
 
 static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
@@ -180,7 +180,7 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                     wrapInTemp = false;
                     break;
                 case clang::OO_ExclaimEqual:
-                    opIdent = Lexer::idPool("opEqualsNot"); // TODO?
+                    opIdent = Identifier::idPool("opEqualsNot"); // TODO?
                     wrapInTemp = false;
                     break;
                 case clang::OO_Less:
@@ -249,7 +249,7 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
         OS.flush();
     }
 
-    return Lexer::idPool(fullName.c_str());
+    return Identifier::idPool(fullName.c_str());
 }
 
 static Identifier *getConversionIdentifier(const clang::CXXConversionDecl *D,
@@ -332,7 +332,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec)
         // Prefix reserved class names with '§'
         if (ident == Id::Object || ident == Id::Throwable || ident == Id::Exception || ident == Id::Error ||
             ident == Id::TypeInfo || ident == Id::TypeInfo_Class || ident == Id::TypeInfo_Interface ||
-            ident == Id::TypeInfo_Struct || ident == Id::TypeInfo_Typedef || ident == Id::TypeInfo_Pointer ||
+            ident == Id::TypeInfo_Struct || ident == Id::TypeInfo_Pointer ||
             ident == Id::TypeInfo_Array || ident == Id::TypeInfo_StaticArray || ident == Id::TypeInfo_AssociativeArray ||
             ident == Id::TypeInfo_Enum || ident == Id::TypeInfo_Function || ident == Id::TypeInfo_Delegate ||
             ident == Id::TypeInfo_Tuple || ident == Id::TypeInfo_Const || ident == Id::TypeInfo_Invariant ||
@@ -340,7 +340,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec)
         {
             llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards
             s += llvm::StringRef(ident->string, ident->len);
-            ident = Lexer::idPool(s.c_str());
+            ident = Identifier::idPool(s.c_str());
         }
     }
 
@@ -405,8 +405,8 @@ Loc fromLoc(clang::SourceLocation L)
 {    Loc loc;
 
     clang::StringRef S(ast()->getSourceManager().getFilename(L));
-    loc.filename.data = S.data();
-    loc.filename.size = S.size();
+    loc.filename = S.data();
+    assert(*(S.data() + S.size()) == '\0'); // TEMPORARY assert to confirm that StringRef isn't needed anymore
     loc.linnum = ast()->getSourceManager().getSpellingLineNumber(L);
 
     return loc;

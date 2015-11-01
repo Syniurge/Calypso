@@ -9,7 +9,7 @@
 #include "identifier.h"
 #include "import.h"
 #include "init.h"
-#include "lexer.h"
+#include "identifier.h"
 #include "template.h"
 #include "scope.h"
 #include "statement.h"
@@ -50,7 +50,7 @@ Modules Module::amodules;
 
 void Module::init()
 {
-    rootPackage = new Package(Lexer::idPool("cpp"));
+    rootPackage = new Package(Identifier::idPool("cpp"));
     rootPackage->symtab = new DsymbolTable;
 
     modules->insert(rootPackage);
@@ -62,13 +62,13 @@ static void combine(char *&objfn, Identifier *id)
 
     auto objlen = strlen(objfn);
     auto idlen = id->len;
-    objfn = (char *)mem.malloc(objlen + 1 + idlen + 1);
+    objfn = (char *)mem.xmalloc(objlen + 1 + idlen + 1);
     memcpy(objfn, prevobjfn, objlen);
     objfn[objlen] = '_';
     objlen++;
     memcpy(objfn + objlen, id->string, idlen + 1);
 
-    mem.free(prevobjfn);
+    mem.xfree(prevobjfn);
 }
 
 Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
@@ -532,14 +532,14 @@ TemplateParameters *initTempParams(Loc loc, SpecValue &spec)
     if (spec.op)
     {
         auto dstringty = new TypeIdentifier(loc, Id::object);
-        dstringty->addIdent(Lexer::idPool("string"));
+        dstringty->addIdent(Identifier::idPool("string"));
 
         auto tp_specvalue = new StringExp(loc, const_cast<char*>(spec.op));
-        p = new TemplateValueParameter(loc, Lexer::idPool("op"),
+        p = new TemplateValueParameter(loc, Identifier::idPool("op"),
                                             dstringty, tp_specvalue, nullptr);
     }
     else if (spec.t)
-        p = new TemplateTypeParameter(loc, Lexer::idPool("type"), spec.t, nullptr);
+        p = new TemplateTypeParameter(loc, Identifier::idPool("type"), spec.t, nullptr);
 
     if (p)
         tpl->push(p);
@@ -903,7 +903,7 @@ Identifier *DeclMapper::getIdentifierForTemplateNonTypeParm(const clang::NonType
         llvm::raw_string_ostream OS(str);
         OS << "value_parameter_" << T->getDepth() << '_' << T->getIndex();
 
-        return Lexer::idPool(OS.str().c_str());
+        return Identifier::idPool(OS.str().c_str());
     }
 }
 
@@ -1543,7 +1543,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         clang::NamedDecl *D = nullptr;
 
         // Lookups can't find the implicit __va_list_tag record
-        if (id == Lexer::idPool("__va_list_tag") && packages->dim == 1)
+        if (id == Identifier::idPool("__va_list_tag") && packages->dim == 1)
         {
             D = Context.getVaListTagType()
                 ->getAs<clang::RecordType>()->getDecl();

@@ -97,7 +97,7 @@ void ldc::DIBuilder::Declare(const Loc &loc, llvm::Value *var, ldc::DILocalVaria
 
 ldc::DIFile ldc::DIBuilder::CreateFile(Loc& loc)
 {
-    llvm::SmallString<128> path(loc.filename ? llvm::StringRef(loc.filename.data, loc.filename.size) : "");  // CALYPSO temp
+    llvm::SmallString<128> path(loc.filename ? llvm::StringRef(loc.filename) : "");  // CALYPSO temp
     llvm::sys::fs::make_absolute(path);
 
     return DBuilder.createFile(

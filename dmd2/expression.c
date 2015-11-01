@@ -1805,7 +1805,6 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                 else
                     arg = arg->castTo(sc, ta);
             }
-#endif
             if (tb->ty == Tstruct)
             {
 //                arg = callCpCtor(sc, arg);

@@ -8,6 +8,7 @@
 #include "scope.h"
 #include "target.h"
 #include "template.h"
+#include "identifier.h"
 #include "id.h"
 
 #include "clang/AST/Decl.h"
@@ -158,7 +159,7 @@ void ClassDeclaration::buildCpCtor(Scope *sc)
     if (!cpctor)
         return; // could be deleted or invalid
 
-    auto fwdcpctor = new OverloadAliasDeclaration(loc, Id::cpctor,
+    auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
                                     new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
     members->push(fwdcpctor);
 

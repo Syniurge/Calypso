@@ -581,7 +581,7 @@ void ClassDeclaration::semantic(Scope *sc)
             ClassDeclaration *cb = b->base->isClassDeclaration(); // CALYPSO
             if (cb && cb->isCOMinterface())
                 com = true;
-            if (cpp && !b->base->isCPPinterface())
+            if (cpp && cb && !cb->isCPPinterface())
             {
                 ::error(loc, "C++ class '%s' cannot implement D interface '%s'", toPrettyChars(), b->base->toPrettyChars());
             }

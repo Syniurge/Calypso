@@ -1229,7 +1229,7 @@ public:
             // Also, private methods are always not virtual.
             const bool nonFinal = !fdecl->isFinalFunc() &&
                 (fdecl->isAbstract() || fdecl->isVirtual()) &&
-                fdecl->prot() != PROTprivate;
+                fdecl->prot().kind != PROTprivate;
 
             // Decide whether this function needs to be looked up in the vtable.
             // Even virtual functions are looked up directly if super or DotTypeExp

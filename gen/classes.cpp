@@ -137,7 +137,7 @@ void DtoDefineClass(ClassDeclaration* cd) // CALYPSO
     classZ->setInitializer(ir->getClassInfoInit());
     classZ->setLinkage(lwc.first);
     if (lwc.second) SET_COMDAT(classZ, gIR->module);
-*
+
     for (auto lp: global.langPlugins)
         lp->codegen()->emitAdditionalClassSymbols(cd); // CALYPSO
 
@@ -635,9 +635,9 @@ static ClassFlags::Type build_classinfo_flags(ClassDeclaration* cd)
     flags |= ClassFlags::hasGetMembers;
     if (cd->ctor)
         flags |= ClassFlags::hasCtor;
-    for (ClassDeclaration *pc = cd; pc; pc = pc->baseClass)
+    for (AggregateDeclaration *ad2 = cd; ad2; ad2 = toAggregateBase(ad2)) // CALYPSO
     {
-        if (pc->dtor)
+        if (ad2->dtor)
         {
             flags |= ClassFlags::hasDtor;
             break;
@@ -745,7 +745,7 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
     // base
     // interfaces never get a base, just the interfaces[]
     if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) // CALYPSO
-        b.push_classinfo(cd->baseClass);
+        b.push_classinfo(static_cast<ClassDeclaration*>(cd->baseClass));
     else
         b.push_null(cinfo->type);
 

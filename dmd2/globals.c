@@ -9,6 +9,7 @@
  * https://github.com/D-Programming-Language/dmd/blob/master/src/mars.c
  */
 
+#include "import.h"
 #include "globals.h"
 
 #include "filename.h"

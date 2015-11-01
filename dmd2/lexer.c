@@ -1595,7 +1595,7 @@ TOK Lexer::parenthesedSpecialToken(Token *t)
             case ')':
                 t->len = stringbuffer.offset;
                 stringbuffer.writeByte(0);
-                t->ustring = (unsigned char *)mem.malloc(stringbuffer.offset);
+                t->ustring = (unsigned char *)mem.xmalloc(stringbuffer.offset);
                 memcpy(t->ustring, stringbuffer.data, stringbuffer.offset);
                 stringPostfix(t);
                 t->value = TOKstring;

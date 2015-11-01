@@ -5,6 +5,7 @@
 #include "cpp/cppmodule.h"
 #include "cpp/calypso.h"
 #include "expression.h"
+#include "identifier.h"
 
 #include "llvm/Support/FileSystem.h" // shall be replaced by std.file
 #include "clang/Basic/Diagnostic.h"
@@ -18,7 +19,7 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
     // add "cpp" as leftmost package to avoid name clashes
     if (!this->packages)
         this->packages = new Identifiers;
-    this->packages->shift(Lexer::idPool("cpp"));  // any better idea ?
+    this->packages->shift(Identifier::idPool("cpp"));  // any better idea ?
 
     if (!aliasId)
         setSymIdent();

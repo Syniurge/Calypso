@@ -1360,7 +1360,7 @@ Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTy
     llvm::raw_string_ostream OS(str);
     OS << "type_parameter_" << D->getDepth() << '_' << D->getIndex();
 
-    return Lexer::idPool(OS.str().c_str());
+    return Identifier::idPool(OS.str().c_str());
 }
 
 Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D)
@@ -1377,7 +1377,7 @@ Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::Templa
     llvm::raw_string_ostream OS(str);
     OS << "template_parameter_" << D->getDepth() << '_' << D->getIndex();
 
-    return Lexer::idPool(OS.str().c_str());
+    return Identifier::idPool(OS.str().c_str());
 }
 
 unsigned getTemplateParmIndex(const clang::NamedDecl *ParmDecl)
@@ -1783,7 +1783,7 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
             { auto importIdent = getIdentifier(TD);
             llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty
             s += llvm::StringRef(importIdent->string, importIdent->len);
-            importAliasid = Lexer::idPool(s.c_str()); }
+            importAliasid = Identifier::idPool(s.c_str()); }
 
             assert(!Key.second);
             break;
@@ -1957,7 +1957,7 @@ static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
             sModule = getIdentifier(cast<clang::NamedDecl>(D));
         else
             // D is neither a tag nor a class template, we need to import the namespace's functions and vars
-            sModule = Lexer::idPool("_");
+            sModule = Identifier::idPool("_");
     }
 
     return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
@@ -1977,12 +1977,12 @@ static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
     }
 
     auto insertIndex = sPackages->dim;
-    auto sModule = Lexer::idPool(Mod->Name.c_str());
+    auto sModule = Identifier::idPool(Mod->Name.c_str());
 
     auto M = Mod->Parent;
     while (M)
     {
-        sPackages->insert(insertIndex, Lexer::idPool(M->Name.c_str()));
+        sPackages->insert(insertIndex, Identifier::idPool(M->Name.c_str()));
         M = M->Parent;
     }
 
@@ -2081,11 +2081,6 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
             auto ED = static_cast<cpp::EnumDeclaration*>(ed)->ED;
 
             return Context.getEnumType(ED);
-        }
-        case Ttypedef:  // NOTE: these aren't the AliasDecl created by DeclMapper
-        {
-            auto td = static_cast<TypeTypedef*>(t)->sym;
-            return toType(loc, td->basetype, sc, stc);
         }
         case Tident:
         case Tinstance:
