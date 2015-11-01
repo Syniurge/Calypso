@@ -868,16 +868,25 @@ void LangPlugin::toDefineStruct(::StructDeclaration* sd)
         return;
 
     auto _RD = const_cast<clang::CXXRecordDecl *>(RD);
-    auto EmitStructor = [&] (clang::CXXMethodDecl *D) {
+    auto Emit = [&] (clang::CXXMethodDecl *D) {
         if (D && !D->isDeleted())
         {
-            CGM->getAddrOfCXXStructor(D, clangCG::StructorType::Complete); // mark it used
+            ResolvedFunc::get(*CGM, D); // mark it used
             CGM->EmitTopLevelDecl(D); // mark it emittable
         }
     };
 
-    EmitStructor(S.LookupDefaultConstructor(_RD));
-    EmitStructor(S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const));
+    Emit(S.LookupDefaultConstructor(_RD));
+    for (int i = 0; i < 2; i++)
+        Emit(S.LookupCopyingConstructor(_RD, i ? clang::Qualifiers::Const : 0));
+
+    Emit(S.LookupDestructor(_RD));
+
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++)
+            for (int k = 0; k < 2; k++)
+                Emit(S.LookupCopyingAssignment(_RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
+                                            k ? clang::Qualifiers::Const : 0));
 
     EmitInternalDeclsForFields(RD);
 }
