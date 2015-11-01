@@ -406,7 +406,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             members->append(field);
     }
 
-    if (CRD && !D->isUnion() && !isPOD)
+    if (CRD && !D->isUnion())
     {
         if (!CRD->isDependentType())
         {
@@ -658,8 +658,13 @@ bool isMapped(const clang::Decl *D) // TODO
             return false; // functions without prototypes are afaik builtins, and since D needs a prototype they can't be mapped
 
         if (auto MD = dyn_cast<clang::CXXMethodDecl>(D))
-            if (MD->getParent()->isUnion())
+        {
+            auto Parent = MD->getParent();
+            if (Parent->isUnion())
                 return false;
+            if (MD->isImplicit() && Parent->isPOD())
+                return false;
+        }
 
         if (auto CCD = dyn_cast<clang::CXXConstructorDecl>(D))
             if ((CCD->isImplicit() || CCD->isDefaultConstructor()) && CCD->getParent()->isPOD())
