@@ -223,10 +223,10 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
     if (!defaultCtor)
         return ::ClassDeclaration::defaultInit(loc);
 
-//     auto arguments = new Expressions;
-//     return new CallExp(loc, new TypeExp(loc, type), arguments);
+    auto arguments = new Expressions;
+    return new CallExp(loc, new TypeExp(loc, type), arguments);
 
-    return nullptr; // handled in cpptoir.cpp because CallExp(TypeExp()) causes recursive evaluation
+//     return nullptr; // handled in cpptoir.cpp because CallExp(TypeExp()) causes recursive evaluation
 }
 
 void ClassDeclaration::makeNested()

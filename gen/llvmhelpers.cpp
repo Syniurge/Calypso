@@ -932,8 +932,6 @@ void DtoVarDeclaration(VarDeclaration* vd)
         // assert(vd->ir.irLocal && "irLocal is expected to be already set by DtoCreateNestedContext");
     }
 
-    auto tb = vd->type->toBasetype(); // CALYPSO
-
     if (isIrLocalCreated(vd))
     {
         // Nothing to do if it has already been allocated.
@@ -997,12 +995,13 @@ void DtoVarDeclaration(VarDeclaration* vd)
                 }
 
                 if (rhs->op == TOKcall) {
+                    if (auto ad = getAggregateSym(vdBasetype)) // CALYPSO
+                        if (auto lp = ad->langPlugin())
+                            return lp->codegen()->toConstructVar(vd, irLocal->value, rhs);
+
                     CallExp *ce = static_cast<CallExp *>(rhs);
                     if (DtoIsReturnInArg(ce))
                     {
-                        for (auto lp: global.langPlugins) // CALYPSO
-                            lp->codegen()->toPreInitVarDeclaration(vd);
-
                         if (isSpecialRefVar(vd))
                         {
                             LLValue* const val = toElem(ce)->getLVal();
@@ -1022,13 +1021,18 @@ void DtoVarDeclaration(VarDeclaration* vd)
 
     IF_LOG Logger::cout() << "llvm value for decl: " << *getIrLocal(vd)->value << '\n';
 
-    for (auto lp: global.langPlugins) // CALYPSO
-        lp->codegen()->toPreInitVarDeclaration(vd);
+//     for (auto lp: global.langPlugins) // CALYPSO (TODO unneeded)
+//         lp->codegen()->toPreInitVarDeclaration(vd);
 
     if (vd->init)
     {
         if (ExpInitializer* ex = vd->init->isExpInitializer())
         {
+            // CALYPSO HACK FIXME remove when temporaries from CallExp(TypeExp) get replaced by NullExp
+            if (ex->exp->op == TOKconstruct)
+                if (static_cast<AssignExp*>(ex->exp)->e2->op == TOKnull)
+                    return;
+
             // TODO: Refactor this so that it doesn't look like toElem has no effect.
             Logger::println("expression initializer");
             toElem(ex->exp);

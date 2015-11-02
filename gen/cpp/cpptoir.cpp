@@ -753,6 +753,23 @@ void LangPlugin::toDefineVariable(::VarDeclaration* vd)
     }
 }
 
+// Handle ConstructExp initializers of struct and class vars
+void LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs)
+{
+    // As RHS we expect either EmptyStructLiteral.this(...) for structs or null.this(...) where null is the same type as vd for classes
+    // Only what's beyond the dot matters.
+    assert(isCPP(getAggregateSym(vd->type->toBasetype())));
+    assert(rhs->op == TOKcall);
+
+    auto ce = static_cast<CallExp*>(rhs);
+    DValue* fnval = toElem(ce->e1);
+    auto dfnval = fnval->isFunc();
+    assert(dfnval && isCPP(dfnval->func));
+
+    dfnval->vthis = value;
+    DtoCallFunction(ce->loc, ce->type, dfnval, ce->arguments);
+}
+
 void toDefaultInitVar(LLValue *vt, ::VarDeclaration *vd);
 
 void toDefaultInitClassValue(Loc loc, LLValue *vt, TypeClass *tc)

@@ -8391,14 +8391,18 @@ Lagain:
         AggregateDeclaration *ad = getAggregateSym(t1);
         if (ad && !ad->byRef()) // CALYPSO
         {
+            StructDeclaration *sd = ad->isStructDeclaration();
+
             // First look for constructor
             if (e1->op == TOKtype && ad->ctor)
             {
-                if (t1->ty != Tstruct ||
-                        (!ad->noDefaultCtor && !(arguments && arguments->dim))) // CALYPSO
+                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim))
                     goto Lx;
 
-                StructDeclaration *sd = ((TypeStruct *)t1)->sym;
+                Expression *e = NULL;
+
+                if (t1->ty == Tstruct) // CALYPSO
+                {
                 StructLiteralExp *sle = new StructLiteralExp(loc, sd, NULL, e1->type);
                 if (!sd->fill(loc, sle->elements, true))
                     return new ErrorExp();
@@ -8414,16 +8418,34 @@ Lagain:
 #endif
                 sle->type = type;
 
-                Expression *e = sle;
-                if (CtorDeclaration *cf = sd->ctor->isCtorDeclaration())
+                e = sle;
+                }
+                else
+                {
+                    // CALYPSO HACK back to DMD 2.066, in ConstructExp the variable is ignored anyway in DtoVarDeclaration
+                    Identifier *idtmp = Identifier::generateId("__ctmp");
+
+                    ExpInitializer *ei = new ExpInitializer(loc, new NullExp(loc, t1));
+                    VarDeclaration *tmp = new VarDeclaration(loc, t1, idtmp, ei);
+                    tmp->storage_class |= STCtemp | STCctfe;
+
+                    e = new DeclarationExp(loc, tmp);
+                    e = new CommaExp(loc, e, new VarExp(loc, tmp));
+
+                    // NOTE/TODO: NullExp can't be used yet, because in a regular method call such as someMethod(someCtor())
+                    // for the time being someCtor() needs to be a temporary
+//                     e = new NullExp(loc, t1);
+                }
+
+                if (CtorDeclaration *cf = ad->ctor->isCtorDeclaration())
                 {
                     e = new DotVarExp(loc, e, cf, 1);
                 }
-                else if (TemplateDeclaration *td = sd->ctor->isTemplateDeclaration())
+                else if (TemplateDeclaration *td = ad->ctor->isTemplateDeclaration())
                 {
                     e = new DotTemplateExp(loc, e, td);
                 }
-                else if (OverloadSet *os = sd->ctor->isOverloadSet())
+                else if (OverloadSet *os = ad->ctor->isOverloadSet())
                 {
                     e = new DotExp(loc, e, new OverExp(loc, os));
                 }
@@ -8453,9 +8475,6 @@ Lagain:
             /* It's a struct literal
              */
         Lx:
-            if (t1->ty != Tstruct)
-                goto L1; // CALYPSO FIXME more grace
-
             Expression *e = new StructLiteralExp(loc, (StructDeclaration *)ad, arguments, e1->type);
             e = e->semantic(sc);
             return e;
@@ -11248,7 +11267,7 @@ Expression *AssignExp::semantic(Scope *sc)
                     (ce = (CallExp *)e2x, ce->e1->op == TOKdotvar) &&
                     (dve = (DotVarExp *)ce->e1, dve->var->isCtorDeclaration()) &&
                     e2x->type->implicitConvTo(t1)
-                    && sd) // CALYPSO HACK/TODO: since ClassDecl::defaultInit returns null this is no good, we should give it a second look after making it return ConstructExp
+                    && sd) // CALYPSO HACK: the bit copy isn't needed and making things harder for us
                 {
                     /* Look for form of constructor call which is:
                      *    __ctmp.ctor(arguments...)
