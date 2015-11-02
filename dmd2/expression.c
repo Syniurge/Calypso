@@ -8394,37 +8394,8 @@ Lagain:
             // First look for constructor
             if (e1->op == TOKtype && ad->ctor)
             {
-                if (t1->ty != Tstruct) // CALYPSO
-                {// FIXME HACK FIXME
-                    // Create variable that will get constructed
-                    Identifier *idtmp = Identifier::generateId("__ctmp");
-
-                    ExpInitializer *ei = NULL;
-                    VarDeclaration *tmp = new VarDeclaration(loc, t1, idtmp, ei);
-                    tmp->storage_class |= STCtemp | STCctfe;
-
-                    Expression *e = new DeclarationExp(loc, tmp);
-                    e = new CommaExp(loc, e, new VarExp(loc, tmp));
-                    if (CtorDeclaration *cf = ad->ctor->isCtorDeclaration())
-                    {
-                        e = new DotVarExp(loc, e, cf, 1);
-                    }
-                    else if (TemplateDeclaration *td = ad->ctor->isTemplateDeclaration())
-                    {
-                        e = new DotTemplateExp(loc, e, td);
-                    }
-                    else if (OverloadSet *os = ad->ctor->isOverloadSet())
-                    {
-                        e = new DotExp(loc, e, new OverExp(loc, os));
-                    }
-                    else
-                        assert(0);
-                    e = new CallExp(loc, e, arguments);
-                    e = e->semantic(sc);
-                    return e;
-                }
-
-                if (!ad->noDefaultCtor && !(arguments && arguments->dim))
+                if (t1->ty != Tstruct ||
+                        (!ad->noDefaultCtor && !(arguments && arguments->dim))) // CALYPSO
                     goto Lx;
 
                 StructDeclaration *sd = ((TypeStruct *)t1)->sym;
