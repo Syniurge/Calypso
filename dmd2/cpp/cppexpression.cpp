@@ -205,14 +205,19 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
             skipCast = false;
     }
 
+    auto CastDestTy = E->getType();
+
     if (Kind == clang::CK_NoOp || Kind == clang::CK_ConstructorConversion ||
             Kind == clang::CK_LValueToRValue)
+        skipCast = true;
+
+    if (Kind == clang::CK_Dependent &&
+            SubExpr->getType().getCanonicalType() == CastDestTy.getCanonicalType())
         skipCast = true;
 
     if (skipCast)
         return e;
 
-    auto CastDestTy = E->getType();
     assert(SubExpr->getType().getCanonicalType()
                     != CastDestTy.getCanonicalType()); // we should be ignoring all casts that do not alter the type
 
