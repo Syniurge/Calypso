@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/llvm.h"
+#include "id.h"
 #include "mars.h"
 #include "gen/abi-generic.h"
 #include "gen/abi.h"
@@ -22,7 +23,13 @@
 
 struct X86TargetABI : TargetABI
 {
+    const bool isOSX;
     IntegerRewrite integerRewrite;
+
+    X86TargetABI()
+        : isOSX(global.params.isOSX)
+    {
+    }
 
     llvm::CallingConv::ID callingConv(llvm::FunctionType* ft, LINK l)
     {
@@ -64,6 +71,37 @@ struct X86TargetABI : TargetABI
         }
     }
 
+private:
+    bool returnOSXStructInArg(TypeStruct* t)
+    {
+        // https://developer.apple.com/library/mac/documentation/DeveloperTools/Conceptual/LowLevelABI/Mac_OS_X_ABI_Function_Calls.pdf
+        //
+        // OS X variation on IA-32 for returning structs, page 57 section on
+        // Returning Results:
+        //   "Structures 1 or 2 bytes in size are placed in EAX. Structures 4
+        //    or 8 bytes in size are placed in: EAX and EDX. Structures of
+        //    other sizes are placed at the address supplied by the caller."
+        // Non-POD structs (non-C compatible) should always be returned in an
+        // arg though (yes, sometimes extern(C) functions return these, but C
+        // code does not handle struct lifecycle).
+        size_t sz = t->Type::size();
+        return !t->sym->isPOD() || (sz != 1 && sz != 2 && sz != 4 && sz != 8);
+    }
+
+    bool isMagicCLong(Type *t)
+    {
+        // The frontend has magic structs to express the variable-sized C types
+        // for C++ mangling purposes. We need to pass them like integers, not
+        // on the stack.
+
+        Type * const bt = t->toBasetype();
+        if (bt->ty != Tstruct) return false;
+
+        Identifier *id = static_cast<TypeStruct *>(bt)->sym->ident;
+        return (id == Id::__c_long) || (id == Id::__c_ulong);
+    }
+
+public:
     bool returnInArg(TypeFunction* tf)
     {
         if (tf->isref)
@@ -78,9 +116,17 @@ struct X86TargetABI : TargetABI
             ;
         }
         // other ABI's follow C, which is cdouble and creal returned on the stack
-        // as well as structs
+        // as well as structs (except for some OSX cases).
         else
-            return (rt->ty == Tstruct || rt->ty == Tcomplex64 || rt->ty == Tcomplex80);
+        {
+            if (isMagicCLong(rt)) return false;
+
+            if (rt->ty == Tstruct)
+            {
+                return !isOSX || returnOSXStructInArg((TypeStruct*)rt);
+            }
+            return (rt->ty == Tsarray || rt->ty == Tcomplex64 || rt->ty == Tcomplex80);
+        }
     }
 
     bool passByVal(Type* t)
@@ -165,16 +211,68 @@ struct X86TargetABI : TargetABI
         {
             // RETURN VALUE
 
-            // cfloat -> i64
-            if (tf->next->toBasetype()->ty == Tcomplex32) // CALYPSO
+            if ((!fty.ret->byref && isMagicCLong(tf->next)) ||
+                tf->next->toBasetype()->ty == Tcomplex32)
             {
+                // __c_long -> i32, cfloat -> i64
                 fty.ret->rewrite = &integerRewrite;
                 fty.ret->ltype = integerRewrite.type(fty.ret->type, fty.ret->ltype);
+            }
+            else if (isOSX)
+            {
+                // value struct returns should be rewritten as an int type to
+                // generate correct register usage (matches clang).
+                // note: sret functions change ret type to void so this won't
+                // trigger for those
+                Type* retTy = fty.ret->type->toBasetype();
+                if (!fty.ret->byref && retTy->ty == Tstruct)
+                {
+                    fty.ret->rewrite = &integerRewrite;
+                    fty.ret->ltype = integerRewrite.type(fty.ret->type, fty.ret->ltype);
+                }
             }
 
             // IMPLICIT PARAMETERS
 
             // EXPLICIT PARAMETERS
+
+            // Clang does not pass empty structs, while it seems that GCC does,
+            // at least on Linux x86. We don't know whether the C compiler will
+            // be Clang or GCC, so just assume Clang on OS X and G++ on Linux.
+            if (isOSX)
+            {
+                size_t i = 0;
+                while (i < fty.args.size())
+                {
+                    Type *type = fty.args[i]->type->toBasetype();
+                    if (type->ty == Tstruct)
+                    {
+                        // Do not pass empty structs at all for C++ ABI compatibility.
+                        // Tests with clang reveal that more complex "empty" types, for
+                        // example a struct containing an empty struct, are not
+                        // optimized in the same way.
+                        StructDeclaration *sd = static_cast<TypeStruct *>(type)->sym;
+                        if (sd->fields.empty())
+                        {
+                            fty.args.erase(fty.args.begin() + i);
+                            continue;
+                        }
+                    }
+                    ++i;
+                }
+            }
+
+            for (size_t i = 0; i < fty.args.size(); ++i)
+            {
+                IrFuncTyArg *arg = fty.args[i];
+                if (!arg->byref && isMagicCLong(arg->type))
+                {
+                    arg->rewrite = &integerRewrite;
+                    arg->ltype = integerRewrite.type(arg->type, arg->ltype);
+                    arg->byref = false;
+                    arg->attrs.clear();
+                }
+            }
         }
     }
 };

@@ -8,7 +8,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "target.h"
+#include "gen/abi.h"
 #include "gen/irstate.h"
+#include "gen/llvmhelpers.h"
 #include "mars.h"
 #include "mtype.h"
 #include <assert.h>
@@ -23,7 +25,8 @@ int Target::ptrsize;
 int Target::realsize;
 int Target::realpad;
 int Target::realalignsize;
-int Target::longsize;
+int Target::c_longsize;
+int Target::c_long_doublesize;
 bool Target::reverseCppOverloads;
 
 void Target::init()
@@ -34,7 +37,8 @@ void Target::init()
     realsize = gDataLayout->getTypeAllocSize(real);
     realpad = realsize - gDataLayout->getTypeStoreSize(real);
     realalignsize = gDataLayout->getABITypeAlignment(real);
-    longsize = global.params.is64bit ? 8 : 4;
+    c_longsize = global.params.is64bit ? 8 : 4;
+    c_long_doublesize = realsize;
 
     reverseCppOverloads = false; // DMC is not supported.
 }
@@ -56,8 +60,7 @@ unsigned Target::alignsize (Type* type)
 
 unsigned Target::fieldalign (Type* type)
 {
-    // LDC_FIXME: Verify this.
-    return type->alignsize();
+    return DtoAlignment(type);
 }
 
 // sizes based on those from tollvm.cpp:DtoMutexType()
@@ -78,7 +81,7 @@ unsigned Target::critsecsize()
 
 Type *Target::va_listType()
 {
-    return Type::tchar->pointerTo();
+    return gABI->vaListType();
 }
 
 /******************************
@@ -145,3 +148,28 @@ Expression *Target::paintAsType(Expression *e, Type *type)
 
     return NULL;    // avoid warning
 }
+
+/******************************
+* Check if the given type is supported for this target
+* 0: supported
+* 1: not supported
+* 2: wrong size
+* 3: wrong base type
+*/
+
+int Target::checkVectorType(int sz, Type *type)
+{
+    // FIXME: It is possible to query the LLVM target about supported vectors?
+    return 0;
+}
+
+/******************************
+* For the given module, perform any post parsing analysis.
+* Certain compiler backends (ie: GDC) have special placeholder
+* modules whose source are empty, but code gets injected
+* immediately after loading.
+*/
+void Target::loadModule(Module *m)
+{
+}
+

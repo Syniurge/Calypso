@@ -19,8 +19,6 @@
 #include "clang/AST/Type.h"
 #include "clang/Sema/Sema.h"
 
-extern void MODtoDecoBuffer(OutBuffer *buf, MOD mod);
-
 namespace cpp
 {
 
@@ -31,14 +29,6 @@ using llvm::isa;
 // Internal Calypso types (unlike TypeValueof which might used by normal D code) essential for template arguments matching.
 // D's const being transitive and since Calypso only needs logical const internally, keeping it outside of DMD seemed like the better idea..
 
-MOD getMOD(const clang::QualType T)
-{
-    if (T.isConstQualified())
-        return MODconst;
-
-    return 0;
-}
-
 class TypePointer : public ::TypePointer
 {
 public:
@@ -46,13 +36,6 @@ public:
 
     TypePointer(Type *t)
         : ::TypePointer(t) {}
-
-    void toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv) override
-    {
-        if (!forEquiv)
-            buf->writeByte('~');
-        ::TypePointer::toDecoBuffer(buf, flag, forEquiv);
-    }
 
     Type *syntaxCopy(Type *o = nullptr) override
     {
@@ -79,13 +62,6 @@ public:
 
     TypeReference(Type *t)
         : ::TypeReference(t) {}
-
-    void toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv) override
-    {
-        if (!forEquiv)
-            buf->writeByte('~');
-        ::TypeReference::toDecoBuffer(buf, flag, forEquiv);
-    }
 
     Type *syntaxCopy(Type *o = nullptr) override
     {
@@ -114,22 +90,12 @@ public:
     const clang::BuiltinType *T;
 
     TypeBasic(TY ty, const clang::BuiltinType *T = nullptr);
-    void toDecoBuffer(OutBuffer *buf, int flag = 0, bool forEquiv = false) override;
     unsigned short sizeType() override;
 };
 
 TypeBasic::TypeBasic(TY ty, const clang::BuiltinType *T)
     : ::TypeBasic(ty), T(T)
 {
-}
-
-void TypeBasic::toDecoBuffer(OutBuffer *buf, int flag, bool forEquiv)
-{
-    Type::toDecoBuffer(buf, flag, forEquiv);
-
-    buf->writeByte('#');
-    buf->writeByte('0' + unsigned(T->getKind()));
-    buf->writeByte('#');
 }
 
 unsigned short TypeBasic::sizeType()
@@ -249,6 +215,51 @@ Type *BuiltinTypes::toInt(clang::TargetInfo::IntType intTy)
 
     assert(false && "unexpected int type size");
     return nullptr;
+}
+
+/***** Mangler extension for Calypso-specific types *****/
+
+// Fortunately the DMD ::Mangler always call visit((Type *)t); for every type.
+// However the visitor pattern is pretty much useless since it's always visit(Type *t) which gets called, ugly but will do for now..
+
+class ManglerExt : public Visitor
+{
+public:
+    OutBuffer *buf;
+    Visitor *base;
+    bool forEquiv;
+
+    ManglerExt(OutBuffer *buf, bool forEquiv, Visitor *base)
+    {
+        this->buf = buf;
+        this->forEquiv = forEquiv;
+        this->base = base;
+    }
+
+    void visit(Type *t)
+    {
+        if (forEquiv)
+            return;
+
+        if (t->isTypeBasic())
+        {
+            buf->writeByte('#');
+            buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind()));
+            buf->writeByte('#');
+        }
+        else if (t->ty == Tpointer || t->ty == Treference)
+            buf->writeByte('~');
+    }
+};
+
+Visitor *LangPlugin::getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base)
+{
+    // FIXME
+    static ManglerExt manglerExt(nullptr, false, nullptr);
+    manglerExt.buf = buf;
+    manglerExt.forEquiv = forEquiv;
+    manglerExt.base = base;
+    return &manglerExt;
 }
 
 /***** Clang -> DMD types *****/
@@ -1350,7 +1361,7 @@ Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTy
     llvm::raw_string_ostream OS(str);
     OS << "type_parameter_" << D->getDepth() << '_' << D->getIndex();
 
-    return Lexer::idPool(OS.str().c_str());
+    return Identifier::idPool(OS.str().c_str());
 }
 
 Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D)
@@ -1367,7 +1378,7 @@ Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::Templa
     llvm::raw_string_ostream OS(str);
     OS << "template_parameter_" << D->getDepth() << '_' << D->getIndex();
 
-    return Lexer::idPool(OS.str().c_str());
+    return Identifier::idPool(OS.str().c_str());
 }
 
 unsigned getTemplateParmIndex(const clang::NamedDecl *ParmDecl)
@@ -1773,7 +1784,7 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
             { auto importIdent = getIdentifier(TD);
             llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty
             s += llvm::StringRef(importIdent->string, importIdent->len);
-            importAliasid = Lexer::idPool(s.c_str()); }
+            importAliasid = Identifier::idPool(s.c_str()); }
 
             assert(!Key.second);
             break;
@@ -1947,7 +1958,7 @@ static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
             sModule = getIdentifier(cast<clang::NamedDecl>(D));
         else
             // D is neither a tag nor a class template, we need to import the namespace's functions and vars
-            sModule = Lexer::idPool("_");
+            sModule = Identifier::idPool("_");
     }
 
     return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
@@ -1967,12 +1978,12 @@ static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
     }
 
     auto insertIndex = sPackages->dim;
-    auto sModule = Lexer::idPool(Mod->Name.c_str());
+    auto sModule = Identifier::idPool(Mod->Name.c_str());
 
     auto M = Mod->Parent;
     while (M)
     {
-        sPackages->insert(insertIndex, Lexer::idPool(M->Name.c_str()));
+        sPackages->insert(insertIndex, Identifier::idPool(M->Name.c_str()));
         M = M->Parent;
     }
 
@@ -2071,11 +2082,6 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
             auto ED = static_cast<cpp::EnumDeclaration*>(ed)->ED;
 
             return Context.getEnumType(ED);
-        }
-        case Ttypedef:  // NOTE: these aren't the AliasDecl created by DeclMapper
-        {
-            auto td = static_cast<TypeTypedef*>(t)->sym;
-            return toType(loc, td->basetype, sc, stc);
         }
         case Tident:
         case Tinstance:

@@ -48,6 +48,7 @@
 # error "Please define LDC_EXE_NAME to the name of the LDC executable to use."
 #endif
 
+#include "driver/exe_path.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -94,58 +95,8 @@ error_code createUniqueFile(const Twine &Model, int &ResultFD,
 }
 #endif
 
-#if LDC_LLVM_VER >= 304
-std::string getEXESuffix() {
-#if _WIN32
-  return "exe";
-#else
-  return llvm::StringRef();
-#endif
-}
-#else
-std::string getEXESuffix() {
-  return ls::Path::GetEXESuffix().str();
-}
-#endif
-
-#if LDC_LLVM_VER >= 304
-namespace llvm {
-/// Prepend the path to the program being executed
-/// to \p ExeName, given the value of argv[0] and the address of main()
-/// itself. This allows us to find another LLVM tool if it is built in the same
-/// directory. An empty string is returned on error; note that this function
-/// just mainpulates the path and doesn't check for executability.
-/// @brief Find a named executable.
-static std::string prependMainExecutablePath(const std::string &ExeName,
-                                          const char *Argv0, void *MainAddr) {
-  // Check the directory that the calling program is in.  We can do
-  // this if ProgramPath contains at least one / character, indicating that it
-  // is a relative path to the executable itself.
-  llvm::SmallString<128> Result(ls::fs::getMainExecutable(Argv0, MainAddr));
-  sys::path::remove_filename(Result);
-
-  if (!Result.empty()) {
-    sys::path::append(Result, ExeName);
-
-    // Do not use path::append here, this is not a path component before which
-    // to insert the path seperator.
-    Result.append(getEXESuffix());
-  }
-
-  return Result.str();
-}
-}
-#else
-namespace llvm {
-static std::string prependMainExecutablePath(const std::string &ExeName,
-                                          const char *Argv0, void *MainAddr) {
-  return llvm::PrependMainExecutablePath(ExeName, Argv0, MainAddr).str();
-}
-}
-#endif
-
 // We reuse DMD's response file parsing routine for maximum compatibilty - it
-// handles quotes in a very peciuliar way.
+// handles quotes in a very peculiar way.
 int response_expand(size_t *pargc, char ***pargv);
 void browse(const char *url);
 
@@ -233,20 +184,25 @@ Usage:\n\
 \n\
   files.d        D source files\n\
   @cmdfile       read arguments from cmdfile\n\
+  -allinst       generate code for all template instantiations\n\
   -c             do not link\n\
   -color[=on|off]   force colored console output on or off\n\
+  -conf=path     use config file at path\n\
   -cov           do code coverage analysis\n\
   -cov=nnn       require at least nnn%% code coverage\n\
   -D             generate documentation\n\
   -Dddocdir      write documentation file to docdir directory\n\
   -Dffilename    write documentation file to filename\n\
-  -d             allow deprecated features\n\
+  -d             silently allow deprecated features\n\
+  -dw            show use of deprecated features as warnings (default)\n\
+  -de            show use of deprecated features as errors (halt compilation)\n\
   -debug         compile in debug code\n\
   -debug=level   compile in debug code <= level\n\
   -debug=ident   compile in debug code identified by ident\n\
   -debuglib=name    set symbolic debug library to name\n\
   -defaultlib=name  set default library to name\n\
   -deps=filename write module dependencies to filename\n\
+  -dip25         implement http://wiki.dlang.org/DIP25 (experimental)\n\
   -fPIC          generate position independent code\n\
   -g             add symbolic debug info\n\
   -gc            add symbolic debug info, pretend to be C\n\
@@ -267,9 +223,8 @@ Usage:\n\
 #if 0
 "  -map           generate linker .map file\n"
 #endif
-"  -boundscheck=[on|safeonly|off]   bounds checks on, in @safe only, or off\n"
-"  -noboundscheck no array bounds checking (deprecated, use -boundscheck=off)\n"
-"  -nofloat       do not emit reference to floating point\n\
+"  -boundscheck=[on|safeonly|off]   bounds checks on, in @safe only, or off\n\
+  -noboundscheck no array bounds checking (deprecated, use -boundscheck=off)\n\
   -O             optimize\n\
   -o-            do not write object file\n\
   -odobjdir      write object & library files to directory objdir\n\
@@ -289,13 +244,16 @@ Usage:\n\
 #endif
 "  -unittest      compile in unit tests\n\
   -v             verbose\n\
+  -vcolumns      print character (column) numbers in diagnostics\n\
   -vdmd          print the command used to invoke the underlying compiler\n\
   -version=level compile in version code >= level\n\
   -version=ident compile in version code identified by ident\n"
 #if 0
 "  -vtls          list all variables going into thread local storage\n"
 #endif
-"  -w             enable warnings\n\
+"  -vgc           list all gc allocations including hidden ones\n\
+  -verrors=num   limit the number of error messages (0 means unlimited)\n\
+  -w             enable warnings\n\
   -wi            enable informational warnings\n\
   -X             generate JSON file\n\
   -Xffilename    write JSON file to filename\n\n", argv0
@@ -412,6 +370,16 @@ struct Debug
     };
 };
 
+struct Deprecated
+{
+    enum Type
+    {
+        allow,
+        warn,
+        error
+    };
+};
+
 struct Model
 {
     enum Type
@@ -434,7 +402,8 @@ struct Warnings
 
 struct Params
 {
-    bool allowDeprecated;
+    bool allinst;
+    Deprecated::Type useDeprecated;
     bool compileOnly;
     bool coverage;
     bool emitSharedLib;
@@ -446,8 +415,12 @@ struct Params
     Model::Type targetModel;
     bool profile;
     bool verbose;
+    bool vcolumns;
     bool vdmd;
+    bool vgc;
     bool logTlsUse;
+    unsigned errorLimit;
+    bool errorLimitSet;
     Warnings::Type warnings;
     bool optimize;
     bool noObj;
@@ -466,7 +439,6 @@ struct Params
     bool enforcePropertySyntax;
     bool enableInline;
     bool emitStaticLib;
-    bool noFloat;
     bool quiet;
     bool release;
     BoundsCheck::Type boundsChecks;
@@ -483,6 +455,8 @@ struct Params
     char* debugLibName;
     char* moduleDepsFile;
     Color::Type color;
+    bool useDIP25;
+    char* conf;
 
     bool hiddenDebugB;
     bool hiddenDebugC;
@@ -499,7 +473,8 @@ struct Params
 
   Params()
     :
-    allowDeprecated(false),
+    allinst(false),
+    useDeprecated(Deprecated::warn),
     compileOnly(false),
     coverage(false),
     emitSharedLib(false),
@@ -511,8 +486,12 @@ struct Params
     targetModel(Model::automatic),
     profile(false),
     verbose(false),
+    vcolumns(false),
     vdmd(false),
+    vgc(false),
     logTlsUse(false),
+    errorLimit(0),
+    errorLimitSet(false),
     warnings(Warnings::none),
     optimize(false),
     noObj(false),
@@ -531,7 +510,6 @@ struct Params
     enforcePropertySyntax(false),
     enableInline(false),
     emitStaticLib(false),
-    noFloat(false),
     quiet(false),
     release(false),
     boundsChecks(BoundsCheck::defaultVal),
@@ -543,6 +521,8 @@ struct Params
     debugLibName(0),
     moduleDepsFile(0),
     color(Color::automatic),
+    useDIP25(false),
+    conf(0),
     hiddenDebugB(false),
     hiddenDebugC(false),
     hiddenDebugF(false),
@@ -577,8 +557,14 @@ Params parseArgs(size_t originalArgc, char** originalArgv, const std::string &ld
         char* p = args[i];
         if (*p == '-')
         {
-            if (strcmp(p + 1, "d") == 0)
-                result.allowDeprecated = true;
+            if (strcmp(p + 1, "allinst") == 0)
+                result.allinst = true;
+            else if (strcmp(p + 1, "de") == 0)
+                result.useDeprecated = Deprecated::error;
+            else if (strcmp(p + 1, "d") == 0)
+                result.useDeprecated = Deprecated::allow;
+            else if (strcmp(p + 1, "dw") == 0)
+                result.useDeprecated = Deprecated::warn;
             else if (strcmp(p + 1, "c") == 0)
                 result.compileOnly = true;
             else if (strncmp(p + 1, "color", 5) == 0)
@@ -597,11 +583,15 @@ Params parseArgs(size_t originalArgc, char** originalArgv, const std::string &ld
                 else if (p[6])
                     goto Lerror;
             }
+            else if (strncmp(p + 1, "conf=", 5) == 0)
+                result.conf = p + 1 + 5;
             else if (strcmp(p + 1, "cov") == 0)
                 // For "-cov=...", the whole cmdline switch is forwarded to LDC.
                 // For plain "-cov", the cmdline switch must be explicitly forwarded
                 // and result.coverage must be set to true to that effect.
                 result.coverage = (p[4] != '=');
+            else if (strcmp(p + 1, "dip25") == 0)
+                result.useDIP25 = true;
             else if (strcmp(p + 1, "shared") == 0
                 // backwards compatibility with old switch
                 || strcmp(p + 1, "dylib") == 0
@@ -631,14 +621,35 @@ Params parseArgs(size_t originalArgc, char** originalArgv, const std::string &ld
                 warning("-transition not yet supported by LDC.");
             else if (strcmp(p + 1, "v") == 0)
                 result.verbose = true;
+            else if (strcmp(p + 1, "vcolumns") == 0)
+                result.vcolumns = true;
             else if (strcmp(p + 1, "vdmd") == 0)
                 result.vdmd = true;
+            else if (strcmp(p + 1, "vgc") == 0)
+                result.vgc = true;
             else if (strcmp(p + 1, "vtls") == 0)
                 result.logTlsUse = true;
             else if (strcmp(p + 1, "v1") == 0)
             {
                 error("use DMD 1.0 series compilers for -v1 switch");
                 break;
+            }
+            else if (memcmp(p + 1, "verrors", 7) == 0)
+            {
+                if (p[8] == '=' && isdigit((unsigned char)p[9]))
+                {
+                    long num;
+                    char* endp;
+                    errno = 0;
+                    num = strtol(p + 9, &endp, 10);
+                    if (*endp || errno || num > INT_MAX)
+                        goto Lerror;
+                    // Bugzilla issue number
+                    result.errorLimit = (unsigned) num;
+                    result.errorLimitSet = true;
+                }
+                else
+                    goto Lerror;
             }
             else if (strcmp(p + 1, "w") == 0)
                 result.warnings = Warnings::asErrors;
@@ -753,8 +764,6 @@ Params parseArgs(size_t originalArgc, char** originalArgv, const std::string &ld
                 result.enableInline = true;
             else if (strcmp(p + 1, "lib") == 0)
                 result.emitStaticLib = true;
-            else if (strcmp(p + 1, "nofloat") == 0)
-                result.noFloat = 1;
             else if (strcmp(p + 1, "quiet") == 0)
                 result.quiet = 1;
             else if (strcmp(p + 1, "release") == 0)
@@ -935,7 +944,9 @@ void pushSwitches(const char* prefix, const std::vector<char*>& vals, std::vecto
  */
 void buildCommandLine(std::vector<const char*>& r, const Params& p)
 {
-    if (p.allowDeprecated) r.push_back("-d");
+    if (p.allinst) r.push_back("-allinst");
+    if (p.useDeprecated == Deprecated::allow) r.push_back("-d");
+    if (p.useDeprecated == Deprecated::error) r.push_back("-de");
     if (p.compileOnly) r.push_back("-c");
     if (p.coverage) r.push_back("-cov");
     if (p.emitSharedLib) r.push_back("-shared");
@@ -950,7 +961,10 @@ void buildCommandLine(std::vector<const char*>& r, const Params& p)
     else if (p.targetModel == Model::m64) r.push_back("-m64");
     if (p.profile) warning("CPU profile generation not yet supported by LDC.");
     if (p.verbose) r.push_back("-v");
+    if (p.vcolumns) r.push_back("-vcolumns");
+    if (p.vgc) r.push_back("-vgc");
     if (p.logTlsUse) warning("-vtls not yet supported by LDC.");
+    if (p.errorLimitSet) r.push_back(concat("-verrors=", p.errorLimit));
     if (p.warnings == Warnings::asErrors) r.push_back("-w");
     else if (p.warnings == Warnings::informational) r.push_back("-wi");
     if (p.optimize) r.push_back("-O3");
@@ -974,7 +988,6 @@ void buildCommandLine(std::vector<const char*>& r, const Params& p)
         r.push_back("-Hkeep-all-bodies");
     }
     if (p.emitStaticLib) r.push_back("-lib");
-    if (p.noFloat) warning("-nofloat is ignored by LDC.");
     // -quiet is the default in (newer?) frontend versions, just ignore it.
     if (p.release) r.push_back("-release"); // Also disables boundscheck.
     if (p.boundsChecks == BoundsCheck::on) r.push_back("-boundscheck=on");
@@ -994,6 +1007,8 @@ void buildCommandLine(std::vector<const char*>& r, const Params& p)
     if (p.moduleDepsFile) r.push_back(concat("-deps=", p.moduleDepsFile));
     if (p.color == Color::on) r.push_back("-enable-color");
     if (p.color == Color::off) r.push_back("-disable-color");
+    if (p.useDIP25) r.push_back("-dip25");
+    if (p.conf) r.push_back(concat("-conf=", p.conf));
     if (p.hiddenDebugB) r.push_back("-hidden-debug-b");
     if (p.hiddenDebugC) r.push_back("-hidden-debug-c");
     if (p.hiddenDebugF) r.push_back("-hidden-debug-f");
@@ -1029,10 +1044,9 @@ size_t maxCommandLineLen()
  * nothing was found. Search paths: 1. Directory where this binary resides.
  * 2. System PATH.
  */
-std::string locateBinary(std::string exeName, const char* argv0)
+std::string locateBinary(std::string exeName)
 {
-    std::string path = llvm::prependMainExecutablePath(exeName,
-        argv0, (void*)&locateBinary);
+    std::string path = exe_path::prependBinDir(exeName.c_str());
     if (ls::fs::can_execute(path)) return path;
 
 #if LDC_LLVM_VER >= 306
@@ -1069,7 +1083,13 @@ static size_t addStrlen(size_t acc, const char* str)
 
 int main(int argc, char *argv[])
 {
-    std::string ldcPath = locateBinary(LDC_EXE_NAME, argv[0]);
+    exe_path::initialize(argv[0], reinterpret_cast<void*>(main));
+
+    std::string ldcExeName = LDC_EXE_NAME;
+#ifdef _WIN32
+    ldcExeName += ".exe";
+#endif
+    std::string ldcPath = locateBinary(ldcExeName);
     if (ldcPath.empty())
     {
         error("Could not locate " LDC_EXE_NAME " executable.");

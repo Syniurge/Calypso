@@ -21,7 +21,6 @@
 #endif
 
 #include "dsymbol.h"
-#include "lexer.h"
 #include "mtype.h"
 
 class Expression;
@@ -34,10 +33,8 @@ class FuncDeclaration;
 class ExpInitializer;
 class StructDeclaration;
 struct InterState;
-struct IRState;
 struct CompiledCtfeFunction;
 
-enum PROT;
 enum LINK;
 enum TOK;
 enum MATCH;
@@ -59,11 +56,10 @@ enum PURE;
 #define STCout          0x1000LL        // out parameter
 #define STClazy         0x2000LL        // lazy parameter
 #define STCforeach      0x4000LL        // variable for foreach loop
-#define STCcomdat       0x8000LL        // should go into COMDAT record
 #define STCvariadic     0x10000LL       // variadic function argument
 #define STCctorinit     0x20000LL       // can only be set inside constructor
 #define STCtemplateparameter  0x40000LL // template parameter
-#define STCscope        0x80000LL       // template parameter
+#define STCscope        0x80000LL
 #define STCimmutable    0x100000LL
 #define STCref          0x200000LL
 #define STCinit         0x400000LL      // has explicit initializer
@@ -90,7 +86,9 @@ enum PURE;
 #define STCnodefaultctor 0x8000000000LL  // must be set inside constructor
 #define STCtemp          0x10000000000LL // temporary variable
 #define STCrvalue        0x20000000000LL // force rvalue for variables
-#define STCnogc          0x40000000000LL  // @nogc
+#define STCnogc          0x40000000000LL // @nogc
+#define STCvolatile      0x80000000000LL // destined for volatile in the back end
+#define STCreturn        0x100000000000LL // 'return ref' for function parameters
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
@@ -128,7 +126,7 @@ public:
     Type *type;
     Type *originalType;         // before semantic analysis
     StorageClass storage_class;
-    PROT protection;
+    Prot protection;
     LINK linkage;
     int inuse;                  // used to detect cycles
     const char *mangleOverride;      // overridden symbol with pragma(mangle, "...")
@@ -166,7 +164,7 @@ public:
     bool isOut()   { return (storage_class & STCout) != 0; }
     bool isRef()   { return (storage_class & STCref) != 0; }
 
-    PROT prot();
+    Prot prot();
 
     Declaration *isDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -198,36 +196,6 @@ public:
 
 /**************************************************************/
 
-class TypedefDeclaration : public Declaration
-{
-public:
-    Type *basetype;
-    Initializer *init;
-
-    TypedefDeclaration(Loc loc, Identifier *ident, Type *basetype, Initializer *init);
-    Dsymbol *syntaxCopy(Dsymbol *);
-    void semantic(Scope *sc);
-    void semantic2(Scope *sc);
-    const char *kind();
-    Type *getType();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
-    Type *htype;
-    Type *hbasetype;
-
-    void toObjFile(bool multiobj);                       // compile to .obj file
-
-    TypedefDeclaration *isTypedefDeclaration() { return this; }
-
-#if IN_DMD
-    Symbol *sinit;
-    Symbol *toInitializer();
-#endif
-
-    void accept(Visitor *v) { v->visit(this); }
-};
-
-/**************************************************************/
-
 class AliasDeclaration : public Declaration
 {
 public:
@@ -244,9 +212,6 @@ public:
     const char *kind();
     Type *getType();
     Dsymbol *toAlias();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
-    Type *htype;
-    Dsymbol *haliassym;
 
     AliasDeclaration *isAliasDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -309,9 +274,6 @@ public:
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
     void semantic2(Scope *sc);
     const char *kind();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
-    Type *htype;
-    Initializer *hinit;
     AggregateDeclaration *isThis();
     bool needThis();
     bool isExport();
@@ -326,11 +288,8 @@ public:
     ExpInitializer *getExpInitializer();
     Expression *getConstInitializer(bool needFullType = true);
     void checkCtorConstInit();
-    void checkNestedReference(Scope *sc, Loc loc);
+    bool checkNestedReference(Scope *sc, Loc loc);
     Dsymbol *toAlias();
-#if IN_DMD
-    void toObjFile(bool multiobj);                       // compile to .obj file
-#endif
     // Eliminate need for dynamic_cast
     VarDeclaration *isVarDeclaration() { return (VarDeclaration *)this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -375,9 +334,6 @@ public:
     void semantic(Scope *sc);
     char *toChars();
 
-#if IN_DMD
-    void toObjFile(bool multiobj);                       // compile to .obj file
-#endif
     TypeInfoDeclaration *isTypeInfoDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -405,15 +361,6 @@ class TypeInfoInterfaceDeclaration : public TypeInfoDeclaration
 public:
     TypeInfoInterfaceDeclaration(Type *tinfo);
     static TypeInfoInterfaceDeclaration *create(Type *tinfo);
-
-    void accept(Visitor *v) { v->visit(this); }
-};
-
-class TypeInfoTypedefDeclaration : public TypeInfoDeclaration
-{
-public:
-    TypeInfoTypedefDeclaration(Type *tinfo);
-    static TypeInfoTypedefDeclaration *create(Type *tinfo);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -568,12 +515,12 @@ BUILTIN isBuiltin(FuncDeclaration *fd);
 typedef Expression *(*builtin_fp)(Loc loc, FuncDeclaration *fd, Expressions *arguments);
 void add_builtin(const char *mangle, builtin_fp fp);
 void builtin_init();
-void buildClosure(FuncDeclaration *fd, IRState *irs);
 
-#define FUNCFLAGpurityInprocess 1   // working on determining purity
-#define FUNCFLAGsafetyInprocess 2   // working on determining safety
-#define FUNCFLAGnothrowInprocess 4  // working on determining nothrow
-#define FUNCFLAGnogcInprocess 8     // working on determining @nogc
+#define FUNCFLAGpurityInprocess    1    // working on determining purity
+#define FUNCFLAGsafetyInprocess    2    // working on determining safety
+#define FUNCFLAGnothrowInprocess   4    // working on determining nothrow
+#define FUNCFLAGnogcInprocess      8    // working on determining @nogc
+#define FUNCFLAGreturnInprocess 0x10    // working on inferring 'return' for parameters
 
 class FuncDeclaration : public Declaration
 {
@@ -597,7 +544,6 @@ public:
     Identifier *outId;                  // identifier for out statement
     VarDeclaration *vresult;            // variable corresponding to outId
     LabelDsymbol *returnLabel;          // where the return goes
-    Scope *scout;                       // out contract scope for vresult->semantic
 
     DsymbolTable *localsymtab;          // used to prevent symbols in different
                                         // scopes from having the same name
@@ -644,9 +590,11 @@ public:
     Symbol *shidden;                    // hidden pointer passed to function
 #endif
 
+    ReturnStatements *returns;
+
     GotoStatements *gotos;              // Gotos with forward references
 
-    BUILTIN builtin;               // set if this is a known, builtin
+    BUILTIN builtin;                    // set if this is a known, builtin
                                         // function we can evaluate at compile
                                         // time
 
@@ -659,7 +607,7 @@ public:
     FuncDeclarations siblingCallers;    // Sibling nested functions which
                                         // called this one
 
-    unsigned flags;
+    unsigned flags;                     // FUNCFLAGxxxxx
 
     FuncDeclaration(Loc loc, Loc endloc, Identifier *id, StorageClass storage_class, Type *type);
     virtual Dsymbol *syntaxCopy(Dsymbol *);
@@ -672,12 +620,11 @@ public:
     VarDeclaration *declareThis(Scope *sc, AggregateDeclaration *ad);
     bool equals(RootObject *o);
 
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
-    void bodyToCBuffer(OutBuffer *buf, HdrGenState *hgs);
     int overrides(FuncDeclaration *fd);
     int findVtblIndex(Dsymbols *vtbl, int dim);
     bool overloadInsert(Dsymbol *s);
     FuncDeclaration *overloadExactMatch(Type *t);
+    FuncDeclaration *overloadModMatch(Loc loc, Type *tthis, Type *&t);
     TemplateDeclaration *findTemplateDeclRoot();
     bool inUnittest();
     MATCH leastAsSpecialized(FuncDeclaration *g);
@@ -685,8 +632,6 @@ public:
     AggregateDeclaration *isThis();
     AggregateDeclaration *isMember2();
     int getLevel(Loc loc, Scope *sc, FuncDeclaration *fd); // lexical nesting level difference
-    void appendExp(Expression *e);
-    void appendState(Statement *s);
     const char *toPrettyChars(bool QualifyTypes = false);
     const char *toFullSignature();  // for diagnostics, e.g. 'int foo(int x, int y) pure'
     bool isMain();
@@ -699,7 +644,6 @@ public:
     bool hasOverloads();
     PURE isPure();
     PURE isPureBypassingInference();
-    bool isPureBypassingInferenceX();
     bool setImpure();
     bool isSafe();
     bool isSafeBypassingInference();
@@ -723,21 +667,17 @@ public:
     virtual bool allowFinalOverride() { return false; } // CALYPSO D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does
     const char *kind();
     FuncDeclaration *isUnique();
-    void checkNestedReference(Scope *sc, Loc loc);
+    bool checkNestedReference(Scope *sc, Loc loc);
     bool needsClosure();
     bool hasNestedFrameRefs();
-    void buildResultVar();
+    void buildResultVar(Scope *sc, Type *tret);
     Statement *mergeFrequire(Statement *, Expressions *params = 0);
     Statement *mergeFensure(Statement *, Identifier *oid, Expressions *params = 0);
     Parameters *getParameters(int *pvarargs);
 
-    static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, const char *name);
-    static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, Identifier *id);
+    static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, const char *name, StorageClass stc=0);
+    static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, Identifier *id, StorageClass stc=0);
 
-#if IN_DMD
-    Symbol *toThunkSymbol(int offset);  // thunk version
-    void toObjFile(bool multiobj);                       // compile to .obj file
-#endif
     FuncDeclaration *isFuncDeclaration() { return this; }
 
     virtual FuncDeclaration *toAliasFunc() { return this; }
@@ -785,7 +725,6 @@ public:
 
     FuncLiteralDeclaration(Loc loc, Loc endloc, Type *type, TOK tok,
         ForeachStatement *fes, Identifier *id = NULL);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
     Dsymbol *syntaxCopy(Dsymbol *);
     bool isNested();
     bool isVirtual();
@@ -822,7 +761,6 @@ public:
     PostBlitDeclaration(Loc loc, Loc endloc, StorageClass stc, Identifier *id);
     Dsymbol *syntaxCopy(Dsymbol *);
     virtual void semantic(Scope *sc); // CALYPSO
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();
@@ -839,7 +777,6 @@ public:
     DtorDeclaration(Loc loc, Loc endloc, StorageClass stc, Identifier *id);
     virtual Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
     const char *kind();
     char *toChars();
     bool isVirtual();
@@ -863,7 +800,6 @@ public:
     bool addPreInvariant();
     bool addPostInvariant();
     bool hasStaticCtorOrDtor();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     StaticCtorDeclaration *isStaticCtorDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -874,7 +810,6 @@ class SharedStaticCtorDeclaration : public StaticCtorDeclaration
 public:
     SharedStaticCtorDeclaration(Loc loc, Loc endloc, StorageClass stc);
     Dsymbol *syntaxCopy(Dsymbol *);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     SharedStaticCtorDeclaration *isSharedStaticCtorDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -894,7 +829,6 @@ public:
     bool hasStaticCtorOrDtor();
     bool addPreInvariant();
     bool addPostInvariant();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     StaticDtorDeclaration *isStaticDtorDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -905,7 +839,6 @@ class SharedStaticDtorDeclaration : public StaticDtorDeclaration
 public:
     SharedStaticDtorDeclaration(Loc loc, Loc endloc, StorageClass stc);
     Dsymbol *syntaxCopy(Dsymbol *);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     SharedStaticDtorDeclaration *isSharedStaticDtorDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -920,7 +853,6 @@ public:
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     InvariantDeclaration *isInvariantDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -934,14 +866,13 @@ public:
     // toObjFile() these nested functions after this one
     FuncDeclarations deferredNested;
 
-    UnitTestDeclaration(Loc loc, Loc endloc, char *codedoc);
+    UnitTestDeclaration(Loc loc, Loc endloc, StorageClass stc, char *codedoc);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     AggregateDeclaration *isThis();
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     UnitTestDeclaration *isUnitTestDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -950,13 +881,12 @@ public:
 class NewDeclaration : public FuncDeclaration
 {
 public:
-    Parameters *arguments;
+    Parameters *parameters;
     int varargs;
 
-    NewDeclaration(Loc loc, Loc endloc, Parameters *arguments, int varargs);
+    NewDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments, int varargs);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
     const char *kind();
     bool isVirtual();
     bool addPreInvariant();
@@ -970,17 +900,17 @@ public:
 class DeleteDeclaration : public FuncDeclaration
 {
 public:
-    Parameters *arguments;
+    Parameters *parameters;
 
-    DeleteDeclaration(Loc loc, Loc endloc, Parameters *arguments);
+    DeleteDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
     const char *kind();
     bool isDelete();
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();
+
     DeleteDeclaration *isDeleteDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
 };

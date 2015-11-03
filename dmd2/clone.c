@@ -24,10 +24,12 @@
 #include "statement.h"
 #include "init.h"
 #include "template.h"
+#include "tokens.h"
 
+Expression *getTypeInfo(Type *t, Scope *sc);
 
 /*******************************************
- * Merge function attributes pure, nothrow, @safe, and @disable
+ * Merge function attributes pure, nothrow, @safe, @nogc, and @disable
  */
 StorageClass mergeFuncAttrs(StorageClass s1, FuncDeclaration *f)
 {
@@ -94,7 +96,8 @@ FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc)
 
         unsigned errors = global.startGagging();    // Do not report errors, even if the
         sc = sc->push();
-        sc->speculative = true;
+        sc->tinst = NULL;
+        sc->minst = NULL;
 
         for (size_t i = 0; i < 2; i++)
         {
@@ -115,8 +118,8 @@ FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc)
             Parameters *fparams = f->getParameters(&varargs);
             if (fparams->dim >= 1)
             {
-                Parameter *arg0 = Parameter::getNth(fparams, 0);
-                if (arg0->type->toDsymbol(NULL) != ad)
+                Parameter *fparam0 = Parameter::getNth(fparams, 0);
+                if (fparam0->type->toDsymbol(NULL) != ad)
                     f = NULL;
             }
         }
@@ -205,7 +208,7 @@ FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc)
     if (!needOpAssign(sd))
         return NULL;
 
-    //printf("StructDeclaration::buildOpAssign() %s\n", toChars());
+    //printf("StructDeclaration::buildOpAssign() %s\n", sd->toChars());
     StorageClass stc = STCsafe | STCnothrow | STCpure | STCnogc;
     Loc declLoc = sd->loc;
     Loc loc = Loc();    // internal code should have no loc to prevent coverage
@@ -240,7 +243,7 @@ FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc)
 
     Parameters *fparams = new Parameters;
     fparams->push(new Parameter(STCnodtor, sd->type, Id::p, NULL));
-    Type *tf = new TypeFunction(fparams, sd->getType(), 0, LINKd, stc | STCref); // CALYPSO
+    TypeFunction *tf = new TypeFunction(fparams, sd->handleType(), 0, LINKd, stc | STCref);
 
     FuncDeclaration *fop = new FuncDeclaration(declLoc, Loc(), Id::assign, stc, tf);
 
@@ -254,7 +257,7 @@ FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc)
          *    tmp = this; this = s; tmp.dtor();
          */
         //printf("\tswap copy\n");
-        Identifier *idtmp = Lexer::uniqueId("__tmp");
+        Identifier *idtmp = Identifier::generateId("__swap");
         VarDeclaration *tmp = NULL;
         AssignExp *ec = NULL;
         if (sd->dtor)
@@ -304,6 +307,7 @@ FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc)
         Statement *s2 = new ReturnStatement(loc, e);
 
         fop->fbody = new CompoundStatement(loc, s1, s2);
+        tf->isreturn = true;
     }
 
     sd->members->push(fop);
@@ -411,7 +415,8 @@ FuncDeclaration *hasIdentityOpEquals(AggregateDeclaration *ad,  Scope *sc)
 
             unsigned errors = global.startGagging();    // Do not report errors, even if the
             sc = sc->push();
-            sc->speculative = true;
+            sc->tinst = NULL;
+            sc->minst = NULL;
 
             for (size_t j = 0; j < 2; j++)
             {
@@ -497,7 +502,7 @@ FuncDeclaration *buildXopEquals(StructDeclaration *sd, Scope *sc)
     if (!sd->xerreq)
     {
         // object._xopEquals
-        Identifier *id = Lexer::idPool("_xopEquals");
+        Identifier *id = Identifier::idPool("_xopEquals");
         Expression *e = new IdentifierExp(sd->loc, Id::empty);
         e = new DotIdExp(sd->loc, e, Id::object);
         e = new DotIdExp(sd->loc, e, id);
@@ -505,7 +510,7 @@ FuncDeclaration *buildXopEquals(StructDeclaration *sd, Scope *sc)
         Dsymbol *s = getDsymbol(e);
         if (!s)
         {
-            ::error(Loc(), "ICE: %s not found in object module. You must update druntime", id->toChars());
+            ::error(Loc(), "Internal Compiler Error: %s not found in object module. You must update druntime", id->toChars());
             fatal();
         }
         assert(s);
@@ -623,7 +628,7 @@ FuncDeclaration *buildXopCmp(StructDeclaration *sd, Scope *sc)
     if (!sd->xerrcmp)
     {
         // object._xopCmp
-        Identifier *id = Lexer::idPool("_xopCmp");
+        Identifier *id = Identifier::idPool("_xopCmp");
         Expression *e = new IdentifierExp(sd->loc, Id::empty);
         e = new DotIdExp(sd->loc, e, Id::object);
         e = new DotIdExp(sd->loc, e, id);
@@ -631,7 +636,7 @@ FuncDeclaration *buildXopCmp(StructDeclaration *sd, Scope *sc)
         Dsymbol *s = getDsymbol(e);
         if (!s)
         {
-            ::error(Loc(), "ICE: %s not found in object module. You must update druntime", id->toChars());
+            ::error(Loc(), "Internal Compiler Error: %s not found in object module. You must update druntime", id->toChars());
             fatal();
         }
         assert(s);
@@ -784,83 +789,6 @@ FuncDeclaration *buildXtoHash(StructDeclaration *sd, Scope *sc)
     return fop;
 }
 
-/*******************************************
- * Build copy constructor for struct.
- *      void __cpctpr(ref const S s) [pure nothrow @trusted]
- *      {
- *          this = s;   // blit copy
- *          this.postBlit();
- *      }
- *
- * Copy constructors are compiler generated only, and are only
- * callable from the compiler. They are not user accessible.
- *
- * This is done so:
- *      - postBlit() never sees uninitialized data
- *      - memcpy can be much more efficient than memberwise copy
- *      - no fields are overlooked
- */
-
-FuncDeclaration *buildCpCtor(StructDeclaration *sd, Scope *sc)
-{
-    // CALYPSO
-    if (auto lp = sd->langPlugin())
-        if (auto fcp = lp->buildCpCtor(sd, sc))
-            return fcp;
-
-    /* Copy constructor is only necessary if there is a postblit function,
-     * otherwise the code generator will just do a bit copy.
-     */
-    if (!sd->postblit)
-        return NULL;
-
-    //printf("StructDeclaration::buildCpCtor() %s\n", toChars());
-    StorageClass stc = STCsafe | STCnothrow | STCpure | STCnogc;
-    Loc declLoc = sd->postblit->loc;
-    Loc loc = Loc();    // internal code should have no loc to prevent coverage
-
-    stc = mergeFuncAttrs(stc, sd->postblit);
-    if (stc & STCsafe)  // change to @trusted for unsafe casts
-        stc = (stc & ~STCsafe) | STCtrusted;
-
-    Parameters *fparams = new Parameters;
-    fparams->push(new Parameter(STCref, sd->type->constOf(), Id::p, NULL));
-    Type *tf = new TypeFunction(fparams, Type::tvoid, 0, LINKd, stc);
-
-    FuncDeclaration *fcp = new FuncDeclaration(declLoc, Loc(), Id::cpctor, stc, tf);
-
-    if (!(stc & STCdisable))
-    {
-        Expression *e;
-
-        // Build this = p;
-        e = new BlitExp(loc,
-            new PtrExp(loc, new AddrExp(loc, new ThisExp(loc))),
-            new PtrExp(loc, new AddrExp(loc, new IdentifierExp(loc, Id::p)))
-        );
-        Statement *s = new ExpStatement(loc, e);
-
-        // Build postBlit();
-        e = new DotVarExp(loc, new ThisExp(loc), sd->postblit, 0);
-        e = new CallExp(loc, e);
-
-        s = new CompoundStatement(loc, s, new ExpStatement(loc, e));
-        fcp->fbody = s;
-    }
-
-    sd->members->push(fcp);
-
-    sc = sc->push();
-    sc->stc = 0;
-    sc->linkage = LINKd;
-
-    fcp->semantic(sc);
-
-    sc->pop();
-
-    return fcp;
-}
-
 /*****************************************
  * Create inclusive postblit for struct by aggregating
  * all the postblits in postblits[] with the postblits for
@@ -877,7 +805,12 @@ FuncDeclaration *buildPostBlit(StructDeclaration *sd, Scope *sc)
     Loc loc = Loc();    // internal code should have no loc to prevent coverage
 
     Expression *e = NULL;
-    for (size_t i = 0; i < sd->fields.dim; i++)
+    for (size_t i = 0; i < sd->postblits.dim; i++)
+    {
+        stc |= sd->postblits[i]->storage_class & STCdisable;
+    }
+
+    for (size_t i = 0; i < sd->fields.dim && !(stc & STCdisable); i++)
     {
         VarDeclaration *v = sd->fields[i];
         if (v->storage_class & STCref)
@@ -918,7 +851,7 @@ FuncDeclaration *buildPostBlit(StructDeclaration *sd, Scope *sc)
                     Expression *ea = new AddrExp(loc, ex);
                     ea = new CastExp(loc, ea, Type::tvoid->pointerTo());
 
-                    Expression *et = v->type->getTypeInfo(sc);
+                    Expression *et = getTypeInfo(v->type, sc);
                     et = new DotIdExp(loc, et, Id::postblit);
 
                     ex = new CallExp(loc, et, ea);
@@ -933,7 +866,7 @@ FuncDeclaration *buildPostBlit(StructDeclaration *sd, Scope *sc)
     if (e || (stc & STCdisable))
     {
         //printf("Building __fieldPostBlit()\n");
-        PostBlitDeclaration *dd = new PostBlitDeclaration(declLoc, Loc(), stc, Lexer::idPool("__fieldPostBlit"));
+        PostBlitDeclaration *dd = new PostBlitDeclaration(declLoc, Loc(), stc, Identifier::idPool("__fieldPostBlit"));
         dd->fbody = new ExpStatement(loc, e);
         sd->postblits.shift(dd);
         sd->members->push(dd);
@@ -965,7 +898,7 @@ FuncDeclaration *buildPostBlit(StructDeclaration *sd, Scope *sc)
                 ex = new CallExp(loc, ex);
                 e = Expression::combine(e, ex);
             }
-            PostBlitDeclaration *dd = new PostBlitDeclaration(declLoc, Loc(), stc, Lexer::idPool("__aggrPostBlit"));
+            PostBlitDeclaration *dd = new PostBlitDeclaration(declLoc, Loc(), stc, Identifier::idPool("__aggrPostBlit"));
             dd->fbody = new ExpStatement(loc, e);
             sd->members->push(dd);
             dd->semantic(sc);
@@ -1035,7 +968,7 @@ FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc)
                     Expression *ea = new AddrExp(loc, ex);
                     ea = new CastExp(loc, ea, Type::tvoid->pointerTo());
 
-                    Expression *et = v->type->getTypeInfo(sc);
+                    Expression *et = getTypeInfo(v->type, sc);
                     et = new DotIdExp(loc, et, Id::destroy);
 
                     ex = new CallExp(loc, et, ea);
@@ -1050,7 +983,7 @@ FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc)
     if (e || (stc & STCdisable))
     {
         //printf("Building __fieldDtor()\n");
-        DtorDeclaration *dd = new DtorDeclaration(declLoc, Loc(), stc, Lexer::idPool("__fieldDtor"));
+        DtorDeclaration *dd = new DtorDeclaration(declLoc, Loc(), stc, Identifier::idPool("__fieldDtor"));
         dd->fbody = new ExpStatement(loc, e);
         ad->dtors.shift(dd);
         ad->members->push(dd);
@@ -1082,7 +1015,7 @@ FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc)
                 ex = new CallExp(loc, ex);
                 e = Expression::combine(ex, e);
             }
-            DtorDeclaration *dd = new DtorDeclaration(declLoc, Loc(), stc, Lexer::idPool("__aggrDtor"));
+            DtorDeclaration *dd = new DtorDeclaration(declLoc, Loc(), stc, Identifier::idPool("__aggrDtor"));
             dd->fbody = new ExpStatement(loc, e);
             ad->members->push(dd);
             dd->semantic(sc);

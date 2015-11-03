@@ -83,7 +83,9 @@ void DtoDefineStruct(StructDeclaration *sd) // CALYPSO
     IrAggr *ir = getIrAggr(sd);
     llvm::GlobalVariable *initZ = ir->getInitSymbol();
     initZ->setInitializer(ir->getDefaultInit());
-    initZ->setLinkage(DtoLinkage(sd));
+    LinkageWithCOMDAT lwc = DtoLinkage(sd);
+    initZ->setLinkage(lwc.first);
+    if (lwc.second) SET_COMDAT(initZ, gIR->module);
 
     // emit typeinfo
     DtoTypeInfoOf(sd->type);
@@ -104,6 +106,10 @@ LLValue* DtoStructEquals(TOK op, DValue* lhs, DValue* rhs)
         cmpop = llvm::ICmpInst::ICMP_EQ;
     else
         cmpop = llvm::ICmpInst::ICMP_NE;
+
+    // empty struct? EQ always true, NE always false
+    if (static_cast<TypeStruct*>(t)->sym->fields.dim == 0)
+        return DtoConstBool(cmpop == llvm::ICmpInst::ICMP_EQ);
 
     // call memcmp
     size_t sz = getTypePaddedSize(DtoType(t));

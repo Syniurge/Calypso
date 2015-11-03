@@ -60,10 +60,7 @@ LLGlobalVariable * IrAggr::getInitSymbol()
         gIR->module, init_type, true, llvm::GlobalValue::ExternalLinkage, NULL, initname);
 
     // set alignment
-    init->setAlignment(type->alignsize());
-    StructDeclaration *sd = aggrdecl->isStructDeclaration();
-    if (sd && sd->alignment != STRUCTALIGN_DEFAULT)
-        init->setAlignment(sd->alignment);
+    init->setAlignment(DtoAlignment(type));
 
     return init;
 }
@@ -140,7 +137,7 @@ LLConstant* get_default_initializer(VarDeclaration* vd, Initializer* init)
     {
         // We need to be able to handle void[0] struct members even if void has
         // no default initializer.
-        return llvm::ConstantPointerNull::get(getPtrToType(DtoType(vd->type)));
+        return llvm::ConstantPointerNull::get(DtoPtrToType(vd->type));
     }
     return DtoConstExpInit(vd->loc, vd->type, vd->type->defaultInit(vd->loc));
 }
@@ -181,11 +178,14 @@ llvm::Constant* IrAggr::createInitializerConstant(
     {
         // add vtbl
         constants.push_back(getVtblSymbol());
-        // add monitor
-        constants.push_back(getNullValue(DtoType(Type::tvoid->pointerTo())));
+        offset += Target::ptrsize;
 
-        // we start right after the vtbl and monitor
-        offset = Target::ptrsize * 2;
+        // add monitor (except for C++ classes)
+        if (!aggrdecl->isClassDeclaration()->isCPPclass())
+        {
+            constants.push_back(getNullValue(getVoidPtrType()));
+            offset += Target::ptrsize;
+        }
     }
 
     // Add the initializers for the member fields. While we are traversing the
@@ -333,23 +333,18 @@ void IrAggr::addFieldInitializers(
         if (vd == NULL)
             continue;
 
-        // get next aligned offset for this field
-        size_t alignedoffset = offset;
-        if (!isPacked())
+        // Explicitly zero the padding as per TDPL §7.1.1. Otherwise, it would
+        // be left uninitialized by LLVM.
+        if (offset < vd->offset)
         {
-            alignedoffset = realignOffset(alignedoffset, vd->type);
-        }
-
-        // insert explicit padding?
-        if (alignedoffset < vd->offset)
-        {
-            add_zeros(constants, alignedoffset, vd->offset);
+            add_zeros(constants, offset, vd->offset);
+            offset = vd->offset;
         }
 
         IF_LOG Logger::println("adding field %s", vd->toChars());
 
         constants.push_back(FillSArrayDims(vd->type, data[i].second));
-        offset = vd->offset + vd->type->size();
+        offset += getMemberSize(vd->type);
     }
 
     if (ClassDeclaration* cd = decl->isClassDeclaration())
@@ -357,6 +352,14 @@ void IrAggr::addFieldInitializers(
         // has interface vtbls?
         if (cd->vtblInterfaces && cd->vtblInterfaces->dim > 0)
         {
+            // Align interface infos to pointer size.
+            unsigned aligned = (offset + Target::ptrsize - 1) & ~(Target::ptrsize - 1);
+            if (offset < aligned)
+            {
+                add_zeros(constants, offset, aligned);
+                offset = aligned;
+            }
+
             // false when it's not okay to use functions from super classes
             bool newinsts = (cd == aggrdecl->isClassDeclaration());
 

@@ -21,11 +21,9 @@
 
 class Identifier;
 struct Scope;
-struct OutBuffer;
 class Module;
 class Package;
 class AliasDeclaration;
-struct HdrGenState;
 class StringExp;
 
 class Import : public Dsymbol
@@ -38,7 +36,7 @@ public:
     Identifier *id;             // module Identifier
     Identifier *aliasId;
     int isstatic;               // !=0 if static import
-    PROT protection;
+    PROTKIND protection;
 
     // Pairs of alias=name to bind into current namespace
     Identifiers names;
@@ -54,7 +52,7 @@ public:
     void setSymIdent(); // CALYPSO
     void addAlias(Identifier *name, Identifier *alias);
     const char *kind();
-    PROT prot();
+    Prot prot();
     Dsymbol *syntaxCopy(Dsymbol *s);    // copy only syntax trees
     virtual void load(Scope *sc); // CALYPSO
     void importAll(Scope *sc);
@@ -64,7 +62,6 @@ public:
     int addMember(Scope *sc, ScopeDsymbol *sds, int memnum);
     Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone);
     bool overloadInsert(Dsymbol *s);
-    void toCBuffer(OutBuffer *buf, HdrGenState *hgs);
 
     // CALYPSO
     virtual Module *loadModule(Loc loc, Identifiers *packages, Identifier *id);
@@ -103,15 +100,19 @@ public:
 
     // ===== - - - - - ===== //
 
-    virtual const char *mangle(Dsymbol *s) = 0;
+    virtual const char *mangle(Dsymbol *s) = 0; // TODO replace by getForeignMangler
+
+    // create a mangler for types and symbols specific to this plugin
+    // base is the D mangler
+    virtual Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) = 0;
 
     // ===== - - - - - ===== //
 
     virtual Expression *getRightThis(Loc loc, Scope *sc, AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int flag = 0) = 0;
+    virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;
 
     virtual FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc) = 0;
-    virtual FuncDeclaration *buildCpCtor(StructDeclaration *sd, Scope *sc) = 0;
     virtual FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) = 0;
 
     // ===== - - - - - ===== //

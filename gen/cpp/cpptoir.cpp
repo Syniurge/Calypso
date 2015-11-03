@@ -753,6 +753,23 @@ void LangPlugin::toDefineVariable(::VarDeclaration* vd)
     }
 }
 
+// Handle ConstructExp initializers of struct and class vars
+void LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs)
+{
+    // As RHS we expect either EmptyStructLiteral.this(...) for structs or null.this(...) where null is the same type as vd for classes
+    // Only what's beyond the dot matters.
+    assert(isCPP(getAggregateSym(vd->type->toBasetype())));
+    assert(rhs->op == TOKcall);
+
+    auto ce = static_cast<CallExp*>(rhs);
+    DValue* fnval = toElem(ce->e1);
+    auto dfnval = fnval->isFunc();
+    assert(dfnval && isCPP(dfnval->func));
+
+    dfnval->vthis = value;
+    DtoCallFunction(ce->loc, ce->type, dfnval, ce->arguments);
+}
+
 void toDefaultInitVar(LLValue *vt, ::VarDeclaration *vd);
 
 void toDefaultInitClassValue(Loc loc, LLValue *vt, TypeClass *tc)
@@ -868,19 +885,25 @@ void LangPlugin::toDefineStruct(::StructDeclaration* sd)
         return;
 
     auto _RD = const_cast<clang::CXXRecordDecl *>(RD);
-    auto EmitStructor = [&] (clang::CXXMethodDecl *D) {
+    auto Emit = [&] (clang::CXXMethodDecl *D) {
         if (D && !D->isDeleted())
         {
-            CGM->getAddrOfCXXStructor(D, clangCG::StructorType::Complete); // mark it used
+            ResolvedFunc::get(*CGM, D); // mark it used
             CGM->EmitTopLevelDecl(D); // mark it emittable
         }
     };
 
-    assert(RD->hasDefaultConstructor() &&
-            RD->hasCopyConstructorWithConstParam());
+    Emit(S.LookupDefaultConstructor(_RD));
+    for (int i = 0; i < 2; i++)
+        Emit(S.LookupCopyingConstructor(_RD, i ? clang::Qualifiers::Const : 0));
 
-    EmitStructor(S.LookupDefaultConstructor(_RD));
-    EmitStructor(S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const));
+    Emit(S.LookupDestructor(_RD));
+
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++)
+            for (int k = 0; k < 2; k++)
+                Emit(S.LookupCopyingAssignment(_RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
+                                            k ? clang::Qualifiers::Const : 0));
 
     EmitInternalDeclsForFields(RD);
 }

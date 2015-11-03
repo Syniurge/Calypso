@@ -160,22 +160,21 @@ namespace {
  * memory so that it's then readable as the other type (i.e., bit-casting).
  */
 struct X86_64_C_struct_rewrite : ABIRewrite {
-    LLValue* get(Type* dty, DValue* v)
+    LLValue* get(Type* dty, LLValue* v)
     {
-        LLValue* address = storeToMemory(v->getRVal(), 0, ".X86_64_C_struct_rewrite_dump");
+        LLValue* address = DtoAllocaDump(v, dty, ".X86_64_C_struct_rewrite_dump");
         LLType* type = DtoType(dty);
         return loadFromMemory(address, type, ".X86_64_C_struct_rewrite_getResult");
     }
 
-    void getL(Type* dty, DValue* v, LLValue* lval) {
-        storeToMemory(v->getRVal(), lval);
+    void getL(Type* dty, LLValue* v, LLValue* lval) {
+        storeToMemory(v, lval);
     }
 
-    LLValue* put(Type* dty, DValue* v) {
-        assert(dty == v->getType());
+    LLValue* put(DValue* v) {
         LLValue* address = getAddressOf(v);
 
-        LLType* abiTy = getAbiType(dty);
+        LLType* abiTy = getAbiType(v->getType());
         assert(abiTy && "Why are we rewriting a non-rewritten type?");
 
         return loadFromMemory(address, abiTy, ".X86_64_C_struct_rewrite_putResult");
@@ -195,23 +194,20 @@ struct X86_64_C_struct_rewrite : ABIRewrite {
  * the ByVal LLVM attribute.
  */
 struct ImplicitByvalRewrite : ABIRewrite {
-    LLValue* get(Type* dty, DValue* v) {
-        LLValue* pointer = v->getRVal();
-        return DtoLoad(pointer, ".ImplicitByvalRewrite_getResult");
+    LLValue* get(Type* dty, LLValue* v) {
+        return DtoLoad(v, ".ImplicitByvalRewrite_getResult");
     }
 
-    void getL(Type* dty, DValue* v, LLValue* lval) {
-        LLValue* pointer = v->getRVal();
-        DtoAggrCopy(lval, pointer);
+    void getL(Type* dty, LLValue* v, LLValue* lval) {
+        DtoAggrCopy(lval, v);
     }
 
-    LLValue* put(Type* dty, DValue* v) {
-        assert(dty == v->getType());
+    LLValue* put(DValue* v) {
         return getAddressOf(v);
     }
 
     LLType* type(Type* dty, LLType* t) {
-        return getPtrToType(DtoType(dty));
+        return DtoPtrToType(dty);
     }
 };
 
@@ -233,6 +229,8 @@ struct X86_64TargetABI : TargetABI {
     void vaCopy(LLValue* pDest, LLValue* src);
 
     LLValue* prepareVaArg(LLValue* pAp);
+
+    Type *vaListType();
 
 private:
     LLType* getValistType();
@@ -379,25 +377,33 @@ LLValue* X86_64TargetABI::prepareVaStart(LLValue* pAp) {
     // we first need to allocate the actual __va_list struct and set 'ap' to its address.
     LLValue* valistmem = DtoRawAlloca(getValistType(), 0, "__va_list_mem");
     valistmem = DtoBitCast(valistmem, getVoidPtrType());
-    DtoStore(valistmem, pAp); // ap = (void*)__va_list_mem
+    DtoStore(valistmem, DtoBitCast(pAp, getPtrToType(getVoidPtrType())));
 
     // pass a void* pointer to the actual struct to LLVM's va_start intrinsic
     return valistmem;
 }
 
 void X86_64TargetABI::vaCopy(LLValue* pDest, LLValue* src) {
-    // Analog to va_start, we need to allocate a __va_list struct on the stack first
-    // and set the passed 'dest' char* pointer to its address.
-    LLValue* valistmem = DtoRawAlloca(getValistType(), 0, "__va_list_mem");
-    DtoStore(DtoBitCast(valistmem, getVoidPtrType()), pDest);
-
-    // Now bitcopy the source struct over the destination struct.
-    src = DtoBitCast(src, valistmem->getType());
-    DtoStore(DtoLoad(src), valistmem); // *(__va_list*)dest = *(__va_list*)src
+    // Analog to va_start, we need to allocate a new __va_list struct on the stack,
+    // fill it with a bitcopy of the source struct...
+    src = DtoLoad(DtoBitCast(src, getValistType()->getPointerTo())); // *(__va_list*)src
+    LLValue* valistmem = DtoAllocaDump(src, 0, "__va_list_mem");
+    // ... and finally set the passed 'dest' char* pointer to the new struct's address.
+    DtoStore(DtoBitCast(valistmem, getVoidPtrType()),
+        DtoBitCast(pDest, getPtrToType(getVoidPtrType())));
 }
 
 LLValue* X86_64TargetABI::prepareVaArg(LLValue* pAp)
 {
     // pass a void* pointer to the actual __va_list struct to LLVM's va_arg intrinsic
     return DtoLoad(pAp);
+}
+
+Type* X86_64TargetABI::vaListType() {
+    // We need to pass the actual va_list type for correct mangling. Simply
+    // using TypeIdentifier here is a bit wonky but works, as long as the name
+    // is actually available in the scope (this is what DMD does, so if a better
+    // solution is found there, this should be adapted).
+    return (new TypeIdentifier(Loc(),
+        Identifier::idPool("__va_list_tag")))->pointerTo();
 }

@@ -130,12 +130,13 @@ public:
         Identifier *aliasId, int isstatic) override;
 
     const char *mangle(Dsymbol *s) override;
+    Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int flag = 0) override;
+    Expression *callCpCtor(Scope *sc, Expression *e) override;
 
     ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
-    ::FuncDeclaration *buildCpCtor(::StructDeclaration *sd, Scope *sc) override;
     ::FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) override;
 
     // ==== CodeGen ====
@@ -174,6 +175,8 @@ public:
     LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, char* name) override;
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                    Expressions* arguments, llvm::Value *retvar) override;
+
+    void toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 
     LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;

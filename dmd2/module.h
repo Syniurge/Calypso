@@ -26,23 +26,14 @@ struct Escape;
 class VarDeclaration;
 class Library;
 
-// Back end
 #if IN_LLVM
 class DValue;
-typedef DValue elem;
 namespace llvm {
     class LLVMContext;
     class Module;
     class GlobalVariable;
     class StructType;
 }
-#else
-
-#ifdef IN_GCC
-typedef union tree_node elem;
-#else
-struct elem;
-#endif
 #endif
 
 enum PKG
@@ -64,6 +55,8 @@ public:
     static DsymbolTable *resolve(Identifiers *packages, Dsymbol **pparent, Package **ppkg);
 
     Package *isPackage() { return this; }
+
+    bool isAncestorPackageOf(Package *pkg);
 
     void semantic(Scope *sc) { }
     Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone);
@@ -91,7 +84,6 @@ public:
     File *srcfile;      // input source file
     File *objfile;      // output .obj file
     File *hdrfile;      // 'header' file
-    File *symfile;      // output symbol file
     File *docfile;      // output documentation file
     unsigned errors;    // if any errors in file
     unsigned numlines;  // number of lines in source file
@@ -100,7 +92,10 @@ public:
     int needmoduleinfo;
 
     int selfimports;            // 0: don't know, 1: does not, 2: does
-    int selfImports();          // returns !=0 if module imports itself
+    bool selfImports();         // returns true if module imports itself
+
+    int rootimports;            // 0: don't know, 1: does not, 2: does
+    bool rootImports();         // returns true if module imports root module
 
     int insearch;
     Identifier *searchCacheIdent;
@@ -125,7 +120,6 @@ public:
 
     Macro *macrotable;          // document comment macros
     Escape *escapetable;        // document comment escapes
-    bool safe;                  // true if module is marked as 'safe'
 
     size_t nameoffset;          // offset of module name from start of ModuleInfo
     size_t namelen;             // length of module name in characters
@@ -156,11 +150,6 @@ public:
     void semantic();    // semantic analysis
     void semantic2();   // pass 2 semantic analysis
     void semantic3();   // pass 3 semantic analysis
-    void genobjfile(bool multiobj);
-    void genhelpers(bool iscomdat);
-#if IN_DMD
-    void gensymfile();
-#endif
     int needModuleInfo();
     virtual Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone); // CALYPSO
     Dsymbol *symtabInsert(Dsymbol *s);
@@ -197,16 +186,9 @@ public:
     Symbol *sfilename;          // symbol for filename
 
     Symbol *massert;            // module assert function
-    Symbol *toModuleAssert();   // get module assert function
-
     Symbol *munittest;          // module unittest failure function
-    Symbol *toModuleUnittest(); // get module unittest failure function
-
     Symbol *marray;             // module array bounds function
-    Symbol *toModuleArray();    // get module array bounds function
-
 #endif
-    void genmoduleinfo();
 
 #if IN_LLVM
     // LDC
@@ -235,11 +217,10 @@ struct ModuleDeclaration
     Loc loc;
     Identifier *id;
     Identifiers *packages;            // array of Identifier's representing packages
-    bool safe;
     bool isdeprecated;  // if it is a deprecated module
     Expression *msg;
 
-    ModuleDeclaration(Loc loc, Identifiers *packages, Identifier *id, bool safe);
+    ModuleDeclaration(Loc loc, Identifiers *packages, Identifier *id);
 
     char *toChars();
 };

@@ -90,7 +90,9 @@ public:
             IrAggr *ir = getIrAggr(decl);
             llvm::GlobalVariable *interfaceZ = ir->getClassInfoSymbol();
             interfaceZ->setInitializer(ir->getClassInfoInit());
-            interfaceZ->setLinkage(DtoLinkage(decl));
+            LinkageWithCOMDAT lwc = DtoLinkage(decl);
+            interfaceZ->setLinkage(lwc.first);
+            if (lwc.second) SET_COMDAT(interfaceZ, gIR->module);
         }
     }
 
@@ -111,7 +113,7 @@ public:
 
         if (decl->members && decl->symtab)
         {
-            DtoDefineStruct(decl);
+            DtoDefineStruct(decl); // CALYPSO
 
             for (Dsymbols::iterator I = decl->members->begin(),
                                     E = decl->members->end();
@@ -147,7 +149,7 @@ public:
 
         if (decl->members && decl->symtab)
         {
-            DtoDefineClass(decl);
+            DtoDefineClass(decl); // CALYPSO
 
             for (Dsymbols::iterator I = decl->members->begin(),
                                     E = decl->members->end();
@@ -218,7 +220,7 @@ public:
             llvm::GlobalVariable *gvar = llvm::cast<llvm::GlobalVariable>(irGlobal->value);
             assert(gvar && "DtoResolveVariable should have created value");
 
-            const llvm::GlobalValue::LinkageTypes llLinkage = DtoLinkage(decl);
+            const LinkageWithCOMDAT lwc = DtoLinkage(decl);
 
             // Check if we are defining or just declaring the global in this module.
             if (decl->storage_class & STCextern)
@@ -235,9 +237,10 @@ public:
                 {
                     llvm::GlobalVariable* newGvar = getOrCreateGlobal(decl->loc,
                         irs->module, initVal->getType(), gvar->isConstant(),
-                        llLinkage, 0,
+                        lwc.first, 0,
                         "", // We take on the name of the old global below.
                         gvar->isThreadLocal());
+                    if (lwc.second) SET_COMDAT(newGvar, gIR->module);
 
                     newGvar->setAlignment(gvar->getAlignment());
                     newGvar->takeName(gvar);
@@ -255,7 +258,8 @@ public:
                 assert(!irGlobal->constInit);
                 irGlobal->constInit = initVal;
                 gvar->setInitializer(initVal);
-                gvar->setLinkage(llLinkage);
+                gvar->setLinkage(lwc.first);
+                if (lwc.second) SET_COMDAT(gvar, gIR->module);
 
                 // Also set up the debug info.
                 irs->DBuilder.EmitGlobalVariable(gvar, decl);
@@ -269,24 +273,6 @@ public:
 
             IF_LOG Logger::cout() << *gvar << '\n';
         }
-    }
-
-    //////////////////////////////////////////////////////////////////////////
-
-    void visit(TypedefDeclaration *decl) LLVM_OVERRIDE {
-        IF_LOG Logger::println("TypedefDeclaration::codegen: '%s'", decl->toPrettyChars());
-        LOG_SCOPE;
-
-        if (decl->ir.isDefined()) return;
-        decl->ir.setDefined();
-
-        if (decl->type->ty == Terror)
-        {   error(decl->loc, "had semantic errors when compiling");
-            return;
-        }
-
-        // generate typeinfo
-        DtoTypeInfoOf(decl->type, false);
     }
 
     //////////////////////////////////////////////////////////////////////////
@@ -440,7 +426,7 @@ public:
     #endif
             {
                 size_t const n = nameLen + 3;
-                char *arg = static_cast<char *>(mem.malloc(n));
+                char *arg = static_cast<char *>(mem.xmalloc(n));
                 arg[0] = '-';
                 arg[1] = 'l';
                 memcpy(arg + 2, se->string, nameLen);

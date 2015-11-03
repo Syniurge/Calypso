@@ -18,6 +18,9 @@ include(CheckCXXCompilerFlag)
 find_package(LLVM 3.1 REQUIRED
     all-targets analysis asmparser asmprinter bitreader bitwriter codegen core debuginfodwarf instcombine ipa ipo instrumentation linker lto mc mcdisassembler mcparser objcarcopts object option profiledata scalaropts selectiondag support tablegen target transformutils vectorize ${EXTRA_LLVM_MODULES})
 math(EXPR LDC_LLVM_VER ${LLVM_VERSION_MAJOR}*100+${LLVM_VERSION_MINOR})
+# Remove LLVMTableGen library from list of libraries
+string(REGEX MATCH "^-.*LLVMTableGen[^;]*;|;-.*LLVMTableGen[^;]*" LLVM_TABLEGEN_LIBRARY "${LLVM_LIBRARIES}")
+string(REGEX REPLACE "^-.*LLVMTableGen[^;]*;|;-.*LLVMTableGen[^;]*" "" LLVM_LIBRARIES "${LLVM_LIBRARIES}")
 
 #
 # Locate libconfig.
@@ -34,10 +37,10 @@ include(GetLinuxDistribution)
 #
 
 # Version information
-set(LDC_VERSION "0.15.2") # May be overridden by git hash tag
+set(LDC_VERSION "0.16.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   66)
+set(DMDFE_PATCH_VERSION   67)
 set(DMDFE_FIX_LEVEL       1) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
@@ -120,6 +123,24 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
     if(CMAKE_COMPILER_IS_GNUCXX AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS "4.7.0")
         append("-Wno-pedantic" LDC_CXXFLAGS)
     endif()
+elseif(MSVC)
+    # Remove flags here, for exceptions and RTTI.
+    # CL.EXE complains to override flags like "/GR /GR-".
+    string(REGEX REPLACE "(^| )[/-]EH[-cs]*( |$)" "\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REGEX REPLACE "(^| )[/-]GR-?( |$)" "\\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    append("/GR- /EHs-c-" CMAKE_CXX_FLAGS)
+    add_definitions(/D_HAS_EXCEPTIONS=0)
+
+    # warning C4018: signed/unsigned mismatch
+    # warning C4101: unreferenced local variable
+    # warning C4102: unreferenced label
+    # warning C4146: unary minus operator applied to unsigned type, result still unsigned
+    # warnings C4244 and C4267: conversion from '...' to '...', possible loss of data
+    # warnings C4456-4459: declaration of '...' hides ...
+    # warning C4624: destructor was implicitly defined as deleted because a base class destructor is inaccessible or deleted
+    # warning C4800: forcing value to bool 'true' or 'false' (performance warning)
+    # warning C4996: we're not using Microsoft's secure stringOp_s() functions
+    append("/wd4018 /wd4101 /wd4102 /wd4146 /wd4244 /wd4267 /wd4456 /wd4457 /wd4458 /wd4459 /wd4624 /wd4800 /wd4996" DMD_CXXFLAGS LDC_CXXFLAGS)
 endif()
 # Append -mminimal-toc for gcc 4.0.x - 4.5.x on ppc64
 if( CMAKE_COMPILER_IS_GNUCXX
@@ -157,6 +178,12 @@ endif()
 # CALYPSO
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+# LLVM_CXXFLAGS may contain -Wcovered-switch-default and -fcolor-diagnostics
+# which are clang-only options
+if(CMAKE_COMPILER_IS_GNUCXX)
+    string(REPLACE "-Wcovered-switch-default " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
+    string(REPLACE "-fcolor-diagnostics " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
+endif()
 #
 # Run idgen and impcnvgen.
 #
@@ -233,6 +260,7 @@ set(DRV_SRC
     driver/cl_options.cpp
     driver/codegenerator.cpp
     driver/configfile.cpp
+    driver/exe_path.cpp
     driver/targetmachine.cpp
     driver/toobj.cpp
     driver/tool.cpp
@@ -245,6 +273,7 @@ set(DRV_HDR
     driver/cl_options.h
     driver/codegenerator.h
     driver/configfile.h
+    driver/exe_path.h
     driver/ldc-version.h
     driver/targetmachine.h
     driver/toobj.h
@@ -323,23 +352,14 @@ if(GENERATE_OFFTI)
     add_definitions(-DGENERATE_OFFTI)
 endif()
 
-if(MSVC)
-    # Remove flags here, for exceptions and RTTI.
-    # CL.EXE complains to override flags like "/GR /GR-".
-    string(REGEX REPLACE "(^| ) */EH[-cs]+ *( |$)" "\\1 \\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    string(REGEX REPLACE "(^| ) */GR-? *( |$)" "\\1 \\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-
-    add_definitions(-D_HAS_EXCEPTIONS=0)
-    set(EXTRA_CXXFLAGS "${EXTRA_CXXFLAGS} /GF /GR- /EHs-c- /MP")
-endif()
-
 # if llvm was built with assertions we have to do the same
 # as there are some headers with differing behavior based on NDEBUG
 if(LLVM_ENABLE_ASSERTIONS)
-    set(EXTRA_CXXFLAGS "${EXTRA_CXXFLAGS} -UNDEBUG")
-    # avoid msvc warning D9025
-    string(REGEX REPLACE "(^| )[/-]D *NDEBUG( |$)" " " CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-    string(REGEX REPLACE "(^| )[/-]D *NDEBUG( |$)" " " CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+    append("-UNDEBUG" EXTRA_CXXFLAGS)
+    # avoid MSVC warning D9025 about "-DNDEBUG ... -UNDEBUG"
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG( |$)" "\\1-UNDEBUG\\2" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG( |$)" "\\1-UNDEBUG\\2" CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL}")
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG( |$)" "\\1-UNDEBUG\\2" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 endif()
 
 #
@@ -520,7 +540,9 @@ add_dependencies(${LDC_LIB} clang)
 #
 
 # The LLVM_INCLUDE_DIR definition is not always set, e.g. on Windows.
-find_path(LLVM_INTRINSIC_TD_PATH "Intrinsics.td" PATHS ${LLVM_INCLUDE_DIRS}/llvm ${LLVM_INCLUDE_DIRS}/llvm/IR NO_DEFAULT_PATH)
+# strip off anything but the first path
+string(REGEX REPLACE ";.*$" "" LLVM_INC_DIR "${LLVM_INCLUDE_DIRS}")
+find_path(LLVM_INTRINSIC_TD_PATH "Intrinsics.td" PATHS ${LLVM_INC_DIR}/llvm ${LLVM_INC_DIR}/llvm/IR NO_DEFAULT_PATH)
 if (${LLVM_INTRINSIC_TD_PATH} STREQUAL "LLVM_INTRINSIC_TD_PATH-NOTFOUND")
     message(SEND_ERROR "File Intrinsics.td not found")
 else()
@@ -544,7 +566,7 @@ set_target_properties(
     COMPILE_FLAGS "${TABLEGEN_CXXFLAGS} ${LDC_CXXFLAGS}"
     LINK_FLAGS "${SANITIZE_LDFLAGS}"
 )
-target_link_libraries(gen_gccbuiltins ${LLVM_LIBRARIES} ${PTHREAD_LIBS} ${TERMINFO_LIBS} ${CMAKE_DL_LIBS} "${LLVM_LDFLAGS}")
+target_link_libraries(gen_gccbuiltins ${LLVM_TABLEGEN_LIBRARY} ${LLVM_LIBRARIES} ${PTHREAD_LIBS} ${TERMINFO_LIBS} ${CMAKE_DL_LIBS} "${LLVM_LDFLAGS}")
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     target_link_libraries(gen_gccbuiltins dl)
 endif()
@@ -558,10 +580,10 @@ if (HAVE_SC_ARG_MAX)
    add_definitions(-DHAVE_SC_ARG_MAX)
 endif()
 
-set_source_files_properties(driver/ldmd.cpp PROPERTIES
+set_source_files_properties(driver/ldmd.cpp driver/response.cpp PROPERTIES
     COMPILE_FLAGS "${LDC_CXXFLAGS}"
 )
-add_executable(${LDMD_EXE} dmd2/root/man.c driver/ldmd.cpp driver/response.cpp)
+add_executable(${LDMD_EXE} dmd2/root/man.c driver/exe_path.cpp driver/ldmd.cpp driver/response.cpp driver/exe_path.h)
 set_target_properties(${LDMD_EXE} PROPERTIES
     COMPILE_DEFINITIONS LDC_EXE_NAME="${LDC_EXE_NAME}"
     COMPILE_FLAGS "${LLVM_CXXFLAGS}"
@@ -596,6 +618,10 @@ if(${BUILD_SHARED})
     install(TARGETS ${LDC_LIB} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
 endif()
 install(FILES ${PROJECT_BINARY_DIR}/bin/${LDC_EXE}_install.conf DESTINATION ${CONF_INST_DIR} RENAME ${LDC_EXE}.conf)
+
+if(MSVC)
+    install(DIRECTORY vcbuild/ DESTINATION ${CMAKE_INSTALL_PREFIX}/bin FILES_MATCHING PATTERN "*.bat")
+endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     find_package(bash-completion QUIET)

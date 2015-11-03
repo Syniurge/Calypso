@@ -162,7 +162,7 @@ public:
     DeclMapper(Module *mod, bool instantiating = false)
         : TypeMapper(mod), instantiating(instantiating) {} // hmm why does putting into .cpp give me a link error?
 
-    inline PROT toPROT(clang::AccessSpecifier AS);
+    inline Prot toProt(clang::AccessSpecifier AS);
 
     // Declarations
     Dsymbols *VisitDeclContext(const clang::DeclContext *DC);

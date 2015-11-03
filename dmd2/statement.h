@@ -20,8 +20,8 @@
 
 #include "arraytypes.h"
 #include "dsymbol.h"
-#include "lexer.h"
 #include "visitor.h"
+#include "tokens.h"
 
 struct OutBuffer;
 struct Scope;
@@ -41,9 +41,6 @@ class CompoundStatement;
 class Parameter;
 class StaticAssert;
 class AsmStatement;
-#if IN_LLVM
-class AsmBlockStatement;
-#endif
 class GotoStatement;
 class ScopeStatement;
 class TryCatchStatement;
@@ -51,16 +48,11 @@ class TryFinallyStatement;
 class CaseStatement;
 class DefaultStatement;
 class LabelStatement;
-struct HdrGenState;
-struct InterState;
-struct CompiledCtfeFunction;
 #if IN_LLVM
 class CaseStatement;
 class LabelStatement;
 class SynchronizedStatement;
 #endif
-
-enum TOK;
 
 #if IN_LLVM
 namespace llvm
@@ -85,7 +77,6 @@ struct block;
 struct code;
 #endif
 
-Expression *interpret(Statement *s, InterState *istate);
 bool inferAggregate(ForeachStatement *fes, Scope *sc, Dsymbol *&sapply);
 bool inferApplyArgTypes(ForeachStatement *fes, Scope *sc, Dsymbol *&sapply);
 
@@ -104,8 +95,6 @@ enum BE
     BEerrthrow = 0x80,
     BEany = (BEfallthru | BEthrow | BEreturn | BEgoto | BEhalt),
 };
-
-void toCBuffer(Statement *s, OutBuffer *buf, HdrGenState *hgs);
 
 class Statement : public RootObject
 {
@@ -134,10 +123,6 @@ public:
     bool hasCode();
     virtual Statement *scopeCode(Scope *sc, Statement **sentry, Statement **sexit, Statement **sfinally);
     virtual Statements *flatten(Scope *sc);
-    Expression *interpret(InterState *istate)
-    {
-        return ::interpret(this, istate);
-    }
     virtual Statement *last();
 
     // Avoid dynamic_cast
@@ -154,8 +139,8 @@ public:
     virtual void accept(Visitor *v) { v->visit(this); }
 
 #if IN_LLVM
-    virtual AsmBlockStatement *isAsmBlockStatement() { return NULL; }
-    virtual AsmBlockStatement* endsWithAsm();
+    virtual CompoundAsmStatement *isCompoundAsmBlockStatement() { return NULL; }
+    virtual CompoundAsmStatement* endsWithAsm();
 #endif
 };
 
@@ -245,7 +230,7 @@ public:
     void accept(Visitor *v) { v->visit(this); }
 
 #if IN_LLVM
-    virtual AsmBlockStatement* endsWithAsm();
+    virtual CompoundAsmStatement* endsWithAsm();
 #endif
 };
 
@@ -295,8 +280,9 @@ class WhileStatement : public Statement
 public:
     Expression *condition;
     Statement *body;
+    Loc endloc;                 // location of closing curly bracket
 
-    WhileStatement(Loc loc, Expression *c, Statement *b);
+    WhileStatement(Loc loc, Expression *c, Statement *b, Loc endloc);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
     bool hasBreak();
@@ -327,13 +313,14 @@ public:
     Expression *condition;
     Expression *increment;
     Statement *body;
+    Loc endloc;                 // location of closing curly bracket
 
     // When wrapped in try/finally clauses, this points to the outermost one,
     // which may have an associated label. Internal break/continue statements
     // treat that label as referring to this loop.
     Statement *relatedLabeled;
 
-    ForStatement(Loc loc, Statement *init, Expression *condition, Expression *increment, Statement *body);
+    ForStatement(Loc loc, Statement *init, Expression *condition, Expression *increment, Statement *body, Loc endloc);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
     Statement *scopeCode(Scope *sc, Statement **sentry, Statement **sexit, Statement **sfinally);
@@ -347,10 +334,11 @@ public:
 class ForeachStatement : public Statement
 {
 public:
-    TOK op;                // TOKforeach or TOKforeach_reverse
-    Parameters *arguments;      // array of Parameter*'s
+    TOK op;                     // TOKforeach or TOKforeach_reverse
+    Parameters *parameters;     // array of Parameter*'s
     Expression *aggr;
     Statement *body;
+    Loc endloc;                 // location of closing curly bracket
 
     VarDeclaration *key;
     VarDeclaration *value;
@@ -360,7 +348,7 @@ public:
     Statements *cases;          // put breaks, continues, gotos and returns here
     ScopeStatements *gotos;     // forward referenced goto's go here
 
-    ForeachStatement(Loc loc, TOK op, Parameters *arguments, Expression *aggr, Statement *body);
+    ForeachStatement(Loc loc, TOK op, Parameters *parameters, Expression *aggr, Statement *body, Loc endloc);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
     bool checkForArgTypes();
@@ -373,16 +361,17 @@ public:
 class ForeachRangeStatement : public Statement
 {
 public:
-    TOK op;                // TOKforeach or TOKforeach_reverse
-    Parameter *arg;             // loop index variable
+    TOK op;                     // TOKforeach or TOKforeach_reverse
+    Parameter *prm;             // loop index variable
     Expression *lwr;
     Expression *upr;
     Statement *body;
+    Loc endloc;                 // location of closing curly bracket
 
     VarDeclaration *key;
 
-    ForeachRangeStatement(Loc loc, TOK op, Parameter *arg,
-        Expression *lwr, Expression *upr, Statement *body);
+    ForeachRangeStatement(Loc loc, TOK op, Parameter *prm,
+        Expression *lwr, Expression *upr, Statement *body, Loc endloc);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
     bool hasBreak();
@@ -394,14 +383,14 @@ public:
 class IfStatement : public Statement
 {
 public:
-    Parameter *arg;
+    Parameter *prm;
     Expression *condition;
     Statement *ifbody;
     Statement *elsebody;
 
     VarDeclaration *match;      // for MatchExpression results
 
-    IfStatement(Loc loc, Parameter *arg, Expression *condition, Statement *ifbody, Statement *elsebody);
+    IfStatement(Loc loc, Parameter *prm, Expression *condition, Statement *ifbody, Statement *elsebody);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
     IfStatement *isIfStatement() { return this; }
@@ -464,10 +453,6 @@ public:
     int hasNoDefault;           // !=0 if no default statement
     int hasVars;                // !=0 if has variable case values
 
-#if IN_LLVM
-    Statement *enclosingScopeExit;
-#endif
-
     SwitchStatement(Loc loc, Expression *c, Statement *b, bool isFinal);
     Statement *syntaxCopy();
     Statement *semantic(Scope *sc);
@@ -484,10 +469,6 @@ public:
 
     int index;          // which case it is (since we sort this)
     block *cblock;      // back end: label for the block
-
-#if IN_LLVM
-    Statement *enclosingScopeExit;
-#endif
 
     CaseStatement(Loc loc, Expression *exp, Statement *s);
     Statement *syntaxCopy();
@@ -524,10 +505,6 @@ public:
     Statement *statement;
 #ifdef IN_GCC
     block *cblock;      // back end: label for the block
-#endif
-
-#if IN_LLVM
-    Statement *enclosingScopeExit;
 #endif
 
     DefaultStatement(Loc loc, Statement *s);
@@ -580,7 +557,7 @@ class ReturnStatement : public Statement
 {
 public:
     Expression *exp;
-    bool implicit0;             // this is an implicit "return 0;"
+    size_t caseDim;
 
     ReturnStatement(Loc loc, Expression *exp);
     Statement *syntaxCopy();
@@ -748,11 +725,7 @@ public:
     LabelDsymbol *label;
     TryFinallyStatement *tf;
     OnScopeStatement *os;
-#if IN_LLVM
-    Statement* enclosingScopeExit;
-#endif
     VarDeclaration *lastVar;
-    FuncDeclaration *fd;
 
     GotoStatement(Loc loc, Identifier *ident);
     Statement *syntaxCopy();
@@ -769,13 +742,11 @@ public:
     Statement *statement;
     TryFinallyStatement *tf;
     OnScopeStatement *os;
-#if IN_LLVM
-    Statement* enclosingScopeExit;
-#endif
-    Statement *gotoTarget;      // interpret
     VarDeclaration *lastVar;
-    block *lblock;              // back end
+    Statement *gotoTarget;      // interpret
 
+    bool breaks;                // someone did a 'break ident'
+    block *lblock;              // back end
     Blocks *fwdrefs;            // forward references to this LabelStatement
 
     LabelStatement(Loc loc, Identifier *ident, Statement *statement);
@@ -827,6 +798,27 @@ public:
 #endif
 };
 
+// a complete asm {} block
+class CompoundAsmStatement : public CompoundStatement
+{
+public:
+    StorageClass stc; // postfix attributes like nothrow/pure/@trusted
+
+    CompoundAsmStatement(Loc loc, Statements *s, StorageClass stc);
+    CompoundAsmStatement *syntaxCopy();
+    CompoundAsmStatement *semantic(Scope *sc);
+    Statements *flatten(Scope *sc);
+
+    void accept(Visitor *v) { v->visit(this); }
+#if IN_LLVM
+    CompoundStatement *isCompoundStatement() { return NULL; }
+    CompoundAsmStatement *isCompoundAsmBlockStatement() { return this; }
+
+    CompoundAsmStatement* endsWithAsm();
+    llvm::Value* abiret;
+#endif
+};
+
 class ImportStatement : public Statement
 {
 public:
@@ -838,27 +830,5 @@ public:
 
     void accept(Visitor *v) { v->visit(this); }
 };
-
-#if IN_LLVM
-class AsmBlockStatement : public CompoundStatement
-{
-public:
-    TryFinallyStatement* enclosingFinally;
-    Statement* enclosingScopeExit;
-
-    AsmBlockStatement(Loc loc, Statements *s);
-    Statements *flatten(Scope *sc);
-    Statement *syntaxCopy();
-    Statement *semantic(Scope *sc);
-
-    CompoundStatement *isCompoundStatement() { return NULL; }
-    AsmBlockStatement *isAsmBlockStatement() { return this; }
-    void accept(Visitor *v) { v->visit(this); }
-
-    AsmBlockStatement* endsWithAsm();
-
-    llvm::Value* abiret;
-};
-#endif
 
 #endif /* DMD_STATEMENT_H */

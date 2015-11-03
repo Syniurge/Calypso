@@ -3,8 +3,10 @@
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppaggregate.h"
 
+#include "identifier.h"
 #include "init.h"
 #include "target.h"
+#include "ir/irfunction.h"
 #include "gen/irstate.h"
 #include "gen/llvmhelpers.h"
 
@@ -170,7 +172,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     Out << callee->ident->toChars();
     Out.flush();
 
-    auto thunkId = Lexer::idPool(thunkName.c_str());
+    auto thunkId = Identifier::idPool(thunkName.c_str());
     auto calleetf = static_cast<TypeFunction*>(callee->type);
 
     // check if the thunk already exists
@@ -191,7 +193,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
         args->push(new IdentifierExp(loc, p->ident));
 
     // adjust "this"
-    auto idtmp = Lexer::uniqueId("__tmp");
+    auto idtmp = Identifier::generateId("__tmp");
     auto tmp = new ::VarDeclaration(loc, Type::tvoidptr,
                              idtmp, new VoidInitializer(loc));
     tmp->noscope = 1;
@@ -350,7 +352,7 @@ void LangPlugin::emitAdditionalClassSymbols(::ClassDeclaration *cd)
     auto linkage = DtoLinkage(cd);
     auto vtableZ = getDCXXVTable(cd, dcxxInfo);
     vtableZ->setInitializer(VTableInit);
-    vtableZ->setLinkage(linkage);
+    vtableZ->setLinkage(linkage.first);
 }
 
 // A few changes to CGClass.cpp here and there

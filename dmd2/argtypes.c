@@ -75,6 +75,8 @@ TypeTuple *toArgTypes(Type *t)
                 case Tfloat32:
                 case Tint64:
                 case Tuns64:
+                case Tint128:
+                case Tuns128:
                 case Tfloat64:
                 case Tfloat80:
                     t1 = t;
@@ -307,7 +309,7 @@ TypeTuple *toArgTypes(Type *t)
         void visit(TypeStruct *t)
         {
             //printf("TypeStruct::toArgTypes() %s\n", t->toChars());
-            if (!t->sym->isPOD())
+            if (!t->sym->isPOD() || t->sym->fields.dim == 0)
             {
             Lmemory:
                 //printf("\ttoArgTypes() %s => [ ]\n", t->toChars());
@@ -429,7 +431,8 @@ TypeTuple *toArgTypes(Type *t)
                 {
                     if (t1->isfloating() && t2->isfloating())
                     {
-                        if (t1->ty == Tfloat64 && t2->ty == Tfloat64)
+                        if ((t1->ty == Tfloat32 || t1->ty == Tfloat64) &&
+                            (t2->ty == Tfloat32 || t2->ty == Tfloat64))
                             ;
                         else
                             goto Lmemory;
@@ -474,11 +477,6 @@ TypeTuple *toArgTypes(Type *t)
         void visit(TypeEnum *t)
         {
             t->toBasetype()->accept(this);
-        }
-
-        void visit(TypeTypedef *t)
-        {
-            t->sym->basetype->accept(this);
         }
 
         void visit(TypeClass *)

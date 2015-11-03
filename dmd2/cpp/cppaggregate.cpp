@@ -8,6 +8,7 @@
 #include "scope.h"
 #include "target.h"
 #include "template.h"
+#include "identifier.h"
 #include "id.h"
 
 #include "clang/AST/Decl.h"
@@ -158,7 +159,7 @@ void ClassDeclaration::buildCpCtor(Scope *sc)
     if (!cpctor)
         return; // could be deleted or invalid
 
-    auto fwdcpctor = new OverloadAliasDeclaration(loc, Id::cpctor,
+    auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
                                     new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
     members->push(fwdcpctor);
 
@@ -222,10 +223,10 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
     if (!defaultCtor)
         return ::ClassDeclaration::defaultInit(loc);
 
-//     auto arguments = new Expressions;
-//     return new CallExp(loc, new TypeExp(loc, type), arguments);
+    auto arguments = new Expressions;
+    return new CallExp(loc, new TypeExp(loc, type), arguments);
 
-    return nullptr; // handled in cpptoir.cpp because CallExp(TypeExp()) causes recursive evaluation
+//     return nullptr; // handled in cpptoir.cpp because CallExp(TypeExp()) causes recursive evaluation
 }
 
 void ClassDeclaration::makeNested()
@@ -306,6 +307,11 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
     return e1;
 }
 
+Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
+{
+    // TODO
+}
+
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
 {
     assert(ad->dtors.dim < 2);
@@ -314,11 +320,6 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
         return nullptr; // forward reference
 
     return ad->dtors[0];
-}
-
-::FuncDeclaration *LangPlugin::buildCpCtor(::StructDeclaration *sd, Scope *sc)
-{
-    return static_cast<::FuncDeclaration*>(sd->searchCpCtor());
 }
 
 ::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)

@@ -15,9 +15,13 @@
 #include "llvm/DerivedTypes.h"
 #endif
 #include "llvm/ADT/SmallString.h"
+#ifndef NDEBUG
+#include "llvm/Support/raw_ostream.h"
+#endif
 
 #include "aggregate.h"
 #include "declaration.h"
+#include "hdrgen.h" // for parametersTypeToChars()
 #include "mtype.h"
 #include "target.h"
 
@@ -29,8 +33,10 @@
 #include "gen/metadata.h"
 #include "gen/runtime.h"
 #include "gen/functions.h"
+#include "gen/abi.h"
 
 #include "ir/iraggr.h"
+#include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -211,7 +217,7 @@ LLConstant * IrAggr::getVtblInit()
                         if (tf->ty == Tfunction)
                             cd->deprecation("use of %s%s hidden by %s is deprecated; use 'alias %s = %s.%s;' to introduce base class overload set",
                                             fd->toPrettyChars(),
-                                            Parameter::argsTypesToChars(tf->parameters, tf->varargs),
+                                            parametersTypeToChars(tf->parameters, tf->varargs),
                                             cd->toChars(),
 
                                             fd->toChars(),
@@ -231,29 +237,22 @@ LLConstant * IrAggr::getVtblInit()
 
     // build the constant struct
     LLType* vtblTy = stripModifiers(type)->ctype->isClass()->getVtbl();
-    constVtbl = LLConstantStruct::get(isaStruct(vtblTy), constants);
-
-#if 0
-   IF_LOG Logger::cout() << "constVtbl type: " << *constVtbl->getType() << std::endl;
-   IF_LOG Logger::cout() << "vtbl type: " << *stripModifiers(type)->ctype->isClass()->getVtbl() << std::endl;
-#endif
-
-#if 0
-
+#ifndef NDEBUG
     size_t nc = constants.size();
 
     for (size_t i = 0; i < nc; ++i)
     {
-        if (constVtbl->getOperand(i)->getType() != vtblTy->getContainedType(i))
+        if (constants[i]->getType() != vtblTy->getContainedType(i))
         {
-            Logger::cout() << "type mismatch for entry # " << i << " in vtbl initializer" << std::endl;
+            llvm::errs() << "type mismatch for entry # " << i << " in vtbl initializer\n";
 
-            constVtbl->getOperand(i)->dump();
+            constants[i]->getType()->dump();
             vtblTy->getContainedType(i)->dump();
         }
     }
 
 #endif
+    constVtbl = LLConstantStruct::get(isaStruct(vtblTy), constants);
 
     assert(constVtbl->getType() == stripModifiers(type)->ctype->isClass()->getVtbl() &&
         "vtbl initializer type mismatch");
@@ -335,58 +334,68 @@ llvm::GlobalVariable * IrAggr::getInterfaceVtbl(BaseClass * b, bool new_instance
         assert(isIrFuncCreated(fd) && "invalid vtbl function");
 
         IrFunction *irFunc = getIrFunc(fd);
-        LLFunction *fn = getIrFunc(fd)->func;
 
-        // If the base is a cpp interface, 'this' parameter is a pointer to
-        // the interface not the underlying object as expected. Instead of
-        // the function, we place into the vtable a small wrapper, called thunk,
-        // that casts 'this' to the object and then pass it to the real function.
-        if (cb->isCPPinterface()) {
-            assert(irFunc->irFty.arg_this);
+        assert(irFunc->irFty.arg_this);
 
-            // create the thunk function
-            OutBuffer name;
-            name.writestring("Th");
-            name.printf("%i", b->offset);
-            name.writestring(mangleExact(fd));
-            LLFunction *thunk = LLFunction::Create(isaFunction(fn->getType()->getContainedType(0)),
-                DtoLinkage(fd), name.extractString(), &gIR->module);
+        // Create the thunk function if it does not already exist in this
+        // module.
+        OutBuffer nameBuf;
+        nameBuf.writestring("Th");
+        nameBuf.printf("%i", b->offset);
+        nameBuf.writestring(mangleExact(fd));
+        const char *thunkName = nameBuf.extractString();
+        llvm::Function *thunk = gIR->module.getFunction(thunkName);
+        if (!thunk)
+        {
+            thunk = LLFunction::Create(
+                isaFunction(irFunc->func->getType()->getContainedType(0)),
+                llvm::GlobalValue::LinkOnceODRLinkage, thunkName,
+                &gIR->module);
+            SET_COMDAT(thunk, gIR->module);
+            thunk->copyAttributesFrom(irFunc->func);
+
+            // Thunks themselves don't have an identity, only the target
+            // function has.
+            thunk->setUnnamedAddr(true);
 
             // create entry and end blocks
             llvm::BasicBlock* beginbb = llvm::BasicBlock::Create(gIR->context(), "", thunk);
-            llvm::BasicBlock* endbb = llvm::BasicBlock::Create(gIR->context(), "endentry", thunk);
-            gIR->scopes.push_back(IRScope(beginbb, endbb));
+            gIR->scopes.push_back(IRScope(beginbb));
 
-            // copy the function parameters, so later we can pass them to the real function
+            // Copy the function parameters, so later we can pass them to the
+            // real function and set their names from the original function (the
+            // latter being just for IR readablilty).
             std::vector<LLValue*> args;
-            llvm::Function::arg_iterator iarg = thunk->arg_begin();
-            for (; iarg != thunk->arg_end(); ++iarg)
-                args.push_back(iarg);
+            llvm::Function::arg_iterator thunkArg = thunk->arg_begin();
+            llvm::Function::arg_iterator origArg = irFunc->func->arg_begin();
+            for (; thunkArg != thunk->arg_end(); ++thunkArg, ++origArg)
+            {
+                thunkArg->setName(origArg->getName());
+                args.push_back(thunkArg);
+            }
 
             // cast 'this' to Object
-            LLValue* &thisArg = args[(irFunc->irFty.arg_sret == 0) ? 0 : 1];
-            LLType* thisType = thisArg->getType();
+            LLValue* &thisArg = args[(!irFunc->irFty.arg_sret || gABI->passThisBeforeSret(irFunc->type)) ? 0 : 1];
+            LLType* targetThisType = thisArg->getType();
             thisArg = DtoBitCast(thisArg, getVoidPtrType());
             thisArg = DtoGEP1(thisArg, DtoConstInt(-b->offset));
-            thisArg = DtoBitCast(thisArg, thisType);
+            thisArg = DtoBitCast(thisArg, targetThisType);
 
             // call the real vtbl function.
-            LLValue *retVal = gIR->ir->CreateCall(fn, args);
+            llvm::CallSite call = gIR->ir->CreateCall(irFunc->func, args);
+            call.setCallingConv(irFunc->func->getCallingConv());
 
             // return from the thunk
             if (thunk->getReturnType() == LLType::getVoidTy(gIR->context()))
                 llvm::ReturnInst::Create(gIR->context(), beginbb);
             else
-                llvm::ReturnInst::Create(gIR->context(), retVal, beginbb);
+                llvm::ReturnInst::Create(gIR->context(), call.getInstruction(), beginbb);
 
             // clean up
             gIR->scopes.pop_back();
-            thunk->getBasicBlockList().pop_back();
-
-            fn = thunk;
         }
 
-        constants.push_back(fn);
+        constants.push_back(thunk);
     }
 
     // build the vtbl constant
@@ -398,14 +407,16 @@ llvm::GlobalVariable * IrAggr::getInterfaceVtbl(BaseClass * b, bool new_instance
     mangledName.append(mangle(b->base));
     mangledName.append("6__vtblZ");
 
+    const LinkageWithCOMDAT lwc = DtoLinkage(cd);
     llvm::GlobalVariable* GV = getOrCreateGlobal(cd->loc,
         gIR->module,
         vtbl_constant->getType(),
         true,
-        DtoLinkage(cd),
+        lwc.first,
         vtbl_constant,
         mangledName
     );
+    if (lwc.second) SET_COMDAT(GV, gIR->module);
 
     // insert into the vtbl map
     interfaceVtblMap.insert(std::make_pair(cb, GV));
@@ -504,7 +515,9 @@ LLConstant * IrAggr::getClassInfoInterfaces()
     // create and apply initializer
     LLConstant* arr = LLConstantArray::get(array_type, constants);
     classInterfacesArray->setInitializer(arr);
-    classInterfacesArray->setLinkage(DtoLinkage(cd));
+    const LinkageWithCOMDAT lwc = DtoLinkage(cd);
+    classInterfacesArray->setLinkage(lwc.first);
+    if (lwc.second) SET_COMDAT(classInterfacesArray, gIR->module);
 
     // return null, only baseclass provide interfaces
     if (cd->vtblInterfaces->dim == 0)

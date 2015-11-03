@@ -28,6 +28,7 @@
 #include "gen/structs.h"
 #include "gen/tollvm.h"
 #include "ir/iraggr.h"
+#include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -117,26 +118,28 @@ void DtoDefineClass(ClassDeclaration* cd) // CALYPSO
         lp->codegen()->toDefineClass(cd);
 
     IrAggr *ir = getIrAggr(cd);
-    llvm::GlobalValue::LinkageTypes const linkage = DtoLinkage(cd);
+    const LinkageWithCOMDAT lwc = DtoLinkage(cd);
 
     llvm::GlobalVariable *initZ = ir->getInitSymbol();
     initZ->setInitializer(ir->getDefaultInit());
-    initZ->setLinkage(linkage);
+    initZ->setLinkage(lwc.first);
+    if (lwc.second) SET_COMDAT(initZ, gIR->module);
 
-    if (!cd->langPlugin()) // CALYPSO FIXME
+    if (!cd->langPlugin()) // CALYPSO HACK FIXME
     {
         llvm::GlobalVariable *vtbl = ir->getVtblSymbol();
         vtbl->setInitializer(ir->getVtblInit());
-        vtbl->setLinkage(linkage);
+        vtbl->setLinkage(lwc.first);
+        if (lwc.second) SET_COMDAT(vtbl, gIR->module);
     }
 
     llvm::GlobalVariable *classZ = ir->getClassInfoSymbol();
     classZ->setInitializer(ir->getClassInfoInit());
-    classZ->setLinkage(linkage);
+    classZ->setLinkage(lwc.first);
+    if (lwc.second) SET_COMDAT(classZ, gIR->module);
 
-    // CALYPSO
     for (auto lp: global.langPlugins)
-        lp->codegen()->emitAdditionalClassSymbols(cd);
+        lp->codegen()->emitAdditionalClassSymbols(cd); // CALYPSO
 
     // No need to do TypeInfo here, it is <name>__classZ for classes in D2.
 }
@@ -202,6 +205,10 @@ DValue* DtoNewClass(Loc& loc, TypeClass* tc, NewExp* newexp)
     // call constructor
     if (newexp->member)
     {
+        // evaluate argprefix
+        if (newexp->argprefix)
+            toElemDtor(newexp->argprefix);
+
         Logger::println("Calling constructor");
         assert(newexp->arguments != NULL);
         DtoResolveFunction(newexp->member);
@@ -215,6 +222,8 @@ DValue* DtoNewClass(Loc& loc, TypeClass* tc, NewExp* newexp)
     // So here, after the ctor call is the most natural place to make the C++ vptrs "mature" to the derived class vptrs
     for (auto *lp: global.langPlugins)
         lp->codegen()->toPostNewClass(loc, tc, result);
+
+    assert(newexp->argprefix == NULL);
 
     // return default constructed class
     return result;
@@ -270,12 +279,9 @@ void DtoFinalizeClass(Loc& loc, LLValue* inst)
 {
     // get runtime function
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_callfinalizer");
-    // build args
-    LLValue* arg[] = {
-        DtoBitCast(inst, fn->getFunctionType()->getParamType(0), ".tmp")
-    };
-    // call
-    gIR->CreateCallOrInvoke(fn, arg, "");
+
+    gIR->CreateCallOrInvoke(fn,
+        DtoBitCast(inst, fn->getFunctionType()->getParamType(0)), "");
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -320,11 +326,22 @@ DValue* DtoCastClass(Loc& loc, DValue* val, Type* _to)
         DImValue im(Type::tsize_t, v);
         return DtoCastInt(loc, &im, _to);
     }
+    // class -> typeof(null)
+    else if (to->ty == Tnull) {
+        IF_LOG Logger::println("to %s", to->toChars());
+        return new DImValue(_to, LLConstant::getNullValue(DtoType(_to)));
+    }
 
     // must be class/interface
     assert(to->ty == Tclass);
     TypeClass* tc = static_cast<TypeClass*>(to);
-    
+
+    if (fc->sym->isCPPclass()) {
+        IF_LOG Logger::println("C++ class/interface, just bitcasting");
+        LLValue* rval = DtoBitCast(val->getRVal(), DtoType(_to));
+        return new DImValue(_to, rval);
+    }
+
     // x -> interface
     if (InterfaceDeclaration* it = tc->sym->isInterfaceDeclaration()) {
         Logger::println("to interface");
@@ -439,38 +456,12 @@ DValue* DtoDynamicCastObject(Loc& loc, DValue* val, Type* _to)
     assert(funcTy->getParamType(1) == cinfo->getType());
 
     // call it
-    LLValue* ret = gIR->CreateCallOrInvoke2(func, obj, cinfo).getInstruction();
+    LLValue* ret = gIR->CreateCallOrInvoke(func, obj, cinfo).getInstruction();
 
     // cast return value
     ret = DtoBitCast(ret, DtoType(_to));
 
     return new DImValue(_to, ret);
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-
-DValue* DtoCastInterfaceToObject(Loc& loc, DValue* val, Type* to)
-{
-    // call:
-    // Object _d_toObject(void* p)
-
-    llvm::Function* func = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_toObject");
-    LLFunctionType* funcTy = func->getFunctionType();
-
-    // void* p
-    LLValue* tmp = val->getRVal();
-    tmp = DtoBitCast(tmp, funcTy->getParamType(0));
-
-    // call it
-    LLValue* ret = gIR->CreateCallOrInvoke(func, tmp).getInstruction();
-
-    // cast return value
-    if (to != NULL)
-        ret = DtoBitCast(ret, DtoType(to));
-    else
-        to = ClassDeclaration::object->type;
-
-    return new DImValue(to, ret);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -499,7 +490,7 @@ DValue* DtoDynamicCastInterface(Loc& loc, DValue* val, Type* _to)
     cinfo = DtoBitCast(cinfo, funcTy->getParamType(1));
 
     // call it
-    LLValue* ret = gIR->CreateCallOrInvoke2(func, ptr, cinfo).getInstruction();
+    LLValue* ret = gIR->CreateCallOrInvoke(func, ptr, cinfo).getInstruction();
 
     // cast return value
     ret = DtoBitCast(ret, DtoType(_to));
@@ -626,56 +617,48 @@ static LLConstant* build_class_dtor(ClassDeclaration* cd)
     return llvm::ConstantExpr::getBitCast(getIrFunc(dtor)->func, getPtrToType(LLType::getInt8Ty(gIR->context())));
 }
 
-//! needs to match object_.d
-struct ClassInfoFlags
+static ClassFlags::Type build_classinfo_flags(ClassDeclaration* cd)
 {
-    enum
-    {
-        isCOMclass = 0x1,
-        noPointers = 0x2,
-        hasOffTi   = 0x4,
-        hasCtor    = 0x8,
-        hasGetMembers = 0x10,
-        hasTypeInfo = 0x20,
-        isAbstract  = 0x40,
-        isCPPclass  = 0x80
-    };
-};
+    // adapted from original dmd code:
+    // toobj.c: ToObjFile::visit(ClassDeclaration*) and ToObjFile::visit(InterfaceDeclaration*)
 
-static unsigned build_classinfo_flags(ClassDeclaration* cd)
-{
-    // adapted from original dmd code
-    unsigned flags = 0;
-    flags |= (unsigned) cd->isCOMclass(); // IUnknown
-    bool hasOffTi = false;
+    ClassFlags::Type flags = ClassFlags::hasOffTi | ClassFlags::hasTypeInfo;
+    if (cd->isInterfaceDeclaration())
+    {
+        if (cd->isCOMinterface()) flags |= ClassFlags::isCOMclass;
+        return flags;
+    }
+
+    if (cd->isCOMclass()) flags |= ClassFlags::isCOMclass;
+    if (cd->isCPPclass()) flags |= ClassFlags::isCPPclass;
+    if (!ClassDeclaration::object->isBaseOf2(cd)) flags |= ClassFlags::isCPPclass; // CALYPSO HACK NOTE: This is checked by the GC, which expects the first member in the vtbl to point to ClassInfo and thus segfaults during destruction, we need to implement a c++ specific destruction
+    flags |= ClassFlags::hasGetMembers;
     if (cd->ctor)
-        flags |= ClassInfoFlags::hasCtor;
-    if (cd->isabstract)
-        flags |= ClassInfoFlags::isAbstract;
-    if (cd->isCPPclass() || !ClassDeclaration::object->isBaseOf2(cd)) // CALYPSO NOTE: This is checked by the GC, which expects the first member in the vtbl to point to ClassInfo and thus segfaults during destruction, we need to implement a c++ specific destruction
-        flags |= ClassInfoFlags::isCPPclass;
+        flags |= ClassFlags::hasCtor;
     for (AggregateDeclaration *ad2 = cd; ad2; ad2 = toAggregateBase(ad2)) // CALYPSO
     {
-        if (!ad2->members)
-            continue;
-        for (size_t i = 0; i < ad2->members->dim; i++)
+        if (ad2->dtor)
         {
-            Dsymbol *sm = static_cast<Dsymbol *>(ad2->members->data[i]);
-            if (sm->isVarDeclaration() && !sm->isVarDeclaration()->isDataseg()) // is this enough?
-                hasOffTi = true;
-            //printf("sm = %s %s\n", sm->kind(), sm->toChars());
-            if (sm->hasPointers())
-                goto L2;
+            flags |= ClassFlags::hasDtor;
+            break;
         }
     }
-    flags |= ClassInfoFlags::noPointers;
-L2:
-    if (hasOffTi)
-        flags |= ClassInfoFlags::hasOffTi;
-
-    // always define the typeinfo field.
-    // why would ever not do this?
-    flags |= ClassInfoFlags::hasTypeInfo;
+    if (cd->isabstract)
+        flags |= ClassFlags::isAbstract;
+    for (AggregateDeclaration *ad2 = cd; ad2; ad2 = toAggregateBase(ad2)) // CALYPSO
+    {
+        if (ad2->members)
+        {
+            for (size_t i = 0; i < ad2->members->dim; i++)
+            {
+                Dsymbol *sm = (*ad2->members)[i];
+                //printf("sm = %s %s\n", sm->kind(), sm->toChars());
+                if (sm->hasPointers())
+                    return flags;
+            }
+        }
+    }
+    flags |= ClassFlags::noPointers;
 
     return flags;
 }
@@ -683,21 +666,22 @@ L2:
 LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
 {
 //     The layout is:
-//        {
+//       {
 //         void **vptr;
 //         monitor_t monitor;
-//         byte[] initializer;     // static initialization data
-//         char[] name;        // class name
-//         void *[] vtbl;
+//         byte[] init;
+//         string name;
+//         void*[] vtbl;
 //         Interface[] interfaces;
-//         ClassInfo *base;        // base class
+//         TypeInfo_Class base;
 //         void *destructor;
-//         void *invariant;        // class invariant
-//         uint flags;
-//         void *deallocator;
-//         OffsetTypeInfo[] offTi;
-//         void *defaultConstructor;
+//         void function(Object) classInvariant;
+//         ClassFlags m_flags;
+//         void* deallocator;
+//         OffsetTypeInfo[] m_offTi;
+//         void function(Object) defaultConstructor;
 //         immutable(void)* m_RTInfo;
+//       }
 
     IF_LOG Logger::println("DtoDefineClassInfo(%s)", cd->toChars());
     LOG_SCOPE;
@@ -709,7 +693,8 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
 
     if (cinfo->fields.dim != 12)
     {
-        error(Loc(), "object.d ClassInfo class is incorrect");
+        error(Loc(), "Unexpected number of fields in object.ClassInfo; "
+            "druntime version does not match compiler (see -v)");
         fatal();
     }
 
@@ -721,7 +706,8 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
     LLType* voidPtr = getVoidPtrType();
     LLType* voidPtrPtr = getPtrToType(voidPtr);
 
-    // byte[] init
+    // adapted from original dmd code
+    // init[]
     if (cd->isInterfaceDeclaration())
     {
         b.push_null_void_array();
@@ -732,8 +718,7 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
         b.push_void_array(initsz, ir->getInitSymbol());
     }
 
-    // class name
-    // code from dmd
+    // name[]
     const char *name = cd->ident->toChars();
     size_t namelen = strlen(name);
     if (!(namelen > 9 && memcmp(name, "TypeInfo_", 9) == 0))
@@ -743,7 +728,7 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
     }
     b.push_string(name);
 
-    // vtbl array
+    // vtbl[]
     if (cd->isInterfaceDeclaration() || cd->langPlugin()) // CALYPSO FIXME TEMP
     {
         b.push_array(0, getNullValue(voidPtrPtr));
@@ -754,11 +739,11 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
         b.push_array(cd->vtbl.dim, c);
     }
 
-    // interfaces array
+    // interfaces[]
     b.push(ir->getClassInfoInterfaces());
 
-    // base classinfo
-    // interfaces never get a base , just the interfaces[]
+    // base
+    // interfaces never get a base, just the interfaces[]
     if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) // CALYPSO
         b.push_classinfo(static_cast<ClassDeclaration*>(cd->baseClass));
     else
@@ -771,46 +756,40 @@ LLConstant* DtoDefineClassInfo(ClassDeclaration* cd)
         b.push(build_class_dtor(cd));
 
     // invariant
-    VarDeclaration* invVar = static_cast<VarDeclaration*>(cinfo->fields.data[6]);
+    VarDeclaration* invVar = cinfo->fields[6];
     b.push_funcptr(cd->inv, invVar->type);
 
-    // uint flags
-    unsigned flags;
-    if (cd->isInterfaceDeclaration())
-        flags = ClassInfoFlags::hasOffTi | (unsigned) cd->isCOMinterface() | ClassInfoFlags::hasTypeInfo;
-    else
-        flags = build_classinfo_flags(cd);
+    // flags
+    ClassFlags::Type flags = build_classinfo_flags(cd);
     b.push_uint(flags);
 
     // deallocator
     b.push_funcptr(cd->aggDelete, Type::tvoid->pointerTo());
 
     // offset typeinfo
-    VarDeclaration* offTiVar = static_cast<VarDeclaration*>(cinfo->fields.data[9]);
-
+    VarDeclaration* offTiVar = cinfo->fields[9];
 #if GENERATE_OFFTI
-
     if (cd->isInterfaceDeclaration())
         b.push_null(offTiVar->type);
     else
         b.push(build_offti_array(cd, DtoType(offTiVar->type)));
-
-#else // GENERATE_OFFTI
-
+#else
     b.push_null(offTiVar->type);
+#endif
 
-#endif // GENERATE_OFFTI
+    // defaultConstructor
+    VarDeclaration* defConstructorVar = cinfo->fields.data[10];
+    CtorDeclaration* defConstructor = cd->defaultCtor;
+    if (defConstructor && (defConstructor->storage_class & STCdisable))
+        defConstructor = NULL;
+    b.push_funcptr(defConstructor, defConstructorVar->type);
 
-    // default constructor
-    VarDeclaration* defConstructorVar = static_cast<VarDeclaration*>(cinfo->fields.data[10]);
-    b.push_funcptr(cd->defaultCtor, defConstructorVar->type);
-
-    // immutable(void)* m_RTInfo;
+    // m_RTInfo
     // The cases where getRTInfo is null are not quite here, but the code is
     // modelled after what DMD does.
     if (cd->getRTInfo)
         b.push(toConstElem(cd->getRTInfo, gIR));
-    else if (flags & ClassInfoFlags::noPointers)
+    else if (flags & ClassFlags::noPointers)
         b.push_size_as_vp(0);       // no pointers
     else
         b.push_size_as_vp(1);       // has pointers

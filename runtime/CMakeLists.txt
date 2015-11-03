@@ -13,10 +13,10 @@ set(BUILD_BC_LIBS         OFF                                       CACHE BOOL  
 set(INCLUDE_INSTALL_DIR   ${CMAKE_INSTALL_PREFIX}/include/d         CACHE PATH    "Path to install D modules to")
 set(BUILD_SHARED_LIBS     OFF                                       CACHE BOOL    "Whether to build the runtime as a shared library")
 set(D_FLAGS               -w;-d                                     CACHE STRING  "Runtime build flags, separated by ;")
-set(D_FLAGS_DEBUG         -g                                        CACHE STRING  "Runtime build flags (debug libraries), separated by ;")
+set(D_FLAGS_DEBUG         -g;-link-debuglib                         CACHE STRING  "Runtime build flags (debug libraries), separated by ;")
 set(D_FLAGS_RELEASE       -O3;-release                              CACHE STRING  "Runtime build flags (release libraries), separated by ;")
 if(MSVC)
-    set(LINK_WITH_MSVCRT  OFF                                       CACHE BOOL    "Link with MSVCRT.LIB instead of LIBCMT.LIB")
+    set(LINK_WITH_MSVCRT  ON                                        CACHE BOOL    "Link with MSVCRT.lib (DLL) instead of LIBCMT.lib (static)")
 endif()
 
 # Note: In the below building helpers, this is more fittingly called
@@ -45,7 +45,6 @@ if(BUILD_SHARED_LIBS)
     set(D_LIBRARY_TYPE SHARED)
 else()
     set(D_LIBRARY_TYPE STATIC)
-    set(CXX_COMPILE_FLAGS " ")
 endif()
 
 get_directory_property(PROJECT_PARENT_DIR DIRECTORY ${PROJECT_SOURCE_DIR} PARENT_DIRECTORY)
@@ -110,8 +109,8 @@ if(UNIX)
     if(APPLE)
         list(APPEND CORE_D_SYS ${CORE_D_OSX})
     endif()
-    list(REMOVE_ITEM LDC_D ${RUNTIME_DIR}/src/ldc/eh2.d)
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc.c)
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
 
     # Using CMAKE_SYSTEM_PROCESSOR might be inacurrate when somebody is
     # cross-compiling by just setting the tool executbles to a cross toolchain,
@@ -119,30 +118,25 @@ if(UNIX)
     list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/arm_unwind.c)
 elseif(WIN32)
     list(APPEND CORE_D_SYS ${CORE_D_WIN})
-    if (MSVC)
-        list(REMOVE_ITEM LDC_D ${RUNTIME_DIR}/src/ldc/eh.d)
-    else()
-        list(REMOVE_ITEM LDC_D ${RUNTIME_DIR}/src/ldc/eh2.d)
-    endif()
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/monitor.c)
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/bss_section.c)
+    if(NOT MSVC)
+        list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
+    endif()
 endif()
 list(APPEND CORE_D ${CORE_D_INTERNAL} ${CORE_D_SYNC} ${CORE_D_SYS} ${CORE_D_STDC})
 list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object_.d)
 file(GLOB CORE_C ${RUNTIME_DIR}/src/core/stdc/*.c)
 
 if(PHOBOS2_DIR)
-    if(BUILD_SHARED_LIBS)
-        # std.net.curl depends on libcurl – when building a shared library, we
-        # need to take care of that.
-        find_package(CURL REQUIRED)
-    endif()
-
     file(GLOB PHOBOS2_D ${PHOBOS2_DIR}/std/*.d)
+    file(GLOB PHOBOS2_D_ALGORITHM ${PHOBOS2_DIR}/std/algorithm/*.d)
     file(GLOB PHOBOS2_D_CONTAINER ${PHOBOS2_DIR}/std/container/*.d)
     file(GLOB PHOBOS2_D_DIGEST ${PHOBOS2_DIR}/std/digest/*.d)
-    file(GLOB PHOBOS2_D_EXPERIMENTAL ${PHOBOS2_DIR}/std/experimental/*.d)
+    file(GLOB_RECURSE PHOBOS2_D_EXPERIMENTAL ${PHOBOS2_DIR}/std/experimental/*.d)
     file(GLOB PHOBOS2_D_NET ${PHOBOS2_DIR}/std/net/*.d)
+    file(GLOB PHOBOS2_D_RANGE ${PHOBOS2_DIR}/std/range/*.d)
+    file(GLOB_RECURSE PHOBOS2_D_REGEX ${PHOBOS2_DIR}/std/regex/*.d)
     file(GLOB_RECURSE PHOBOS2_D_INTERNAL ${PHOBOS2_DIR}/std/internal/*.d)
     file(GLOB PHOBOS2_D_C ${PHOBOS2_DIR}/std/c/*.d)
     file(GLOB PHOBOS2_ETC ${PHOBOS2_DIR}/etc/c/*.d)
@@ -165,10 +159,13 @@ if(PHOBOS2_DIR)
         file(GLOB PHOBOS2_D_WIN ${PHOBOS2_DIR}/std/windows/*.d)
     endif()
     list(APPEND PHOBOS2_D
+            ${PHOBOS2_D_ALGORITHM}
             ${PHOBOS2_D_CONTAINER}
             ${PHOBOS2_D_DIGEST}
             ${PHOBOS2_D_EXPERIMENTAL}
             ${PHOBOS2_D_NET}
+            ${PHOBOS2_D_RANGE}
+            ${PHOBOS2_D_REGEX}
             ${PHOBOS2_D_INTERNAL}
             ${PHOBOS2_D_WIN}
             ${PHOBOS2_D_C}
@@ -194,10 +191,10 @@ endif()
 #
 # Create configuration files.
 #
-if(MSVC)
-    set(LIB_PATH "\"-L-L${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/${CMAKE_BUILD_TYPE}\",")
-else()
-    set(LIB_PATH "\"-L-L${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}\",")
+
+# Add a lib required by VS 2015+ when building LDC with VS 2015+.
+if(MSVC AND (MSVC_VERSION GREATER 1800))
+    set(ADDITIONAL_DEFAULT_LDC_SWITCHES ",\n        \"-Llegacy_stdio_definitions.lib\"")
 endif()
 
 # Add extra paths on Linux and disable linker arch mismatch warnings (like
@@ -226,41 +223,31 @@ add_custom_command(
     COMMAND gen_gccbuiltins ${GCCBUILTINS} "x86"
 )
 
-if(MSVC)
-    if(NOT LINK_WITH_MSVCRT)
-        set(variables
-            CMAKE_C_FLAGS_DEBUG
-            CMAKE_C_FLAGS_MINSIZEREL
-            CMAKE_C_FLAGS_RELEASE
-            CMAKE_C_FLAGS_RELWITHDEBINFO
-            CMAKE_CXX_FLAGS_DEBUG
-            CMAKE_CXX_FLAGS_MINSIZEREL
-            CMAKE_CXX_FLAGS_RELEASE
-            CMAKE_CXX_FLAGS_RELWITHDEBINFO
-        )
-        foreach(variable ${variables})
-          if(${variable} MATCHES "/MT")
-            string(REGEX REPLACE "/MT" "/MD" ${variable} "${${variable}}")
-          endif()
-        endforeach()
-    endif()
-    # /wd4996: suppress deprecation warnings about zlib using POSIX names
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4996")
-    set(CMAKE_C_FLAGS_DEBUG "")
-endif()
-
 # Always build zlib and other C parts of the runtime in release mode, regardless
 # of what the user chose for LDC itself.
-set(cfiles "${CORE_C};${DCRT_C}")
-if(PHOBOS2_DIR)
-    list(APPEND cfiles "${ZLIB_C}")
+# 1) Set up CMAKE_C_FLAGS_RELEASE
+if(MSVC)
+    if(NOT LINK_WITH_MSVCRT)
+        string(REGEX REPLACE "(^| )[/-]MD( |$)" "\\2" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+        if(NOT CMAKE_C_FLAGS_RELEASE MATCHES "(^| )[/-]MT( |$)")
+            append("/MT" CMAKE_C_FLAGS_RELEASE)
+        endif()
+    endif()
+    # warning C4996: zlib uses 'deprecated' POSIX names
+    append("/wd4996" CMAKE_C_FLAGS_RELEASE)
 endif()
-set_source_files_properties(${cfiles} PROPERTIES
-    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}"
+# 2) Set all other CMAKE_C_FLAGS variants to CMAKE_C_FLAGS_RELEASE
+set(variables
+    CMAKE_C_FLAGS_DEBUG
+    CMAKE_C_FLAGS_MINSIZEREL
+    CMAKE_C_FLAGS_RELWITHDEBINFO
 )
+foreach(variable ${variables})
+    set(${variable} "${CMAKE_C_FLAGS_RELEASE}")
+endforeach()
 
 # Compiles the given D module into an object file, and if enabled, a bitcode
-# file. The ouput is written to a path based on output_dir. The paths of the
+# file. The output is written to a path based on output_dir. The paths of the
 # output files are appended to outlist_o and outlist_bc, respectively.
 macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
     file(RELATIVE_PATH output ${output_dir} ${input_d})
@@ -455,7 +442,7 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
             # TODO: As for druntime, adapt once shared libraries are supported
             # on more operating systems.
             target_link_libraries(phobos2-ldc${target_suffix}
-                druntime-ldc${target_suffix} "curl" "m" "pthread" "dl")
+                druntime-ldc${target_suffix} "m" "pthread" "dl")
         endif()
 
         list(APPEND ${outlist_targets} "phobos2-ldc${target_suffix}")
@@ -729,7 +716,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
                 COMMAND ${LDC_EXE}
                     -of${PROJECT_BINARY_DIR}/phobos2-test-runner${name_suffix}${CMAKE_EXECUTABLE_SUFFIX}
                     -defaultlib=druntime-ldc,${phobos2-casm} -debuglib=druntime-ldc,${phobos2-casm}
-                    -singleobj -L-lcurl ${flags} ${phobos2_o} ${RUNTIME_DIR}/src/test_runner.d
+                    -singleobj ${flags} ${phobos2_o} ${RUNTIME_DIR}/src/test_runner.d
             )
             set_tests_properties(build-phobos2-test-runner${name_suffix} PROPERTIES
                 DEPENDS build-phobos2-ldc-unittest${name_suffix}
@@ -807,7 +794,7 @@ if(BUILD_SHARED_LIBS)
     add_test(NAME druntime-test-shared
         COMMAND make -C ${PROJECT_SOURCE_DIR}/druntime/test/shared
             ROOT=${outdir} DMD=${ldmd_path} MODEL=default DRUNTIMESO=${druntime_path}
-            CFLAGS=-Wall\ -Wl,-rpath,${CMAKE_BINARY_DIR}/lib
+            CFLAGS=-Wall\ -Wl,-rpath,${CMAKE_BINARY_DIR}/lib LINKDL=-L-ldl
     )
     set_tests_properties(druntime-test-shared PROPERTIES DEPENDS clean-druntime-test-shared)
 endif()
