@@ -171,6 +171,21 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     if (!D->isCanonicalDecl())
         return nullptr;
 
+    // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
+    // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
+    // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
+    // they get mapped only once.
+    if (!(flags & MapExplicitSpecs))
+    {
+        if (isa<clang::ClassTemplateSpecializationDecl>(D))
+            return nullptr;
+
+        if (auto FD = dyn_cast<clang::FunctionDecl>(D))
+            if (FD->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
+                        FD->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
+                return nullptr;
+    }
+
     Dsymbols *s = nullptr;
 
 #define DECL(BASE) \
@@ -851,10 +866,13 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     if (!id)
         return nullptr; // TODO: map unsupported overloaded operators
 
+    auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
+    auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D);
+
     auto Def = D;
-    if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
+    if (CTD)
         Def = getDefinition(CTD);
-    else if (auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D))
+    else if (FTD)
         Def = getDefinition(FTD);
 
     auto tpl = initTempParams(loc, spec);
@@ -891,8 +909,33 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     TempParamScope.pop_back();
 
-    auto a = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    return oneSymbol(a);
+    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+
+    auto a = new Dsymbols;
+    a->push(td);
+
+    // Append explicit and partial specializations to the returned symbols as well
+    if (CTD)
+    {
+        llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
+        const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
+
+        for (auto Spec: CTD->specializations())
+            if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+                a->append(sp);
+
+        for (auto PartialSpec: PS)
+            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                a->append(sp);
+    }
+    else if (FTD)
+    {
+        for (auto Spec: FTD->specializations())
+            if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+                a->append(sp);
+    }
+
+    return a;
 }
 
 Identifier *DeclMapper::getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *T)
@@ -1596,21 +1639,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
 
         if (auto s = mapper.VisitDecl(D, DeclMapper::MapImplicit))
             m->members->append(s);
-
-        // Special case for class template, we need to add explicit specializations to the module as well
-        if (CTD)
-        {
-            llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
-            CTD->getPartialSpecializations(PS);
-
-            for (auto PartialSpec: PS)
-                if (auto s = mapper.VisitDecl(PartialSpec->getCanonicalDecl()))
-                    m->members->append(s);
-
-            for (auto Spec: CTD->specializations())
-                if (auto s = mapper.VisitDecl(Spec->getCanonicalDecl()))
-                    m->members->append(s);
-        }
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
         for (int Op = 1; Op < clang::NUM_OVERLOADED_OPERATORS; Op++)

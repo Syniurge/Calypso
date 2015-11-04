@@ -185,6 +185,7 @@ public:
     static const unsigned ForceNonPOD = 1 << 0; // When a templace declaration is non-POD, we want the explicit template specializations to be non-POD too even if isPOD() is true
     static const unsigned MapImplicit = 1 << 1;
     static const unsigned NamedValueWithAnonRecord = 1 << 2; // Only set when called from VisitValueDecl for e.g union {...} myUnion
+    static const unsigned MapExplicitSpecs = 1 << 3; // If not set explicit and partial specs will be discarded by VisitDecl
 
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };
