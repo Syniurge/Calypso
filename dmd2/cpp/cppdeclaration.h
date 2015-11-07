@@ -155,12 +155,9 @@ bool isMapped(const clang::Decl *D);
 
 class DeclMapper : public TypeMapper
 {
-protected:
-    bool instantiating;
-
 public:
-    DeclMapper(Module *mod, bool instantiating = false)
-        : TypeMapper(mod), instantiating(instantiating) {} // hmm why does putting into .cpp give me a link error?
+    DeclMapper(Module *mod)
+        : TypeMapper(mod) {} // hmm why does putting into .cpp give me a link error?
 
     inline Prot toProt(clang::AccessSpecifier AS);
 
@@ -172,7 +169,7 @@ public:
     Dsymbols *VisitValueDecl(const clang::ValueDecl *D);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
     Dsymbols *VisitTypedefNameDecl(const clang::TypedefNameDecl *D);
-    Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D);
+    Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
     Dsymbols *VisitRedeclarableTemplateDecl(const clang::RedeclarableTemplateDecl* D);
     Dsymbols *VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D);
     Dsymbols *VisitEnumDecl(const clang::EnumDecl *D);
@@ -183,9 +180,10 @@ public:
                                                                     const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
     static const unsigned ForceNonPOD = 1 << 0; // When a templace declaration is non-POD, we want the explicit template specializations to be non-POD too even if isPOD() is true
-    static const unsigned MapImplicit = 1 << 1;
-    static const unsigned NamedValueWithAnonRecord = 1 << 2; // Only set when called from VisitValueDecl for e.g union {...} myUnion
+    static const unsigned MapImplicitRecords = 1 << 1;
+    static const unsigned MapTemplateInstantiations = 1 << 2;
     static const unsigned MapExplicitSpecs = 1 << 3; // If not set explicit and partial specs will be discarded by VisitDecl
+    static const unsigned NamedValueWithAnonRecord = 1 << 4; // Only set when called from VisitValueDecl for e.g union {...} myUnion
 
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };

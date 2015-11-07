@@ -201,7 +201,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     DECL(TypedefName)
     DECL(ClassTemplateSpecialization)
     DECLWF(Record)
-    DECL(Function)
+    DECLWF(Function)
     DECL(RedeclarableTemplate)
     DECL(Enum)
     DECL(Value)
@@ -331,7 +331,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     auto& S = calypso.pch.AST->getSema();
     auto Canon = D->getCanonicalDecl();
 
-    if (D->isImplicit() && !(flags & MapImplicit))
+    if (D->isImplicit() && !(flags & MapImplicitRecords))
         return nullptr;
 
     auto decldefs = new Dsymbols;
@@ -492,7 +492,8 @@ Ldeclaration:
     // see friend QString::operator==(const QString &s1, const QString &s2);
     // NOTE: should be after because ClassDeclaration::semantic() expects decldefs[0] to be the record
     typedef clang::DeclContext::specific_decl_iterator<clang::FriendDecl> Friend_iterator;
-    if (!instantiating) // if we're in an implicit instantiation, no need to remap the out-of-line specializations which have their own template mapped with the class template
+    auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
+    if (!CTSD || !CTSD->getSpecializationKind() != clang::TSK_ImplicitInstantiation) // if we're in an implicit instantiation, no need to remap the out-of-line specializations which have their own template mapped with the class template
     {
         for (Friend_iterator I(D->decls_begin()), E(D->decls_end());
                     I != E; I++)
@@ -690,14 +691,15 @@ bool isMapped(const clang::Decl *D) // TODO
     return true;
 }
 
-Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D)
+Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     auto& S = calypso.pch.AST->getSema();
 
     if (!isMapped(D))
         return nullptr;
 
-    if (!instantiating && D->isTemplateInstantiation())
+    if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
+            D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
         return nullptr;
 
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
@@ -1089,22 +1091,20 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 {
     assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
 
-    instantiating = true; // FIXME redundant with the DeclMapper ctor
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
     pushTempParamList(D);
 
-    auto a = VisitRecordDecl(D, flags);
+    auto a = VisitRecordDecl(D, flags | MapExplicitSpecs | MapTemplateInstantiations);
     assert(a->dim);
     return (*a)[0];
 }
 
 ::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
 {
-    instantiating = true;
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
     pushTempParamList(D);
 
-    auto a = VisitFunctionDecl(D);
+    auto a = VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations);
     assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
     return static_cast<::FuncDeclaration*>((*a)[0]);
 }
@@ -1637,7 +1637,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         else
             m->rootKey.first = D;
 
-        if (auto s = mapper.VisitDecl(D, DeclMapper::MapImplicit))
+        if (auto s = mapper.VisitDecl(D, DeclMapper::MapImplicitRecords))
             m->members->append(s);
 
         // Add the non-member overloaded operators that are meant to work with this record/enum

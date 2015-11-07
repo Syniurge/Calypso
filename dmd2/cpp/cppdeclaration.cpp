@@ -218,7 +218,7 @@ void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
         auto Inst = cast<clang::FunctionDecl>(c_ti->Inst);
 
         assert(isCPP(sc->module));
-        DeclMapper m(static_cast<cpp::Module*>(sc->module), true);
+        DeclMapper m(static_cast<cpp::Module*>(sc->module));
         m.addImplicitDecls = false;
 
         auto inst = m.VisitInstancedFunctionTemplate(Inst);
