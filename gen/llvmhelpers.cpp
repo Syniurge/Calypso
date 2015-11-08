@@ -996,8 +996,11 @@ void DtoVarDeclaration(VarDeclaration* vd)
 
                 if (rhs->op == TOKcall) {
                     if (auto ad = getAggregateSym(vdBasetype)) // CALYPSO
-                        if (auto lp = ad->langPlugin())
-                            return lp->codegen()->toConstructVar(vd, irLocal->value, rhs);
+                    {
+                        auto lp = ad->langPlugin();
+                        if (lp && lp->codegen()->toConstructVar(vd, irLocal->value, rhs))
+                            return;
+                    }
 
                     CallExp *ce = static_cast<CallExp *>(rhs);
                     if (DtoIsReturnInArg(ce))

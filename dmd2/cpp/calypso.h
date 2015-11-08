@@ -176,7 +176,7 @@ public:
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                    Expressions* arguments, llvm::Value *retvar) override;
 
-    void toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
+    bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 
     LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;

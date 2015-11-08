@@ -44,7 +44,7 @@ public:
     virtual DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                    Expressions* arguments, llvm::Value *retvar) = 0;
 
-    virtual void toConstructVar(VarDeclaration *vd, llvm::Value *value, Expression *rhs) = 0;
+    virtual bool toConstructVar(VarDeclaration *vd, llvm::Value *value, Expression *rhs) = 0;
 
     virtual LLValue* toIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaration* vd) = 0;
     virtual void addBaseClassData(AggrTypeBuilder &builder, AggregateDeclaration *base) = 0;

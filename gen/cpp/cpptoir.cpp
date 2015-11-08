@@ -754,20 +754,48 @@ void LangPlugin::toDefineVariable(::VarDeclaration* vd)
 }
 
 // Handle ConstructExp initializers of struct and class vars
-void LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs)
+bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs)
 {
     // As RHS we expect either EmptyStructLiteral.this(...) for structs or null.this(...) where null is the same type as vd for classes
     // Only what's beyond the dot matters.
+    // But first we must check if rhs really is such an empty literal or temporary created for the ctor call
     assert(isCPP(getAggregateSym(vd->type->toBasetype())));
     assert(rhs->op == TOKcall);
 
     auto ce = static_cast<CallExp*>(rhs);
+
+    Expression *thisexp;
+    if (ce->e1->op == TOKdotvar || ce->e1->op == TOKdottd)
+        thisexp = static_cast<UnaExp*>(ce->e1)->e1;
+    else if (ce->e1->op == TOKdotexp)
+        thisexp = static_cast<BinExp*>(ce->e1)->e1;
+    else
+        return false;
+
+    if (thisexp->op == TOKcomma)
+    {
+        thisexp = static_cast<CommaExp*>(thisexp)->e2;
+        if (thisexp->op != TOKvar)
+            return false;
+
+        auto vthis = static_cast<VarExp*>(thisexp)->var;
+        if (!(vthis->storage_class & STCtemp))
+            return false;
+    }
+    else if (thisexp->op == TOKstructliteral)
+    {
+        return false; // TODO?
+    }
+    else
+        return false;
+
     DValue* fnval = toElem(ce->e1);
     auto dfnval = fnval->isFunc();
     assert(dfnval && isCPP(dfnval->func));
 
     dfnval->vthis = value;
     DtoCallFunction(ce->loc, ce->type, dfnval, ce->arguments);
+    return true;
 }
 
 void toDefaultInitVar(LLValue *vt, ::VarDeclaration *vd);
