@@ -1032,7 +1032,7 @@ void DtoVarDeclaration(VarDeclaration* vd)
         if (ExpInitializer* ex = vd->init->isExpInitializer())
         {
             // CALYPSO HACK FIXME remove when temporaries from CallExp(TypeExp) get replaced by NullExp
-            if (ex->exp->op == TOKconstruct)
+            if ((vd->storage_class & STCtemp) && ex->exp->op == TOKconstruct)
                 if (static_cast<AssignExp*>(ex->exp)->e2->op == TOKnull)
                     return;
 
