@@ -168,7 +168,7 @@ Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
 
 Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 {
-    if (!D->isCanonicalDecl())
+    if (D != getCanonicalDecl(D))
         return nullptr;
 
     // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
@@ -901,7 +901,7 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
         tpl->push(tp);
     }
 
-    auto s = VisitDecl(Def->getTemplatedDecl()->getCanonicalDecl());
+    auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()));
 
     if (!s)
         return nullptr;
@@ -933,7 +933,7 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     else if (FTD)
     {
         for (auto Spec: FTD->specializations())
-            if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
                 a->append(sp);
     }
 
@@ -1653,7 +1653,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
 
                 for (auto OverOp: Ctx->lookup(OpName))
                     if (isOverloadedOperatorWithTagOperand(OverOp, D))
-                        if (auto s = mapper.VisitDecl(OverOp->getCanonicalDecl()))
+                        if (auto s = mapper.VisitDecl(getCanonicalDecl(OverOp)))
                             m->members->append(s);
             }
         }

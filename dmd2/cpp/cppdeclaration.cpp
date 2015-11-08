@@ -308,7 +308,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     if (Func && Func->getPrimaryTemplate())
-        D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func)->getCanonicalDecl());
+        D = cast<clang::NamedDecl>(getCanonicalDecl(getSpecializedDeclOrExplicit(Func)));
 
     // HACK FIXME
     if (Func && Func->isOutOfLine() &&
@@ -358,7 +358,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
                 decltype(D) s_D = fd ? getFD(fd) : td->TempOrSpec;
 
-                if (p->D == s_D->getCanonicalDecl())
+                if (p->D == getCanonicalDecl(s_D))
                 {
                     p->s = s;
                     return 1;
@@ -521,6 +521,25 @@ const clang::FunctionDecl *getFD(::FuncDeclaration *f)
         return static_cast<DtorDeclaration*>(f)->CDD;
     else
         return static_cast<FuncDeclaration*>(f)->FD;
+}
+
+const clang::Decl *getCanonicalDecl(const clang::Decl *D)
+{
+    D = D->getCanonicalDecl();
+
+    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine() &&
+            isa<clang::FunctionDecl>(D))
+    {
+        auto FD = cast<clang::FunctionDecl>(D);
+
+        // if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, prefer the latter to the former
+        // to ensure that it ends up in the proper module, not the friend decl parent's module
+        for (auto Redecl: FD->redecls())
+            if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
+                return Redecl;
+    }
+
+    return D;
 }
 
 }

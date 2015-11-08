@@ -223,6 +223,8 @@ public:
 extern DeclReferencer declReferencer;
 Scope *globalScope(::Module *m);
 
+const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
+
 }
 
 #endif /* DMD_CPP_CPPDECLARATION_H */

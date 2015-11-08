@@ -451,7 +451,7 @@ const char *LangPlugin::mangle(Dsymbol *s)
 
     auto ND = cast<clang::NamedDecl>(getDecl(s));
 
-    auto &FoundStr = MangledDeclNames[ND->getCanonicalDecl()];
+    auto &FoundStr = MangledDeclNames[getCanonicalDecl(ND)];
     if (!FoundStr.empty())
         return FoundStr.c_str();
 

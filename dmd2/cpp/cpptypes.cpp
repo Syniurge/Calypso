@@ -1808,7 +1808,7 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
 
 Module::RootKey TypeMapper::GetImplicitImportKeyForDecl(const clang::NamedDecl* D)
 {
-    D = cast<clang::NamedDecl>(D->getCanonicalDecl());
+    D = cast<clang::NamedDecl>(getCanonicalDecl(D));
 
     if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine() &&
             isa<clang::FunctionDecl>(D))
@@ -2142,7 +2142,7 @@ template <typename RedeclTempDecl>
         if (auto MemberDef = getDefinition(MemberTemp))
             return MemberDef;
 
-    return D->getCanonicalDecl();
+    return cast<RedeclTempDecl>(getCanonicalDecl(D));
 }
 
 const clang::ClassTemplateDecl *getDefinition(const clang::ClassTemplateDecl *D)
