@@ -96,7 +96,8 @@ void Module::buildTargetFiles(bool singleObj, bool library)
         return;
 
     if (!objfile) {
-        const char *objname = library ? 0 : global.params.objname;
+        // CALYPSO HACK FIXME
+        const char *objname = (library || langPlugin()) ? 0 : global.params.objname;
         if (global.params.output_o)
             objfile = Module::buildFilePath(objname, global.params.objdir,
                 global.params.targetTriple.isOSWindows() ? global.obj_ext_alt : global.obj_ext);
