@@ -12,9 +12,6 @@
 #include "cpp/calypso.h"
 #include "cpp/cpptypes.h"
 
-// NOTE: We're focusing on literal expressions, since expression conversion
-// is needed for default function and template args.
-
 namespace llvm
 {
 class APSInt;
