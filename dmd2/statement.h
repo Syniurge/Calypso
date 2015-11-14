@@ -657,8 +657,10 @@ public:
     bool internalCatch;
 
     Catch(Loc loc, Type *t, Identifier *id, Statement *handler);
-    Catch *syntaxCopy();
+    virtual Catch *syntaxCopy(); // CALYPSO
     void semantic(Scope *sc);
+    virtual bool onlyCatchThrowable() { return true; }  // CALYPSO
+    virtual LangPlugin *langPlugin() { return NULL; }
 };
 
 class TryFinallyStatement : public Statement

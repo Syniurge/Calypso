@@ -129,6 +129,10 @@ public:
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) override;
 
+    bool doesHandleCatch(LINK lang) override;
+    ::Catch *createCatch(Loc loc, Type *t,
+                            Identifier *id, Statement *handler) override;
+
     const char *mangle(Dsymbol *s) override;
     Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
@@ -186,6 +190,10 @@ public:
     void toPreInitClass(TypeClass* tc, LLValue* dst) override;
     void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;
 
+    void toBeginCatch(IRState *irs, ::Catch *cj) override;
+    void toEndCatch(IRState *irs, ::Catch *cj) override;
+    llvm::Constant *toCatchScopeType(IRState *irs, Type *t) override;
+
     void EmitInternalDeclsForFields(const clang::RecordDecl *RD);
          
     // ==== ==== ====
@@ -194,6 +202,9 @@ public:
 
     BuiltinTypes &builtinTypes;
     DeclReferencer &declReferencer;
+
+    ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
+    std::map<llvm::Constant*, llvm::GlobalVariable*> type_infoWrappers; // FIXME put into module state with the CodeGenModule
 
     std::string executablePath; // from argv[0] to locate Clang builtin headers
 

@@ -582,7 +582,10 @@ int Statement::blockExit(FuncDeclaration *func, bool mustNotThrow)
 
                 /* If we're catching Object, then there is no throwing
                  */
-                Identifier *id = c->type->toBasetype()->isClassHandle()->ident;
+                Identifier *id = NULL;
+                ClassDeclaration *cd = c->type->toBasetype()->isClassHandle(); // CALYPSO
+                if (cd && !cd->langPlugin())
+                    id = cd->ident;
                 if (c->internalCatch && (cresult & BEfallthru))
                 {
                     // Bugzilla 11542: leave blockExit flags of the body
@@ -4619,6 +4622,9 @@ void Catch::semantic(Scope *sc)
         type = tid;
     }
     type = type->semantic(loc, sc);
+
+    if (onlyCatchThrowable()) // CALYPSO
+    {
     ClassDeclaration *cd = type->toBasetype()->isClassHandle();
     if (!cd || ((cd != ClassDeclaration::throwable) && !ClassDeclaration::throwable->isBaseOf(cd, NULL)))
     {
@@ -4638,7 +4644,9 @@ void Catch::semantic(Scope *sc)
         error(loc, "can only catch class objects derived from Exception in @safe code, not '%s'", type->toChars());
         type = Type::terror;
     }
-    else if (ident)
+    }
+
+    if (ident)
     {
         var = new VarDeclaration(loc, type, ident, NULL);
         var->semantic(sc);

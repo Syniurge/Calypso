@@ -1306,7 +1306,8 @@ LINK Parser::parseLinkage(Identifiers **pidents)
         link = LINKd;           // default
     }
     check(TOKrparen);
-    *pidents = idents;
+    if (pidents) // CALYPSO
+        *pidents = idents;
     return link;
 }
 
@@ -5440,21 +5441,45 @@ Statement *Parser::parseStatement(int flags, const utf8_t** endPtr, Loc *pEndloc
                 Identifier *id;
                 Loc catchloc = token.loc;
 
-                nextToken();
-                if (token.value == TOKlcurly || token.value != TOKlparen)
+                LangPlugin *langPlugin = NULL; // CALYPSO
+
+                Token *tk = peek(&token);
+                if (tk->value == TOKlcurly || tk->value != TOKlparen)
                 {
+                    nextToken();
                     t = NULL;
                     id = NULL;
                 }
                 else
                 {
+                    if (tk->value == TOKlparen && peekPastParen(tk)->value == TOKlparen) // CALYPSO
+                    {
+                        LINK lang = parseLinkage(); // TODO: remove the parenthesedSpecialToken hack and rename LINK
+
+                        for (int i = 0; i < global.langPlugins.dim; i++)
+                        {
+                            if (global.langPlugins[i]->doesHandleCatch(lang))
+                            {
+                                langPlugin = global.langPlugins[i];
+                                break;
+                            }
+                        }
+                        if (!langPlugin)
+                            error("no language plugin was found to support language %s", token.toChars());
+                    }
+                    else
+                        nextToken();
+
                     check(TOKlparen);
                     id = NULL;
                     t = parseType(&id);
                     check(TOKrparen);
                 }
                 handler = parseStatement(0);
-                c = new Catch(catchloc, t, id, handler);
+                if (langPlugin)
+                    c = langPlugin->createCatch(catchloc, t, id, handler); // CALYPSO
+                else
+                    c = new Catch(catchloc, t, id, handler);
                 if (!catches)
                     catches = new Catches();
                 catches->push(c);

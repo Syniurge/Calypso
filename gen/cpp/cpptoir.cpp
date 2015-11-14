@@ -65,6 +65,7 @@ void LangPlugin::enterModule(::Module *, llvm::Module *lm)
 
     CGM.reset(new clangCG::CodeGenModule(Context,
                             *Opts, *lm, *gDataLayout, *pch.Diags));
+    type_infoWrappers.clear();
     EmittedStaticVars.clear();
 }
 

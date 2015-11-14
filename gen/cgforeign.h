@@ -10,6 +10,7 @@ class Type;
 class ClassDeclaration;
 class StructDeclaration;
 class VarDeclaration;
+class Catch;
 
 class ForeignCodeGen
 {
@@ -54,4 +55,9 @@ public:
     // Called for any aggregate (TODO: less ambiguous names?)
     virtual void toPreInitClass(TypeClass* tc, LLValue* dst) = 0;
     virtual void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) = 0;
+
+    // Exception handling
+    virtual void toBeginCatch(IRState *irs, Catch *cj) = 0;
+    virtual void toEndCatch(IRState *irs, Catch *cj) = 0;
+    virtual llvm::Constant *toCatchScopeType(IRState *irs, Type *t) = 0;
 };

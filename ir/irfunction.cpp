@@ -186,10 +186,10 @@ void ScopeStack::popCleanups(CleanupCursor targetScope) {
     }
 }
 
-void ScopeStack::pushCatch(llvm::Constant* classInfoPtr,
+void ScopeStack::pushCatch(llvm::Constant* clausePtr,
     llvm::BasicBlock* bodyBlock
 ) {
-    catchScopes.push_back({classInfoPtr, bodyBlock, currentCleanupScope()});
+    catchScopes.push_back({clausePtr, bodyBlock, currentCleanupScope()});
     currentLandingPads().push_back(0);
 }
 
@@ -368,7 +368,7 @@ llvm::BasicBlock* ScopeStack::emitLandingPad() {
 
         // Add the ClassInfo reference to the landingpad instruction so it is
         // emitted to the EH tables.
-        landingPad->addClause(it->classInfoPtr);
+        landingPad->addClause(it->clausePtr);
 
         llvm::BasicBlock* mismatchBB = llvm::BasicBlock::Create(
             irs->context(),
@@ -378,7 +378,7 @@ llvm::BasicBlock* ScopeStack::emitLandingPad() {
 
         // "Call" llvm.eh.typeid.for, which gives us the eh selector value to compare with
         llvm::Value* ehTypeId = irs->ir->CreateCall(GET_INTRINSIC_DECL(eh_typeid_for),
-            DtoBitCast(it->classInfoPtr, getVoidPtrType()));
+            DtoBitCast(it->clausePtr, getVoidPtrType()));
 
         // Compare the selector value from the unwinder against the expected
         // one and branch accordingly.

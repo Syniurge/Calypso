@@ -25,6 +25,7 @@ class Module;
 class Package;
 class AliasDeclaration;
 class StringExp;
+class Catch;
 
 class Import : public Dsymbol
 {
@@ -97,6 +98,11 @@ public:
     virtual Import *createImport(int treeId,
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) = 0;
+
+    // foreign exceptions
+    virtual bool doesHandleCatch(LINK lang) = 0;
+    virtual Catch *createCatch(Loc loc, Type *t,
+                            Identifier *id, Statement *handler) = 0;
 
     // ===== - - - - - ===== //
 

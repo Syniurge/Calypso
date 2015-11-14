@@ -94,7 +94,7 @@ public:
     StaticAssert *parseStaticAssert();
     TypeQualified *parseTypeof();
     Type *parseVector();
-    LINK parseLinkage(Identifiers **);
+    LINK parseLinkage(Identifiers **pidents = NULL);
     Identifiers *parseQualifiedIdentifier(const char *entity);
     Condition *parseDebugCondition();
     Condition *parseVersionCondition();

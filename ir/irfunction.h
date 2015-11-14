@@ -151,7 +151,7 @@ public:
 struct CatchScope {
     /// The ClassInfo reference corresponding to the type to match the
     /// exception object against.
-    llvm::Constant* classInfoPtr;
+    llvm::Constant* clausePtr;
 
     /// The block to branch to if the exception type matches.
     llvm::BasicBlock* bodyBlock;
@@ -221,7 +221,7 @@ public:
     /// given ClassInfo constant and to branch to the given body block if it
     /// matches. The registered catch blocks are maintained on a stack, with the
     /// top-most (i.e. last pushed, innermost) taking precedence.
-    void pushCatch(llvm::Constant* classInfoPtr, llvm::BasicBlock* bodyBlock);
+    void pushCatch(llvm::Constant* clausePtr, llvm::BasicBlock* bodyBlock);
 
     /// Unregisters the last registered catch block.
     void popCatch();

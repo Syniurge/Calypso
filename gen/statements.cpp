@@ -7,6 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "import.h"
 #include "init.h"
 #include "mars.h"
 #include "module.h"
@@ -14,6 +15,7 @@
 #include "port.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/coverage.h"
 #include "gen/dvalue.h"
@@ -718,7 +720,7 @@ public:
 
         assert(stmt->catches);
 
-        typedef llvm::SmallVector<std::pair<ClassDeclaration*, llvm::BasicBlock*>, 6>
+        typedef llvm::SmallVector<std::pair<Type*, llvm::BasicBlock*>, 6> // CALYPSO
             CatchBlocks;
         CatchBlocks catchBlocks;
         catchBlocks.reserve(stmt->catches->dim);
@@ -733,6 +735,11 @@ public:
 
             irs->scope() = IRScope(catchBB);
             irs->DBuilder.EmitBlockStart((*it)->loc);
+
+            if (auto lp = (*it)->langPlugin()) // CALYPSO
+                lp->codegen()->toBeginCatch(irs, *it);
+            else
+            {
 
             llvm::Function* enterCatchFn =
                 LLVM_D_GetRuntimeFunction(Loc(), irs->module, "_d_eh_enter_catch");
@@ -771,6 +778,7 @@ public:
                     DtoStore(exc, irLocal->value);
                 }
             }
+            }
 
             // emit handler, if there is one
             // handler is zero for instance for 'catch { debug foo(); }'
@@ -779,25 +787,37 @@ public:
             }
 
             if (!irs->scopereturned()) {
+                // CALYPSO BUG FIXME: _cxa_end_catch won't be called if it already returned
+                if (auto lp = (*it)->langPlugin())
+                    lp->codegen()->toEndCatch(irs, *it);
                 irs->ir->CreateBr(endbb);
             }
 
             irs->DBuilder.EmitBlockEnd();
 
             catchBlocks.push_back(std::make_pair(
-                (*it)->type->toBasetype()->isClassHandle(), catchBB));
+                (*it)->type->toBasetype(), catchBB));
         }
 
         // Only after emitting all the catch bodies, register the catch scopes.
         // This is so that (re)throwing inside a catch does not match later
         // catches.
+        Catches::reverse_iterator c_it = stmt->catches->rbegin();
         for (CatchBlocks::iterator it = catchBlocks.begin(),
                                    end = catchBlocks.end();
-             it != end; ++it
+             it != end; ++it, ++c_it
         ) {
-            DtoResolveClass(it->first);
-            irs->func()->scopes->pushCatch(
-                getIrAggr(it->first)->getClassInfoSymbol(), it->second);
+            llvm::Constant *catchType;
+            if (auto lp = (*c_it)->langPlugin()) // CALYPSO
+                catchType = lp->codegen()->toCatchScopeType(irs, it->first);
+            else
+            {
+                ClassDeclaration *cd = it->first->isClassHandle();
+                DtoResolveClass(cd);
+                catchType = getIrAggr(cd)->getClassInfoSymbol();
+            }
+
+            irs->func()->scopes->pushCatch(catchType, it->second);
         }
 
         // Emit the try block.
