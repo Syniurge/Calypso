@@ -636,8 +636,27 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     assert(!retvar); // since LDC doesn't know we're using sret for C++ calls
             // we could make it aware though (TODO)
     
+    llvm::BasicBlock *invokeDest = nullptr,
+                    *postinvoke = nullptr;
+
+    auto calleeFn = dyn_cast<llvm::Function>(callable);
+    if (calleeFn && !calleeFn->doesNotThrow()) {
+        auto scopes = gIR->func()->scopes;
+        auto& landingPad = scopes->currentLandingPads().back();
+        if (!landingPad)
+            landingPad = scopes->emitLandingPad();
+
+        invokeDest = landingPad;
+        postinvoke = llvm::BasicBlock::Create(gIR->context(),
+            "postinvoke", gIR->topfunc(), landingPad);
+    }
+
     auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
-    RV = CGF()->EmitCall(FInfo, callable, clangCG::ReturnValueSlot(), Args, FD);
+    RV = CGF()->EmitCall(FInfo, callable, clangCG::ReturnValueSlot(), Args, FD,
+                            nullptr, invokeDest, postinvoke);
+
+    if (postinvoke)
+        gIR->scope() = IRScope(postinvoke);
 
     if (isa<clang::CXXConstructorDecl>(FD))
     {

@@ -296,11 +296,13 @@ private:
 
     std::vector<GotoJump>& currentUnresolvedGotos();
 
+public: // CALYPSO
     std::vector<llvm::BasicBlock*>& currentLandingPads();
 
     /// Emits a landing pad to honor all the active cleanups and catches.
     llvm::BasicBlock* emitLandingPad();
 
+private:
     /// Unified implementation for labeled break/continue.
     void jumpToStatement(std::vector<JumpTarget>& targets, Statement* loopOrSwitchStatement);
 
