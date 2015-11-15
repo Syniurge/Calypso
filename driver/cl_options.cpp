@@ -461,8 +461,12 @@ cl::opt<unsigned char, true, CoverageParser> coverageAnalysis("cov",
 
 // CALYPSO
 cl::list<std::string> cppArgs("cpp-args",
-    cl::desc("Clang args (PCH)"));
+    cl::desc("Clang arguments passed during PCH generation"));
 
+cl::opt<std::string> cppCacheDir("cpp-cachedir",
+    cl::desc("Write Calypso cache files to <dir>"),
+    cl::value_desc("dir"),
+    cl::Prefix);
 
 static cl::extrahelp footer("\n"
 "-d-debug can also be specified without options, in which case it enables all\n"

@@ -689,10 +689,9 @@ void PCH::update()
     assert(!(needEmit && AST) && "Need AST merging FIXME");
 
     auto AddSuffixThenCheck = [&] (const char *suffix, bool dirtyPCH = true) {
-        std::string fn_var(calypso.cachePrefix);
-        fn_var += suffix;
-
         using namespace llvm::sys::fs;
+
+        auto fn_var = calypso.getCacheFilename(suffix);
         file_status result;
         status(fn_var, result);
         if (is_directory(result)) {
@@ -705,7 +704,6 @@ void PCH::update()
 
         return fn_var;
     };
-    // NOTE: there's File::exists but it is incomplete and unused, hence llvm::sys::fs
 
     pchHeader = AddSuffixThenCheck(".h");
     pchFilename = AddSuffixThenCheck(".h.pch");
@@ -844,9 +842,7 @@ void LangPlugin::GenModSet::parse()
     parsed = true;
     clear();
 
-	std::string genFilename(calypso.cachePrefix);
-	genFilename += ".gen";
-
+    auto genFilename = calypso.getCacheFilename(".gen");
     if (!llvm::sys::fs::exists(genFilename))
         return;
 
@@ -876,9 +872,7 @@ void LangPlugin::GenModSet::add(::Module *m)
     auto& objName = m->objfile->name->str;
     assert(parsed && !count(objName));
 
-	std::string genFilename(calypso.cachePrefix);
-	genFilename += ".gen";
-
+    auto genFilename = calypso.getCacheFilename(".gen");
     auto fgenList = fopen(genFilename.c_str(), "a");
     if (!fgenList)
     {
@@ -959,6 +953,19 @@ void LangPlugin::init(const char *Argv0)
 clang::ASTContext& LangPlugin::getASTContext()
 {
     return getASTUnit()->getASTContext();
+}
+
+std::string LangPlugin::getCacheFilename(const char *suffix)
+{
+    using namespace llvm::sys::path;
+
+    std::string fn(calypso.cachePrefix);
+    llvm::SmallString<128> fullpath(opts::cppCacheDir);
+
+    fn += suffix;
+    append(fullpath, fn);
+
+    return fullpath.str().str();
 }
 
 bool isCPP(Type* t) { return t->langPlugin() == &calypso; }
