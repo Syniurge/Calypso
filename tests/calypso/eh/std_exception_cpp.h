@@ -1,5 +1,9 @@
 #include <exception>
 
-struct ooops : std::exception {
-    const char* what() const _GLIBCXX_USE_NOEXCEPT { return "Ooops!"; }
+class ooops : public std::exception {
+public:
+    unsigned a;
+    const char* what() const noexcept { return "Ooops!"; }
+
+    ooops() { a = 0x12345678; }
 };

@@ -1,8 +1,8 @@
 /**
- * C++ catch basic example.
+ * C++ catch basic examples.
  *
  * Build with :
- *   $ clang++ std_exception_cpp.cpp
+ *   $ clang++ -c std_exception_cpp.cpp
  *   $ ldc2 std_exception_cpp.o -L-lstdc++ std_exception.d
  */
 
@@ -17,9 +17,10 @@ extern(C++) void throwException();
 
 void main()
 {
+    // We should be falling through to the last catch
     try
     {
-        writeln("Calling throwException");
+        writeln("Throwing an ooops exception");
         throwException();
     }
     catch (Throwable t)
@@ -33,8 +34,25 @@ void main()
     }
     catch (C++) (ooops *e)
     {
-        writeln("Catching the C++ std::exception!");
-        writeln("e == ", e);
-        writeln("what() == ", e.what());
+        writefln("Catching the ooops, e.what() == %s", to!string(e.what()));
+    }
+
+    // This time with a std::exception catch handling any class derived from it
+    try
+    {
+        writeln("\nThrowing another ooops exception");
+        throwException();
+    }
+    catch (Throwable t)
+    {
+        writeln("Nope, catched a Throwable");
+    }
+    catch (C++) (ooops **a)
+    {
+        writeln("Wrong catch, this is for ooops**");
+    }
+    catch (C++) (exception *e) // std::exception
+    {
+        writefln("Catching the std::exception, e.what() == %s", to!string(e.what()));
     }
 }
