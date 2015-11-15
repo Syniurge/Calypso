@@ -4648,13 +4648,18 @@ void Catch::semantic(Scope *sc)
 
     if (ident)
     {
-        var = new VarDeclaration(loc, type, ident, NULL);
+        var = createVar();
         var->semantic(sc);
         sc->insert(var);
     }
     handler = handler->semantic(sc);
 
     sc->pop();
+}
+
+VarDeclaration *Catch::createVar() // CALYPSO
+{
+    return new VarDeclaration(loc, type, ident, NULL);
 }
 
 /****************************** TryFinallyStatement ***************************/

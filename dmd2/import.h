@@ -101,8 +101,8 @@ public:
 
     // foreign exceptions
     virtual bool doesHandleCatch(LINK lang) = 0;
-    virtual Catch *createCatch(Loc loc, Type *t,
-                            Identifier *id, Statement *handler) = 0;
+    virtual Catch *createCatch(Loc loc, Type *t, Identifier *id,
+                               Statement *handler, StorageClass stc) = 0;
 
     // ===== - - - - - ===== //
 

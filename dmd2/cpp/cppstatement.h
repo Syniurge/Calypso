@@ -20,7 +20,10 @@ class Catch : public ::Catch
 public:
     CALYPSO_LANGPLUGIN
 
-    Catch(Loc loc, Type *t, Identifier *id, Statement *handler);
+    StorageClass stc;
+
+    Catch(Loc loc, Type *t, Identifier *id, Statement *handler, StorageClass stc);
+    VarDeclaration *createVar() override;
     ::Catch *syntaxCopy() override;
     
     bool onlyCatchThrowable() override { return false; }

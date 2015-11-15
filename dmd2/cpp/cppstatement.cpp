@@ -5,9 +5,10 @@
 namespace cpp
 {
 
-Catch::Catch(Loc loc, Type *t, Identifier *id, Statement *handler)
+Catch::Catch(Loc loc, Type *t, Identifier *id, Statement *handler, StorageClass stc)
         : ::Catch(loc, t, id, handler)
 {
+    this->stc = stc;
 }
 
 ::Catch *Catch::syntaxCopy()
@@ -15,9 +16,22 @@ Catch::Catch(Loc loc, Type *t, Identifier *id, Statement *handler)
     Catch *c = new Catch(loc,
         type ? type->syntaxCopy() : NULL,
         ident,
-        (handler ? handler->syntaxCopy() : NULL));
+        (handler ? handler->syntaxCopy() : NULL),
+        stc);
     c->internalCatch = internalCatch;
     return c;
+}
+
+VarDeclaration *Catch::createVar()
+{
+    if (stc & ~STCref)
+    {
+        error(loc, "Only ref storage class accepted in catch (C++) types");
+        return nullptr;
+    }
+
+    auto vd = ::Catch::createVar();
+    vd->storage_class |= stc | STCforeach /* HACK */;
 }
 
 bool LangPlugin::doesHandleCatch(LINK lang)
@@ -26,9 +40,10 @@ bool LangPlugin::doesHandleCatch(LINK lang)
 }
 
 ::Catch *LangPlugin::createCatch(Loc loc, Type *t,
-                        Identifier *id, Statement *handler)
+                        Identifier *id, Statement *handler,
+                        StorageClass stc)
 {
-    return new Catch(loc, t, id, handler);
+    return new Catch(loc, t, id, handler, stc);
 }
 
 }

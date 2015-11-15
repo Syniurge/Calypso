@@ -130,8 +130,8 @@ public:
         Identifier *aliasId, int isstatic) override;
 
     bool doesHandleCatch(LINK lang) override;
-    ::Catch *createCatch(Loc loc, Type *t,
-                            Identifier *id, Statement *handler) override;
+    ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
+                               Statement *handler, StorageClass stc) override;
 
     const char *mangle(Dsymbol *s) override;
     Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;

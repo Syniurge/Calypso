@@ -65,7 +65,7 @@ void LangPlugin::toBeginCatch(IRState *irs, ::Catch *cj)
             IrLocal* irLocal = getIrLocal(cj->var);
 
             auto CatchParamTy = TypeMapper().toType(cj->loc, cj->var->type,
-                                                        irs->func()->decl->scope);
+                                                        irs->func()->decl->scope, cj->var->storage_class);
             auto CatchParamAlign = clang::CharUnits();
 
             clangCG::InitCatchParam(*CGF(), ehPtr, CatchParamTy, CatchParamAlign,

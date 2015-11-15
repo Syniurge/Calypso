@@ -5439,6 +5439,7 @@ Statement *Parser::parseStatement(int flags, const utf8_t** endPtr, Loc *pEndloc
                 Catch *c;
                 Type *t;
                 Identifier *id;
+                StorageClass stc = 0; // CALYPSO
                 Loc catchloc = token.loc;
 
                 LangPlugin *langPlugin = NULL; // CALYPSO
@@ -5471,13 +5472,18 @@ Statement *Parser::parseStatement(int flags, const utf8_t** endPtr, Loc *pEndloc
                         nextToken();
 
                     check(TOKlparen);
+                    if (langPlugin && token.value == TOKref) // CALYPSO
+                    {
+                        stc |= STCref;
+                        nextToken();
+                    }
                     id = NULL;
                     t = parseType(&id);
                     check(TOKrparen);
                 }
                 handler = parseStatement(0);
                 if (langPlugin)
-                    c = langPlugin->createCatch(catchloc, t, id, handler); // CALYPSO
+                    c = langPlugin->createCatch(catchloc, t, id, handler, stc); // CALYPSO
                 else
                     c = new Catch(catchloc, t, id, handler);
                 if (!catches)

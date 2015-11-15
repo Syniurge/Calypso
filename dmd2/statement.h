@@ -659,6 +659,7 @@ public:
     Catch(Loc loc, Type *t, Identifier *id, Statement *handler);
     virtual Catch *syntaxCopy(); // CALYPSO
     void semantic(Scope *sc);
+    virtual VarDeclaration *createVar(); // CALYPSO
     virtual bool onlyCatchThrowable() { return true; }  // CALYPSO
     virtual LangPlugin *langPlugin() { return NULL; }
 };
