@@ -1,6 +1,16 @@
 #include "std_exception_cpp.h"
 
-void throwException()
+namespace test
 {
-    throw new ooops;
+
+void throwOoops()
+{
+    throw ooops();
+}
+
+void throwFloat()
+{
+    throw 20.16f;
+}
+
 }
