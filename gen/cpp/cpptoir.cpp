@@ -636,12 +636,19 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     assert(!retvar); // since LDC doesn't know we're using sret for C++ calls
             // we could make it aware though (TODO)
     
+    // Setup a landing pad if needed
     llvm::BasicBlock *invokeDest = nullptr,
                     *postinvoke = nullptr;
 
     auto calleeFn = dyn_cast<llvm::Function>(callable);
-    if (calleeFn && !calleeFn->doesNotThrow()) {
-        auto scopes = gIR->func()->scopes;
+    auto scopes = gIR->func()->scopes;
+
+    if (calleeFn && !calleeFn->doesNotThrow() &&
+            !(scopes->cleanupScopes.empty() && scopes->catchScopes.empty()))
+    {
+        if (scopes->currentLandingPads().empty())
+            scopes->currentLandingPads().push_back(0);
+
         auto& landingPad = scopes->currentLandingPads().back();
         if (!landingPad)
             landingPad = scopes->emitLandingPad();

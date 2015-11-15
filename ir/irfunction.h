@@ -324,6 +324,7 @@ private:
     ///
     std::vector<JumpTarget> continueTargets;
 
+public: // CALYPSO
     /// cleanupScopes[i] contains the information to go from
     /// currentCleanupScope() == i + 1 to currentCleanupScope() == i.
     std::vector<CleanupScope> cleanupScopes;
@@ -331,6 +332,7 @@ private:
     ///
     std::vector<CatchScope> catchScopes;
 
+private:
     /// Gotos which we were not able to resolve to any cleanup scope, but which
     /// might still be defined later in the function at top level. If there are
     /// any left on function exit, it is an error (e.g. because the user tried
