@@ -9,7 +9,8 @@
 //
 // ASTUnit utility class.
 //
-// CALYPSO NOTE: Flavouring ASTUnit is necessary because Clang doesn't provide any way to assign a custom ASTConsumer. Fortunately the functionality we use is only a few members + LoadFromASTFile()
+// CALYPSO NOTE: Flavouring ASTUnit is necessary because Clang doesn't provide any way to assign a custom ASTConsumer.
+// Fortunately the functionality we use is only a few members + LoadFromASTFile().
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,6 +27,7 @@
 #include "clang/Lex/PreprocessingRecord.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
 #include "clang/Serialization/ASTBitCodes.h"
+#include "clang/Serialization/ASTReader.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
@@ -43,7 +45,6 @@ namespace clang
 {
 class Sema;
 class ASTContext;
-class ASTReader;
 class CodeCompleteConsumer;
 class CompilerInvocation;
 class CompilerInstance;
@@ -172,6 +173,7 @@ public:
                               IntrusiveRefCntPtr<DiagnosticsEngine> Diags,
                                   const FileSystemOptions &FileSystemOpts,
                                   ASTConsumer *Consumer,
+                                  ASTReader::ASTReadResult &ReadResult,
                                   bool OnlyLocalDecls = false);
 
   ModuleLoadResult loadModule(SourceLocation ImportLoc, ModuleIdPath Path,

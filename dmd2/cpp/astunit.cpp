@@ -172,6 +172,7 @@ ASTUnit *ASTUnit::LoadFromASTFile(const std::string &Filename,
                               IntrusiveRefCntPtr<DiagnosticsEngine> Diags,
                                   const FileSystemOptions &FileSystemOpts,
                                   ASTConsumer *Consumer,
+                                  ASTReader::ASTReadResult &ReadResult,
                                   bool OnlyLocalDecls) {
   std::unique_ptr<ASTUnit> AST(new ASTUnit);
 
@@ -230,8 +231,9 @@ ASTUnit *ASTUnit::LoadFromASTFile(const std::string &Filename,
       *AST->PP, Context, AST->ASTFileLangOpts, AST->TargetOpts, AST->Target,
       Counter));
 
-  switch (AST->Reader->ReadAST(Filename, serialization::MK_MainFile,
-                          SourceLocation(), ASTReader::ARR_None)) {
+  ReadResult = AST->Reader->ReadAST(Filename, serialization::MK_MainFile,
+                          SourceLocation(), ASTReader::ARR_None);
+  switch (ReadResult) {
   case ASTReader::Success:
     break;
 

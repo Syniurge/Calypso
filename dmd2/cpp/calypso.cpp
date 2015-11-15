@@ -571,6 +571,105 @@ void PCH::add(StringRef header)
     needEmit = true;
 }
 
+void PCH::emit()
+{
+    llvm::sys::fs::remove(pchFilenameNew, true);
+
+    // Re-emit the source file with #include directives
+    auto fmono = fopen(pchHeader.c_str(), "w");
+    if (!fmono)
+    {
+        ::error(Loc(), "C++ monolithic header couldn't be created");
+        fatal();
+    }
+
+    for (unsigned i = 0; i < headers.dim; ++i)
+    {
+        if (headers[i][0] == '<')
+            fprintf(fmono, "#include %s\n", headers[i]);
+        else
+            fprintf(fmono, "#include \"%s\"\n", headers[i]);
+    }
+
+    fclose(fmono);
+
+    // Compiler flags, we use a hack from clang-interpreter to extract -cc1 flags from "puny human" flags
+    // The driver doesn't do anything except computing the flags.
+    std::string TripleStr = llvm::sys::getProcessTriple();
+    llvm::Triple T(TripleStr);
+
+    clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
+    auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
+                                        &*CC1DiagOpts, CC1DiagClient);
+
+    clang::driver::Driver TheDriver(calypso.executablePath, T.str(), *CC1Diags);
+    TheDriver.setTitle("Calypso PCH");
+
+    llvm::SmallVector<const char *, 16> Argv;
+    Argv.push_back("clang");
+    for (auto cppArg: opts::cppArgs)
+        Argv.push_back(cppArg.c_str());
+    Argv.push_back("-x");
+    Argv.push_back("c++-header");
+    Argv.push_back("-Xclang");
+    Argv.push_back("-emit-pch");
+    Argv.push_back("-o");
+    Argv.push_back(pchFilename.c_str());
+    Argv.push_back(pchHeader.c_str());
+
+    std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
+    assert(C);
+
+    // We expect to get back exactly one command job, if we didn't something
+    // failed. Extract that job from the compilation.
+    const clang::driver::JobList &Jobs = C->getJobs();
+    assert(Jobs.size() == 1 && isa<clang::driver::Command>(*Jobs.begin()));
+    const clang::driver::Command &Cmd = cast<clang::driver::Command>(*Jobs.begin());
+    assert(llvm::StringRef(Cmd.getCreator().getName()) == "clang");
+
+    // Initialize a compiler invocation object from the clang (-cc1) arguments.
+    const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
+    clang::CompilerInstance Clang;
+    clang::CompilerInvocation::CreateFromArgs(Clang.getInvocation(), CCArgs.begin(), CCArgs.end(), *CC1Diags);
+    Clang.createDiagnostics();
+    assert(Clang.hasDiagnostics());
+
+    // Infer the builtin include path if unspecified.
+    if (Clang.getHeaderSearchOpts().UseBuiltinIncludes &&
+            Clang.getHeaderSearchOpts().ResourceDir.empty())
+        Clang.getHeaderSearchOpts().ResourceDir = TheDriver.ResourceDir;
+
+    // Create and execute the frontend to generate a PCH
+    std::unique_ptr<clang::GeneratePCHAction> Act(new clang::GeneratePCHAction);
+    if (!Clang.ExecuteAction(*Act))
+    {
+        ::error(Loc(), "PCH generation failed!");
+        fatal();
+    }
+
+    /* Update the list of headers */
+
+    auto fheaderlist = fopen(calypso.cachePrefix, "w");
+    if (fheaderlist == NULL)
+    {
+        ::error(Loc(), "C/C++ header list cache file couldn't be opened/created");
+        fatal();
+    }
+
+    for (unsigned i = 0; i < headers.dim; ++i)
+        fprintf(fheaderlist, "%s\n", headers[i]);
+
+    fclose(fheaderlist);
+
+    /* Mark every C++ module object file dirty */
+
+    std::string genListFilename(calypso.cachePrefix);
+    genListFilename += ".gen";
+    llvm::sys::fs::remove(genListFilename, true);
+}
+
 // WORKAROUND Temporary visitor to deserialize the entire ASTContext
 class ASTDummyVisitor : public clang::RecursiveASTVisitor<ASTDummyVisitor>
 {
@@ -580,8 +679,6 @@ public:
 
 void PCH::update()
 {
-    auto& cachePrefix = calypso.cachePrefix;
-
     if (headers.empty())
         return;
 
@@ -616,103 +713,8 @@ void PCH::update()
 
     if (needEmit)
     {
-        llvm::sys::fs::remove(pchFilenameNew, true);
-
         /* PCH generation */
-
-        // Re-emit the source file with #include directives
-        auto fmono = fopen(pchHeader.c_str(), "w");
-        if (!fmono)
-        {
-            ::error(Loc(), "C++ monolithic header couldn't be created");
-            fatal();
-        }
-
-        for (unsigned i = 0; i < headers.dim; ++i)
-        {
-            if (headers[i][0] == '<')
-                fprintf(fmono, "#include %s\n", headers[i]);
-            else
-                fprintf(fmono, "#include \"%s\"\n", headers[i]);
-        }
-
-        fclose(fmono);
-
-        // Compiler flags, we use a hack from clang-interpreter to extract -cc1 flags from "puny human" flags
-        // The driver doesn't do anything except computing the flags.
-        std::string TripleStr = llvm::sys::getProcessTriple();
-        llvm::Triple T(TripleStr);
-
-        clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
-        clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
-        auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
-        clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
-                                            &*CC1DiagOpts, CC1DiagClient);
-
-        clang::driver::Driver TheDriver(calypso.executablePath, T.str(), *CC1Diags);
-        TheDriver.setTitle("Calypso PCH");
-
-        llvm::SmallVector<const char *, 16> Argv;
-        Argv.push_back("clang");
-        for (auto cppArg: opts::cppArgs)
-            Argv.push_back(cppArg.c_str());
-        Argv.push_back("-x");
-        Argv.push_back("c++-header");
-        Argv.push_back("-Xclang");
-        Argv.push_back("-emit-pch");
-        Argv.push_back("-o");
-        Argv.push_back(pchFilename.c_str());
-        Argv.push_back(pchHeader.c_str());
-
-        std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
-        assert(C);
-
-        // We expect to get back exactly one command job, if we didn't something
-        // failed. Extract that job from the compilation.
-        const clang::driver::JobList &Jobs = C->getJobs();
-        assert(Jobs.size() == 1 && isa<clang::driver::Command>(*Jobs.begin()));
-        const clang::driver::Command &Cmd = cast<clang::driver::Command>(*Jobs.begin());
-        assert(llvm::StringRef(Cmd.getCreator().getName()) == "clang");
-
-        // Initialize a compiler invocation object from the clang (-cc1) arguments.
-        const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
-        clang::CompilerInstance Clang;
-        clang::CompilerInvocation::CreateFromArgs(Clang.getInvocation(), CCArgs.begin(), CCArgs.end(), *CC1Diags);
-        Clang.createDiagnostics();
-        assert(Clang.hasDiagnostics());
-
-        // Infer the builtin include path if unspecified.
-        if (Clang.getHeaderSearchOpts().UseBuiltinIncludes &&
-                Clang.getHeaderSearchOpts().ResourceDir.empty())
-            Clang.getHeaderSearchOpts().ResourceDir = TheDriver.ResourceDir;
-
-        // Create and execute the frontend to generate a PCH
-        std::unique_ptr<clang::GeneratePCHAction> Act(new clang::GeneratePCHAction);
-        if (!Clang.ExecuteAction(*Act))
-        {
-            ::error(Loc(), "PCH generation failed!");
-            fatal();
-        }
-
-        /* Update the list of headers */
-
-        auto fheaderlist = fopen(cachePrefix, "w");
-        if (fheaderlist == NULL)
-        {
-            ::error(Loc(), "C/C++ header list cache file couldn't be opened/created");
-            fatal();
-        }
-
-        for (unsigned i = 0; i < headers.dim; ++i)
-            fprintf(fheaderlist, "%s\n", headers[i]);
-
-        fclose(fheaderlist);
-
-        /* Mark every C++ module object file dirty */
-
-        std::string genListFilename(cachePrefix);
-        genListFilename += ".gen";
-        llvm::sys::fs::remove(genListFilename, true);
+        emit();
     }
 
     needEmit = false;
@@ -728,9 +730,35 @@ void PCH::update()
     }
 
     clang::FileSystemOptions FileSystemOpts;
+    clang::ASTReader::ASTReadResult ReadResult;
 
     AST = ASTUnit::LoadFromASTFile(pchFilename,
-                                Diags, FileSystemOpts, &instChecker);
+                            Diags, FileSystemOpts, &instChecker, ReadResult);
+
+    switch (ReadResult) {
+        case clang::ASTReader::Success:
+            break;
+
+        case clang::ASTReader::Failure:
+        case clang::ASTReader::Missing:
+        case clang::ASTReader::OutOfDate:
+        case clang::ASTReader::VersionMismatch:
+        case clang::ASTReader::ConfigurationMismatch:
+            delete AST;
+            Diags->Reset();
+
+            // Headers or flags may have changed since the PCH was generated, try re-emitting.
+            emit();
+            AST = ASTUnit::LoadFromASTFile(pchFilename, Diags, FileSystemOpts, &instChecker, ReadResult);
+            break;
+
+        default:
+            fatal();
+            return;
+    }
+
+    if (!AST)
+        fatal();
 
     // WORKAROUND for https://llvm.org/bugs/show_bug.cgi?id=24420
     // « RecordDecl::LoadFieldsFromExternalStorage() expels existing decls from the DeclContext linked list »
