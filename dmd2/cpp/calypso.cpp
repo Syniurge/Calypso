@@ -530,9 +530,9 @@ void PCH::init()
     Diags = new clang::DiagnosticsEngine(DiagID,
                                          &*DiagOpts, DiagClient);
 
-    auto& headerList = calypso.cachePrefix;
+    auto headerList = calypso.getCacheFilename();
 
-    auto fheaderList = fopen(headerList, "r"); // ordered list of headers
+    auto fheaderList = fopen(headerList.c_str(), "r"); // ordered list of headers
         // currently cached as one big PCH (neither modules nor chained PCH can be
         // used without modifying Clang).
     if (!fheaderList)
@@ -662,7 +662,8 @@ void PCH::emit()
 
     /* Update the list of headers */
 
-    auto fheaderlist = fopen(calypso.cachePrefix, "w");
+    auto headerList = calypso.getCacheFilename();
+    auto fheaderlist = fopen(headerList.c_str(), "w");
     if (fheaderlist == NULL)
     {
         ::error(Loc(), "C/C++ header list cache file couldn't be opened/created");
@@ -676,8 +677,7 @@ void PCH::emit()
 
     /* Mark every C++ module object file dirty */
 
-    std::string genListFilename(calypso.cachePrefix);
-    genListFilename += ".gen";
+    auto genListFilename = calypso.getCacheFilename(".gen");
     llvm::sys::fs::remove(genListFilename, true);
 }
 
@@ -987,7 +987,8 @@ std::string LangPlugin::getCacheFilename(const char *suffix)
     std::string fn(calypso.cachePrefix);
     llvm::SmallString<128> fullpath(opts::cppCacheDir);
 
-    fn += suffix;
+    if (suffix)
+        fn += suffix;
     append(fullpath, fn);
 
     return fullpath.str().str();

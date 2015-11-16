@@ -231,7 +231,7 @@ public:
     ASTUnit *getASTUnit() { return pch.AST; }
     clang::ASTContext &getASTContext();
 
-    std::string getCacheFilename(const char *suffix);
+    std::string getCacheFilename(const char *suffix = nullptr);
     
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly
