@@ -65,7 +65,7 @@
 #include <alloca.h>
 #endif
 
-static llvm::cl::opt<bool> preservePaths("op",
+llvm::cl::opt<bool> preservePaths("op",
     llvm::cl::desc("Do not strip paths from source file"),
     llvm::cl::ZeroOrMore);
 
@@ -96,22 +96,21 @@ void Module::buildTargetFiles(bool singleObj, bool library)
         return;
 
     if (!objfile) {
-        // CALYPSO HACK FIXME
-        const char *objname = (library || langPlugin()) ? 0 : global.params.objname;
+        const char *objname = library ? 0 : global.params.objname;
         if (global.params.output_o)
-            objfile = Module::buildFilePath(objname, global.params.objdir,
+            objfile = buildFilePath(objname, global.params.objdir,
                 global.params.targetTriple.isOSWindows() ? global.obj_ext_alt : global.obj_ext);
         else if (global.params.output_bc)
-            objfile = Module::buildFilePath(objname, global.params.objdir, global.bc_ext);
+            objfile = buildFilePath(objname, global.params.objdir, global.bc_ext);
         else if (global.params.output_ll)
-            objfile = Module::buildFilePath(objname, global.params.objdir, global.ll_ext);
+            objfile = buildFilePath(objname, global.params.objdir, global.ll_ext);
         else if (global.params.output_s)
-            objfile = Module::buildFilePath(objname, global.params.objdir, global.s_ext);
+            objfile = buildFilePath(objname, global.params.objdir, global.s_ext);
     }
     if (doDocComment && !docfile)
-        docfile = Module::buildFilePath(global.params.docname, global.params.docdir, global.doc_ext);
+        docfile = buildFilePath(global.params.docname, global.params.docdir, global.doc_ext);
     if (doHdrGen && !hdrfile)
-        hdrfile = Module::buildFilePath(global.params.hdrname, global.params.hdrdir, global.hdr_ext);
+        hdrfile = buildFilePath(global.params.hdrname, global.params.hdrdir, global.hdr_ext);
 
     // safety check: never allow obj, doc or hdr file to have the source file's name
     if (Port::stricmp(FileName::name(objfile->name->str), FileName::name(this->arg)) == 0) {

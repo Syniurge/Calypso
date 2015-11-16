@@ -14,6 +14,7 @@
 #include "scope.h"
 #include "statement.h"
 #include "id.h"
+#include "driver/cl_options.h"
 
 #include "cpp/calypso.h"
 #include "cpp/cppmodule.h"
@@ -35,6 +36,8 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Lookup.h"
+
+extern llvm::cl::opt<bool> preservePaths;
 
 namespace cpp
 {
@@ -113,6 +116,26 @@ void Module::addPreambule()
         ::Import *im = new ::Import(Loc(), NULL, Id::object, NULL, true);
         members->shift(im);
     }
+}
+
+File *Module::buildFilePath(const char *, const char *path, const char *ext)
+{
+    const char *argobj;
+    if (preservePaths)
+        argobj = this->arg;
+    else
+        argobj = FileName::name(this->arg);
+
+    if (!opts::cppCacheDir.empty())
+        path = opts::cppCacheDir.c_str();
+
+    assert(!FileName::absolute(argobj));
+    argobj = FileName::combine(path, argobj);
+
+    FileName::ensurePathExists(FileName::path(argobj));
+
+    // always append the extension! otherwise hard to make output switches consistent
+    return new File(FileName::forceExt(argobj, ext));
 }
 
 /************************************/
