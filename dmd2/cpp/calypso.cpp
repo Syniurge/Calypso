@@ -551,21 +551,32 @@ void PCH::init()
     fclose(fheaderList);
 }
 
-void PCH::add(StringRef header)
+void PCH::add(StringRef header, ::Module *from)
 {
-    bool found = false;
-
-    for (unsigned i = 0; i < headers.dim; i++)
+    // First check whether the path points towards a file relative to the module directory or a header from -I options or system include dirs
+    // In the first case we need to make the path absolute since the calypso_cache directory is most of the time different.
+    if (header.data[0] != '<')
     {
-        if (strncmp(header.data, headers[i], header.size) == 0)
+        using namespace llvm::sys::fs;
+        using namespace llvm::sys::path;
+
+        auto headerFn = new llvm::SmallString<128>(parent_path(from->srcfile->name->name()));
+        append(*headerFn, llvm::StringRef(header.data, header.size));
+
+        file_status result;
+        status(llvm::Twine(*headerFn), result);
+        if (is_regular_file(result))
         {
-            found = true;
-            break;
+            make_absolute(*headerFn);
+            headerFn->push_back('\0');
+            header.data = headerFn->data();
+            header.size = headerFn->size() - 1;
         }
     }
 
-    if (found)
-        return;
+    for (unsigned i = 0; i < headers.dim; i++)
+        if (strncmp(header.data, headers[i], header.size) == 0)
+            return;
 
     headers.push(header);
     needEmit = true;

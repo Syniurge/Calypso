@@ -6,6 +6,7 @@
 #include "cpp/calypso.h"
 #include "expression.h"
 #include "identifier.h"
+#include "scope.h"
 
 #include "llvm/Support/FileSystem.h" // shall be replaced by std.file
 #include "clang/Basic/Diagnostic.h"
@@ -41,7 +42,7 @@ void Modmap::importAll(Scope *sc)
 {
     assert(arg->sz == 1); // FIXME
     StringRef headerName((const char *) arg->string, arg->len);
-    calypso.pch.add(headerName);
+    calypso.pch.add(headerName, sc->module);
 }
 
 void Modmap::semantic(Scope* sc)
