@@ -560,7 +560,7 @@ void PCH::add(StringRef header, ::Module *from)
         using namespace llvm::sys::fs;
         using namespace llvm::sys::path;
 
-        auto headerFn = new llvm::SmallString<128>(parent_path(from->srcfile->name->name()));
+        auto headerFn = new llvm::SmallString<128>(parent_path(from->srcfile->name->str));
         append(*headerFn, llvm::StringRef(header.data, header.size));
 
         file_status result;
