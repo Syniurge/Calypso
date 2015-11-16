@@ -299,6 +299,9 @@ macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
         set(dc_flags --output-o)
     endif()
 
+    # CALYPSO
+    list(APPEND dc_flags "-cpp-cachedir=${PROJECT_BINARY_DIR}")
+
     add_custom_command(
         OUTPUT
             ${outfiles}
