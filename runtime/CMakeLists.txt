@@ -557,7 +557,7 @@ set(DRUNTIME_PACKAGES core etc ldc)
 
 set(druntime_modules)
 foreach(p ${DRUNTIME_PACKAGES})
-    file(GLOB_RECURSE m ${RUNTIME_DIR}/src/${p}/*.d ${RUNTIME_DIR}/src/${p}/*.di)
+    file(GLOB_RECURSE m ${RUNTIME_DIR}/src/${p}/*.d ${RUNTIME_DIR}/src/${p}/*.di ${RUNTIME_DIR}/src/${p}/*.h) # CALYPSO
     list(APPEND druntime_modules ${m})
 endforeach()
 
