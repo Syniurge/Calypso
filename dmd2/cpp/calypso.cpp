@@ -821,6 +821,20 @@ void PCH::update()
         }
     }
 
+    // Since the out-of-dateness of headers are checked lazily for most of them, it might only be detected
+    // by walking through all the SLoc entries. If an error occurred start over and trigger a PCH regen.
+    if (Diags->hasErrorOccurred())
+    {
+        Diags->Reset();
+
+        delete AST;
+        delete MMap;
+        AST = nullptr;
+
+        needEmit = true;
+        return update();
+    }
+
     // Build the builtin type map
     calypso.builtinTypes.build(AST->getASTContext());
 
