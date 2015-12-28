@@ -1406,9 +1406,10 @@ static void mapNamespace(DeclMapper &mapper,
             continue;  // skip decls which are parts of a Clang module
 #endif
 
-        if (auto LinkSpec = dyn_cast<clang::LinkageSpecDecl>(*D))
+        auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
+        if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
         {
-            mapNamespace(mapper, LinkSpec, members, forClangModule);
+            mapNamespace(mapper, cast<clang::DeclContext>(*D), members, forClangModule);
             continue;
         }
         else if (!isTopLevelInNamespaceModule(*D))
@@ -1554,9 +1555,9 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         }
 
         auto NSN = dyn_cast<clang::NamespaceDecl>(R[0]);
-        if (!NSN)
+        if (!NSN || NSN->isInline())
         {
-            ::error(loc, "only namespaces can be C++ packages");
+            ::error(loc, "only non-inline namespaces can be C++ packages");
             fatal();
         }
 
@@ -1593,9 +1594,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         {
             assert(isa<clang::TranslationUnitDecl>(DC));
 
-#if 1
             mapNamespace(mapper, DC, m->members);
-#endif
         }
         else
         {
