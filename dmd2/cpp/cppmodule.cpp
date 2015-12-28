@@ -516,7 +516,7 @@ Ldeclaration:
     // NOTE: should be after because ClassDeclaration::semantic() expects decldefs[0] to be the record
     typedef clang::DeclContext::specific_decl_iterator<clang::FriendDecl> Friend_iterator;
     auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
-    if (!CTSD || !CTSD->getSpecializationKind() != clang::TSK_ImplicitInstantiation) // if we're in an implicit instantiation, no need to remap the out-of-line specializations which have their own template mapped with the class template
+    if (!CTSD || CTSD->getSpecializationKind() != clang::TSK_ImplicitInstantiation) // if we're in an implicit instantiation, no need to remap the out-of-line specializations which have their own template mapped with the class template
     {
         for (Friend_iterator I(D->decls_begin()), E(D->decls_end());
                     I != E; I++)
