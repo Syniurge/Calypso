@@ -620,7 +620,7 @@ void PCH::emit()
 
     llvm::SmallVector<const char *, 16> Argv;
     Argv.push_back("clang");
-    for (auto cppArg: opts::cppArgs)
+    for (auto& cppArg: opts::cppArgs)
         Argv.push_back(cppArg.c_str());
     Argv.push_back("-x");
     Argv.push_back("c++-header");
