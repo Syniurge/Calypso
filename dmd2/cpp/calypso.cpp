@@ -9,6 +9,7 @@
 #include "cpp/cppaggregate.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/cpptypes.h"
+#include "cpp/diagprinter.h"
 
 #include "aggregate.h"
 #include "declaration.h"
@@ -520,13 +521,26 @@ void InstantiationChecker::FunctionDefinitionInstantiated(const clang::FunctionD
 
 /***********************/
 
+DiagMuter::DiagMuter()
+{
+    calypso.pch.DiagClient->muted = true;
+}
+
+DiagMuter::~DiagMuter()
+{
+    calypso.pch.DiagClient->muted = false;
+}
+
+/***********************/
+
 #define MAX_FILENAME_SIZE 4096
 
 void PCH::init()
 {
     clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(new clang::DiagnosticOptions);
     clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> DiagID(new clang::DiagnosticIDs);
-    auto DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    DiagClient = new DiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    DiagClient->muted = !opts::cppVerboseDiags;
     Diags = new clang::DiagnosticsEngine(DiagID,
                                          &*DiagOpts, DiagClient);
 

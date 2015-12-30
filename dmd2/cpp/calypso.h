@@ -41,9 +41,10 @@ class TemplateInstance;
 class TypeMapper;
 class DeclReferencer;
 
-namespace reclang { class ASTUnit; class ModuleMap; }
+namespace reclang { class ASTUnit; class ModuleMap; class DiagnosticPrinter; }
 using reclang::ASTUnit;
 using reclang::ModuleMap;
+using reclang::DiagnosticPrinter;
 
 namespace clangCG = clang::CodeGen;
 
@@ -83,6 +84,13 @@ public:
     void FunctionDefinitionInstantiated(const clang::FunctionDecl *D) override;
 };
 
+class DiagMuter
+{
+public:
+   DiagMuter();
+   ~DiagMuter();
+};
+
 class PCH
 {
 public:
@@ -94,6 +102,7 @@ public:
     clang::MangleContext *MangleCtx = nullptr;
 
     InstantiationChecker instChecker;
+    DiagnosticPrinter *DiagClient;
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
     
     ModuleMap *MMap = nullptr;
