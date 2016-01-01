@@ -1631,11 +1631,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
             for (auto Match: R)
             {
                 if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
-                {
-                    auto UT = Typedef->getUnderlyingType().getDesugaredType(Context);
-                    if (auto RT = dyn_cast<clang::TagType>(UT))
-                        Match = RT->getDecl();
-                }
+                    if (auto Tag = isAnonTagTypedef(Typedef))
+                        Match = const_cast<clang::TagDecl*>(Tag);
 
                 if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
                     D = Match;
