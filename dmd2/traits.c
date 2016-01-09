@@ -37,6 +37,9 @@
 #include "parse.h"
 #include "speller.h"
 
+// CALYPSO FIXME
+#include "cpp/calypso.h"
+
 #define LOGSEMANTIC     0
 
 
@@ -255,6 +258,7 @@ const char* traits[] = {
     "getUnitTests",
     "getVirtualIndex",
     "getPointerBitmap",
+    "getCppVirtualIndex", // CALYPSO quick&dirty addition necessary when we need to compare member function pointers (e.g for moc)
     NULL
 };
 
@@ -1231,6 +1235,10 @@ Expression *semanticTraits(TraitsExp *e, Scope *sc)
     else if (e->ident == Id::getPointerBitmap)
     {
         return pointerBitmap(e);
+    }
+    else if (e->ident == Identifier::idPool("getCppVirtualIndex")) // CALYPSO TODO move to cpp/
+    {
+        return cpp::calypso.semanticTraits(e, sc);
     }
     else
     {

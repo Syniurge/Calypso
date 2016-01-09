@@ -241,6 +241,9 @@ public:
     clang::ASTContext &getASTContext();
 
     std::string getCacheFilename(const char *suffix = nullptr);
+
+    // FIXME quick&dirty traits addition
+    Expression *semanticTraits(TraitsExp *e, Scope *sc);
     
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly
