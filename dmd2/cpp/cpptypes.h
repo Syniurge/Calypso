@@ -94,6 +94,7 @@ public:
         Type *fromTypeTypedef(const clang::TypedefType *T);
         Type *fromTypeEnum(const clang::EnumType *T);
         Type *fromTypeRecord(const clang::RecordType *T);
+        Type *fromTypeMemberPointer(const clang::MemberPointerType *T);
         Type *fromTypeElaborated(const clang::ElaboratedType *T);
         Type *fromTypeTemplateSpecialization(const clang::TemplateSpecializationType *T);
         Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T, const clang::TemplateTypeParmDecl *OrigDecl = nullptr);

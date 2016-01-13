@@ -367,9 +367,6 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 	else if (auto UTT = dyn_cast<clang::UnaryTransformType>(T)) // underlying integral type of an enum
 		return fromType(UTT->getUnderlyingType());
 
-    if (auto MPT = dyn_cast<clang::MemberPointerType>(T)) // rarely used feature of C++, see [expr.mptr.oper]
-        return Type::tptrdiff_t;
-
 #define TYPEMAP(Ty) \
     if (auto Ty##T = dyn_cast<clang::Ty##Type>(T)) \
         return fromType##Ty(Ty##T);
@@ -377,6 +374,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     TYPEMAP(Typedef)
     TYPEMAP(Enum)
     TYPEMAP(Record)
+    TYPEMAP(MemberPointer)
     TYPEMAP(Elaborated)
     TYPEMAP(TemplateSpecialization)
     TYPEMAP(TemplateTypeParm)
@@ -1087,6 +1085,19 @@ Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
     return typeSubstOrQualifiedFor(T->getDecl());
+}
+
+Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
+{
+    // Rarely used feature of C++, see [expr.mptr.oper]
+    if (T->isMemberDataPointer())
+        return Type::tptrdiff_t;
+    else
+    {
+        auto t = new TypeIdentifier(loc, Identifier::idPool("object"));
+        t->addIdent(Identifier::idPool("__cpp_member_funcptr"));  // in the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
+        return t; // NOTE: making those types' semantics dependent on the C++ ABI was a conscious choice
+    }
 }
 
 Type *TypeMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
