@@ -178,7 +178,6 @@ const clang::ClassTemplateDecl *getDefinition(const clang::ClassTemplateDecl *D)
 const clang::FunctionTemplateDecl *getDefinition(const clang::FunctionTemplateDecl *D);
 const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTemplateSpecializationDecl *D);
 
-bool isNonPODRecord(const clang::QualType T);
 bool isNonSupportedType(clang::QualType T);
 const clang::DeclContext *getDeclContextNonLinkSpec(const clang::Decl *D);
 const clang::DeclContext *getDeclContextNamedOrTU(const clang::Decl *D); // skipping transparent (i.e anonymous) decl contexts too

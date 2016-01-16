@@ -264,27 +264,6 @@ Visitor *LangPlugin::getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *b
 
 /***** Clang -> DMD types *****/
 
-static bool isNonPODRecord(const clang::RecordDecl *RD)
-{
-    auto CRD = dyn_cast<clang::CXXRecordDecl>(RD);
-    if (!CRD)
-        return false;
-
-    if (!CRD->hasDefinition()) // WARNING forward decls will always be considered POD
-        return false;
-
-    return !CRD->isPOD();
-}
-
-bool isNonPODRecord(const clang::QualType T)
-{
-    auto RT = T->getAs<clang::RecordType>();
-    if (!RT)
-        return false;
-
-    return isNonPODRecord(RT->getDecl());
-}
-
 bool isNonSupportedType(clang::QualType T)
 {
     auto& Context = calypso.pch.AST->getASTContext();
@@ -780,7 +759,7 @@ void TypeQualifiedBuilder::pushInst(TypeQualified *&tqual,
 
     // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible,
     // i.e when the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to
-    // complete its instantiation and determine whether it is POD or not.
+    // complete its instantiation and determine whether it is non-polymorphic or not.
     if (Spec)
         tempinst->Inst = Spec;
 

@@ -349,6 +349,16 @@ static void MarkFunctionForEmit(const clang::FunctionDecl *D)
     }
 }
 
+// For simplicity's sake (or confusion's) let's call records with either virtual functions or bases polymorphic
+inline bool isPolymorphic(const clang::RecordDecl *D)
+{
+    if (!D->isCompleteDefinition() && D->getDefinition())
+        D = D->getDefinition();
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(D);
+        return CRD && D->isCompleteDefinition() &&
+            (CRD->getNumBases() || CRD->isPolymorphic());
+}
+
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
     auto& S = calypso.pch.AST->getSema();
@@ -363,9 +373,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
     bool isDefined = D->isCompleteDefinition();
+    bool isStruct = !isPolymorphic(D) && !(flags & ForcePolymorphic);
 
     auto TND = D->getTypedefNameForAnonDecl();
-    bool isPOD = true;
 
     int anon = 0;
     if (D->isAnonymousStructOrUnion())
@@ -385,10 +395,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         // NOTE: CXXRecordDecl will disappear in a future version of Clang and only
         // RecordDecl will remain to be used for both C and C++.
 
-    if ((flags & ForceNonPOD) ||
-            (CRD && isDefined && !CRD->isPOD()))
-        isPOD = false;
-
     AggregateDeclaration *a;
     if (!anon)
     {
@@ -398,7 +404,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         {
             a = new UnionDeclaration(loc, id, D);
         }
-        else if (isPOD)
+        else if (isStruct)
         {
             a = new StructDeclaration(loc, id, D);
         }
@@ -642,7 +648,7 @@ bool FunctionReferencer::ReferenceRecord(const clang::RecordType *RT)
 
     if (!RD->isDependentType())
     {
-        if (!RD->isPOD())
+        if (isPolymorphic(RD))
         {
             auto Ctor = S.LookupDefaultConstructor(
                             const_cast<clang::CXXRecordDecl *>(RD));
@@ -701,12 +707,12 @@ bool isMapped(const clang::Decl *D) // TODO
             auto Parent = MD->getParent();
             if (Parent->isUnion())
                 return false;
-            if (MD->isImplicit() && Parent->isPOD())
+            if (MD->isImplicit() && !isPolymorphic(Parent))
                 return false;
         }
 
         if (auto CCD = dyn_cast<clang::CXXConstructorDecl>(D))
-            if ((CCD->isImplicit() || CCD->isDefaultConstructor()) && CCD->getParent()->isPOD())
+            if ((CCD->isImplicit() || CCD->isDefaultConstructor()) && !isPolymorphic(CCD->getParent()))
                 return false; // default constructors aren't allowed for structs (but some template C++ code rely on them so they'll need to be emitted anyway)
                     // also if the implicit copy constructor gets mapped for a struct for example, then new thatStruct won't work without arguments
     }

@@ -179,7 +179,7 @@ public:
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                                                     const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
-    static const unsigned ForceNonPOD = 1 << 0; // When a templace declaration is non-POD, we want the explicit template specializations to be non-POD too even if isPOD() is true
+    static const unsigned ForcePolymorphic = 1 << 0; // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false
     static const unsigned MapImplicitRecords = 1 << 1;
     static const unsigned MapTemplateInstantiations = 1 << 2;
     static const unsigned MapExplicitSpecs = 1 << 3; // If not set explicit and partial specs will be discarded by VisitDecl

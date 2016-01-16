@@ -130,7 +130,7 @@ void ClassDeclaration::semantic(Scope *sc)
         m.addImplicitDecls = false;
 
         auto instcd = static_cast<cpp::ClassDeclaration*>(
-            m.VisitInstancedClassTemplate(InstRD, DeclMapper::ForceNonPOD)->isClassDeclaration());
+            m.VisitInstancedClassTemplate(InstRD, DeclMapper::ForcePolymorphic)->isClassDeclaration());
         assert(instcd);
 
         instcd->syntaxCopy(this);

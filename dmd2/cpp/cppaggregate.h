@@ -22,7 +22,7 @@ namespace cpp
 {
 class FuncDeclaration;
 
-// All POD C++ aggregate types, it doesn't matter whether "struct" or "class"
+// All non-polymorphic C++ aggregate types, it doesn't matter whether "struct" or "class"
 // was used and whether another aggregate inherit from it
 class StructDeclaration : public ::StructDeclaration
 {
