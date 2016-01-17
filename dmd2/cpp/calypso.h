@@ -187,7 +187,6 @@ public:
     void toDefineVariable(::VarDeclaration* vd) override;
     void toDefineStruct(::StructDeclaration* sd) override;
     void toDefineClass(::ClassDeclaration* cd) override;
-    void toPreInitVarDeclaration(::VarDeclaration* vd) override;
 
     LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, char* name) override;
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
@@ -200,7 +199,6 @@ public:
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
     void toInitClassForeign(TypeClass* tc, LLValue* dst) override;
 
-    void toPreInitClass(TypeClass* tc, LLValue* dst) override;
     void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;
 
     void toBeginCatch(IRState *irs, ::Catch *cj) override;
