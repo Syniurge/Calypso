@@ -1620,6 +1620,7 @@ bool TypeMapper::isInjectedScopeName(const clang::Decl *D)
 TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
         const clang::FunctionDecl *FD)
 {
+    auto& Context = calypso.getASTContext();
     auto& S = calypso.pch.AST->getSema();
     auto& Diags = calypso.pch.AST->getDiagnostics();
 
@@ -1700,6 +1701,9 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         stc |= STCref;
         rt = rt->nextOf();
     }
+
+    if (T->isNothrow(Context, false))
+        stc |= STCnothrow;
 
     auto tf = new TypeFunction(params, rt, 0, LINKd, stc);
     tf = static_cast<TypeFunction*>(tf->addSTC(stc));
