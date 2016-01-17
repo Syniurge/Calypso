@@ -452,6 +452,14 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
     if (CRD && !D->isUnion())
     {
+        if (isStruct && !CRD->hasDefaultConstructor())
+        {
+            // Disable the default ctor if it's also disabled on the C++ side
+            auto tf = new TypeFunction(new Parameters, nullptr, 0, LINKd, STCdisable);
+            auto disabledCtor = new CtorDeclaration(loc, STCdisable, tf, nullptr);
+            members->push(disabledCtor);
+        }
+
         if (!CRD->isDependentType())
         {
             auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
@@ -712,7 +720,7 @@ bool isMapped(const clang::Decl *D) // TODO
         }
 
         if (auto CCD = dyn_cast<clang::CXXConstructorDecl>(D))
-            if ((CCD->isImplicit() || CCD->isDefaultConstructor()) && !isPolymorphic(CCD->getParent()))
+            if (CCD->isDefaultConstructor() && !isPolymorphic(CCD->getParent()))
                 return false; // default constructors aren't allowed for structs (but some template C++ code rely on them so they'll need to be emitted anyway)
                     // also if the implicit copy constructor gets mapped for a struct for example, then new thatStruct won't work without arguments
     }
@@ -756,6 +764,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     StorageClass stc = STCundefined;
     if (MD)
     {
+        if (MD->isDeleted())
+            stc |= STCdisable;
+
         if (MD->isStatic())
             stc |= STCstatic;
 

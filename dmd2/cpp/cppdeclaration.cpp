@@ -209,6 +209,13 @@ void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
         return;
 
     auto FD = getFD(fd);
+
+    if (!FD)
+    {
+        assert(fd->storage_class & STCdisable); // e.g added @disable this for structs without a C++ default ctor
+        return;
+    }
+
     if (FD->getDescribedFunctionTemplate())
     {
         auto ti = sc->parent->isTemplateInstance();
@@ -481,6 +488,8 @@ void FuncDeclaration::semantic3reference(::FuncDeclaration *fd, Scope *sc)
     fd->semantic3Errors = false;
 
     auto FD = getFD(fd);
+    if (!FD)
+        return;
 
     const clang::FunctionDecl *Def;
     if (!FD->isInvalidDecl() && FD->hasBody(Def))

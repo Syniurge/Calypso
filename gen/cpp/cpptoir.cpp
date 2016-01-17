@@ -693,6 +693,12 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
 
     fdecl->ir.setDeclared();
 
+    if (!FD)
+    {
+        assert(fdecl->storage_class & STCdisable);
+        return;
+    }
+
     auto resolved = ResolvedFunc::get(*CGM, FD);
     irFunc->func = resolved.Func;
     irFty.funcType = resolved.Ty;
