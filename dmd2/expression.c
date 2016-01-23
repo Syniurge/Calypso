@@ -8396,12 +8396,12 @@ Lagain:
             // First look for constructor
             if (e1->op == TOKtype && ad->ctor)
             {
-                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim))
+                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim) && /* CALYPSO */ !sd->defaultCtor)
                     goto Lx;
 
                 Expression *e = NULL;
 
-                if (t1->ty == Tstruct) // CALYPSO
+                if (t1->ty == Tstruct && /* HACK */ !ad->langPlugin()) // CALYPSO
                 {
                 StructLiteralExp *sle = new StructLiteralExp(loc, sd, NULL, e1->type);
                 if (!sd->fill(loc, sle->elements, true))
@@ -11266,18 +11266,20 @@ Expression *AssignExp::semantic(Scope *sc)
                     e2x->op == TOKcall &&
                     (ce = (CallExp *)e2x, ce->e1->op == TOKdotvar) &&
                     (dve = (DotVarExp *)ce->e1, dve->var->isCtorDeclaration()) &&
-                    e2x->type->implicitConvTo(t1)
-                    && sd) // CALYPSO HACK: the bit copy isn't needed and making things harder for us
+                    e2x->type->implicitConvTo(t1))
                 {
                     /* Look for form of constructor call which is:
                      *    __ctmp.ctor(arguments...)
                      */
 
+                    AssignExp *ae = NULL;
+                    if (!ad->langPlugin()) // CALYPSO HACK: the bit copy isn't needed and making things harder for us
+                    {
                     /* Before calling the constructor, initialize
                      * variable with a bit copy of the default
                      * initializer
                      */
-                    AssignExp *ae = this;
+                    ae = this;
                     if (sd && sd->zeroInit == 1)
                         ae->e2 = new IntegerExp(loc, 0, Type::tint32);
                     else if (ad->isNested())
@@ -11286,6 +11288,7 @@ Expression *AssignExp::semantic(Scope *sc)
                         ae->e2 = t1->defaultInit(loc);
                     // Keep ae->op == TOKconstruct
                     ae->type = e1x->type;
+                    }
 
                     /* Replace __ctmp being constructed with e1.
                      * We need to copy constructor call expression,
@@ -11296,7 +11299,7 @@ Expression *AssignExp::semantic(Scope *sc)
                     CallExp *cx = (CallExp *)ce->copy();
                     cx->e1 = dvx;
 
-                    Expression *e = new CommaExp(loc, ae, cx);
+                    Expression *e = ae ? (Expression *) new CommaExp(loc, ae, cx) : (Expression *) cx;
                     e = e->semantic(sc);
                     return e;
                 }
