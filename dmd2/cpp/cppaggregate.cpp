@@ -104,6 +104,15 @@ unsigned int StructDeclaration::size(Loc loc)
     return structsize;
 }
 
+Expression *StructDeclaration::defaultInit(Loc loc)
+{
+    if (!defaultCtor)
+        return ::StructDeclaration::defaultInit(loc);
+
+    auto arguments = new Expressions;
+    return new CallExp(loc, new TypeExp(loc, type), arguments);
+}
+
 bool StructDeclaration::mayBeAnonymous()
 {
     return true;
@@ -225,8 +234,6 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
 
     auto arguments = new Expressions;
     return new CallExp(loc, new TypeExp(loc, type), arguments);
-
-//     return nullptr; // handled in cpptoir.cpp because CallExp(TypeExp()) causes recursive evaluation
 }
 
 void ClassDeclaration::makeNested()

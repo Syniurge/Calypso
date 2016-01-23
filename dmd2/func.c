@@ -4816,7 +4816,7 @@ void CtorDeclaration::semantic(Scope *sc)
         && (!this->parent->isTemplateInstance() || this->parent->isTemplateMixin()))
     {
         StructDeclaration *sd = ad->isStructDeclaration();
-        if (sd)
+        if (sd && sd->disableDefaultCtor()) // CALYPSO
         {
             if (fbody || !(storage_class & STCdisable))
             {

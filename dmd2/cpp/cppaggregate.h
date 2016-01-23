@@ -37,7 +37,9 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     unsigned size(Loc loc) override;
+    Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
+    bool disableDefaultCtor() override { return false; }
 };
 
 // The rest, i.e anything involving inheritance, virtual functions.

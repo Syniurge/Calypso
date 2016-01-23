@@ -179,7 +179,9 @@ public:
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     bool isPOD();
 
-    virtual Expression *defaultInit(Loc loc); // CALYPSO
+    // CALYPSO
+    virtual bool disableDefaultCtor() { return true; }
+    virtual Expression *defaultInit(Loc loc);
 
     StructDeclaration *isStructDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }

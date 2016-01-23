@@ -718,11 +718,6 @@ bool isMapped(const clang::Decl *D) // TODO
             if (MD->isImplicit() && !isPolymorphic(Parent))
                 return false;
         }
-
-        if (auto CCD = dyn_cast<clang::CXXConstructorDecl>(D))
-            if (CCD->isDefaultConstructor() && !isPolymorphic(CCD->getParent()))
-                return false; // default constructors aren't allowed for structs (but some template C++ code rely on them so they'll need to be emitted anyway)
-                    // also if the implicit copy constructor gets mapped for a struct for example, then new thatStruct won't work without arguments
     }
 
     return true;
