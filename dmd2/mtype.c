@@ -8635,7 +8635,7 @@ Expression *TypeClass::defaultInit(Loc loc)
 
 bool TypeClass::isZeroInit(Loc loc)
 {
-    return true;
+    return byRef(); // CALYPSO
 }
 
 bool TypeClass::checkBoolean()
