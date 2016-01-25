@@ -1024,9 +1024,6 @@ void DtoVarDeclaration(VarDeclaration* vd)
 
     IF_LOG Logger::cout() << "llvm value for decl: " << *getIrLocal(vd)->value << '\n';
 
-//     for (auto lp: global.langPlugins) // CALYPSO (TODO unneeded)
-//         lp->codegen()->toPreInitVarDeclaration(vd);
-
     if (vd->init)
     {
         if (ExpInitializer* ex = vd->init->isExpInitializer())
