@@ -380,6 +380,13 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         assert(p.s && p.s->isTemplateDeclaration());
 
         auto td = p.s->isTemplateDeclaration();
+        if (td->semanticRun == PASSinit)
+        {
+            assert(td->scope);
+            td->semantic(td->scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
+            assert(td->semanticRun > PASSinit);
+        }
+
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
         assert(tiargs);
         SpecValue spec(mapper);
