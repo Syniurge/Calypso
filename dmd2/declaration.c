@@ -1652,24 +1652,7 @@ void VarDeclaration::setFieldOffset(AggregateDeclaration *ad, unsigned *poffset,
         return;
     assert(!(storage_class & (STCstatic | STCextern | STCparameter | STCtls)));
 
-    /* Fields that are tuples appear both as part of TupleDeclarations and
-     * as members. That means ignore them if they are already a field.
-     */
-    if (offset)
-    {
-        // already a field
-        *poffset = ad->structsize;  // Bugzilla 13613
-        return;
-    }
-    for (size_t i = 0; i < ad->fields.dim; i++)
-    {
-        if (ad->fields[i] == this)
-        {
-            // already a field
-            *poffset = ad->structsize;  // Bugzilla 13613
-            return;
-        }
-    }
+    // CALYPSO moved after semantic()
 
     // Check for forward referenced types which will fail the size() call
     Type *t = type->toBasetype();
@@ -1706,6 +1689,27 @@ void VarDeclaration::setFieldOffset(AggregateDeclaration *ad, unsigned *poffset,
     if (t->ty == Terror)
         return;
 
+    // CALYPSO HACK: we need to move the following check after the ts->sym->semantic() call,
+    // since Calypso sets the field offsets without running semantic() to avoid overzealous fwd errors.
+
+    /* Fields that are tuples appear both as part of TupleDeclarations and
+     * as members. That means ignore them if they are already a field.
+     */
+    if (offset)
+    {
+        // already a field
+        *poffset = ad->structsize;  // Bugzilla 13613
+        return;
+    }
+    for (size_t i = 0; i < ad->fields.dim; i++)
+    {
+        if (ad->fields[i] == this)
+        {
+            // already a field
+            *poffset = ad->structsize;  // Bugzilla 13613
+            return;
+        }
+    }
 
     unsigned memsize      = (unsigned)t->size(loc);  // size of member
     unsigned memalignsize = Target::fieldalign(t);   // size of member for alignment purposes
