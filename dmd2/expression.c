@@ -5023,6 +5023,10 @@ Lagain:
 
             if (!sd->fill(loc, arguments, false))
                 return new ErrorExp();
+
+            // CALYPSO HACK or FIX? the default init for C++ TypeStruct and TypeClass need to be semantic'd, which isn't done by fit() and fill()
+            if (arrayExpressionSemantic(arguments, sc))
+                goto Lerr;
         }
 
         type = type->pointerTo();
