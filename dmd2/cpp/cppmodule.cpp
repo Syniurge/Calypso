@@ -718,7 +718,7 @@ bool isMapped(const clang::Decl *D) // TODO
             auto Parent = MD->getParent();
             if (Parent->isUnion())
                 return false;
-            if (MD->isImplicit() && !isPolymorphic(Parent))
+            if (MD->isImplicit() && MD->isTrivial()/* && !isPolymorphic(Parent)*/)
                 return false;
         }
     }
