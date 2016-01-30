@@ -332,7 +332,10 @@ static void MarkFunctionForEmit(const clang::FunctionDecl *D)
     if (!D->getDeclContext()->isDependentContext())
     {
         auto D_ = const_cast<clang::FunctionDecl*>(D);
-        D_->setTrivial(false);  // force its definition and Sema to resolve its exception spec
+        
+        auto FPT = dyn_cast<clang::FunctionProtoType>(D_->getType());
+        if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
+            S.ResolveExceptionSpec(D->getLocation(), FPT);
 
         S.MarkFunctionReferenced(D->getLocation(), D_);
         if (Diags.hasErrorOccurred())
