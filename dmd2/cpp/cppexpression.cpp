@@ -184,15 +184,10 @@ Expression* ExprMapper::fromBinExp(const clang::BinaryOperator* E)
                     E->getLHS(), E->getRHS());
 }
 
-Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
+static const clang::Expr* skipIgnoredCast(const clang::CastExpr *E)
 {
     auto Kind = E->getCastKind();
-
-    if (Kind == clang::CK_NullToPointer)
-        return new NullExp(loc);
-
     auto SubExpr = E->getSubExpr();
-    auto e = fromExpression(SubExpr);
 
     bool skipCast = false;
     if (isa<clang::ImplicitCastExpr>(E))
@@ -215,7 +210,34 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
             SubExpr->getType().getCanonicalType() == CastDestTy.getCanonicalType())
         skipCast = true;
 
-    if (skipCast)
+    return skipCast ? SubExpr : E;
+}
+
+static const clang::Expr* skipIgnored(const clang::Expr *E)
+{
+    const clang::Expr* SubExpr = E;
+
+    if (auto CastExpr = dyn_cast<clang::CastExpr>(E))
+        SubExpr = skipIgnoredCast(CastExpr);
+    else if (auto ConstructExpr = dyn_cast<clang::CXXConstructExpr>(E))
+        if (ConstructExpr->isElidable())
+            SubExpr = ConstructExpr->getArg(0);
+
+    return (SubExpr != E) ? skipIgnored(SubExpr) : E;
+}
+
+Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
+{
+    auto Kind = E->getCastKind();
+
+    if (Kind == clang::CK_NullToPointer)
+        return new NullExp(loc);
+
+    auto SubExpr = E->getSubExpr();
+    auto CastDestTy = E->getType();
+    auto e = fromExpression(SubExpr);
+
+    if (skipIgnoredCast(E) != E)
         return e;
 
     assert(SubExpr->getType().getCanonicalType()
@@ -535,7 +557,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     else if (auto MT = dyn_cast<clang::MaterializeTemporaryExpr>(E))
     {
         auto Ty = E->getType();
-        auto TempExpr = MT->GetTemporaryExpr();
+        auto TempExpr = skipIgnored(MT->GetTemporaryExpr());  // ignore skipped casts, elidable constructs, etc. in order to not bias TempExpr->isLValue()
         e = fromExpression(TempExpr);
 
         if (!e)
