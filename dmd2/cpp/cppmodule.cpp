@@ -455,13 +455,13 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
     if (CRD && !D->isUnion())
     {
-        if (isStruct && !CRD->hasDefaultConstructor())
-        {
-            // Disable the default ctor if it's also disabled on the C++ side
-            auto tf = new TypeFunction(new Parameters, nullptr, 0, LINKd, STCdisable);
-            auto disabledCtor = new CtorDeclaration(loc, STCdisable, tf, nullptr);
-            members->push(disabledCtor);
-        }
+//         if (isStruct && !CRD->hasDefaultConstructor())
+//         {
+//             // Disable the default ctor if it's also disabled on the C++ side
+//             auto tf = new TypeFunction(new Parameters, nullptr, 0, LINKd, STCdisable);
+//             auto disabledCtor = new CtorDeclaration(loc, STCdisable, tf, nullptr);
+//             members->push(disabledCtor);
+//         }
 
         if (!CRD->isDependentType())
         {
