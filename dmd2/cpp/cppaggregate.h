@@ -92,6 +92,7 @@ template<typename AggTy> void buildAggLayout(AggTy *ad);
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad);
 const clang::RecordDecl *getRecordDecl(::Type *t);
 ::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl *FD);
+::FuncDeclaration *findOverriddenMethod(::FuncDeclaration* md, ::ClassDeclaration* base );
 
 }
 

@@ -452,4 +452,20 @@ const clang::RecordDecl *getRecordDecl(::Type *t)
     return nullptr;
 }
 
+::FuncDeclaration* findOverriddenMethod(::FuncDeclaration *md, ::ClassDeclaration *base)
+{
+    for (auto s2: base->vtbl)
+    {
+        auto md2 = s2->isFuncDeclaration();
+        if (!md2)
+            continue;
+
+        for (auto overmd: md->foverrides) {
+            if (overmd == md2)
+                return md2;
+        }
+    }
+    return nullptr;
+}
+
 }

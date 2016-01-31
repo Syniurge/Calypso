@@ -270,21 +270,10 @@ void LangPlugin::emitAdditionalClassSymbols(::ClassDeclaration *cd)
             continue;
 
         cpp::FuncDeclaration *cxxmd = nullptr;
-        for (auto s2: dcxxInfo->mostDerivedCXXBase->vtbl)
+        if (auto overmd = findOverriddenMethod(md, dcxxInfo->mostDerivedCXXBase))
         {
-            auto md2 = s2->isFuncDeclaration();
-            if (!md2)
-                continue;
-
-            for (auto overmd: md->foverrides) {
-                if (overmd == md2) {
-                    cxxmd = static_cast<cpp::FuncDeclaration*>(md2);
-                    break;
-                }
-            }
-
-            if (cxxmd)
-                break;
+            assert(isCPP(overmd));
+            cxxmd = static_cast<cpp::FuncDeclaration*>(overmd);
         }
 
         if (!cxxmd)

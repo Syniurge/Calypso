@@ -2,6 +2,7 @@
 
 #include "cpp/astunit.h"
 #include "cpp/calypso.h"
+#include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "scope.h"
 #include "template.h"
@@ -33,13 +34,24 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
         RootObject *o = (*e->args)[0];
         Dsymbol *s = getDsymbol(o);
         ::FuncDeclaration *fd;
-        if (!s || (fd = s->isFuncDeclaration()) == NULL || !isCPP(fd))
+
+        assert(s->toParent()->isClassDeclaration());
+        auto cd = static_cast<::ClassDeclaration*>(s->toParent());
+        if (auto cxxparent = isDCXX(cd))
+            cd = cxxparent;
+
+        if (!s || (fd = s->isFuncDeclaration()) == NULL || !isCPP(cd))
         {
-            e->error("first argument to __traits(getCppVirtualIndex) must be a C++ function");
+            e->error("first argument to __traits(getCppVirtualIndex) must be a C++ virtual method or a D method overriding a C++ virtual method");
             goto Lfalse;
         }
         fd = fd->toAliasFunc(); // Neccessary to support multiple overloads.
 
+        if (!isCPP(fd))
+        {
+            fd = findOverriddenMethod(fd, cd);
+            assert(fd && isCPP(fd));
+        }
         auto c_fd = static_cast<cpp::FuncDeclaration*>(fd);
         auto MD = cast<clang::CXXMethodDecl>(c_fd->FD);
 
