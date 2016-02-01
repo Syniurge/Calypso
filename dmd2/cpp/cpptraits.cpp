@@ -42,16 +42,15 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
 
         if (!s || (fd = s->isFuncDeclaration()) == NULL || !isCPP(cd))
         {
-            e->error("first argument to __traits(getCppVirtualIndex) must be a C++ virtual method or a D method overriding a C++ virtual method");
-            goto Lfalse;
+//             e->error("first argument to __traits(getCppVirtualIndex) must be a C++ virtual method or a D method overriding a C++ virtual method");
+            return new IntegerExp(e->loc, -1, Type::tptrdiff_t);
         }
         fd = fd->toAliasFunc(); // Neccessary to support multiple overloads.
 
         if (!isCPP(fd))
-        {
             fd = findOverriddenMethod(fd, cd);
-            assert(fd && isCPP(fd));
-        }
+        if (!fd || !isCPP(fd) || !fd->isVirtualMethod())
+            return new IntegerExp(e->loc, -1, Type::tptrdiff_t);
         auto c_fd = static_cast<cpp::FuncDeclaration*>(fd);
         auto MD = cast<clang::CXXMethodDecl>(c_fd->FD);
 
