@@ -1073,9 +1073,21 @@ Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType
         return Type::tptrdiff_t;
     else
     {
+        auto FPT = cast<clang::FunctionProtoType>(
+                        withoutNonAliasSugar(T->getPointeeType()).getTypePtr());
+        auto ft = FromType(tm, loc).fromTypeFunction(FPT);
+        auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
+
+        // in the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
+        // NOTE: making those types' semantics dependent on the C++ ABI was a conscious choice
+        auto ti = new ::TemplateInstance(loc, Identifier::idPool("__cpp_member_funcptr"));
+        ti->tiargs = new Objects;
+        ti->tiargs->push(ft); // we need to remember the function type and the parent class, in case we have to send the type back to Clang
+        ti->tiargs->push(tc);
+
         auto t = new TypeIdentifier(loc, Identifier::idPool("object"));
-        t->addIdent(Identifier::idPool("__cpp_member_funcptr"));  // in the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
-        return t; // NOTE: making those types' semantics dependent on the C++ ABI was a conscious choice
+        t->addInst(ti);
+        return t;
     }
 }
 
@@ -2065,6 +2077,24 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
     switch (t->ty)
     {
         case Tstruct:
+        {
+            // Special treatment of __cpp_member_funcptr!(T, Cls)
+            auto sd = static_cast<TypeStruct*>(t)->sym;
+            if (sd->ident == Identifier::idPool("__cpp_member_funcptr"))
+            {
+                auto ti = sd->toParent()->isTemplateInstance();
+                assert(ti);
+                auto ft = isType((*ti->tiargs)[0]);
+                auto tagg = isType((*ti->tiargs)[1]);
+                assert(ft && ft->ty == Tfunction &&
+                        tagg && (tagg->ty == Tstruct || tagg->ty == Tclass) && isCPP(getAggregateSym(tagg)));
+
+                auto FT = toType(loc, ft, sc);
+                auto ClassParent = toType(loc, tagg, sc);
+
+                return Context.getMemberPointerType(FT, ClassParent.getTypePtr());
+            }
+        }
         case Tclass:
         {
             return Context.getRecordType(getRecordDecl(t));
