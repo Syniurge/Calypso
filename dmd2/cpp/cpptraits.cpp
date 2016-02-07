@@ -27,7 +27,22 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
     auto& Context = getASTContext();
     size_t dim = e->args ? e->args->dim : 0;
 
-    if (e->ident == Identifier::idPool("getCppVirtualIndex"))
+    if (e->ident == Identifier::idPool("isCpp"))
+    {
+        if (dim != 1)
+            goto Ldimerror;
+        RootObject *o = (*e->args)[0];
+        Dsymbol *s = getDsymbol(o);
+        if (!s) { }
+        else if (isCPP(s))
+            goto Ltrue;
+        else
+            goto Lfalse;
+
+        e->error("symbol expected instead of '%s'", o->toChars());
+        goto Lfalse;
+    }
+    else if (e->ident == Identifier::idPool("getCppVirtualIndex"))
     {
         if (dim != 1)
             goto Ldimerror;
@@ -70,6 +85,9 @@ Ldimerror:
 
 Lfalse:
     return new IntegerExp(e->loc, 0, Type::tbool);
+
+Ltrue:
+    return new IntegerExp(e->loc, 1, Type::tbool);
 }
 
 }
