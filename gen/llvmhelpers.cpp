@@ -500,6 +500,9 @@ DValue* DtoCastPtr(Loc& loc, DValue* val, Type* to)
 
     LLValue* rval;
 
+    if (isClassValueHandle(fromtype) && isClassValueHandle(totype)) // CALYPSO
+        return DtoCastClass(loc, val, to);
+
     if (totype->ty == Tpointer || totype->ty == Tclass) {
         LLValue* src = val->getRVal();
         IF_LOG {

@@ -36,6 +36,9 @@
 // CALYPSO
 LLValue *DtoClassHandle(DValue *val)
 {
+    if (isClassValueHandle(val->type))
+        return val->getRVal();
+
     assert(val->type->ty == Tclass);
     auto tc = static_cast<TypeClass*>(val->type);
     if (tc->byRef())
@@ -292,13 +295,15 @@ DValue* DtoCastClass(Loc& loc, DValue* val, Type* _to)
     LOG_SCOPE;
 
     Type* to = _to->toBasetype();
-
     // from type
     Type* from = val->getType()->toBasetype();
-    TypeClass* fc = static_cast<TypeClass*>(from);
 
-    if (fc->byRef() && isClassValueHandle(to)) // CALYPSO
+    if (isClassValueHandle(from)) // CALYPSO
+        from = from->nextOf();
+    if (isClassValueHandle(to))
         to = to->nextOf();
+
+    TypeClass* fc = static_cast<TypeClass*>(from);
 
     // get class ptr
     LLValue *v = DtoClassHandle(val); // CALYPSO
