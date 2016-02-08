@@ -258,6 +258,7 @@ const char* traits[] = {
     "getUnitTests",
     "getVirtualIndex",
     "getPointerBitmap",
+    "getBaseOffset",
     "getCppVirtualIndex", // CALYPSO quick&dirty addition necessary when we need to compare member function pointers (e.g for moc)
     "isCpp",
     NULL
@@ -1237,7 +1238,8 @@ Expression *semanticTraits(TraitsExp *e, Scope *sc)
     {
         return pointerBitmap(e);
     }
-    else if (e->ident == Identifier::idPool("getCppVirtualIndex") ||
+    else if (e->ident == Identifier::idPool("getBaseOffset") ||
+            e->ident == Identifier::idPool("getCppVirtualIndex") ||
             e->ident == Identifier::idPool("isCpp")) // CALYPSO TODO move to cpp/
     {
         return cpp::calypso.semanticTraits(e, sc);

@@ -78,6 +78,21 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
 
         return new IntegerExp(e->loc, VTableOffset, Type::tptrdiff_t);
     }
+    else if (e->ident == Identifier::idPool("getBaseOffset"))
+    {
+        if (dim != 2)
+            goto Ldimerror;
+        RootObject *o1 = (*e->args)[0];
+        RootObject *o2 = (*e->args)[1];
+        auto t1 = getType(o1)->toBasetype();
+        auto t2 = getType(o2)->toBasetype();
+
+        int offset = 0;
+        if (!t1 || !t2 || (t1 != t2 && !t2->isBaseOf(t1, &offset)))
+            return new IntegerExp(e->loc, -1, Type::tptrdiff_t);
+
+        return new IntegerExp(e->loc, offset, Type::tptrdiff_t);
+    }
     assert(0);
 
 Ldimerror:
