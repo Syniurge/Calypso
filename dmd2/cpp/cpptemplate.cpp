@@ -330,7 +330,7 @@ clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
     TypeMapper tymap;
     ExprMapper expmap(tymap);
     tymap.addImplicitDecls = false;
-    tymap.cppPrefix = false;
+//     tymap.cppPrefix = false;
 
     auto Temp = getPrimaryTemplate();
 
