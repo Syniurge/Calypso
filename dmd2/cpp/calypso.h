@@ -188,6 +188,7 @@ public:
     void toDefineStruct(::StructDeclaration* sd) override;
     void toDefineClass(::ClassDeclaration* cd) override;
 
+    bool toIsReturnInArg(CallExp* ce) override;
     LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, char* name) override;
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                    Expressions* arguments, llvm::Value *retvar) override;

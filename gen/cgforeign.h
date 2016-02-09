@@ -40,6 +40,7 @@ public:
     virtual void toDefineStruct(StructDeclaration* sd) = 0;
     virtual void toDefineClass(ClassDeclaration* cd) = 0;
 
+    virtual bool toIsReturnInArg(CallExp* ce) = 0;
     virtual LLValue *toVirtualFunctionPointer(DValue* inst, FuncDeclaration* fdecl, char* name) = 0;
     virtual DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                    Expressions* arguments, llvm::Value *retvar) = 0;

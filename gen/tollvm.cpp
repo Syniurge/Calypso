@@ -12,10 +12,12 @@
 #include "declaration.h"
 #include "dsymbol.h"
 #include "id.h"
+#include "import.h"
 #include "init.h"
 #include "module.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/complex.h"
 #include "gen/dvalue.h"
@@ -50,6 +52,8 @@ RET retStyle(TypeFunction *tf)
 bool DtoIsReturnInArg(CallExp *ce)
 {
     TypeFunction *tf = static_cast<TypeFunction *>(ce->e1->type->toBasetype());
+    if (ce->f && ce->f->langPlugin()) // CALYPSO
+        return ce->f->langPlugin()->codegen()->toIsReturnInArg(ce);
     if (tf->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f)))
         return retStyle(tf) == RETstack;
     return false;

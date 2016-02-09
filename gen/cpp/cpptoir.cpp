@@ -440,6 +440,17 @@ void LangPlugin::toInitClassForeign(TypeClass* tc, LLValue* dst)
     DtoMemCpy(dst, initsym, DtoConstSize_t(dataBytes));
 }
 
+bool LangPlugin::toIsReturnInArg(CallExp* ce)
+{
+    auto fd = static_cast<cpp::FuncDeclaration*>(ce->f);
+    auto FD = fd->FD;
+
+    auto& fnInfo = CGM->getTypes().arrangeFunctionDeclaration(FD);
+    auto& RetAI = fnInfo.getReturnInfo();
+
+    return RetAI.isIndirect() || RetAI.isInAlloca();
+}
+
 LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst, 
                                               ::FuncDeclaration* fdecl, char* name)
 {
@@ -632,9 +643,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
             Args.add(clangCG::RValue::get(argval->getRVal()), ArgTy);
     }
 
-//     clangCG::ReturnValueSlot ReturnValue(retvar, false);
-    assert(!retvar); // since LDC doesn't know we're using sret for C++ calls
-            // we could make it aware though (TODO)
+    clangCG::ReturnValueSlot ReturnValue(retvar, false);
     
     // Setup a landing pad if needed
     llvm::BasicBlock *invokeDest = nullptr,
@@ -659,7 +668,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     }
 
     auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
-    RV = CGF()->EmitCall(FInfo, callable, clangCG::ReturnValueSlot(), Args, FD,
+    RV = CGF()->EmitCall(FInfo, callable, ReturnValue, Args, FD,
                             nullptr, invokeDest, postinvoke);
 
     if (postinvoke)
