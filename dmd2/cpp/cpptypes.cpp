@@ -800,7 +800,7 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
         tqual = nullptr;
     else
     {
-        auto LeftMost = tm.GetNonNestedContext(D);
+        auto LeftMost = GetNonNestedContext(D);
         ScopeChecker LeftMostCheck(LeftMost);
 
         if (LeftMostCheck(D))  // we'll need a fully qualified type
@@ -1899,7 +1899,7 @@ bool isSameNameTagTypedef(const clang::TypedefNameDecl* D)
 }
 
 // Returns the topmost parent tagdecl, or the bottom-most namespace or the TU
-const clang::Decl *TypeMapper::GetNonNestedContext(const clang::Decl *D)
+const clang::Decl *GetNonNestedContext(const clang::Decl *D)
 {
     if (isa<clang::TranslationUnitDecl>(D) ||
                 isa<clang::NamespaceDecl>(D))

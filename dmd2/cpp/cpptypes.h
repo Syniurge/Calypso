@@ -165,7 +165,6 @@ protected:
     ::Import *BuildImplicitImport(Loc loc, const clang::Decl *D, Identifier *aliasid = nullptr);
     ::Import *BuildImplicitImport(Loc loc, const clang::Decl *D, const clang::Module *Mod, Identifier *aliasid = nullptr);
     Module::RootKey GetImplicitImportKeyForDecl(const clang::NamedDecl *D);
-    const clang::Decl *GetNonNestedContext(const clang::Decl *D);  // returns the "root" for qualified types
 
     Type *trySubstitute(const clang::Decl *D);
 
@@ -179,8 +178,11 @@ const clang::FunctionTemplateDecl *getDefinition(const clang::FunctionTemplateDe
 const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTemplateSpecializationDecl *D);
 
 bool isNonSupportedType(clang::QualType T);
+
 const clang::DeclContext *getDeclContextNonLinkSpec(const clang::Decl *D);
 const clang::DeclContext *getDeclContextNamedOrTU(const clang::Decl *D); // skipping transparent (i.e anonymous) decl contexts too
+const clang::Decl *GetNonNestedContext(const clang::Decl *D);  // returns the "root" for qualified types
+
 const clang::Decl *getSpecializedDeclOrExplicit(const clang::Decl *Spec);
 clang::QualType withoutNonAliasSugar(clang::QualType Ty);
 const clang::TagDecl *isAnonTagTypedef(const clang::TypedefNameDecl* D);

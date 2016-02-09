@@ -1309,12 +1309,6 @@ const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
         auto ParamTy = Func->getParamDecl(I)->getType().getNonReferenceType()
                                 .getDesugaredType(Context).getCanonicalType();
 
-        if (auto TagTy = ParamTy->getAs<clang::TagType>())
-        {
-            OpTyDecl = TagTy->getDecl();
-            break;
-        }
-
         if (auto TempSpec = ParamTy->getAs<clang::TemplateSpecializationType>())
             if (auto Temp = TempSpec->getTemplateName().getAsTemplateDecl())
             {
@@ -1325,8 +1319,22 @@ const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                 }
 
                 if (isa<clang::TypeAliasTemplateDecl>(Temp))
-                    assert(false && "Wrongly assumed that it would desugared");
+                    assert(false && "Wrongly assumed that it would get desugared");
             }
+
+        if (auto TagTy = ParamTy->getAs<clang::TagType>())
+        {
+            OpTyDecl = TagTy->getDecl();
+            break;
+        }
+    }
+
+    if (OpTyDecl)
+    {
+        OpTyDecl = cast<clang::TagDecl>(GetNonNestedContext(OpTyDecl)); // get the module-level TagDecl
+
+        if (auto TempSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(OpTyDecl))
+            OpTyDecl = TempSpec->getSpecializedTemplate()->getTemplatedDecl();
     }
 
     if (OpTyDecl && // either LHS or RHS has a tag type
