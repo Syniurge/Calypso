@@ -1882,7 +1882,7 @@ MATCH Type::implicitConvTo(Type *to)
     //printf("Type::implicitConvTo(this=%p, to=%p)\n", this, to);
     //printf("from: %s\n", toChars());
     //printf("to  : %s\n", to->toChars());
-    if (this->equals(to))
+    if (this->equivs(to)) // CALYPSO
         return MATCHexact;
     return MATCHnomatch;
 }
@@ -1899,7 +1899,7 @@ MATCH Type::implicitConvTo(Type *to)
 MATCH Type::constConv(Type *to)
 {
     //printf("Type::constConv(this = %s, to = %s)\n", toChars(), to->toChars());
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty && MODimplicitConv(mod, to->mod))
         return MATCHconst;
@@ -2753,7 +2753,7 @@ Type *TypeNext::makeMutable()
 MATCH TypeNext::constConv(Type *to)
 {
     //printf("TypeNext::constConv from = %s, to = %s\n", toChars(), to->toChars());
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
 
     if (!(ty == to->ty && MODimplicitConv(mod, to->mod)))
@@ -2772,7 +2772,7 @@ MATCH TypeNext::constConv(Type *to)
     }
     else
     {   //printf("\tnext => %s, to->next => %s\n", next->toChars(), tn->toChars());
-        m = next->equals(tn) ? MATCHconst : MATCHnomatch;
+        m = next->equivs(tn) ? MATCHconst : MATCHnomatch;
     }
     return m;
 }
@@ -3684,7 +3684,7 @@ bool TypeVector::isscalar()
 MATCH TypeVector::implicitConvTo(Type *to)
 {
     //printf("TypeVector::implicitConvTo(%s) from %s\n", to->toChars(), toChars());
-    if (this == to)
+    if (this->equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty)
         return MATCHconvert;
@@ -4234,7 +4234,7 @@ MATCH TypeSArray::implicitConvTo(Type *to)
 
     if (to->ty == Tsarray)
     {
-        if (this == to)
+        if (this->equivs(to)) // CALYPSO
             return MATCHexact;
 
         TypeSArray *tsa = (TypeSArray *)to;
@@ -4474,7 +4474,7 @@ bool TypeDArray::isString()
 MATCH TypeDArray::implicitConvTo(Type *to)
 {
     //printf("TypeDArray::implicitConvTo(to = %s) this = %s\n", to->toChars(), toChars());
-    if (equals(to))
+    if (equivs(to))
         return MATCHexact;
 
     // Allow implicit conversion of array to pointer
@@ -4872,7 +4872,7 @@ bool TypeAArray::hasPointers()
 MATCH TypeAArray::implicitConvTo(Type *to)
 {
     //printf("TypeAArray::implicitConvTo(to = %s) this = %s\n", to->toChars(), toChars());
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
 
     if (to->ty == Taarray)
@@ -4981,7 +4981,7 @@ MATCH TypePointer::implicitConvTo(Type *to)
 {
     //printf("TypePointer::implicitConvTo(to = %s) %s\n", to->toChars(), toChars());
 
-    if (equals(to))
+    if (equivs(to))
         return MATCHexact;
     if (next->ty == Tfunction)
     {
@@ -4990,7 +4990,7 @@ MATCH TypePointer::implicitConvTo(Type *to)
             TypePointer *tp = (TypePointer*)to;
             if (tp->next->ty == Tfunction)
             {
-                if (next->equals(tp->next))
+                if (next->equivs(tp->next))
                     return MATCHconst;
 
                 if (next->covariant(tp->next) == 1)
@@ -5054,7 +5054,7 @@ MATCH TypePointer::constConv(Type *to)
 {
     if (next->ty == Tfunction)
     {
-        if (to->nextOf() && next->equals(((TypeNext*)to)->next))
+        if (to->nextOf() && next->equivs(((TypeNext*)to)->next)) // CALYPSO
             return Type::constConv(to);
         else
             return MATCHnomatch;
@@ -6325,7 +6325,7 @@ MATCH TypeDelegate::implicitConvTo(Type *to)
     //printf("TypeDelegate::implicitConvTo(this=%p, to=%p)\n", this, to);
     //printf("from: %s\n", toChars());
     //printf("to  : %s\n", to->toChars());
-    if (this == to)
+    if (this->equivs(to)) // CALYPSO
         return MATCHexact;
 #if 1 // not allowing covariant conversions because it interferes with overriding
     if (to->ty == Tdelegate && this->nextOf()->covariant(to->nextOf()) == 1)
@@ -7453,7 +7453,7 @@ MATCH TypeEnum::implicitConvTo(Type *to)
 
 MATCH TypeEnum::constConv(Type *to)
 {
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty && sym == ((TypeEnum *)to)->sym &&
         MODimplicitConv(mod, to->mod))
@@ -8018,7 +8018,7 @@ MATCH TypeStruct::implicitConvTo(Type *to)
 
 MATCH TypeStruct::constConv(Type *to)
 {
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty && sym == ((TypeStruct *)to)->sym &&
         MODimplicitConv(mod, to->mod))
@@ -8581,7 +8581,7 @@ MATCH TypeClass::implicitConvTo(Type *to)
 
 MATCH TypeClass::constConv(Type *to)
 {
-    if (equals(to))
+    if (equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty && sym == ((TypeClass *)to)->sym &&
         MODimplicitConv(mod, to->mod))
