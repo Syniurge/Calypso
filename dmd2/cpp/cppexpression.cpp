@@ -706,16 +706,13 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
     return new RealExp(loc, val, t);
 }
 
-Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl *D,
-                                    const clang::NestedNameSpecifier *)
+Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
+                                    const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
     if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
         return fromExpressionNonTypeTemplateParm(loc, NTTP);
 
-    TypeQualifiedBuilderOptions tqualOpts;
-    tqualOpts.overOpFullIdent = true;
-
-    auto tqual = TypeMapper::FromType(tymap, loc).typeQualifiedFor(D, nullptr, nullptr, &tqualOpts);
+    auto tqual = TypeMapper::FromType(tymap, loc).typeQualifiedFor(D, nullptr, nullptr, tqualOpts);
     assert(tqual && "DeclRefExpr decl without a DeclarationName");
 
     // Convert the TypeQualified path to DotXXXExp because

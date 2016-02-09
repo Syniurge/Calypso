@@ -51,10 +51,11 @@ protected:
 };
 
 // Tweaks for special cases
-struct TypeQualifiedBuilderOptions
+enum TypeQualifiedBuilderOpts
 {
-    bool overOpSkipSpecArg = false; // if true skip "-" in opBinary!"-"
-    bool overOpFullIdent = false; // if true prefer the non-templated function to the forwarding template
+    TQ_None = 0,
+    TQ_OverOpSkipSpecArg = 1 << 0, // skip "-" in opBinary!"-"
+    TQ_OverOpFullIdent = 1 << 1 // prefer the non-templated function to the forwarding template
 };
 
 class TypeMapper
@@ -122,7 +123,7 @@ public:
         TypeQualified *typeQualifiedFor(clang::NamedDecl* D,
                             const clang::TemplateArgument* ArgBegin = nullptr,
                             const clang::TemplateArgument* ArgEnd = nullptr,
-                            TypeQualifiedBuilderOptions* options = nullptr);
+                            TypeQualifiedBuilderOpts options = TQ_None);
         Type *typeSubstOrQualifiedFor(clang::NamedDecl* D,
                             const clang::TemplateArgument* ArgBegin = nullptr,
                             const clang::TemplateArgument* ArgEnd = nullptr);

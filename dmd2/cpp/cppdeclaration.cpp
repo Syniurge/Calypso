@@ -331,7 +331,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto tqual = TypeMapper::FromType(mapper, loc).typeQualifiedFor(
                 const_cast<clang::NamedDecl*>(D), nullptr, nullptr,
-                &tqualOptions);
+                TQ_OverOpSkipSpecArg);
     if (!tqual)
         return true;
 

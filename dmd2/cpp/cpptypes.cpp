@@ -667,7 +667,7 @@ public:
     TypeMapper::FromType &from;
     TypeMapper &tm;
 
-    TypeQualifiedBuilderOptions options;
+    TypeQualifiedBuilderOpts options;
 
     ScopeChecker RootEquals;
     const clang::NamedDecl *TopDecl;
@@ -694,14 +694,12 @@ public:
         const clang::NamedDecl *TopDecl = nullptr,
         const clang::TemplateArgument *TempArgBegin = nullptr,
         const clang::TemplateArgument *TempArgEnd = nullptr,
-        TypeQualifiedBuilderOptions *options = nullptr)
-        : from(from), tm(from.tm), RootEquals(Root),
+        TypeQualifiedBuilderOpts options = TQ_None)
+        : from(from), tm(from.tm), options(options), RootEquals(Root),
           TopDecl(TopDecl),
           TopTempArgBegin(TempArgBegin),
           TopTempArgEnd(TempArgEnd)
     {
-        if (options)
-            this->options = *options;
     }
 
     TypeQualified *get(const clang::Decl *D);
@@ -772,13 +770,13 @@ RootObject *TypeQualifiedBuilder::getIdentOrTempinst(const clang::Decl *D)
     if (!Named)
         return nullptr;
 
-    if (options.overOpFullIdent)
+    if (options & TQ_OverOpFullIdent)
         return getExtendedIdentifierOrNull(Named, tm);
 
     SpecValue spec(tm); // overloaded operator
     auto ident = getIdentifierOrNull(Named, &spec);
 
-    if (spec && !options.overOpSkipSpecArg)
+    if (spec && !(options & TQ_OverOpSkipSpecArg))
     {
         auto loc = fromLoc(D->getLocation());
         auto tempinst = new cpp::TemplateInstance(loc, ident);
@@ -985,7 +983,7 @@ static TypeQualified *fromInjectedClassName(Loc loc)
 
 TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
-                        TypeQualifiedBuilderOptions* options)
+                        TypeQualifiedBuilderOpts options)
 {
     if (tm.isInjectedClassName(D))
         return fromInjectedClassName(loc); // in the following :

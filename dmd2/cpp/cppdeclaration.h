@@ -194,7 +194,6 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
     TypeMapper mapper;
     Loc loc;
     Scope *sc = nullptr;
-    TypeQualifiedBuilderOptions tqualOptions;
 
     llvm::DenseSet<const clang::Decl *> Referenced;
 
@@ -208,7 +207,6 @@ public:
     {
         mapper.addImplicitDecls = false;
 //         mapper.cppPrefix = false;
-        tqualOptions.overOpSkipSpecArg = true;
     }
 
     void Traverse(Loc loc, Scope *sc, clang::Stmt *S);
