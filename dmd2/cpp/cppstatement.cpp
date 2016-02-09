@@ -32,6 +32,7 @@ VarDeclaration *Catch::createVar()
 
     auto vd = ::Catch::createVar();
     vd->storage_class |= stc | STCforeach /* HACK */;
+    return vd;
 }
 
 bool LangPlugin::doesHandleCatch(LINK lang)
