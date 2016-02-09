@@ -308,7 +308,7 @@ void LangPlugin::emitAdditionalClassSymbols(::ClassDeclaration *cd)
             NewThunk.This.NonVirtual = -2 * Target::ptrsize;
             NewThunk.Return.NonVirtual = 2 * Target::ptrsize;
 
-            if (MD->getParent()->getCanonicalDecl() != dcxxInfo->MostDerivedBase)
+            if (MD->getParent()->getCanonicalDecl() != dcxxInfo->MostDerivedBase->getCanonicalDecl())
             {
                 // NOTE: we can't rely on existing thunks, because methods that aren't overridden by the most derived C++ class
                 // won't have the proper thunk offsets (sometimes no thunk at all).
