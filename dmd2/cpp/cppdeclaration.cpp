@@ -329,23 +329,20 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             return true;
     }
 
-    auto tqual = TypeMapper::FromType(mapper, loc).typeQualifiedFor(
-                const_cast<clang::NamedDecl*>(D), nullptr, nullptr,
-                TQ_OverOpSkipSpecArg);
-    if (!tqual)
-        return true;
-
-    auto te = new TypeExp(loc, tqual);
-    auto e = te->semantic(sc);
+    auto e = expmap.fromExpressionDeclRef(loc, const_cast<clang::NamedDecl*>(D),
+                                            nullptr, TQ_OverOpSkipSpecArg);
+    e = e->semantic(sc);
 
     if (Func && Func->getPrimaryTemplate())
     {
-        assert(e->op == TOKvar || e->op == TOKtemplate);
+        assert(e->op == TOKvar || e->op == TOKtemplate || e->op == TOKimport);
         Dsymbol *s;
         if (e->op == TOKvar)
             s = static_cast<SymbolExp*>(e)->var;
-        else
+        else if (e->op == TOKtemplate)
             s = static_cast<TemplateExp*>(e)->td;
+        else
+            s = static_cast<ScopeExp*>(e)->sds;
 
         // if it's a non-template function there's nothing to do, it will be semantic'd along with its declcontext
         // if it's a template spec we must instantiate the right overload
@@ -403,8 +400,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     // Memory usage can skyrocket when using a large library
     if (im->packages) delete im->packages;
     delete im;
-    delete te;
-    delete tqual;
+    delete e;
 
     return true;
 }

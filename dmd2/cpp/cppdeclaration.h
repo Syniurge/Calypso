@@ -11,6 +11,7 @@
 #include "dsymbol.h"
 #include "enum.h"
 #include "cpp/calypso.h"
+#include "cpp/cppexpression.h"
 #include "cpp/cpptypes.h"
 
 #include "../declaration.h"
@@ -192,6 +193,7 @@ public:
 class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
     TypeMapper mapper;
+    ExprMapper expmap;
     Loc loc;
     Scope *sc = nullptr;
 
@@ -203,7 +205,7 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:
-    DeclReferencer()
+    DeclReferencer() : expmap(mapper)
     {
         mapper.addImplicitDecls = false;
 //         mapper.cppPrefix = false;
