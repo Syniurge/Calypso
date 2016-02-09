@@ -203,7 +203,7 @@ MATCH implicitConvTo(Expression *e, Type *t)
                 e->type = Type::terror;
             }
             Expression *ex = e->optimize(WANTvalue);
-            if (ex->type->equals(t))
+            if (ex->type->equivs(t))
             {
                 result = MATCHexact;
                 return;
@@ -512,7 +512,7 @@ MATCH implicitConvTo(Expression *e, Type *t)
             printf("NullExp::implicitConvTo(this=%s, type=%s, t=%s, committed = %d)\n",
                 e->toChars(), e->type->toChars(), t->toChars(), e->committed);
         #endif
-            if (e->type->equals(t))
+            if (e->type->equivs(t))
             {
                 result = MATCHexact;
                 return;
@@ -1418,7 +1418,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             printf("Expression::castTo(this=%s, type=%s, t=%s)\n",
                 e->toChars(), e->type->toChars(), t->toChars());
         #endif
-            if (e->type->equals(t))
+            if (e->type->equivs(t))
             {
                 result = e;
                 return;
@@ -1436,7 +1436,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
             Type *tob = t->toBasetype();
             Type *t1b = e->type->toBasetype();
-            if (tob->equals(t1b))
+            if (tob->equivs(t1b))
             {
                 result = e->copy();  // because of COW for assignment to e->type
                 result->type = t;
@@ -1486,7 +1486,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
                 result = result->semantic(sc);
                 return;
             }
-            else if (t1b->implicitConvTo(tob) == MATCHconst && t->equals(e->type->constOf()))
+            else if (t1b->implicitConvTo(tob) == MATCHconst && t->equivs(e->type->constOf()))
             {
                 result = e->copy();
                 result->type = t;
@@ -1550,7 +1550,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
         void visit(RealExp *e)
         {
-            if (!e->type->equals(t))
+            if (!e->type->equivs(t))
             {
                 if ((e->type->isreal() && t->isreal()) ||
                     (e->type->isimaginary() && t->isimaginary())
@@ -1568,7 +1568,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
         void visit(ComplexExp *e)
         {
-            if (!e->type->equals(t))
+            if (!e->type->equivs(t))
             {
                 if (e->type->iscomplex() && t->iscomplex())
                 {
@@ -1626,7 +1626,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
                 copied = 1;
             }
 
-            if (e->type->equals(t))
+            if (e->type->equivs(t))
             {
                 result = se;
                 return;
@@ -1641,7 +1641,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             }
 
             Type *typeb = e->type->toBasetype();
-            if (typeb->equals(tb))
+            if (typeb->equivs(tb))
             {
                 if (!copied)
                 {
@@ -1879,7 +1879,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
             tb = t->toBasetype();
             e->type = e->type->toBasetype();
-            if (!tb->equals(e->type))
+            if (!tb->equivs(e->type))
             {
                 // Look for pointers to functions where the functions are overloaded.
 
@@ -1944,7 +1944,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
         void visit(TupleExp *e)
         {
-            if (e->type->equals(t))
+            if (e->type->equivs(t))
             {
                 result = e;
                 return;
@@ -2023,7 +2023,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             else if (tb->ty == Tpointer && typeb->ty == Tsarray)
             {
                 Type *tp = typeb->nextOf()->pointerTo();
-                if (!tp->equals(ae->type))
+                if (!tp->equivs(ae->type))
                 {
                     ae = (ArrayLiteralExp *)e->copy();
                     ae->type = tp;
@@ -2105,7 +2105,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             Type *tb = t->toBasetype();
             Type *typeb = e->type->toBasetype();
 
-            if (tb->equals(typeb))
+            if (tb->equivs(typeb))
             {
                 result = e->copy();
                 result->type = t;
@@ -2169,7 +2169,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
             Type *tb = t->toBasetype();
             Type *typeb = e->type->toBasetype();
-            if (!tb->equals(typeb) || e->hasOverloads)
+            if (!tb->equivs(typeb) || e->hasOverloads)
             {
                 // Look for delegates to functions where the functions are overloaded.
                 if (typeb->ty == Tdelegate &&
@@ -2219,7 +2219,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
 
         void visit(CondExp *e)
         {
-            if (!e->type->equals(t))
+            if (!e->type->equivs(t))
             {
                 result = new CondExp(e->loc, e->econd, e->e1->castTo(sc, t), e->e2->castTo(sc, t));
                 result->type = t;
@@ -2249,7 +2249,7 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             //printf("SliceExp::castTo e = %s, type = %s, t = %s\n", e->toChars(), e->type->toChars(), t->toChars());
             Type *typeb = e->type->toBasetype();
             Type *tb = t->toBasetype();
-            if (e->type->equals(t) || typeb->ty != Tarray ||
+            if (e->type->equivs(t) || typeb->ty != Tarray ||
                 (tb->ty != Tarray && tb->ty != Tsarray))
             {
                 visit((Expression *)e);
@@ -2450,7 +2450,7 @@ Expression *scaleFactor(BinExp *be, Scope *sc)
         Type *t = Type::tptrdiff_t;
 
         d_uns64 stride = t1b->nextOf()->size(be->loc);
-        if (!t->equals(t2b))
+        if (!t->equivs(t2b))
             be->e2 = be->e2->castTo(sc, t);
         eoff = be->e2;
         be->e2 = new MulExp(be->loc, be->e2, new IntegerExp(Loc(), stride, t));
@@ -2465,7 +2465,7 @@ Expression *scaleFactor(BinExp *be, Scope *sc)
         Expression *e;
 
         d_uns64 stride = t2b->nextOf()->size(be->loc);
-        if (!t->equals(t1b))
+        if (!t->equivs(t1b))
             e = be->e1->castTo(sc, t);
         else
             e = be->e1;

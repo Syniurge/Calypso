@@ -1662,7 +1662,7 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                 Type *tprm = p->type;
                 if (p->type->hasWild())
                     tprm = p->type->substWildTo(wildmatch);
-                if (!tprm->equals(arg->type))
+                if (!tprm->equivs(arg->type)) // CALYPSO
                 {
                     //printf("arg->type = %s, p->type = %s\n", arg->type->toChars(), p->type->toChars());
                     arg = arg->implicitCastTo(sc, tprm);
