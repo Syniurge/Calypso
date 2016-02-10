@@ -844,6 +844,9 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
     else
         return false;
 
+    if (ce->f && !ce->f->isCtorDeclaration())
+        return false; // is this enough? are we sure that A a = B(); where A and B are value types will never happen?
+
     DValue* fnval = toElem(ce->e1);
     auto dfnval = fnval->isFunc();
     assert(dfnval && isCPP(dfnval->func));
