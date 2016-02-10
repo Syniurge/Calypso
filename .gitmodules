@@ -4,7 +4,8 @@
 	branch = release-0.16.1
 [submodule "phobos"]
 	path = runtime/phobos
-	url = git://github.com/ldc-developers/phobos.git
+	url = https://github.com/Syniurge/phobos.git
+	branch = release-0.16.1
 [submodule "tests/d2/dmd-testsuite"]
 	path = tests/d2/dmd-testsuite
 	url = git://github.com/ldc-developers/dmd-testsuite.git
