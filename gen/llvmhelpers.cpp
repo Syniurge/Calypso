@@ -500,6 +500,10 @@ DValue* DtoCastPtr(Loc& loc, DValue* val, Type* to)
 
     LLValue* rval;
 
+    if (totype->ty == Tpointer && fromtype->nextOf()->constConv(totype->nextOf()) >= MATCHconst)
+        return val; // CALYPSO workaround DMD semi-BUG? [A*]->constConv([const(A)*]) returns MATCHnomatch, is this intended?
+                    // It makes implicitCastTo() not avoid the cast, whereas it would have avoided « cast(const(A*)) someAptr »
+
     if (isClassValueHandle(fromtype) && isClassValueHandle(totype)) // CALYPSO
         return DtoCastClass(loc, val, to);
 
@@ -674,7 +678,7 @@ DValue* DtoCast(Loc& loc, DValue* val, Type* to)
         }
     }
 
-    if (fromtype->equals(totype))
+    if (fromtype->equivs(totype))
         return val;
 
     IF_LOG Logger::println("Casting from '%s' to '%s'", fromtype->toChars(), to->toChars());
