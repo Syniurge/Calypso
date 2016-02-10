@@ -171,6 +171,7 @@ public:
 
     LLType *toType(Type *t) override;
     llvm::FunctionType *toFunctionType(::FuncDeclaration *fdecl) override;
+    llvm::Type *IrTypeStructHijack(::StructDeclaration *sd) override;
 
     LLConstant *toConstExpInit(Loc loc, Type *targetType, Expression *exp) override;
 

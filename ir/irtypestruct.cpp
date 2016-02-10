@@ -54,10 +54,17 @@ IrTypeStruct* IrTypeStruct::get(StructDeclaration* sd)
 
     // CALYPSO
     if (auto lp = sd->langPlugin())
-    {
         t->type = lp->codegen()->toType(sd->type);
-        t->packed = llvm::cast<LLStructType>(t->type)->isPacked();
                 // what about default_fields
+    else
+        for (auto lp: global.langPlugins)
+            if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // CALYPSO wonderful HACK for __cpp_member_funcptr
+                t->type = Ty;
+
+    auto StructTy = llvm::cast<LLStructType>(t->type);
+    if (!StructTy->isOpaque())
+    {
+        t->packed = StructTy->isPacked();
         return t;
     }
 

@@ -286,6 +286,19 @@ llvm::FunctionType *LangPlugin::toFunctionType(::FuncDeclaration *fdecl)
     return Resolved.Ty;
 }
 
+llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but if we don't do this LLVM type comparisons will fail
+{
+    if (sd->ident == Identifier::idPool("__cpp_member_funcptr"))
+    {
+        auto Ty = TypeMapper().toType(Loc(), sd->getType(), nullptr);
+
+        if (auto MPT = Ty->getAs<clang::MemberPointerType>())
+            return CGM->getCXXABI().ConvertMemberPointerType(MPT);
+    }
+
+    return nullptr;
+}
+
 LLConstant *LangPlugin::toConstExpInit(Loc, Type *targetType, Expression *exp)
 {
     if (exp)

@@ -23,6 +23,7 @@ public:
 
     virtual LLType *toType(Type *t) = 0;
     virtual llvm::FunctionType *toFunctionType(FuncDeclaration *fdecl) = 0;
+    virtual llvm::Type *IrTypeStructHijack(StructDeclaration *sd) = 0; // UGLY HACK
 
     virtual LLConstant *toConstExpInit(Loc loc, Type *targetType, Expression *exp) = 0;
 
