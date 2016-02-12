@@ -4995,7 +4995,7 @@ Lagain:
             }
         }
 
-        if (sd->ctor && nargs)
+        if ((sd->ctor && nargs) || (sd->defaultCtor && !nargs)) // CALYPSO
         {
             FuncDeclaration *f = resolveFuncCall(loc, sc, sd->ctor, NULL, tb, arguments, 0);
             if (!f || f->errors)
