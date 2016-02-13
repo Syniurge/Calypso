@@ -208,7 +208,7 @@ public:
     DeclReferencer() : expmap(mapper)
     {
         mapper.addImplicitDecls = false;
-//         mapper.cppPrefix = false;
+        mapper.cppPrefix = false;
     }
 
     void Traverse(Loc loc, Scope *sc, clang::Stmt *S);

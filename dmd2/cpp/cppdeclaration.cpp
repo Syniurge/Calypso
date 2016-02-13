@@ -258,7 +258,7 @@ Scope *globalScope(::Module *m)
 {
     auto sc = Scope::createGlobal(m);
     sc = sc->pop();
-    sc = sc->push(::Module::rootModule);
+    sc = sc->push(cpp::Module::rootPackage);
     return sc;
 }
 
