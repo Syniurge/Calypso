@@ -257,7 +257,6 @@ void DtorDeclaration::semantic(Scope *sc)
 Scope *globalScope(::Module *m)
 {
     auto sc = Scope::createGlobal(m);
-    sc = sc->pop();
     sc = sc->push(cpp::Module::rootPackage);
     return sc;
 }
