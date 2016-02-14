@@ -30,6 +30,7 @@ TemplateDeclaration::TemplateDeclaration(Loc loc, Identifier* id,
     : ::TemplateDeclaration(loc, id, parameters, nullptr, decldefs)
 {
     this->TempOrSpec = TempOrSpec;
+    this->constraint = new NullExp(loc); // HACK to grant Sema another check e.g for templates with std::enable_if
 }
 
 TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
@@ -193,6 +194,59 @@ const clang::TemplateArgumentList *getTemplateInstantiationArgs(const clang::Dec
     return nullptr;
 }
 
+clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListInfo& Args,
+                                clang::FunctionTemplateDecl *FuncTemp)
+{
+    auto& S = calypso.pch.AST->getSema();
+
+    // Converts TemplateArgumentListInfo to something suitable for TemplateArgumentList
+    llvm::SmallVector<clang::TemplateArgument, 4> Converted;
+    if (S.CheckTemplateArgumentList(FuncTemp, FuncTemp->getLocation(), Args,
+                                    false, Converted))
+        assert(false && "CheckTemplateArgumentList failed for function template");
+
+    clang::TemplateArgumentList ArgList(clang::TemplateArgumentList::OnStack,
+                            Converted.data(), Converted.size());
+    clang::MultiLevelTemplateArgumentList MultiList(ArgList);
+
+    // Instantiate the declaration
+    clang::Sema::InstantiatingTemplate Instantiating(S,
+                    FuncTemp->getLocation(), FuncTemp->getTemplatedDecl());
+    if (Instantiating.isInvalid())
+        assert(false && "InstantiatingTemplate is invalid");
+
+    return llvm::cast_or_null<clang::FunctionDecl>(
+                    S.SubstDecl(FuncTemp->getTemplatedDecl(),
+                                FuncTemp->getDeclContext(), MultiList));
+}
+
+// C++ doesn't have constraints but in function calls SFINAE with std::enable_if<> and the like may be used to weed out candidate overloads,
+// whereas D expects at least the instantiated symbol to have a valid type.
+// evaluateConstraint is a good place to make Sema check whether the instantiated decl is valid or not
+bool TemplateDeclaration::evaluateConstraint(::TemplateInstance* ti, Scope* sc, Scope* paramscope,
+                                            Objects* dedtypes, ::FuncDeclaration* fd)
+{
+    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto Temp = getPrimaryTemplate();
+
+    TypeMapper tymap;
+    ExprMapper expmap(tymap);
+    tymap.addImplicitDecls = false;
+
+    if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(Temp))
+    {
+        clang::TemplateArgumentListInfo Args;
+        fillTemplateArgumentListInfo(ti->loc, sc, Args, dedtypes, Temp, tymap, expmap);
+
+        if (!instantiateFunctionDeclaration(Args, cast<clang::FunctionTemplateDecl>(FuncTemp)))
+        {
+            Diags.Reset();
+            return false;
+        }
+    }
+    return true;
+}
+
 MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
                                              Objects *dedtypes, Expressions *fargs, int flag)
 {
@@ -208,7 +262,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
 
     auto m = ::TemplateDeclaration::matchWithInstance(sc, ti, dedtypes, fargs, flag);
 
-    if (m == MATCHnomatch || !isForeignInstance(ti) || fargs) // if we're resolving a function call or finding best match then dedtypes is irrelevant
+    if (m == MATCHnomatch || !isForeignInstance(ti)) // if we're resolving a function call or finding best match then dedtypes is irrelevant
         return m;
 
     // Although the match result is ok, the types deducted by DMD may have been stripped of C++-specific info and end up wrong.
@@ -381,54 +435,7 @@ clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
 
     {
         clang::TemplateArgumentListInfo Args;
-
-        SpecValue spec(tymap);
-        getIdentifierOrNull(Temp, &spec);
-
-        // See translateTemplateArgument() in SemaTemplate.cpp
-        for (unsigned i = 0; i < ti->tiargs->dim; i++)
-        {
-            if (i == 0 && spec)
-                continue; // skip the first parameter of opUnary/opBinary/opOpAssign/...
-
-            auto o = (*ti->tiargs)[i];
-
-            Type *ta = isType(o);
-            Expression *ea = isExpression(o);
-            Dsymbol *sa = isDsymbol(o);
-
-            if (ta)
-            {
-                auto T = tymap.toType(ti->loc, ta, sc);
-                auto DI = Context.getTrivialTypeSourceInfo(T);
-
-                clang::TemplateArgumentLoc Loc(clang::TemplateArgument(T), DI);
-                Args.addArgument(Loc);
-            }
-            else if (ea)
-            {
-                auto E = expmap.toExpression(ea);
-
-                clang::TemplateArgumentLoc Loc(clang::TemplateArgument(E), E);
-                Args.addArgument(Loc);
-            }
-            else if (sa)
-            {
-                auto tempdecl = sa->isTemplateDeclaration();
-                assert(tempdecl && isCPP(tempdecl));
-
-                auto c_td = static_cast<cpp::TemplateDeclaration *>(tempdecl);
-                auto Temp = c_td->getPrimaryTemplate();
-                clang::TemplateName Name(Temp);
-
-                clang::TemplateArgumentLoc Loc(clang::TemplateArgument(Name),
-                                        clang::NestedNameSpecifierLoc(),
-                                        Temp->getLocation(), clang::SourceLocation());
-                Args.addArgument(Loc);
-            }
-            else
-                assert(false && "unhandled template arg C++ -> D conversion");
-        }
+        fillTemplateArgumentListInfo(loc, sc, Args, ti->tiargs, Temp, tymap, expmap);
 
         clang::TemplateName Name(Temp);
 
@@ -447,25 +454,7 @@ clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
             assert(FuncTemp->getTemplatedDecl()->isDefined() ||
                     FuncTemp->getInstantiatedFromMemberTemplate());
 
-            // Converts TemplateArgumentListInfo to something suitable for TemplateArgumentList
-            llvm::SmallVector<clang::TemplateArgument, 4> Converted;
-            if (S.CheckTemplateArgumentList(Temp, Temp->getLocation(), Args,
-                                            false, Converted))
-                assert(false && "CheckTemplateArgumentList failed for function template");
-
-            clang::TemplateArgumentList ArgList(clang::TemplateArgumentList::OnStack,
-                                    Converted.data(), Converted.size());
-            clang::MultiLevelTemplateArgumentList MultiList(ArgList);
-
-            // Instantiate the declaration
-            clang::Sema::InstantiatingTemplate Instantiating(S,
-                                            Temp->getLocation(), Temp->getTemplatedDecl());
-            if (Instantiating.isInvalid())
-                assert(false && "InstantiatingTemplate is invalid");
-
-            auto FuncInst = llvm::cast_or_null<clang::FunctionDecl>(
-                            S.SubstDecl(FuncTemp->getTemplatedDecl(),
-                                        Temp->getDeclContext(), MultiList));
+            auto FuncInst = instantiateFunctionDeclaration(Args, FuncTemp);
 
             if (!FuncInst)
             {
