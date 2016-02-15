@@ -301,10 +301,14 @@ llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but 
 
 LLConstant *LangPlugin::toConstExpInit(Loc, Type *targetType, Expression *exp)
 {
-    if (exp)
-        return nullptr; // we only handle C++ class values which return a null default init
+    if (exp->op != TOKcall)
+        return nullptr;
 
-    if (targetType->ty != Tclass)
+    auto ce = static_cast<CallExp*>(exp);
+    if (ce->e1->op != TOKtype || (ce->arguments && ce->arguments->dim))
+        return nullptr; // we only handle C++ structs and class values default inits
+
+    if (targetType->ty != Tclass && targetType->ty != Tstruct)
         return nullptr;
 
     auto& Context = calypso.getASTContext();
