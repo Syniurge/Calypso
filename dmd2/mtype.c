@@ -5462,7 +5462,8 @@ Type *TypeFunction::semantic(Loc loc, Scope *sc)
     if (sc->stc & STCproperty)
         tf->isproperty = true;
 
-    tf->linkage = sc->linkage;
+    if (tf->linkage == LINKd) // CALYPSO only take sc->linkage if the current linkage is the LINKd default
+        tf->linkage = sc->linkage;
 #if 0
     /* If the parent is @safe, then this function defaults to safe
      * too.

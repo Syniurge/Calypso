@@ -1715,7 +1715,10 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     if (T->isNothrow(Context, false))
         stc |= STCnothrow;
 
-    auto tf = new TypeFunction(params, rt, 0, LINKd, stc);
+    LINK linkage = (FD && FD->isExternC()) ? LINKc : LINKcpp;
+        // TODO: inferring the linkage for overriding methods would be nice
+
+    auto tf = new TypeFunction(params, rt, 0, linkage, stc);
     tf = static_cast<TypeFunction*>(tf->addSTC(stc));
     return tf;
 }
