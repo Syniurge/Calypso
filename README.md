@@ -17,7 +17,7 @@ import (C++) NamespaceA._;       // special module per namespace, imports every 
                                  // global functions and typedefs whose direct parent is NamespaceA::
 ```
 
-The resulting imported symbols are usable like their D counterparts, although their implementation differs a lot. For more detailed examples and explanations on Calypso's features see [tests/calypso/showcase.d](tests/calypso/showcase.d).
+The resulting imported symbols are usable like their D counterparts, although their implementation differs a lot. For more detailed examples and explanations on Calypso's features see [tests/calypso](tests/calypso).
 
 Although Calypso is currently soldered to LDC, separating the two and placing Calypso and its bulky Clang dependency in an optional shared library should be easy. In this way, D compilers won't have to depend on a C/C++ compiler, and wider C++ support than what D currently has won't result in too cumbersome intrusions in core DMD/LDC.
 
@@ -28,14 +28,13 @@ A Clang 3.6 fork makes its appearance as a submodule, it's therefore recommended
 
 Please note that to build Calypso in ```Debug``` mode LLVM needs to be built in ```Debug``` mode as well.
 
-Specific flags and building the [showcase](tests/calypso/showcase.d) example
+Specific flags and building the basic example
 -------
 
-Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during the PCH generation, e.g to enable C++11 while building [tests/calypso/showcase.d](tests/calypso/showcase.d):
+Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during the PCH generation, e.g to enable C++11 while building [tests/calypso/basic/basics.d](tests/calypso/basic/basics.d):
 
-    $ clang++ -std=c++11 -c showcase.cpp -o showcase.cpp.o
-    $ ar rcs libshowcase.a showcase.cpp.o
-    $ ldc2 -cpp-args -std=c++11 -Llibshowcase.a -L-lstdc++ showcase.d
+    $ clang++ -std=c++11 -c basics.cpp -o basics.cpp.o
+    $ ldc2 -cpp-args -std=c++11 basics.cpp.o -L-lstdc++ basics.d
 
 LDC – the LLVM-based D Compiler
 ===============================
