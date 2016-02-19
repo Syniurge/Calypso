@@ -737,8 +737,6 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
         return nullptr;
 
-    auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
-
     auto loc = fromLoc(D->getLocation());
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
 
@@ -749,6 +747,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     const clang::FunctionDecl *Def;
     if (D->hasBody(Def))
         FunctionReferencer(*this, S, clang::SourceLocation()).TraverseStmt(Def->getBody());
+
+    auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
     auto tf = FromType(*this, loc).fromTypeFunction(FPT, D);
     if (!tf)
