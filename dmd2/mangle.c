@@ -892,10 +892,14 @@ const char *mangleImpl(Dsymbol *s)
  */
 const char *mangleExact(FuncDeclaration *fd)
 {
-    OutBuffer buf;
-    Mangler v(&buf);
-    v.mangleExact(fd);
-    return buf.extractString();
+    if (!fd->mangleString)
+    {
+        OutBuffer buf;
+        Mangler v(&buf);
+        v.mangleExact(fd);
+        fd->mangleString = buf.extractString();
+    }
+    return fd->mangleString;
 }
 
 void mangleToBuffer(Type *t, OutBuffer *buf, bool forEquiv)

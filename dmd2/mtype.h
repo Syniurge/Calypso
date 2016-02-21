@@ -47,10 +47,6 @@ typedef class IrType type;
 typedef struct TYPE type;
 #endif
 
-#if IN_DMD
-struct Symbol;
-#endif
-
 void semanticTypeInfo(Scope *sc, Type *t);
 MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *parameters, Objects *dedtypes, unsigned *wm = NULL, size_t inferStart = 0);
 Type *reliesOnTident(Type *t, TemplateParameters *tparams = NULL, size_t iStart = 0);
@@ -281,7 +277,7 @@ public:
     virtual bool isscope();
     virtual bool isString();
     virtual bool isAssignable();
-    virtual bool checkBoolean(); // if can be converted to boolean value
+    virtual bool isBoolean();
     virtual void checkDeprecated(Loc loc, Scope *sc);
     bool isConst()       { return (mod & MODconst) != 0; }
     bool isImmutable()   { return (mod & MODimmutable) != 0; }
@@ -353,6 +349,7 @@ public:
     uinteger_t sizemask();
     virtual bool needsDestruction();
     virtual bool needsNested();
+    void checkComplexTransition(Loc loc);
 
     static void error(Loc loc, const char *format, ...) IS_PRINTF(2);
     static void warning(Loc loc, const char *format, ...) IS_PRINTF(2);
@@ -449,7 +446,7 @@ public:
     bool isfloating();
     bool isscalar();
     bool isunsigned();
-    bool checkBoolean();
+    bool isBoolean();
     MATCH implicitConvTo(Type *to);
     Expression *defaultInit(Loc loc);
     Expression *defaultInitLiteral(Loc loc);
@@ -510,7 +507,7 @@ public:
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isString();
     bool isZeroInit(Loc loc);
-    bool checkBoolean();
+    bool isBoolean();
     MATCH implicitConvTo(Type *to);
     Expression *defaultInit(Loc loc);
     bool hasPointers();
@@ -535,7 +532,7 @@ public:
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc);
-    bool checkBoolean();
+    bool isBoolean();
     Expression *toExpression();
     bool hasPointers();
     MATCH implicitConvTo(Type *to);
@@ -668,7 +665,7 @@ public:
     MATCH implicitConvTo(Type *to);
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc);
-    bool checkBoolean();
+    bool isBoolean();
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool hasPointers();
 
@@ -687,9 +684,16 @@ public:
     void syntaxCopyHelper(TypeQualified *t);
     void addIdent(Identifier *ident);
     void addInst(TemplateInstance *inst);
+    void addIndex(RootObject *expr);
     d_uns64 size(Loc loc);
+
+    void resolveTupleIndex(Loc loc, Scope *sc, Dsymbol *s,
+        Expression **pe, Type **pt, Dsymbol **ps, RootObject *oindex);
+    void resolveExprType(Loc loc, Scope *sc, Expression *e, size_t i,
+        Expression **pe, Type **pt);
     void resolveHelper(Loc loc, Scope *sc, Dsymbol *s, Dsymbol *scopesym,
         Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
+
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -785,7 +789,7 @@ public:
     Expression *defaultInitLiteral(Loc loc);
     bool isZeroInit(Loc loc);
     bool isAssignable();
-    bool checkBoolean();
+    bool isBoolean();
     bool needsDestruction();
     bool needsNested();
     bool hasPointers();
@@ -825,7 +829,7 @@ public:
     bool iscomplex();
     bool isscalar();
     bool isunsigned();
-    bool checkBoolean();
+    bool isBoolean();
     bool isString();
     bool isAssignable();
     bool needsDestruction();
@@ -866,7 +870,7 @@ public:
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc);
     bool isscope();
-    bool checkBoolean();
+    bool isBoolean();
     bool hasPointers();
 
     void accept(Visitor *v) { v->visit(this); }
@@ -914,7 +918,7 @@ public:
 
     virtual Type *syntaxCopy(Type *o = NULL); // CALYPSO
     MATCH implicitConvTo(Type *to);
-    bool checkBoolean();
+    bool isBoolean();
 
     d_uns64 size(Loc loc);
     Expression *defaultInit(Loc loc);

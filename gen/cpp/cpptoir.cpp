@@ -445,7 +445,7 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     return LV.getAddress();
 }
 
-void LangPlugin::toInitClassForeign(TypeClass* tc, LLValue* dst)
+void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
 {
     uint64_t const dataBytes = tc->sym->structsize;
     if (dataBytes == 0)

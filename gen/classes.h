@@ -32,7 +32,7 @@ LLType* DtoClassHandleType(TypeClass *tc);
 void DtoResolveAggregate(AggregateDeclaration* ad);
 
 /// Resolves the llvm type for a class declaration
-void DtoResolveClass(ClassDeclaration* cd);
+void DtoResolveClass(ClassDeclaration *cd);
 
 /// Provides the llvm declaration for a class declaration
 // void DtoDeclareClass(ClassDeclaration* cd);
@@ -45,17 +45,18 @@ void DtoDefineClass(ClassDeclaration* cd);
 
 /// Builds the initializer of cd's ClassInfo.
 /// FIXME: this should be put into IrStruct and eventually IrClass.
-llvm::Constant* DtoDefineClassInfo(ClassDeclaration* cd);
+llvm::Constant *DtoDefineClassInfo(ClassDeclaration *cd);
 
-DValue* DtoNewClass(Loc& loc, TypeClass* type, NewExp* newexp);
-void DtoInitClass(TypeClass* tc, llvm::Value* dst);
-void DtoFinalizeClass(Loc& loc, llvm::Value* inst);
+DValue *DtoNewClass(Loc &loc, TypeClass *type, NewExp *newexp);
+void DtoInitClass(TypeClass *tc, llvm::Value *dst);
+void DtoFinalizeClass(Loc &loc, llvm::Value *inst);
 
-DValue* DtoCastClass(Loc& loc, DValue* val, Type* to);
-DValue* DtoDynamicCastObject(Loc& loc, DValue* val, Type* to);
+DValue *DtoCastClass(Loc &loc, DValue *val, Type *to);
+DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *to);
 
-DValue* DtoDynamicCastInterface(Loc& loc, DValue* val, Type* to);
+DValue *DtoDynamicCastInterface(Loc &loc, DValue *val, Type *to);
 
-llvm::Value* DtoVirtualFunctionPointer(DValue* inst, FuncDeclaration* fdecl, char* name);
+llvm::Value *DtoVirtualFunctionPointer(DValue *inst, FuncDeclaration *fdecl,
+                                       char *name);
 
 #endif

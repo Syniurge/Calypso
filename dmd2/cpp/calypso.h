@@ -199,7 +199,7 @@ public:
     LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
-    void toInitClassForeign(TypeClass* tc, LLValue* dst) override;
+    void toInitClass(TypeClass* tc, LLValue* dst) override;
 
     void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;
 
