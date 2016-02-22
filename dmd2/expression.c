@@ -8502,19 +8502,19 @@ Lagain:
         if (ad && !ad->byRef()) // CALYPSO
         {
             StructDeclaration *sd = ad->isStructDeclaration();
-            sd->size(loc);      // Resolve forward references to construct object
-            if (sd->sizeok != SIZEOKdone)
+            ad->size(loc);      // Resolve forward references to construct object
+            if (ad->sizeok != SIZEOKdone)
                 return new ErrorExp();
 
             // First look for constructor
             if (e1->op == TOKtype && ad->ctor)
             {
-                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim) && /* CALYPSO */ !sd->defaultCtor)
+                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim) && !sd->defaultCtor) // CALYPSO
                     goto Lx;
 
                 Expression *e = NULL;
 
-                if (t1->ty == Tstruct && /* HACK */ !ad->langPlugin()) // CALYPSO
+                if (t1->ty == Tstruct && /* HACK */ !ad->langPlugin()) // CALYPSO the default inits may be C++ ctor calls
                 {
                 StructLiteralExp *sle = new StructLiteralExp(loc, sd, NULL, e1->type);
                 if (!sd->fill(loc, sle->elements, true))
