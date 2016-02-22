@@ -101,8 +101,8 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
 
   // This class may contain an align declaration. See issue 726.
   t->packed = false;
-  for (ClassDeclaration *base = cd; base != nullptr && !t->packed;
-       base = base->baseClass) {
+  for (AggregateDeclaration *base = cd; base != nullptr && !t->packed;
+       base = toAggregateBase(base)) { // CALYPSO
     t->packed = isPacked(base);
   }
 

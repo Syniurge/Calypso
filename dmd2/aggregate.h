@@ -196,6 +196,7 @@ public:
     // CALYPSO
     virtual bool disableDefaultCtor() { return true; }
     virtual Expression *defaultInit(Loc loc);
+    virtual void buildLayout(); // CALYPSO
 
     StructDeclaration *isStructDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -310,7 +311,8 @@ public:
 
     // CALYPSO
     virtual bool byRef() { return true; }
-    virtual Expression *defaultInit(Loc loc); // CALYPSO
+    virtual void buildLayout();
+    virtual Expression *defaultInit(Loc loc);
     virtual bool allowMultipleInheritance() { return false; }  // will allow more than one non-interface base
     virtual bool allowInheritFromStruct() { return false; }  // even though C++ class types are value, we may want to keep mapping POD classes to D structs to keep init lists
     virtual void initVtbl();

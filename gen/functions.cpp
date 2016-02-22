@@ -952,7 +952,7 @@ void DtoDefineFunction(FuncDeclaration *fd) {
 
   // CALYPSO
   for (auto lp: global.langPlugins)
-    lp->codegen()->leaveFunc(fd);
+    lp->codegen()->leaveFunc();
 
   // erase alloca point
   if (allocaPoint->getParent()) {

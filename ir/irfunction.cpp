@@ -26,9 +26,9 @@ GotoJump::GotoJump(Loc loc, llvm::BasicBlock *sourceBlock,
     : sourceLoc(std::move(loc)), sourceBlock(sourceBlock),
       tentativeTarget(tentativeTarget), targetLabel(targetLabel) {}
 
-CatchScope::CatchScope(llvm::Constant *classInfoPtr,
+CatchScope::CatchScope(llvm::Constant *clausePtr,
                        llvm::BasicBlock *bodyBlock, CleanupCursor cleanupScope)
-    : classInfoPtr(classInfoPtr), bodyBlock(bodyBlock),
+    : clausePtr(clausePtr), bodyBlock(bodyBlock),
       cleanupScope(cleanupScope) {}
 
 namespace {

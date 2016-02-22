@@ -46,7 +46,7 @@ struct DCXXVTableInfo // "DCXX" for D-C++ class "hybrid"
             return result;  // Pure C++ or D class
 
         auto& CGM = *calypso.CGM;
-        auto& CGVT = CGM.getVTables();
+//         auto& CGVT = CGM.getVTables();
         auto& VTableContext =
             *static_cast<clang::ItaniumVTableContext *>(Context.getVTableContext());
 
@@ -448,7 +448,7 @@ struct DCXXVptrAdjuster
         llvm::Type *AddressPointPtrTy =
             DCXXVTableAddressPoint->getType()->getPointerTo();
         VTableField = Builder.CreateBitCast(VTableField, AddressPointPtrTy);
-        llvm::StoreInst *Store = Builder.CreateStore(DCXXVTableAddressPoint, VTableField);
+        /* llvm::StoreInst *Store = */ Builder.CreateStore(DCXXVTableAddressPoint, VTableField);
 //         CGM.DecorateInstruction(Store, CGM.getTBAAInfoForVTablePtr());
     }
 

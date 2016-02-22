@@ -1734,13 +1734,6 @@ void VarDeclaration::setFieldOffset(AggregateDeclaration *ad, unsigned *poffset,
         return;
     }
 
-    // List in ad->fields. Even if the type is error, it's necessary to avoid
-    // pointless error diagnostic "more initializers than fields" on struct literal.
-    ad->fields.push(this);
-
-    if (t->ty == Terror)
-        return;
-
     // CALYPSO HACK: we need to move the following check after the ts->sym->semantic() call,
     // since Calypso sets the field offsets without running semantic() to avoid overzealous fwd errors.
 
@@ -1762,6 +1755,13 @@ void VarDeclaration::setFieldOffset(AggregateDeclaration *ad, unsigned *poffset,
             return;
         }
     }
+
+    // List in ad->fields. Even if the type is error, it's necessary to avoid
+    // pointless error diagnostic "more initializers than fields" on struct literal.
+    ad->fields.push(this);
+
+    if (t->ty == Terror)
+        return;
 
     unsigned memsize      = (unsigned)t->size(loc);  // size of member
     unsigned memalignsize = Target::fieldalign(t);   // size of member for alignment purposes

@@ -96,14 +96,6 @@ void StructDeclaration::semantic(Scope *sc)
     ::StructDeclaration::semantic(sc);
 }
 
-unsigned int StructDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildAggLayout(this);
-
-    return structsize;
-}
-
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -116,6 +108,11 @@ Expression *StructDeclaration::defaultInit(Loc loc)
 bool StructDeclaration::mayBeAnonymous()
 {
     return true;
+}
+
+void StructDeclaration::buildLayout()
+{
+    buildAggLayout(this);
 }
 
 void ClassDeclaration::semantic(Scope *sc)
@@ -154,35 +151,27 @@ void ClassDeclaration::semantic(Scope *sc)
 
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {
-    auto& S = calypso.pch.AST->getSema();
-    auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
-
-    auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
-    if (!CD)
-        CD = S.LookupCopyingConstructor(_RD, 0);
-
-    if (!CD)
-        return;
-
-    auto cpctor = findMethod(this, CD);
-    if (!cpctor)
-        return; // could be deleted or invalid
-
-    auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
-                                    new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
-    members->push(fwdcpctor);
-
-    fwdcpctor->addMember(sc, this, 1);
-    fwdcpctor->setScope(cpctor->scope);
-    fwdcpctor->semantic(cpctor->scope);
-}
-
-unsigned int ClassDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildLayout();
-
-    return structsize;
+//     auto& S = calypso.pch.AST->getSema();
+//     auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
+//
+//     auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
+//     if (!CD)
+//         CD = S.LookupCopyingConstructor(_RD, 0);
+//
+//     if (!CD)
+//         return;
+//
+//     auto cpctor = findMethod(this, CD);
+//     if (!cpctor)
+//         return; // could be deleted or invalid
+//
+//     auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
+//                                     new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
+//     members->push(fwdcpctor);
+//
+//     fwdcpctor->addMember(sc, this, 1);
+//     fwdcpctor->setScope(cpctor->scope);
+//     fwdcpctor->semantic(cpctor->scope);
 }
 
 bool ClassDeclaration::mayBeAnonymous()
@@ -278,17 +267,14 @@ void ClassDeclaration::buildLayout()
     buildAggLayout(this);
 }
 
-unsigned int UnionDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildAggLayout(this);
-
-    return structsize;
-}
-
 bool UnionDeclaration::mayBeAnonymous()
 {
     return true;
+}
+
+void UnionDeclaration::buildLayout()
+{
+    buildAggLayout(this);
 }
 
 // NOTE: we need to adjust every "this" pointer when accessing fields from bases
@@ -341,7 +327,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
                 cast<clang::CXXRecordDecl>(RD));
     auto MD = S.LookupCopyingAssignment(CRD, clang::Qualifiers::Const, false, 0);
 
-    if (!MD || MD->isDeleted())
+    if (!MD || MD->isDeleted() || !isMapped(MD))
         return nullptr;
 
     return findMethod(sd, MD);
@@ -355,8 +341,13 @@ template <typename AggTy>
     if (ad->layoutQueried)
         return;
 
-    if (ad->RD->isInvalidDecl())
-        return; // if it's a forward reference, consider the record empty
+    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
+    {
+       // if it's a forward reference, consider the record empty
+        ad->structsize = 1;
+        ad->alignsize = 1;
+        return;
+    }
 
     auto& Context = calypso.getASTContext();
     auto& RL = Context.getASTRecordLayout(ad->RD);

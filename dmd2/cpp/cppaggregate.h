@@ -36,7 +36,7 @@ public:
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
-    unsigned size(Loc loc) override;
+    void buildLayout() override;
     Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
     bool disableDefaultCtor() override { return false; }
@@ -56,8 +56,8 @@ public:
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
+    void buildLayout() override;
     bool mayBeAnonymous() override;
-    unsigned size(Loc loc) override;
     
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     void interfaceSemantic(Scope *sc) override;
@@ -68,7 +68,6 @@ public:
     bool allowInheritFromStruct() override { return true; }
     void makeNested() override;
     void finalizeVtbl() override;
-    void buildLayout() override; // determine the agg size and field offsets
 
     void buildCpCtor(Scope *sc);
 };
@@ -84,8 +83,8 @@ public:
     UnionDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    unsigned size(Loc loc) override;
     bool mayBeAnonymous() override;
+    void buildLayout() override;
 };
 
 template<typename AggTy> void buildAggLayout(AggTy *ad);

@@ -374,7 +374,6 @@ clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
 ::TemplateInstance* TemplateDeclaration::foreignInstance(::TemplateInstance* tithis,
                                                        Scope* sc)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
     auto& S = calypso.pch.AST->getSema();
     auto& Diags = calypso.pch.AST->getDiagnostics();
 

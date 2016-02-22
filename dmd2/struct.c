@@ -980,12 +980,8 @@ Dsymbol *StructDeclaration::search(Loc loc, Identifier *ident, int flags)
     return ScopeDsymbol::search(loc, ident, flags);
 }
 
-void StructDeclaration::finalizeSize(Scope *sc)
+void StructDeclaration::buildLayout() // CALYPSO
 {
-    //printf("StructDeclaration::finalizeSize() %s\n", toChars());
-    if (sizeok != SIZEOKnone)
-        return;
-
     // Set the offsets of the fields and determine the size of the struct
     unsigned offset = 0;
     bool isunion = isUnionDeclaration() != NULL;
@@ -1011,7 +1007,17 @@ void StructDeclaration::finalizeSize(Scope *sc)
         structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
     else
         structsize = (structsize + alignment - 1) & ~(alignment - 1);
+}
 
+void StructDeclaration::finalizeSize(Scope *sc)
+{
+    //printf("StructDeclaration::finalizeSize() %s\n", toChars());
+    if (sizeok != SIZEOKnone)
+        return;
+
+    buildLayout(); // CALYPSO
+    if (sizeok == SIZEOKfwd)
+        return;
     sizeok = SIZEOKdone;
 
     // Calculate fields[i]->overlapped

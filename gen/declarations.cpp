@@ -286,7 +286,7 @@ public:
       }
 
       for (auto lp: global.langPlugins)
-        lp->codegen()->emitAdditionalClassSymbols(cd); // CALYPSO
+        lp->codegen()->emitAdditionalClassSymbols(decl); // CALYPSO
 
       // No need to do TypeInfo here, it is <name>__classZ for classes in D2.
     }

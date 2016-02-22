@@ -108,7 +108,7 @@ public:
     ModuleMap *MMap = nullptr;
 
     void init(); // load the list of headers already cached in the PCH
-    void add(StringRef header, ::Module *from);
+    void add(const char* header, ::Module *from);
 
     void update(); // re-emit the PCH if needed, and update the cached list
 

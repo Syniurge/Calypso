@@ -145,7 +145,7 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
                                 DtoType(Type::typeinfoclass->type));
     mem =
         gIR->CreateCallOrInvoke(fn, ci, ".newclass_gc_alloc").getInstruction();
-    mem = DtoBitCast(mem, DtoType(tc), ".newclass_gc");
+    mem = DtoBitCast(mem, DtoClassHandleType(tc), ".newclass_gc"); // CALYPSO
   }
 
   // init
@@ -270,22 +270,19 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   if (to->ty == Tpointer) {
     IF_LOG Logger::println("to pointer");
     LLType *tolltype = DtoType(_to);
-    LLValue *rval = DtoBitCast(val->getRVal(), tolltype);
+    LLValue *rval = DtoBitCast(v, tolltype);
     return new DImValue(_to, rval);
   }
   // class -> bool
   if (to->ty == Tbool) {
     IF_LOG Logger::println("to bool");
-    LLValue *llval = val->getRVal();
-    LLValue *zero = LLConstant::getNullValue(llval->getType());
-    return new DImValue(_to, gIR->ir->CreateICmpNE(llval, zero));
+    LLValue *zero = LLConstant::getNullValue(v->getType());
+    return new DImValue(_to, gIR->ir->CreateICmpNE(v, zero));
   }
   // class -> integer
   if (to->isintegral()) {
     IF_LOG Logger::println("to %s", to->toChars());
 
-    // get class ptr
-    LLValue *v = val->getRVal();
     // cast to size_t
     v = gIR->ir->CreatePtrToInt(v, DtoSize_t(), "");
     // cast to the final int type
@@ -335,7 +332,6 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
              "requesting interface that is not implemented by this class");
 
       // offset pointer
-      LLValue *v = val->getRVal();
       LLValue *orig = v;
       v = DtoGEPi(v, 0, i_index);
       LLType *ifType = DtoType(_to);
@@ -372,19 +368,20 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
     return DtoDynamicCastInterface(loc, val, _to);
   }
   // class -> class - static down cast
-  if (tc->sym->isBaseOf(fc->sym, nullptr)) {
+  int offset;
+  if (tc->sym->isBaseOf(fc->sym, &offset)) {
     Logger::println("static down cast");
     LLType* tolltype = DtoClassHandleType(tc); // CALYPSO
     // CALYPSO
-    LLValue* rval = DtoBitCast(DtoClassHandle(val),
-                  llvm::Type::getInt8PtrTy(gIR->context()));
+    LLValue* rval = DtoBitCast(v,
+            llvm::Type::getInt8PtrTy(gIR->context()));
     if (offset) {
       auto baseOffset = llvm::ConstantInt::get(
                 DtoType(Type::tptrdiff_t), offset);
       rval = gIR->ir->CreateInBoundsGEP(rval,
                                     baseOffset, "add.ptr");
     }
-    rval = DtoBitCast(val->getRVal(), tolltype);
+    rval = DtoBitCast(rval, tolltype);
     return DtoClassDValue(tc, rval);
   }
   // class -> class - dynamic up cast
@@ -697,7 +694,7 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   b.push_string(name);
 
   // vtbl[]
-  if (cd->isInterfaceDeclaration() || cd->langPlugin()) // CALYPSO FIXME temporary?
+  if (cd->isInterfaceDeclaration() || cd->langPlugin()) { // CALYPSO FIXME temporary?
     b.push_array(0, getNullValue(voidPtrPtr));
   } else {
     c = DtoBitCast(ir->getVtblSymbol(), voidPtrPtr);
@@ -709,7 +706,7 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
 
   // base
   // interfaces never get a base, just the interfaces[]
-  if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) // CALYPSO
+  if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) { // CALYPSO
     b.push_classinfo(static_cast<ClassDeclaration*>(cd->baseClass));
   } else {
     b.push_null(cinfo->type);

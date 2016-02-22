@@ -1005,28 +1005,27 @@ ClassDeclaration *ClassDeclaration::searchBase(Loc loc, Identifier *ident)
     return NULL;
 }
 
-void ClassDeclaration::finalizeSize(Scope *sc)
+void ClassDeclaration::buildLayout() // CALYPSO
 {
-    if (sizeok != SIZEOKnone)
-        return;
-
     // Set the offsets of the fields and determine the size of the class
-    if (baseClass)
-    {
-        assert(baseClass->sizeok == SIZEOKdone);
 
-        alignsize = baseClass->alignsize;
-        structsize = baseClass->structsize;
-        if (cpp && global.params.isWindows)
-            structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
-    }
-    else
+    if (!baseClass || baseClass->langPlugin())  // if we're inheriting from a class written in a foreign language, add the D header // CALYPSO
     {
         alignsize = Target::ptrsize;
         if (cpp)
             structsize = Target::ptrsize;       // allow room for __vptr
         else
             structsize = Target::ptrsize * 2;   // allow room for __vptr and __monitor
+    }
+    
+    if (baseClass)
+    {
+        assert(baseClass->sizeok == SIZEOKdone);
+
+        alignsize = baseClass->alignsize;
+        structsize += baseClass->structsize;
+        if (cpp && global.params.isWindows)
+            structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
     }
 
     unsigned offset = structsize;
@@ -1072,6 +1071,16 @@ void ClassDeclaration::finalizeSize(Scope *sc)
         else
             structsize = (structsize + alignment - 1) & ~(alignment - 1);
     }
+}
+
+void ClassDeclaration::finalizeSize(Scope *sc)
+{
+    if (sizeok != SIZEOKnone)
+        return;
+
+    buildLayout(); // CALYPSO
+    if (sizeok == SIZEOKfwd)
+        return;
     sizeok = SIZEOKdone;
 
     // Look for the constructor

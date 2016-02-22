@@ -281,9 +281,9 @@ void ldc::DIBuilder::AddBaseFields(AggregateDeclaration *ad, ldc::DIFile file,
     AddBaseFields(toAggregateBase(ad), file, elems); // CALYPSO
   }
 
-  size_t narr = sd->fields.dim;
+  size_t narr = ad->fields.dim;
   elems.reserve(narr);
-  for (auto vd : sd->fields) {
+  for (auto vd : ad->fields) {
     elems.push_back(CreateMemberType(vd->loc.linnum, vd->type, file,
                                      vd->toChars(), vd->offset,
                                      vd->prot().kind));

@@ -799,14 +799,14 @@ public:
     for (const auto &pair : catchBlocks) {
       llvm::Constant *catchType;
       if (auto lp = (*c_it)->langPlugin()) // CALYPSO
-          catchType = lp->codegen()->toCatchScopeType(irs, it->first);
+          catchType = lp->codegen()->toCatchScopeType(irs, pair.first);
       else {
-        ClassDeclaration *cd = it->first->isClassHandle();
+        ClassDeclaration *cd = pair.first->isClassHandle();
         DtoResolveClass(cd);
         catchType = getIrAggr(cd)->getClassInfoSymbol();
       }
 
-      irs->func()->scopes->pushCatch(catchType, it->second);
+      irs->func()->scopes->pushCatch(catchType, pair.second);
       c_it++;
     }
 

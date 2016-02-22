@@ -5039,7 +5039,7 @@ Lagain:
             }
         }
 
-        if (!tc->byRef())
+        if (!cd->byRef())
             type = type->pointerTo();
     }
     else if (tb->ty == Tstruct)
