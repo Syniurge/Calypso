@@ -442,17 +442,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!isDefined)
         goto Ldeclaration;
 
-    for (auto I = D->field_begin(), E = D->field_end();
-            I != E; ++I)
-    {
-        if (I->getCanonicalDecl() != *I)
-            continue;
-
-        auto field = VisitValueDecl(*I);
-        if (field)
-            members->append(field);
-    }
-
     if (CRD && !D->isUnion())
     {
 //         if (isStruct && !CRD->hasDefaultConstructor())
@@ -497,25 +486,21 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                 MD->setInvalidDecl();
     }
 
-    // Add specific decls: vars, tags, templates, typedefs
-#define SPECIFIC_ADD(DECL) \
-    typedef clang::DeclContext::specific_decl_iterator<clang::DECL##Decl> DECL##_iterator; \
-    for (DECL##_iterator I(D->decls_begin()), E(D->decls_end()); \
-                I != E; I++) \
-    { \
-        if (cast<clang::Decl>((*I)->getDeclContext())->getCanonicalDecl() != Canon) \
-            continue;  /* only map declarations that are semantically within the RecordDecl */ \
-        if (auto s = VisitDecl(*I)) \
-            members->append(s); \
+    // Add specific decls: fields, vars, tags, templates, typedefs
+    // They are expected by DMD to be in the correct order.
+    for (auto M: D->decls())
+    {
+        if (cast<clang::Decl>(M->getDeclContext())->getCanonicalDecl() != Canon)
+            continue;  /* only map declarations that are semantically within the RecordDecl */
+
+        if (!isa<clang::FieldDecl>(M) && !isa<clang::VarDecl>(M) &&
+              !isa<clang::FunctionDecl>(M) && !isa<clang::TagDecl>(M) &&
+              !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
+            continue;
+
+        if (auto s = VisitDecl(M))
+            members->append(s);
     }
-
-    SPECIFIC_ADD(Function)
-    SPECIFIC_ADD(Tag)
-    SPECIFIC_ADD(Var)
-    SPECIFIC_ADD(RedeclarableTemplate)
-    SPECIFIC_ADD(TypedefName)
-
-#undef SPECIFIC_ADD
 
 Ldeclaration:
     CXXScope.pop();
