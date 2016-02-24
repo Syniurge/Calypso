@@ -10,6 +10,7 @@
 #include "root.h"
 #include "calypso.h"
 #include "../aggregate.h"
+#include "../attrib.h"
 
 namespace clang
 {
@@ -85,6 +86,17 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool mayBeAnonymous() override;
     void buildLayout() override;
+};
+
+class AnonDeclaration : public ::AnonDeclaration
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    const clang::FieldDecl *AnonField = nullptr; // corresponding anonymous field in the parent record if any
+
+    AnonDeclaration(Loc loc, bool isunion, Dsymbols *decl);
+    Dsymbol *syntaxCopy(Dsymbol *s) override;
 };
 
 template<typename AggTy> void buildAggLayout(AggTy *ad);

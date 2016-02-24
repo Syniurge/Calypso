@@ -5,6 +5,7 @@
 #include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cpptemplate.h"
+#include "attrib.h"
 #include "scope.h"
 #include "target.h"
 #include "template.h"
@@ -277,6 +278,19 @@ void UnionDeclaration::buildLayout()
     buildAggLayout(this);
 }
 
+AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
+    : ::AnonDeclaration(loc, isunion, decl)
+{
+}
+
+Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
+{
+    assert(!s);
+    auto a = new AnonDeclaration(loc, isunion, decl);
+    a->AnonField = AnonField;
+    return a;
+}
+
 // NOTE: we need to adjust every "this" pointer when accessing fields from bases
 // This is what Clang does in Sema::PerformObjectMemberConversion
 Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
@@ -355,27 +369,41 @@ template <typename AggTy>
     ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
     ad->structsize = RL.getSize().getQuantity();
 
-    for (size_t i = 0; i < ad->members->dim; i++)
+    std::function<void(Dsymbols *, unsigned, const clang::ASTRecordLayout&)>
+        addRecord = [&] (Dsymbols *members, unsigned baseoffset,  const clang::ASTRecordLayout& Layout)
     {
-        auto s = (*ad->members)[i];
+        for (auto m: *members)
+        {
+            if (auto vd = m->isVarDeclaration())
+            {
+                assert(isCPP(vd));
 
-        auto vd = s->isVarDeclaration();
-        if (!vd)
-            continue;
+                auto c_vd = static_cast<VarDeclaration*>(vd);
+                auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
 
-        assert(isCPP(vd));
+                if (!FD)
+                    continue;
 
-        auto c_vd = static_cast<VarDeclaration*>(vd);
-        auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
+                auto fldIdx = FD->getFieldIndex();
+                vd->offset = baseoffset + Layout.getFieldOffset(fldIdx) / 8;
 
-        if (!FD)
-            continue;
+                ad->fields.push(vd);
+            }
+            else if (auto anon = m->isAttribDeclaration())
+            {
+                assert(/*anon->isAnonDeclaration() && */isCPP(anon));
+                auto AnonField = static_cast<cpp::AnonDeclaration*>(anon)->AnonField;
+                auto AnonRecord = AnonField->getType()->castAs<clang::RecordType>()->getDecl();
 
-        auto fldIdx = FD->getFieldIndex();
-        c_vd->offset = RL.getFieldOffset(fldIdx) / 8;
+                auto AnonFieldIdx = AnonField->getFieldIndex();
+                auto& AnonLayout = Context.getASTRecordLayout(AnonRecord);
 
-        ad->fields.push(c_vd);
-    }
+                addRecord(anon->decl, baseoffset + Layout.getFieldOffset(AnonFieldIdx) / 8, AnonLayout);
+            }
+        }
+    };
+
+    addRecord(ad->members, 0, RL);
 
     ad->layoutQueried = true;
 }

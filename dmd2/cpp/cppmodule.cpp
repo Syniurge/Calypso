@@ -246,13 +246,25 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
     if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
         return nullptr;
 
+    if (auto Field = dyn_cast<clang::FieldDecl>(D))
+    {
+        if (Field->isUnnamedBitfield())
+            return nullptr;
+
+        // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false, it returns true only for "true" anonymous structs/unions
+        if (Field->isAnonymousStructOrUnion())
+        {
+            auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
+            assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
+
+            auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
+            anon->AnonField = Field;
+            return a;
+        }
+    }
+
     auto loc = fromLoc(D->getLocation());
     auto decldefs = new Dsymbols;
-
-    if (auto Field = dyn_cast<clang::FieldDecl>(D))
-        if (Field->isAnonymousStructOrUnion() || Field->isUnnamedBitfield())
-            return nullptr; // "true" anonymous structs/unions are already mapped by VisitRecordDecl
-                            // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false
 
     auto id = fromIdentifier(D->getIdentifier());
     Type *t = nullptr;
@@ -384,6 +396,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (D->isAnonymousStructOrUnion())
     {
         assert(!TND);
+
+        if (!(flags & MapAnonRecord))
+          return nullptr;
 
         anon = 1;
         if (D->isUnion())

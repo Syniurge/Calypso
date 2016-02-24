@@ -132,7 +132,7 @@ public:
     int sem;                    // 1 if successful semantic()
 
     AnonDeclaration(Loc loc, bool isunion, Dsymbols *decl);
-    Dsymbol *syntaxCopy(Dsymbol *s);
+    virtual Dsymbol *syntaxCopy(Dsymbol *s); // CALYPSO
     void semantic(Scope *sc);
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
     const char *kind();
