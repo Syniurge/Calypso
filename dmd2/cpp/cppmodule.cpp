@@ -376,7 +376,9 @@ inline bool isPolymorphic(const clang::RecordDecl *D)
 
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
+    auto& Context = calypso.pch.AST->getASTContext();
     auto& S = calypso.pch.AST->getSema();
+    auto& Diags = calypso.pch.AST->getDiagnostics();
     auto Canon = D->getCanonicalDecl();
 
     if (D->isImplicit() && !(flags & MapImplicitRecords))
@@ -384,6 +386,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
+
+    if (S.RequireCompleteType(D->getLocation(), Context.getRecordType(D), 0))
+        Diags.Reset();
 
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
