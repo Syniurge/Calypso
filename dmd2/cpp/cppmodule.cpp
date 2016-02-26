@@ -810,6 +810,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
         //   Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
 
+        auto R = D->getDeclContext()->lookup(D->getDeclName());
+        bool isFirstOverload = R[0]->getCanonicalDecl() == D->getCanonicalDecl(); // WARNING: needs to be rethought for non-member operators
+
         bool wrapInTemp = spec &&
                     !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
                     !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation());  // if we're instantiating a templated overloaded operator, we're after the function
@@ -824,18 +827,13 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd = new FuncDeclaration(loc, fullIdent, stc, tf, D);
         a->push(fd);
 
-        if (wrapInTemp)
+        if (wrapInTemp && isFirstOverload)
         {
-            // Add the opUnary/opBinary/... template declaration
+            // Add the opUnary/opBinary/... template declaration aliasing fullIdent if none exists(important!)
             auto tpl = initTempParams(loc, spec);
 
-            auto a_fwd = new OverloadAliasDeclaration(loc, opIdent,
-                                        new TypeIdentifier(loc, fullIdent), tf);
-
-            // NOTE: the previous approach of making a small forwarding function calling fd had one important
-            // issue as well in that LDC and the ABIs would need to know how to define function types
-            // taking and returning class values. Simpler and safer to let Clang handle those.
-            // Adding these specific overload aliases seemed like the cleanest way.
+            auto a_fwd = new ::AliasDeclaration(loc, opIdent,
+                                        new TypeIdentifier(loc, fullIdent));
 
             // Enclose the forwarding function within the template declaration
             auto decldefs = new Dsymbols;
