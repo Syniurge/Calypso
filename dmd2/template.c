@@ -2416,10 +2416,7 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
             }
             else if (s->isFuncDeclaration())
             {
-                if (ti->inst->aliasdecl->isOverloadAliasDeclaration()) // CALYPSO HACK FIXME better solution? but I've spent a lot of time on this issue and the best/simplest seems for D to support aliases to specific overloads and take this into account here
-                    fd = s->isFuncDeclaration();
-                else
-                    fd = resolveFuncCall(loc, sc, s, NULL, tthis, fargs, 1);
+                fd = resolveFuncCall(loc, sc, s, NULL, tthis, fargs, 1);
             }
             else
                 goto Lerror;

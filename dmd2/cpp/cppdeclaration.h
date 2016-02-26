@@ -123,22 +123,6 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
 };
 
-// We need aliases for overloaded operators, but aliases do not reference a specific function and then resolving the operator call fails if there are more than one match
-// We can't set the aliassym straightaway because the parents need to be semantic'd before semantic'ing the referenced function
-// Maybe there's a more elegant and shorter solution but for now that'll do
-class OverloadAliasDeclaration : public ::AliasDeclaration
-{
-public:
-    TypeFunction *overtf;
-
-    OverloadAliasDeclaration(Loc loc, Identifier *ident, Type *type,
-                             TypeFunction *overtf);
-    OverloadAliasDeclaration(const OverloadAliasDeclaration&);
-    Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    ::AliasDeclaration *isOverloadAliasDeclaration() override { return this; }
-};
-
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);
 
 #define IMPLEMENT_syntaxCopy(Class, D) \
