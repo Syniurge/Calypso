@@ -275,6 +275,7 @@ public:
     virtual Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
+    virtual bool overlap(VarDeclaration *v2); // CALYPSO
     void semantic2(Scope *sc);
     const char *kind();
     AggregateDeclaration *isThis();

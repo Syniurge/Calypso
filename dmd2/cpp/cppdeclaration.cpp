@@ -34,6 +34,11 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
     storage_class = o.storage_class; // workaround for syntaxCopy because base method only assigns storage_class if the arg is null (BUG?)
 }
 
+bool VarDeclaration::overlap(::VarDeclaration* v2)
+{
+    return false; // HACK
+}
+
 FuncDeclaration::FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
                     Type* type, const clang::FunctionDecl *FD)
     : ::FuncDeclaration(loc, loc, id, storage_class, type)

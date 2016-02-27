@@ -1774,6 +1774,12 @@ void VarDeclaration::setFieldOffset(AggregateDeclaration *ad, unsigned *poffset,
     //printf(" addField '%s' to '%s' at offset %d, size = %d\n", toChars(), ad->toChars(), offset, memsize);
 }
 
+bool VarDeclaration::overlap(VarDeclaration* v2) // CALYPSO
+{
+    return offset < v2->offset + v2->type->size() &&
+                  v2->offset < offset + type->size();
+}
+
 const char *VarDeclaration::kind()
 {
     return "variable";
