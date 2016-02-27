@@ -332,6 +332,54 @@ void ClassDeclaration::semantic(Scope *sc)
     }
     semanticRun = PASSsemantic;
 
+    // CALYPSO DMD BUG: https://issues.dlang.org/show_bug.cgi?id=15477
+    // We need to populate the symtab before calling semantic on the base classes to prevent forwarding errors
+    // e.g with the myriad of QTypeInfo explicit specializations.
+    if (!symtab && members)
+    {
+        symtab = new DsymbolTable();
+
+        /* Bugzilla 12152: The semantic analysis of base classes should be finished
+         * before the members semantic analysis of this class, in order to determine
+         * vtbl in this class. However if a base class refers the member of this class,
+         * it can be resolved as a normal forward reference.
+         * Call addMember() and setScope() to make this class members visible from the base classes.
+         */
+        for (size_t i = 0; i < members->dim; i++)
+        {
+            Dsymbol *s = (*members)[i];
+            s->addMember(sc, this);
+        }
+
+        Scope *sc2 = sc->push(this);
+        sc2->stc &= STCsafe | STCtrusted | STCsystem;
+        sc2->parent = this;
+        sc2->inunion = 0;
+        if (isCOMclass())
+        {
+            if (global.params.isWindows)
+                sc2->linkage = LINKwindows;
+            else
+                sc2->linkage = LINKc;
+        }
+        sc2->protection = Prot(PROTpublic);
+        sc2->explicitProtection = 0;
+        sc2->structalign = STRUCTALIGN_DEFAULT;
+        sc2->userAttribDecl = NULL;
+
+        /* Set scope so if there are forward references, we still might be able to
+         * resolve individual members like enums.
+         */
+        for (size_t i = 0; i < members->dim; i++)
+        {
+            Dsymbol *s = (*members)[i];
+            //printf("[%d] setScope %s %s, sc2 = %p\n", i, s->kind(), s->toChars(), sc2);
+            s->setScope(sc2);
+        }
+
+        sc2->pop();
+    }
+
     if (baseok < BASEOKdone)
     {
         baseok = BASEOKin;
@@ -589,51 +637,6 @@ Lancestorsdone:
     {
         semanticRun = PASSsemanticdone;
         return;
-    }
-
-    if (!symtab)
-    {
-        symtab = new DsymbolTable();
-
-        /* Bugzilla 12152: The semantic analysis of base classes should be finished
-         * before the members semantic analysis of this class, in order to determine
-         * vtbl in this class. However if a base class refers the member of this class,
-         * it can be resolved as a normal forward reference.
-         * Call addMember() and setScope() to make this class members visible from the base classes.
-         */
-        for (size_t i = 0; i < members->dim; i++)
-        {
-            Dsymbol *s = (*members)[i];
-            s->addMember(sc, this);
-        }
-
-        Scope *sc2 = sc->push(this);
-        sc2->stc &= STCsafe | STCtrusted | STCsystem;
-        sc2->parent = this;
-        sc2->inunion = 0;
-        if (isCOMclass())
-        {
-            if (global.params.isWindows)
-                sc2->linkage = LINKwindows;
-            else
-                sc2->linkage = LINKc;
-        }
-        sc2->protection = Prot(PROTpublic);
-        sc2->explicitProtection = 0;
-        sc2->structalign = STRUCTALIGN_DEFAULT;
-        sc2->userAttribDecl = NULL;
-
-        /* Set scope so if there are forward references, we still might be able to
-         * resolve individual members like enums.
-         */
-        for (size_t i = 0; i < members->dim; i++)
-        {
-            Dsymbol *s = (*members)[i];
-            //printf("[%d] setScope %s %s, sc2 = %p\n", i, s->kind(), s->toChars(), sc2);
-            s->setScope(sc2);
-        }
-
-        sc2->pop();
     }
 
     for (size_t i = 0; i < baseclasses->dim; i++)
