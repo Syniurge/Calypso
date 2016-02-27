@@ -811,7 +811,26 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         //   Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
 
         auto R = D->getDeclContext()->lookup(D->getDeclName());
-        bool isFirstOverload = R[0]->getCanonicalDecl() == D->getCanonicalDecl(); // WARNING: needs to be rethought for non-member operators
+        std::function<bool(const clang::NamedDecl*)> pred;
+        SpecValue spec2(*this);
+        if (isa<clang::TagDecl>(D->getDeclContext()))
+            pred = [&](const clang::NamedDecl* _D)
+                { return opIdent == getIdentifierOrNull(_D, &spec2); }; // member operator, simplest case
+        else
+        {
+            // non member overloaded operators are trickier, since they end up in different modules and we need one alias per module
+            auto OpTyDecl = isOverloadedOperatorWithTagOperand(D);
+            if (!OpTyDecl)
+                pred = [&](const clang::NamedDecl* _D)
+                    { return opIdent == getIdentifierOrNull(_D, &spec2) && !isOverloadedOperatorWithTagOperand(_D); };
+            else
+                pred = [&](const clang::NamedDecl* _D)
+                    { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
+        }
+
+        auto FirstOverload = *std::find_if(R.begin(), R.end(), pred);
+        assert(FirstOverload);
+        bool isFirstOverloadInScope = FirstOverload->getCanonicalDecl() == D->getCanonicalDecl();
 
         bool wrapInTemp = spec &&
                     !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
@@ -827,7 +846,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd = new FuncDeclaration(loc, fullIdent, stc, tf, D);
         a->push(fd);
 
-        if (wrapInTemp && isFirstOverload)
+        if (wrapInTemp && isFirstOverloadInScope)
         {
             // Add the opUnary/opBinary/... template declaration aliasing fullIdent if none exists(important!)
             auto tpl = initTempParams(loc, spec);
