@@ -4,6 +4,8 @@
  * Contributed by Elie Morisse.
  */
 
+module moc.moc_;
+
 modmap (C++) "<QtCore>";
 modmap (C++) "<private/qmetaobject_p.h>";
 

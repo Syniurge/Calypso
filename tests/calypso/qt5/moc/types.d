@@ -4,6 +4,8 @@
  * Contributed by Elie Morisse.
  */
 
+module moc.types;
+
 modmap (C++) "<qglobal.h>";
 modmap (C++) "<qmetatype.h>";
 
