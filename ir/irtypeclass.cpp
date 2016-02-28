@@ -99,6 +99,13 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
   LOG_SCOPE;
   IF_LOG Logger::println("Instance size: %u", cd->structsize);
 
+  if (auto lp = cd->langPlugin()) // CALYPSO
+  {
+    t->type = lp->codegen()->toType(cd->type);
+    t->packed = llvm::cast<LLStructType>(t->type)->isPacked();
+    return t;
+  }
+
   // This class may contain an align declaration. See issue 726.
   t->packed = false;
   for (AggregateDeclaration *base = cd; base != nullptr && !t->packed;
@@ -126,13 +133,6 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
 
     // add data members recursively
     t->addBaseClassData(builder, cd);
-
-    if (auto lp = cd->langPlugin()) // CALYPSO
-    {
-      t->type = lp->codegen()->toType(cd->type);
-      t->packed = llvm::cast<LLStructType>(t->type)->isPacked();
-      return t;
-    }
 
     // add tail padding
     builder.addTailPadding(cd->structsize);
