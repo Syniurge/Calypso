@@ -147,6 +147,7 @@ public:
                                Statement *handler, StorageClass stc) override;
 
     const char *mangle(Dsymbol *s) override;
+    void mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad) override;
     Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,

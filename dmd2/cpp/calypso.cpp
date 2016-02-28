@@ -33,6 +33,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Serialization/ASTWriter.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/IR/LLVMContext.h"
@@ -485,6 +486,22 @@ const char *LangPlugin::mangle(Dsymbol *s)
 
     Str.str().swap(FoundStr);
     return FoundStr.c_str();
+}
+
+void LangPlugin::mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad)
+{
+    auto MangleCtx = pch.MangleCtx;
+    auto RD = getRecordDecl(ad);
+
+    // Get a unique id for the anonymous struct.
+    unsigned AnonStructId = MangleCtx->getAnonymousStructId(RD);
+
+    llvm::SmallString<8> Str;
+    Str += "$_";
+    Str += llvm::utostr(AnonStructId);
+
+    buf->printf("%llu", (ulonglong)Str.size());
+    buf->writestring(Str.c_str());
 }
 
 /***********************/

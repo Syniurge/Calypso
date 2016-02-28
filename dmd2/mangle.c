@@ -592,7 +592,11 @@ public:
             }
         }
 
-        visit((Dsymbol *)ad);
+        auto lp = ad->langPlugin();
+        if (ad->isAnonymous() && lp)
+            lp->mangleAnonymousAggregate(buf, ad); // CALYPSO HACK (very ugly)
+        else
+            visit((Dsymbol *)ad);
 
         ad->parent = parentsave;
     }
