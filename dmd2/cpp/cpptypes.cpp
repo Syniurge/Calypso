@@ -446,7 +446,7 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
         auto dim = ExprMapper(tm).fromExpression(DSAT->getSizeExpr());
         return new TypeSArray(t, dim);
     }
-    else if (auto IAT = dyn_cast<clang::IncompleteArrayType>(T))
+    else if (isa<clang::IncompleteArrayType>(T))
     {
         return new TypePointer(t);
     }

@@ -60,7 +60,7 @@ public:
     void semantic(Scope *sc);
     void semantic2(Scope *sc);
     Dsymbol *toAlias();
-    int addMember(Scope *sc, ScopeDsymbol *sds, int memnum);
+    void addMember(Scope *sc, ScopeDsymbol *sds);
     Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone);
     bool overloadInsert(Dsymbol *s);
 
@@ -107,6 +107,7 @@ public:
     // ===== - - - - - ===== //
 
     virtual const char *mangle(Dsymbol *s) = 0; // TODO replace by getForeignMangler
+    virtual void mangleAnonymousAggregate(OutBuffer *buf, AggregateDeclaration* ad) = 0; // HACK
 
     // create a mangler for types and symbols specific to this plugin
     // base is the D mangler

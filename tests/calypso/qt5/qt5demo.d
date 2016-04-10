@@ -4,7 +4,7 @@
  * Module map files from utils/modulemap/ should be installed in the libc and Qt include folders.
  *
  * Then build with:
- *   $ ldc2 -relocation-model=pic -wi -v -cpp-args -D_REENTRANT -cpp-args -fPIE -cpp-args -DQT_WIDGETS_LIB -cpp-args -DQT_GUI_LIB -cpp-args -DQT_CORE_LIB -cpp-args -I/pathto/Qt/5.5/gcc_64/mkspecs/linux-g++ -cpp-args -I/pathto/Qt/5.5/gcc_64/include -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtWidgets -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtGui -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtCore -L-rpath=/pathto/Qt/5.5/gcc_64 -L-rpath=/pathto/Qt/5.5/gcc_64/lib -L-lQt5Widgets -L-lQt5Gui -L-lQt5Core -L-lGL -L-lstdc++ qt5demo.d
+ *   $ ldc2 -relocation-model=pic -wi -v -cpp-args -D_REENTRANT -cpp-args -fPIE -cpp-args -DQT_WIDGETS_LIB -cpp-args -DQT_GUI_LIB -cpp-args -DQT_CORE_LIB -cpp-args -I/pathto/Qt/5.5/gcc_64/mkspecs/linux-g++ -cpp-args -I/pathto/Qt/5.5/gcc_64/include -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtWidgets -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtGui -cpp-args -I/pathto/Qt/5.5/gcc_64/include/QtCore -L-rpath=/pathto/Qt/5.5/gcc_64 -L-rpath=/pathto/Qt/5.5/gcc_64/lib -L-lQt5Widgets -L-lQt5Gui -L-lQt5Core -L-lGL -L-lstdc++ qt5demo.d moc/package.d moc/moc_.d moc/types.d
  */
 
  // WORKAROUND until modmap gets fixed

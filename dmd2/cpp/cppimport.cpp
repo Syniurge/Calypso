@@ -41,8 +41,8 @@ Modmap::Modmap(Loc loc, StringExp *arg)
 void Modmap::importAll(Scope *sc)
 {
     assert(arg->sz == 1); // FIXME
-    StringRef headerName((const char *) arg->string, arg->len);
-    calypso.pch.add(headerName, sc->module);
+    assert(strlen((const char *) arg->string) == arg->len);
+    calypso.pch.add((const char *) arg->string, sc->module);
 }
 
 void Modmap::semantic(Scope* sc)

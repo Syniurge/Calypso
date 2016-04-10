@@ -445,7 +445,7 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     return LV.getAddress();
 }
 
-void LangPlugin::toInitClassForeign(TypeClass* tc, LLValue* dst)
+void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
 {
     uint64_t const dataBytes = tc->sym->structsize;
     if (dataBytes == 0)
@@ -748,28 +748,25 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
 {
-    const clang::RecordDecl *RD;
-    if (base->isClassDeclaration())
-        RD = static_cast<cpp::ClassDeclaration*>(base)->RD;
-    else
-        RD  = static_cast<cpp::StructDeclaration*>(base)->RD;
-
+    auto RD = getRecordDecl(base);
     auto& CGRL = CGM->getTypes().getCGRecordLayout(RD);
 
     auto BaseTy = CGRL.getBaseSubobjectLLVMType();
     auto BaseLayout = gDataLayout->getStructLayout(BaseTy);
 
-    for (auto I = BaseTy->element_begin(), E = BaseTy->element_end();
-         I != E; ++I)
+    for (auto Element: BaseTy->elements())
     {
-        b.m_defaultTypes.push_back(*I);
+        b.m_defaultTypes.push_back(Element);
         ++b.m_fieldIndex;
     }
 
     for (auto vd: base->fields)
     {
         auto VD = static_cast<cpp::VarDeclaration*>(vd)->VD;
-        b.m_varGEPIndices[vd] = CGRL.getLLVMFieldNo(llvm::cast<clang::FieldDecl>(VD));
+        if (cast<clang::Decl>(VD->getDeclContext())->getCanonicalDecl() != RD->getCanonicalDecl())
+            b.m_varGEPIndices[vd] = 0x12345678; // the field is from an anon union/struct
+        else
+            b.m_varGEPIndices[vd] = CGRL.getLLVMFieldNo(llvm::cast<clang::FieldDecl>(VD));
     }
 
     b.m_offset += BaseLayout->getSizeInBytes();

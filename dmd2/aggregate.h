@@ -42,6 +42,14 @@ enum Sizeok
     SIZEOKfwd,          // error in computing size of aggregate
 };
 
+enum Baseok
+{
+    BASEOKnone,         // base classes not computed yet
+    BASEOKin,           // in process of resolving base classes
+    BASEOKdone,         // all base classes are resolved
+    BASEOKsemanticdone, // all base classes semantic done
+};
+
 enum StructPOD
 {
     ISPODno,            // struct is not POD
@@ -70,7 +78,7 @@ public:
     unsigned alignsize;         // size of struct for alignment purposes
     structalign_t alignment;    // alignment applied outside of the struct/class value // CALYPSO
     VarDeclarations fields;     // VarDeclaration fields
-    Sizeok sizeok;         // set when structsize contains valid data
+    Sizeok sizeok;              // set when structsize contains valid data
     Dsymbol *deferred;          // any deferred semantic2() or semantic3() symbol
     bool isdeprecated;          // true if deprecated
     bool mutedeprecation;       // true while analysing RTInfo to avoid deprecation message
@@ -104,8 +112,9 @@ public:
     void setScope(Scope *sc);
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
-    virtual unsigned size(Loc loc); // CALYPSO
     virtual bool mayBeAnonymous(); // CALYPSO
+    unsigned size(Loc loc);
+    virtual void finalizeSize(Scope *sc) = 0;
     static void alignmember(structalign_t salign, unsigned size, unsigned *poffset);
     static unsigned placeField(unsigned *nextoffset,
         unsigned memsize, unsigned memalignsize, structalign_t memalign,
@@ -168,13 +177,18 @@ public:
     Type *arg1type;
     Type *arg2type;
 
+    // Even if struct is defined as non-root symbol, some built-in operations
+    // (e.g. TypeidExp, NewExp, ArrayLiteralExp, etc) request its TypeInfo.
+    // For those, today TypeInfo_Struct is generated in COMDAT.
+    bool requestTypeInfo;
+
     StructDeclaration(Loc loc, Identifier *id);
     virtual Dsymbol *syntaxCopy(Dsymbol *s);
     virtual void semantic(Scope *sc);
     void semanticTypeInfoMembers();
     Dsymbol *search(Loc, Identifier *ident, int flags = IgnoreNone);
     const char *kind();
-    void finalizeSize(Scope *sc);
+    virtual void finalizeSize(Scope *sc); // CALYPSO
     bool fit(Loc loc, Scope *sc, Expressions *elements, Type *stype);
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     bool isPOD();
@@ -182,6 +196,7 @@ public:
     // CALYPSO
     virtual bool disableDefaultCtor() { return true; }
     virtual Expression *defaultInit(Loc loc);
+    virtual void buildLayout(); // CALYPSO
 
     StructDeclaration *isStructDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -219,9 +234,6 @@ struct BaseClass
     bool fillVtbl(ClassDeclaration *cd, FuncDeclarations *vtbl, int newinstance);
     void copyBaseInterfaces(BaseClasses *);
 };
-
-#define CLASSINFO_SIZE_64  0x98         // value of ClassInfo.size
-#define CLASSINFO_SIZE  (0x3C+12+4)     // value of ClassInfo.size
 
 struct ClassFlags
 {
@@ -270,9 +282,7 @@ public:
     bool isscope;                       // true if this is a scope class
     bool isabstract;                    // true if abstract class
     int inuse;                          // to prevent recursive attempts
-    Semantic doAncestorsSemantic;       // Before searching symbol, whole ancestors should finish
-                                        // calling semantic() at least once, due to fill symtab
-                                        // and do addMember(). [== Semantic(Start,In,Done)]
+    Baseok baseok;                      // set the progress of base classes resolving
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses, bool inObject = false);
     virtual Dsymbol *syntaxCopy(Dsymbol *s); // CALYPSO
@@ -285,6 +295,7 @@ public:
     bool isBaseInfoComplete();
     Dsymbol *search(Loc, Identifier *ident, int flags = IgnoreNone);
     ClassDeclaration *searchBase(Loc, Identifier *ident);
+    virtual void finalizeSize(Scope *sc); // CALYPSO
     bool isFuncHidden(FuncDeclaration *fd);
     FuncDeclaration *findFunc(Identifier *ident, TypeFunction *tf);
     virtual void interfaceSemantic(Scope *sc);  // CALYPSO
@@ -300,12 +311,12 @@ public:
 
     // CALYPSO
     virtual bool byRef() { return true; }
-    virtual Expression *defaultInit(Loc loc); // CALYPSO
+    virtual void buildLayout();
+    virtual Expression *defaultInit(Loc loc);
     virtual bool allowMultipleInheritance() { return false; }  // will allow more than one non-interface base
     virtual bool allowInheritFromStruct() { return false; }  // even though C++ class types are value, we may want to keep mapping POD classes to D structs to keep init lists
     virtual void initVtbl();
     virtual void finalizeVtbl() {}
-    virtual void buildLayout(); // determine the agg size and field offsets
     AggregateDeclaration *foreignBase();
 
 #if IN_DMD
@@ -323,6 +334,7 @@ public:
     InterfaceDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses);
     Dsymbol *syntaxCopy(Dsymbol *s);
     void semantic(Scope *sc);
+    void finalizeSize(Scope *sc);
     bool isBaseOf(ClassDeclaration *cd, int *poffset);
     bool isBaseOf(BaseClass *bc, int *poffset);
     const char *kind();

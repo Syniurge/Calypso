@@ -34,6 +34,11 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
     storage_class = o.storage_class; // workaround for syntaxCopy because base method only assigns storage_class if the arg is null (BUG?)
 }
 
+bool VarDeclaration::overlap(::VarDeclaration* v2)
+{
+    return false; // HACK
+}
+
 FuncDeclaration::FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
                     Type* type, const clang::FunctionDecl *FD)
     : ::FuncDeclaration(loc, loc, id, storage_class, type)
@@ -135,73 +140,11 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
     return new cpp::AliasDeclaration(*this); // hmm hmm
 }
 
-OverloadAliasDeclaration::OverloadAliasDeclaration(Loc loc, Identifier *ident,
-                        Type *type, TypeFunction *overtf)
-    : ::AliasDeclaration(loc, ident, type)
-{
-    this->overtf = overtf;
-}
-
-OverloadAliasDeclaration::OverloadAliasDeclaration(const OverloadAliasDeclaration &o)
-    : OverloadAliasDeclaration(o.loc, o.ident, o.type->syntaxCopy(), o.overtf)
-{
-    this->storage_class = o.storage_class;
-}
-
-Dsymbol* OverloadAliasDeclaration::syntaxCopy(Dsymbol* s)
-{
-    assert(!s);
-    return new OverloadAliasDeclaration(*this);
-}
-
 IMPLEMENT_syntaxCopy(VarDeclaration, VD)
 IMPLEMENT_syntaxCopy(FuncDeclaration, FD)
 IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
 IMPLEMENT_syntaxCopy(DtorDeclaration, CDD)
 IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
-
-void OverloadAliasDeclaration::semantic(Scope *sc)
-{
-    ::AliasDeclaration::semantic(sc);
-
-    if (aliassym && overtf)
-    {
-        assert(aliassym->isFuncDeclaration());
-        if (aliassym->hasOverloads())
-        {
-            overtf = static_cast<TypeFunction*>(overtf->semantic(loc, aliassym->scope));
-
-            struct TypeFunctionEquals
-            {
-                TypeFunction *tf;            // type to match
-                ::FuncDeclaration *f; // return value
-
-                static int fp(void *param, Dsymbol *s)
-                {
-                    if (!s->isFuncDeclaration())
-                        return 0;
-                    auto f = static_cast<::FuncDeclaration*>(s);
-                    TypeFunctionEquals *p = (TypeFunctionEquals *)param;
-
-                    if (p->tf->deco == f->type->deco)
-                    {
-                        p->f = f;
-                        return 1;
-                    }
-
-                    return 0;
-                }
-            };
-            TypeFunctionEquals p;
-            p.tf = overtf;
-            p.f = nullptr;
-            overloadApply(this, &p, &TypeFunctionEquals::fp);
-            assert(p.f);
-            aliassym = p.f;
-        }
-        overtf = nullptr;
-    }
-}
 
 void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
 {

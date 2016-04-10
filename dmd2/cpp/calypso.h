@@ -108,7 +108,7 @@ public:
     ModuleMap *MMap = nullptr;
 
     void init(); // load the list of headers already cached in the PCH
-    void add(StringRef header, ::Module *from);
+    void add(const char* header, ::Module *from);
 
     void update(); // re-emit the PCH if needed, and update the cached list
 
@@ -147,6 +147,7 @@ public:
                                Statement *handler, StorageClass stc) override;
 
     const char *mangle(Dsymbol *s) override;
+    void mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad) override;
     Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
@@ -199,7 +200,7 @@ public:
     LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
-    void toInitClassForeign(TypeClass* tc, LLValue* dst) override;
+    void toInitClass(TypeClass* tc, LLValue* dst) override;
 
     void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;
 

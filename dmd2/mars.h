@@ -66,8 +66,6 @@ the target object file format:
 #include <stddef.h>
 #include <stdarg.h>
 
-#include "root/stringref.h"
-
 #if IN_LLVM
 #include "llvm/ADT/Triple.h"
 #endif

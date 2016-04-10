@@ -186,7 +186,7 @@ Initializer *StructInitializer::semantic(Scope *sc, Type *t, NeedInterpret needI
                 {
                     s = sd->search_correct(id);
                     if (s)
-                        error(loc, "'%s' is not a member of '%s', did you mean '%s %s'?",
+                        error(loc, "'%s' is not a member of '%s', did you mean %s '%s'?",
                               id->toChars(), sd->toChars(), s->kind(), s->toChars());
                     else
                         error(loc, "'%s' is not a member of '%s'", id->toChars(), sd->toChars());
@@ -223,9 +223,7 @@ Initializer *StructInitializer::semantic(Scope *sc, Type *t, NeedInterpret needI
             for (size_t j = 0; j < nfields; j++)
             {
                 VarDeclaration *v2 = sd->fields[j];
-                bool overlap = (vd->offset < v2->offset + v2->type->size() &&
-                                v2->offset < vd->offset + vd->type->size());
-                if (overlap && (*elements)[j])
+                if (vd->overlap(v2) && (*elements)[j])
                 {
                     error(loc, "overlapping initialization for field %s and %s",
                         v2->toChars(), vd->toChars());

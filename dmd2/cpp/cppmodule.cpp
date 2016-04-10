@@ -246,13 +246,25 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
     if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
         return nullptr;
 
+    if (auto Field = dyn_cast<clang::FieldDecl>(D))
+    {
+        if (Field->isUnnamedBitfield())
+            return nullptr;
+
+        // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false, it returns true only for "true" anonymous structs/unions
+        if (Field->isAnonymousStructOrUnion())
+        {
+            auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
+            assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
+
+            auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
+            anon->AnonField = Field;
+            return a;
+        }
+    }
+
     auto loc = fromLoc(D->getLocation());
     auto decldefs = new Dsymbols;
-
-    if (auto Field = dyn_cast<clang::FieldDecl>(D))
-        if (Field->isAnonymousStructOrUnion() || Field->isUnnamedBitfield())
-            return nullptr; // "true" anonymous structs/unions are already mapped by VisitRecordDecl
-                            // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false
 
     auto id = fromIdentifier(D->getIdentifier());
     Type *t = nullptr;
@@ -364,7 +376,9 @@ inline bool isPolymorphic(const clang::RecordDecl *D)
 
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
+    auto& Context = calypso.pch.AST->getASTContext();
     auto& S = calypso.pch.AST->getSema();
+    auto& Diags = calypso.pch.AST->getDiagnostics();
     auto Canon = D->getCanonicalDecl();
 
     if (D->isImplicit() && !(flags & MapImplicitRecords))
@@ -372,6 +386,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
+
+    if (S.RequireCompleteType(D->getLocation(), Context.getRecordType(D), 0))
+        Diags.Reset();
 
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
@@ -384,6 +401,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (D->isAnonymousStructOrUnion())
     {
         assert(!TND);
+
+        if (!(flags & MapAnonRecord))
+          return nullptr;
 
         anon = 1;
         if (D->isUnion())
@@ -442,17 +462,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!isDefined)
         goto Ldeclaration;
 
-    for (auto I = D->field_begin(), E = D->field_end();
-            I != E; ++I)
-    {
-        if (I->getCanonicalDecl() != *I)
-            continue;
-
-        auto field = VisitValueDecl(*I);
-        if (field)
-            members->append(field);
-    }
-
     if (CRD && !D->isUnion())
     {
 //         if (isStruct && !CRD->hasDefaultConstructor())
@@ -497,25 +506,21 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                 MD->setInvalidDecl();
     }
 
-    // Add specific decls: vars, tags, templates, typedefs
-#define SPECIFIC_ADD(DECL) \
-    typedef clang::DeclContext::specific_decl_iterator<clang::DECL##Decl> DECL##_iterator; \
-    for (DECL##_iterator I(D->decls_begin()), E(D->decls_end()); \
-                I != E; I++) \
-    { \
-        if (cast<clang::Decl>((*I)->getDeclContext())->getCanonicalDecl() != Canon) \
-            continue;  /* only map declarations that are semantically within the RecordDecl */ \
-        if (auto s = VisitDecl(*I)) \
-            members->append(s); \
+    // Add specific decls: fields, vars, tags, templates, typedefs
+    // They are expected by DMD to be in the correct order.
+    for (auto M: D->decls())
+    {
+        if (cast<clang::Decl>(M->getDeclContext())->getCanonicalDecl() != Canon)
+            continue;  /* only map declarations that are semantically within the RecordDecl */
+
+        if (!isa<clang::FieldDecl>(M) && !isa<clang::VarDecl>(M) &&
+              !isa<clang::FunctionDecl>(M) && !isa<clang::TagDecl>(M) &&
+              !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
+            continue;
+
+        if (auto s = VisitDecl(M))
+            members->append(s);
     }
-
-    SPECIFIC_ADD(Function)
-    SPECIFIC_ADD(Tag)
-    SPECIFIC_ADD(Var)
-    SPECIFIC_ADD(RedeclarableTemplate)
-    SPECIFIC_ADD(TypedefName)
-
-#undef SPECIFIC_ADD
 
 Ldeclaration:
     CXXScope.pop();
@@ -805,6 +810,28 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
         //   Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
 
+        auto R = D->getDeclContext()->lookup(D->getDeclName());
+        std::function<bool(const clang::NamedDecl*)> pred;
+        SpecValue spec2(*this);
+        if (isa<clang::TagDecl>(D->getDeclContext()))
+            pred = [&](const clang::NamedDecl* _D)
+                { return opIdent == getIdentifierOrNull(_D, &spec2); }; // member operator, simplest case
+        else
+        {
+            // non member overloaded operators are trickier, since they end up in different modules and we need one alias per module
+            auto OpTyDecl = isOverloadedOperatorWithTagOperand(D);
+            if (!OpTyDecl)
+                pred = [&](const clang::NamedDecl* _D)
+                    { return opIdent == getIdentifierOrNull(_D, &spec2) && !isOverloadedOperatorWithTagOperand(_D); };
+            else
+                pred = [&](const clang::NamedDecl* _D)
+                    { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
+        }
+
+        auto FirstOverload = *std::find_if(R.begin(), R.end(), pred);
+        assert(FirstOverload);
+        bool isFirstOverloadInScope = FirstOverload->getCanonicalDecl() == D->getCanonicalDecl();
+
         bool wrapInTemp = spec &&
                     !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
                     !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation());  // if we're instantiating a templated overloaded operator, we're after the function
@@ -819,18 +846,13 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd = new FuncDeclaration(loc, fullIdent, stc, tf, D);
         a->push(fd);
 
-        if (wrapInTemp)
+        if (wrapInTemp && isFirstOverloadInScope)
         {
-            // Add the opUnary/opBinary/... template declaration
+            // Add the opUnary/opBinary/... template declaration aliasing fullIdent if none exists(important!)
             auto tpl = initTempParams(loc, spec);
 
-            auto a_fwd = new OverloadAliasDeclaration(loc, opIdent,
-                                        new TypeIdentifier(loc, fullIdent), tf);
-
-            // NOTE: the previous approach of making a small forwarding function calling fd had one important
-            // issue as well in that LDC and the ABIs would need to know how to define function types
-            // taking and returning class values. Simpler and safer to let Clang handle those.
-            // Adding these specific overload aliases seemed like the cleanest way.
+            auto a_fwd = new ::AliasDeclaration(loc, opIdent,
+                                        new TypeIdentifier(loc, fullIdent));
 
             // Enclose the forwarding function within the template declaration
             auto decldefs = new Dsymbols;

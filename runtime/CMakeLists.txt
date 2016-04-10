@@ -75,8 +75,15 @@ list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/deh.c ${RUNTIME_DIR}/src/rt/dylib_
 if(APPLE)
     list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/osx_tls.c)
 endif()
+if(MSVC)
+    list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/msvc.c)
+else()
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc.c)
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc_math.c)
+endif()
 file(GLOB_RECURSE CORE_D_UNIX ${RUNTIME_DIR}/src/core/sys/posix/*.d)
 file(GLOB_RECURSE CORE_D_FREEBSD ${RUNTIME_DIR}/src/core/sys/freebsd/*.d)
+file(GLOB_RECURSE CORE_D_NETBSD ${RUNTIME_DIR}/src/core/sys/netbsd/*.d)
 file(GLOB_RECURSE CORE_D_LINUX ${RUNTIME_DIR}/src/core/sys/linux/*.d)
 file(GLOB_RECURSE CORE_D_OSX ${RUNTIME_DIR}/src/core/sys/osx/*.d)
 file(GLOB_RECURSE CORE_D_SOLARIS ${RUNTIME_DIR}/src/core/sys/solaris/*.d)
@@ -87,6 +94,9 @@ if(UNIX)
     list(APPEND CORE_D_SYS ${CORE_D_UNIX})
     if(${CMAKE_SYSTEM} MATCHES "FreeBSD")
         list(APPEND CORE_D_SYS ${CORE_D_FREEBSD})
+    endif()
+    if(${CMAKE_SYSTEM} MATCHES "NetBSD")
+        list(APPEND CORE_D_SYS ${CORE_D_NETBSD})
     endif()
     if(${CMAKE_SYSTEM} MATCHES "Linux")
         list(APPEND CORE_D_SYS ${CORE_D_LINUX})
@@ -109,8 +119,6 @@ if(UNIX)
     if(APPLE)
         list(APPEND CORE_D_SYS ${CORE_D_OSX})
     endif()
-    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc.c)
-    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
 
     # Using CMAKE_SYSTEM_PROCESSOR might be inacurrate when somebody is
     # cross-compiling by just setting the tool executbles to a cross toolchain,
@@ -120,12 +128,9 @@ elseif(WIN32)
     list(APPEND CORE_D_SYS ${CORE_D_WIN})
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/monitor.c)
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/bss_section.c)
-    if(NOT MSVC)
-        list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
-    endif()
 endif()
 list(APPEND CORE_D ${CORE_D_INTERNAL} ${CORE_D_SYNC} ${CORE_D_SYS} ${CORE_D_STDC})
-list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object_.d)
+list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object.d)
 file(GLOB CORE_C ${RUNTIME_DIR}/src/core/stdc/*.c)
 
 if(PHOBOS2_DIR)
@@ -192,11 +197,6 @@ endif()
 # Create configuration files.
 #
 
-# Add a lib required by VS 2015+ when building LDC with VS 2015+.
-if(MSVC AND (MSVC_VERSION GREATER 1800))
-    set(ADDITIONAL_DEFAULT_LDC_SWITCHES ",\n        \"-Llegacy_stdio_definitions.lib\"")
-endif()
-
 # Add extra paths on Linux and disable linker arch mismatch warnings (like
 # DMD and GDC do). OS X doesn't need extra configuration due to the use of
 # fat binaries. Other Posixen might need to be added here.
@@ -217,11 +217,30 @@ configure_file(${PROJECT_PARENT_DIR}/${LDC_EXE}_install.conf.in ${PROJECT_BINARY
 # druntime/Phobos compilation helpers.
 #
 
-set(GCCBUILTINS "${PROJECT_BINARY_DIR}/gccbuiltins_x86.di")
-add_custom_command(
-    OUTPUT ${GCCBUILTINS}
-    COMMAND gen_gccbuiltins ${GCCBUILTINS} "x86"
-)
+set(GCCBUILTINS "")
+function(gen_gccbuiltins name)
+  set(module "${PROJECT_BINARY_DIR}/gccbuiltins_${name}.di")
+  if (GCCBUILTINS STREQUAL "")
+    set(GCCBUILTINS "${module}" PARENT_SCOPE)
+  else()
+    set(GCCBUILTINS "${GCCBUILTINS};${module}" PARENT_SCOPE)
+  endif()
+  add_custom_command(
+      OUTPUT ${module}
+      COMMAND gen_gccbuiltins ${module} "${name}"
+  )
+endfunction()
+
+set(target_arch "AArch64;ARM;Mips;PowerPC;SystemZ;X86")
+set(target_name "aarch64;arm;mips;ppc;s390;x86")
+
+foreach(target ${LLVM_TARGETS_TO_BUILD})
+  list(FIND target_arch ${target} idx)
+  if(idx GREATER -1)
+    list(GET target_name ${idx} name)
+    gen_gccbuiltins(${name})
+  endif()
+endforeach()
 
 # Always build zlib and other C parts of the runtime in release mode, regardless
 # of what the user chose for LDC itself.
@@ -267,29 +286,6 @@ macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
         list(APPEND ${outlist_bc} ${output_bc})
     endif()
 
-    # We hit a few known bugs in older LLVM versions when building the unit
-    # tests with full optimizations. Downgrade the optimization flags for those
-    # specific files so we can at least test the rest of them.
-    set(cur_d_flags ${d_flags})
-    if("${cur_d_flags}" MATCHES "-unittest")
-        if(${LDC_LLVM_VER} EQUAL 301 AND "${input_d}" MATCHES "std/exception.d" AND
-            ${HOST_BITNESS} EQUAL 64)
-            # Building the std.exception tests on x86_64 triggers an infinite
-            # recursion in scalar evolution on LLVM 3.1 (only), see the list of
-            # known LLVM bugs for details.
-            string(REPLACE "-O3" "-O1" cur_d_flags "${cur_d_flags}")
-        elseif(${LDC_LLVM_VER} LESS 303 AND "${input_d}" MATCHES "std/range.d")
-            # Building the std.range tests triggers an assertion error on
-            # every LLVM release before 3.3. See PR15608.
-            string(REPLACE "-O3" "-O1" cur_d_flags "${cur_d_flags}")
-        elseif(${LDC_LLVM_VER} LESS 304 AND "${input_d}" MATCHES "rt/util/container/array.d")
-            # Building the rt.util.container.array tests triggers a bug in the
-            # jump threading pass on every LLVM release before 3.4.
-            # See PR17621.
-            string(REPLACE "-O3" "-O1" cur_d_flags "${cur_d_flags}")
-        endif()
-    endif()
-
     # Compile
     if(BUILD_BC_LIBS)
         set(outfiles ${output_o} ${output_bc})
@@ -305,7 +301,7 @@ macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
     add_custom_command(
         OUTPUT
             ${outfiles}
-        COMMAND ${LDC_EXE} ${dc_flags} -c -I${RUNTIME_DIR}/src -I${RUNTIME_DIR}/src/gc ${input_d} -of${output_o} ${cur_d_flags}
+        COMMAND ${LDC_EXE} ${dc_flags} -c -I${RUNTIME_DIR}/src -I${RUNTIME_DIR}/src/gc ${input_d} -of${output_o} ${d_flags}
         WORKING_DIRECTORY ${PROJECT_PARENT_DIR}
         DEPENDS ${input_d}
                 ${LDC_EXE}
@@ -551,32 +547,15 @@ else()
     build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" LIBS_TO_INSTALL)
 endif()
 
-# Copy over druntime modules, preferring hand-written .di files.
-set(DRUNTIME_IMPORT_DIR ${CMAKE_BINARY_DIR}/import)
-set(DRUNTIME_PACKAGES core etc ldc)
-
-set(druntime_modules)
-foreach(p ${DRUNTIME_PACKAGES})
-    file(GLOB_RECURSE m ${RUNTIME_DIR}/src/${p}/*.d ${RUNTIME_DIR}/src/${p}/*.di ${RUNTIME_DIR}/src/${p}/*.h) # CALYPSO
-    list(APPEND druntime_modules ${m})
-endforeach()
-
-list(APPEND druntime_modules ${RUNTIME_DIR}/src/object.di)
-foreach(f ${druntime_modules})
-    if (NOT EXISTS "${f}i")
-        file(RELATIVE_PATH relpath ${RUNTIME_DIR}/src ${f})
-        configure_file(${f} ${DRUNTIME_IMPORT_DIR}/${relpath} COPYONLY)
-    endif()
-endforeach()
-
-
 #
 # Install target.
 #
 
-install(FILES ${DRUNTIME_IMPORT_DIR}/object.di DESTINATION ${INCLUDE_INSTALL_DIR}/ldc)
+set(DRUNTIME_PACKAGES core etc ldc)
+
+install(FILES ${RUNTIME_DIR}/src/object.d DESTINATION ${INCLUDE_INSTALL_DIR}/ldc)
 foreach(p ${DRUNTIME_PACKAGES})
-    install(DIRECTORY ${DRUNTIME_IMPORT_DIR}/${p} DESTINATION ${INCLUDE_INSTALL_DIR})
+    install(DIRECTORY ${RUNTIME_DIR}/src/${p} DESTINATION ${INCLUDE_INSTALL_DIR})
 endforeach()
 if(PHOBOS2_DIR)
     install(DIRECTORY ${PHOBOS2_DIR}/std DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.d")
@@ -660,6 +639,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
     else()
         set(druntime_o "")
         set(druntime_bc "")
+        set(casm_lib_path "${CMAKE_BINARY_DIR}/lib")
         compile_druntime("${flags}" "-unittest${name_suffix}" "" druntime_o druntime_bc)
 
         # We need to compile a small static library with the C/ASM files, as
@@ -675,7 +655,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
             LINKER_LANGUAGE             C
             COMPILE_FLAGS               "${RT_CFLAGS} ${c_flags}"
             LINK_FLAGS                  "${LD_FLAGS} ${ld_flags}"
-            ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+            ARCHIVE_OUTPUT_DIRECTORY    ${casm_lib_path}
         )
 
         # See shared library case for explanation.
@@ -707,7 +687,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
                 LINKER_LANGUAGE             C
                 COMPILE_FLAGS               "${RT_CFLAGS} ${c_flags}"
                 LINK_FLAGS                  "${LD_FLAGS} ${ld_flags}"
-                ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+                ARCHIVE_OUTPUT_DIRECTORY    ${casm_lib_path}
             )
 
             set_target_properties(${phobos2-casm} PROPERTIES EXCLUDE_FROM_ALL ON EXCLUDE_FROM_DEFAULT_BUILD ON)
@@ -740,7 +720,6 @@ macro(file_to_module_name file_name out_module_name)
     string(REPLACE ${PROJECT_SOURCE_DIR}/ "" stripped ${file_name})
     string(REPLACE "druntime/src/" "" stripped ${stripped})
     string(REPLACE "phobos/" "" stripped ${stripped})
-    string(REPLACE "object_.d" "object.d" stripped ${stripped})
     string(REPLACE ".d" "" stripped ${stripped})
     string(REPLACE "/" "." module ${stripped})
 
@@ -756,19 +735,13 @@ endmacro()
 function(add_tests d_files runner name_suffix)
     foreach(file ${d_files})
         file_to_module_name(${file} module)
-        if("${module}" STREQUAL "core.internal.convert")
-            # Exclude unit tests for now, as they fail due to a CTFE vs. runtime
-            # issue with floating point numbers. See the discussion on GitHub
-            # pull request #770. To be revisited after 0.15.0 is out.
-        else()
-            add_test(NAME "${module}${name_suffix}"
-                WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
-                COMMAND ${runner}-test-runner${name_suffix} ${module}
-            )
-            set_tests_properties("${module}${name_suffix}" PROPERTIES
-                DEPENDS build-${runner}-test-runner${name_suffix}
-            )
-        endif()
+        add_test(NAME "${module}${name_suffix}"
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+            COMMAND ${runner}-test-runner${name_suffix} ${module}
+        )
+        set_tests_properties("${module}${name_suffix}" PROPERTIES
+            DEPENDS build-${runner}-test-runner${name_suffix}
+	)
     endforeach()
 endfunction()
 function(add_runtime_tests name_suffix)

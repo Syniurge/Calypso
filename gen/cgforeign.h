@@ -51,7 +51,7 @@ public:
     virtual LLValue* toIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaration* vd) = 0;
     virtual void addBaseClassData(AggrTypeBuilder &builder, AggregateDeclaration *base) = 0;
     virtual void emitAdditionalClassSymbols(ClassDeclaration *cd) = 0;
-    virtual void toInitClassForeign(TypeClass* tc, LLValue* dst) = 0;
+    virtual void toInitClass(TypeClass* tc, LLValue* dst) = 0;
 
     // Called for any aggregate (TODO: less ambiguous names?)
     virtual void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) = 0;

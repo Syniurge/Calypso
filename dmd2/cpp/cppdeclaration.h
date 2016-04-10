@@ -41,6 +41,7 @@ public:
                    const clang::ValueDecl *VD, Type *t, Initializer *init = nullptr);
     VarDeclaration(const VarDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    bool overlap(::VarDeclaration *v2) override;
 };
 
 class FuncDeclaration : public ::FuncDeclaration
@@ -123,22 +124,6 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
 };
 
-// We need aliases for overloaded operators, but aliases do not reference a specific function and then resolving the operator call fails if there are more than one match
-// We can't set the aliassym straightaway because the parents need to be semantic'd before semantic'ing the referenced function
-// Maybe there's a more elegant and shorter solution but for now that'll do
-class OverloadAliasDeclaration : public ::AliasDeclaration
-{
-public:
-    TypeFunction *overtf;
-
-    OverloadAliasDeclaration(Loc loc, Identifier *ident, Type *type,
-                             TypeFunction *overtf);
-    OverloadAliasDeclaration(const OverloadAliasDeclaration&);
-    Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    ::AliasDeclaration *isOverloadAliasDeclaration() override { return this; }
-};
-
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);
 
 #define IMPLEMENT_syntaxCopy(Class, D) \
@@ -180,11 +165,16 @@ public:
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                                                     const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
-    static const unsigned ForcePolymorphic = 1 << 0; // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false
-    static const unsigned MapImplicitRecords = 1 << 1;
-    static const unsigned MapTemplateInstantiations = 1 << 2;
-    static const unsigned MapExplicitSpecs = 1 << 3; // If not set explicit and partial specs will be discarded by VisitDecl
-    static const unsigned NamedValueWithAnonRecord = 1 << 4; // Only set when called from VisitValueDecl for e.g union {...} myUnion
+    enum
+    {
+        ForcePolymorphic = 1 << 0, // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false
+        MapImplicitRecords = 1 << 1,
+        MapTemplateInstantiations = 1 << 2,
+        MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
+        NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
+        MapAnonRecord = 1 << 5
+    };
+
 
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };

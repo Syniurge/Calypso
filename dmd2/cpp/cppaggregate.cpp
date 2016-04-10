@@ -5,6 +5,7 @@
 #include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cpptemplate.h"
+#include "attrib.h"
 #include "scope.h"
 #include "target.h"
 #include "template.h"
@@ -96,14 +97,6 @@ void StructDeclaration::semantic(Scope *sc)
     ::StructDeclaration::semantic(sc);
 }
 
-unsigned int StructDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildAggLayout(this);
-
-    return structsize;
-}
-
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -116,6 +109,11 @@ Expression *StructDeclaration::defaultInit(Loc loc)
 bool StructDeclaration::mayBeAnonymous()
 {
     return true;
+}
+
+void StructDeclaration::buildLayout()
+{
+    buildAggLayout(this);
 }
 
 void ClassDeclaration::semantic(Scope *sc)
@@ -154,35 +152,27 @@ void ClassDeclaration::semantic(Scope *sc)
 
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {
-    auto& S = calypso.pch.AST->getSema();
-    auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
-
-    auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
-    if (!CD)
-        CD = S.LookupCopyingConstructor(_RD, 0);
-
-    if (!CD)
-        return;
-
-    auto cpctor = findMethod(this, CD);
-    if (!cpctor)
-        return; // could be deleted or invalid
-
-    auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
-                                    new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
-    members->push(fwdcpctor);
-
-    fwdcpctor->addMember(sc, this, 1);
-    fwdcpctor->setScope(cpctor->scope);
-    fwdcpctor->semantic(cpctor->scope);
-}
-
-unsigned int ClassDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildLayout();
-
-    return structsize;
+//     auto& S = calypso.pch.AST->getSema();
+//     auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
+//
+//     auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
+//     if (!CD)
+//         CD = S.LookupCopyingConstructor(_RD, 0);
+//
+//     if (!CD)
+//         return;
+//
+//     auto cpctor = findMethod(this, CD);
+//     if (!cpctor)
+//         return; // could be deleted or invalid
+//
+//     auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
+//                                     new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
+//     members->push(fwdcpctor);
+//
+//     fwdcpctor->addMember(sc, this, 1);
+//     fwdcpctor->setScope(cpctor->scope);
+//     fwdcpctor->semantic(cpctor->scope);
 }
 
 bool ClassDeclaration::mayBeAnonymous()
@@ -278,17 +268,27 @@ void ClassDeclaration::buildLayout()
     buildAggLayout(this);
 }
 
-unsigned int UnionDeclaration::size(Loc loc)
-{
-    if (sizeok != SIZEOKdone)
-        buildAggLayout(this);
-
-    return structsize;
-}
-
 bool UnionDeclaration::mayBeAnonymous()
 {
     return true;
+}
+
+void UnionDeclaration::buildLayout()
+{
+    buildAggLayout(this);
+}
+
+AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
+    : ::AnonDeclaration(loc, isunion, decl)
+{
+}
+
+Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
+{
+    assert(!s);
+    auto a = new AnonDeclaration(loc, isunion, decl);
+    a->AnonField = AnonField;
+    return a;
 }
 
 // NOTE: we need to adjust every "this" pointer when accessing fields from bases
@@ -341,7 +341,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
                 cast<clang::CXXRecordDecl>(RD));
     auto MD = S.LookupCopyingAssignment(CRD, clang::Qualifiers::Const, false, 0);
 
-    if (!MD || MD->isDeleted())
+    if (!MD || MD->isDeleted() || !isMapped(MD))
         return nullptr;
 
     return findMethod(sd, MD);
@@ -355,8 +355,13 @@ template <typename AggTy>
     if (ad->layoutQueried)
         return;
 
-    if (ad->RD->isInvalidDecl())
-        return; // if it's a forward reference, consider the record empty
+    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
+    {
+       // if it's a forward reference, consider the record empty
+        ad->structsize = 1;
+        ad->alignsize = 1;
+        return;
+    }
 
     auto& Context = calypso.getASTContext();
     auto& RL = Context.getASTRecordLayout(ad->RD);
@@ -364,27 +369,41 @@ template <typename AggTy>
     ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
     ad->structsize = RL.getSize().getQuantity();
 
-    for (size_t i = 0; i < ad->members->dim; i++)
+    std::function<void(Dsymbols *, unsigned, const clang::ASTRecordLayout&)>
+        addRecord = [&] (Dsymbols *members, unsigned baseoffset,  const clang::ASTRecordLayout& Layout)
     {
-        auto s = (*ad->members)[i];
+        for (auto m: *members)
+        {
+            if (auto vd = m->isVarDeclaration())
+            {
+                assert(isCPP(vd));
 
-        auto vd = s->isVarDeclaration();
-        if (!vd)
-            continue;
+                auto c_vd = static_cast<VarDeclaration*>(vd);
+                auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
 
-        assert(isCPP(vd));
+                if (!FD)
+                    continue;
 
-        auto c_vd = static_cast<VarDeclaration*>(vd);
-        auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
+                auto fldIdx = FD->getFieldIndex();
+                vd->offset = baseoffset + Layout.getFieldOffset(fldIdx) / 8;
 
-        if (!FD)
-            continue;
+                ad->fields.push(vd);
+            }
+            else if (auto anon = m->isAttribDeclaration())
+            {
+                assert(/*anon->isAnonDeclaration() && */isCPP(anon));
+                auto AnonField = static_cast<cpp::AnonDeclaration*>(anon)->AnonField;
+                auto AnonRecord = AnonField->getType()->castAs<clang::RecordType>()->getDecl();
 
-        auto fldIdx = FD->getFieldIndex();
-        c_vd->offset = RL.getFieldOffset(fldIdx) / 8;
+                auto AnonFieldIdx = AnonField->getFieldIndex();
+                auto& AnonLayout = Context.getASTRecordLayout(AnonRecord);
 
-        ad->fields.push(c_vd);
-    }
+                addRecord(anon->decl, baseoffset + Layout.getFieldOffset(AnonFieldIdx) / 8, AnonLayout);
+            }
+        }
+    };
+
+    addRecord(ad->members, 0, RL);
 
     ad->layoutQueried = true;
 }

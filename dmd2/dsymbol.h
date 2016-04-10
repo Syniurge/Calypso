@@ -84,11 +84,6 @@ class Expression;
 class DeleteDeclaration;
 class OverloadSet;
 struct AA;
-#ifdef IN_GCC
-typedef union tree_node TYPE;
-#else
-struct TYPE;
-#endif
 
 struct Ungag
 {
@@ -208,8 +203,9 @@ public:
     virtual const char *toPrettyChars(bool QualifyTypes = false);
     virtual const char *kind();
     virtual Dsymbol *toAlias();                 // resolve real symbol
+    virtual Dsymbol *toAlias2();
     virtual int apply(Dsymbol_apply_ft_t fp, void *param);
-    virtual int addMember(Scope *sc, ScopeDsymbol *sds, int memnum);
+    virtual void addMember(Scope *sc, ScopeDsymbol *sds);
     virtual void setScope(Scope *sc);
     virtual void importAll(Scope *sc);
     virtual void semantic(Scope *sc);
@@ -262,7 +258,6 @@ public:
     virtual TypeInfoDeclaration *isTypeInfoDeclaration() { return NULL; }
     virtual TupleDeclaration *isTupleDeclaration() { return NULL; }
     virtual AliasDeclaration *isAliasDeclaration() { return NULL; }
-    virtual AliasDeclaration *isOverloadAliasDeclaration() { return NULL; } // CALYPSO
     virtual AggregateDeclaration *isAggregateDeclaration() { return NULL; }
     virtual FuncDeclaration *isFuncDeclaration() { return NULL; }
     virtual FuncAliasDeclaration *isFuncAliasDeclaration() { return NULL; }

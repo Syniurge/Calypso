@@ -651,7 +651,7 @@ longdouble Port::strtold(const char *p, char **endp)
 
 #endif
 
-#if __linux__ || __APPLE__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__ || __HAIKU__
+#if __linux__ || __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__ || __HAIKU__
 
 #include <math.h>
 #if __linux__
@@ -806,7 +806,7 @@ int Port::isNan(double r)
 #else
     return __inline_isnan(r);
 #endif
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return isnan(r);
 #else
     #undef isnan
@@ -822,7 +822,7 @@ int Port::isNan(longdouble r)
 #else
     return __inline_isnan(r);
 #endif
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return isnan(r);
 #else
     #undef isnan
@@ -850,7 +850,7 @@ int Port::isInfinity(double r)
 {
 #if __APPLE__
     return fpclassify(r) == FP_INFINITE;
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ ||  __DragonFly__
     return isinf(r);
 #else
     #undef isinf
@@ -865,7 +865,7 @@ longdouble Port::sqrt(longdouble x)
 
 longdouble Port::fmodl(longdouble x, longdouble y)
 {
-#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || __DragonFly__
+#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return ::fmod(x, y);        // hack for now, fix later
 #else
     return ::fmodl(x, y);
@@ -1261,3 +1261,51 @@ longdouble Port::strtold(const char *p, char **endp)
 }
 
 #endif
+
+// Little endian
+void Port::writelongLE(unsigned value, void* buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    p[3] = (unsigned char)(value >> 24);
+    p[2] = (unsigned char)(value >> 16);
+    p[1] = (unsigned char)(value >> 8);
+    p[0] = (unsigned char)(value);
+}
+
+// Little endian
+unsigned Port::readlongLE(void* buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    return (((((p[3] << 8) | p[2]) << 8) | p[1]) << 8) | p[0];
+}
+
+// Big endian
+void Port::writelongBE(unsigned value, void* buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    p[0] = (unsigned char)(value >> 24);
+    p[1] = (unsigned char)(value >> 16);
+    p[2] = (unsigned char)(value >> 8);
+    p[3] = (unsigned char)(value);
+}
+
+// Big endian
+unsigned Port::readlongBE(void* buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    return (((((p[0] << 8) | p[1]) << 8) | p[2]) << 8) | p[3];
+}
+
+// Little endian
+unsigned Port::readwordLE(void *buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    return (p[1] << 8) | p[0];
+}
+
+// Big endian
+unsigned Port::readwordBE(void *buffer)
+{
+    unsigned char *p = (unsigned char*)buffer;
+    return (p[0] << 8) | p[1];
+}
