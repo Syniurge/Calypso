@@ -1225,7 +1225,8 @@ public:
     if (!e->var) {
       Logger::println("this exp without var declaration");
       LLValue *v = p->func()->thisArg;
-      result = new DVarValue(e->type, v);
+      auto thisval = new DVarValue(p->func()->decl->vthis->type, v);
+      result = DtoCast(e->loc, thisval, e->type); // CALYPSO cast thisArg to the actual ThisExp type (super needs to be adjusted for DCXX classes)
       return;
     }
     // regular this expr
@@ -1245,7 +1246,9 @@ public:
         return;
       } else {
         Logger::println("normal this exp");
-        v = p->func()->thisArg;
+        auto thisval = new DVarValue(p->func()->decl->vthis->type, p->func()->thisArg);
+        result = DtoCast(e->loc, thisval, e->type); // CALYPSO cast thisArg to the actual ThisExp type (super needs to be adjusted for DCXX classes)
+        return;
       }
       result = new DVarValue(e->type, vd, v);
     } else {
