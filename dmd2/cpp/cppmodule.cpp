@@ -352,7 +352,7 @@ static void MarkFunctionForEmit(const clang::FunctionDecl *D)
         S.MarkFunctionReferenced(D->getLocation(), D_);
         if (Diags.hasErrorOccurred())
         {
-            assert(D->isInvalidDecl());
+//             assert(D->isInvalidDecl());
             Diags.Reset();
         }
         S.PerformPendingInstantiations();
