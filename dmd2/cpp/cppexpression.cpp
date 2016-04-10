@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/cppexpression.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cpptemplate.h"
@@ -733,7 +732,7 @@ Expression* ExprMapper::fromExpressionNonTypeTemplateParm(Loc loc, const clang::
 
 clang::Expr* ExprMapper::toExpression(Expression* e)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
     clang::SourceLocation Loc;
 
     switch (e->op)

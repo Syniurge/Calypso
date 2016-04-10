@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/modulemap.h"
 #include "cpp/calypso.h"
 #include "cpp/cppdeclaration.h"
@@ -29,9 +28,12 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/ModuleMap.h"
+#include "clang/Lex/Preprocessor.h"
+#include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Host.h"
@@ -508,7 +510,10 @@ void LangPlugin::mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration
 
 void InstantiationChecker::CompletedImplicitDefinition(const clang::FunctionDecl *D)
 {
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    if (!calypso.pch.AST)
+        return; // we may still be in the initial parsing of headers
+
+    auto& Diags = calypso.getDiagnostics();
 
     calypso.pch.needSaving = true;
 
@@ -523,7 +528,10 @@ void InstantiationChecker::CompletedImplicitDefinition(const clang::FunctionDecl
 
 void InstantiationChecker::FunctionDefinitionInstantiated(const clang::FunctionDecl *D)
 {
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    if (!calypso.pch.AST)
+        return; // we may still be in the initial parsing of headers
+
+    auto& Diags = calypso.getDiagnostics();
 
     calypso.pch.needSaving = true;
 
@@ -609,12 +617,12 @@ void PCH::add(const char* header, ::Module *from)
             return;
 
     headers.push(header);
-    needEmit = true;
+    needHeadersReload = true;
 }
 
-void PCH::emit()
+void PCH::loadFromHeaders()
 {
-    llvm::sys::fs::remove(pchFilenameNew, true);
+//     llvm::sys::fs::remove(pchFilenameNew, true);
 
     // Re-emit the source file with #include directives
     auto fmono = fopen(pchHeader.c_str(), "w");
@@ -652,12 +660,9 @@ void PCH::emit()
     Argv.push_back("clang");
     for (auto& cppArg: opts::cppArgs)
         Argv.push_back(cppArg.c_str());
+    Argv.push_back("-c");
     Argv.push_back("-x");
     Argv.push_back("c++-header");
-    Argv.push_back("-Xclang");
-    Argv.push_back("-emit-pch");
-    Argv.push_back("-o");
-    Argv.push_back(pchFilename.c_str());
     Argv.push_back(pchHeader.c_str());
 
     std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
@@ -672,23 +677,16 @@ void PCH::emit()
 
     // Initialize a compiler invocation object from the clang (-cc1) arguments.
     const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
-    clang::CompilerInstance Clang;
-    clang::CompilerInvocation::CreateFromArgs(Clang.getInvocation(), CCArgs.begin(), CCArgs.end(), *CC1Diags);
-    Clang.createDiagnostics();
-    assert(Clang.hasDiagnostics());
+    clang::CompilerInvocation CI;
+    clang::CompilerInvocation::CreateFromArgs(CI, CCArgs.begin(), CCArgs.end(), *Diags);
 
-    // Infer the builtin include path if unspecified.
-    if (Clang.getHeaderSearchOpts().UseBuiltinIncludes &&
-            Clang.getHeaderSearchOpts().ResourceDir.empty())
-        Clang.getHeaderSearchOpts().ResourceDir = TheDriver.ResourceDir;
-
-    // Create and execute the frontend to generate a PCH
-    std::unique_ptr<clang::GeneratePCHAction> Act(new clang::GeneratePCHAction);
-    if (!Clang.ExecuteAction(*Act))
-    {
-        ::error(Loc(), "PCH generation failed!");
-        fatal();
-    }
+    // Parse the headers
+    AST = ASTUnit::LoadFromCompilerInvocation(&CI, Diags, false, false, false,
+                                              clang::TU_Complete, false, false, false,
+                                              new InstantiationChecker).release();
+    AST->getSema();
+    Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
+    needSaving = true;
 
     /* Update the list of headers */
 
@@ -718,61 +716,15 @@ public:
     bool shouldVisitTemplateInstantiations() const { return true; }
 };
 
-void PCH::update()
+void PCH::loadFromPCH()
 {
-    if (headers.empty())
-        return;
-
-    if (!needEmit && AST)
-        return;
-
-    // FIXME
-    assert(!(needEmit && AST) && "Need AST merging FIXME");
-
-    auto AddSuffixThenCheck = [&] (const char *suffix, bool dirtyPCH = true) {
-        using namespace llvm::sys::fs;
-
-        auto fn_var = calypso.getCacheFilename(suffix);
-        file_status result;
-        status(fn_var, result);
-        if (is_directory(result)) {
-            ::error(Loc(), "%s is a directory\n", fn_var.c_str());
-            fatal();
-        }
-
-        if (dirtyPCH && !exists(result))
-            needEmit = true;
-
-        return fn_var;
-    };
-
-    pchHeader = AddSuffixThenCheck(".h");
-    pchFilename = AddSuffixThenCheck(".h.pch");
-    pchFilenameNew = AddSuffixThenCheck(".new.pch", false);
-
-    if (needEmit)
-    {
-        /* PCH generation */
-        emit();
-    }
-
-    needEmit = false;
-
-    /* PCH was generated successfully, let's load it */
-
-    // If the PCH was updated by Calypso to avoid redoing implicit instantiations, replace the old PCH
-    // It cannot be overridden if loaded by an ASTContext, hence we're only doing it now.
-    if (llvm::sys::fs::exists(pchFilenameNew))
-    {
-        llvm::sys::fs::remove(pchFilename, true);
-        llvm::sys::fs::rename(pchFilenameNew, pchFilename);
-    }
-
     clang::FileSystemOptions FileSystemOpts;
     clang::ASTReader::ASTReadResult ReadResult;
 
     AST = ASTUnit::LoadFromASTFile(pchFilename,
-                            Diags, FileSystemOpts, &instChecker, ReadResult);
+                            Diags, FileSystemOpts, false, llvm::None, false,
+                            /* AllowPCHWithCompilerErrors = */ true, false,
+                            new InstantiationChecker, &ReadResult).release();
 
     switch (ReadResult) {
         case clang::ASTReader::Success:
@@ -786,10 +738,9 @@ void PCH::update()
             delete AST;
             Diags->Reset();
 
-            // Headers or flags may have changed since the PCH was generated, try re-emitting.
-            emit();
-            AST = ASTUnit::LoadFromASTFile(pchFilename, Diags, FileSystemOpts, &instChecker, ReadResult);
-            break;
+            // Headers or flags may have changed since the PCH was generated, fall back to headers.
+            loadFromHeaders();
+            return;
 
         default:
             fatal();
@@ -803,12 +754,58 @@ void PCH::update()
     // « RecordDecl::LoadFieldsFromExternalStorage() expels existing decls from the DeclContext linked list »
     // This only concerns serialized declarations, new records aren't affected by this issue
     ASTDummyVisitor().TraverseDecl(AST->getASTContext().getTranslationUnitDecl());
+}
+
+void PCH::update()
+{
+    if (headers.empty())
+        return;
+
+    if (!needHeadersReload && AST)
+        return;
+
+    // FIXME
+    assert(!(needHeadersReload && AST) && "Need AST merging FIXME");
+
+    auto AddSuffixThenCheck = [&] (const char *suffix, bool dirtyPCH = true) {
+        using namespace llvm::sys::fs;
+
+        auto fn_var = calypso.getCacheFilename(suffix);
+        file_status result;
+        status(fn_var, result);
+        if (is_directory(result)) {
+            ::error(Loc(), "%s is a directory\n", fn_var.c_str());
+            fatal();
+        }
+
+        if (dirtyPCH && !exists(result))
+            needHeadersReload = true;
+
+        return fn_var;
+    };
+
+    pchHeader = AddSuffixThenCheck(".h");
+    pchFilename = AddSuffixThenCheck(".h.pch");
+//     pchFilenameNew = AddSuffixThenCheck(".new.pch", false);
+
+    if (needHeadersReload)
+    {
+        // The PCH either doesn't exist or is obsolete, reparse the header files
+        loadFromHeaders();
+        needHeadersReload = false;
+    }
+    else
+    {
+        // The PCH is up-to-date, use it
+        loadFromPCH();
+    }
 
     /* Collect Clang module map files */
     auto& SrcMgr = AST->getSourceManager();
+    auto& PP = AST->getPreprocessor();
 
-    MMap = new ModuleMap(AST->getSourceManager(), *Diags, AST->getASTFileLangOpts(),
-                            &AST->getTargetInfo(), AST->getHeaderSearch());
+    MMap = new ModuleMap(AST->getSourceManager(), *Diags,
+                            PP.getLangOpts(), &PP.getTargetInfo(), PP.getHeaderSearchInfo());
 
     llvm::DenseSet<const clang::DirectoryEntry*> CheckedDirs;
     for (size_t i = 0; i < SrcMgr.loaded_sloc_entry_size(); i++)
@@ -852,7 +849,7 @@ void PCH::update()
     }
 
     // Since the out-of-dateness of headers are checked lazily for most of them, it might only be detected
-    // by walking through all the SLoc entries. If an error occurred start over and trigger a PCH regen.
+    // by walking through all the SLoc entries. If an error occurred start over and trigger a loadFromHeaders.
     if (Diags->hasErrorOccurred())
     {
         Diags->Reset();
@@ -861,7 +858,7 @@ void PCH::update()
         delete MMap;
         AST = nullptr;
 
-        needEmit = true;
+        needHeadersReload = true;
         return update();
     }
 
@@ -874,14 +871,19 @@ void PCH::update()
 
 void PCH::save()
 {
-    if (1 || !needSaving) // disabled for now, Clang makes it hard to save a new PCH when an external source like another PCH is loaded by the ASTContext
+    if (!needSaving)
         return;
 
-    std::error_code EC;
-    llvm::raw_fd_ostream OS(pchFilenameNew, EC, llvm::sys::fs::F_None);
+    if (AST->getASTContext().getExternalSource() != nullptr) // FIXME: Clang makes it hard to save a new PCH when an external source like another PCH is loaded by the ASTContext
+        return;
 
-    auto& Sysroot = AST->getHeaderSearch().getHeaderSearchOpts().Sysroot;
-    auto GenPCH = llvm::make_unique<clang::PCHGenerator>(AST->getPreprocessor(), pchFilenameNew,
+    auto& PP = AST->getPreprocessor();
+
+    std::error_code EC;
+    llvm::raw_fd_ostream OS(pchFilename, EC, llvm::sys::fs::F_None);
+
+    auto& Sysroot = PP.getHeaderSearchInfo().getHeaderSearchOpts().Sysroot;
+    auto GenPCH = llvm::make_unique<clang::PCHGenerator>(PP, pchFilename,
                                          nullptr, Sysroot, &OS, true);
     GenPCH->InitializeSema(AST->getSema());
     GenPCH->HandleTranslationUnit(AST->getASTContext());
@@ -1008,6 +1010,26 @@ void LangPlugin::init(const char *Argv0)
 clang::ASTContext& LangPlugin::getASTContext()
 {
     return getASTUnit()->getASTContext();
+}
+
+clang::Sema& LangPlugin::getSema()
+{
+    return getASTUnit()->getSema();
+}
+
+clang::DiagnosticsEngine& LangPlugin::getDiagnostics()
+{
+    return getASTUnit()->getDiagnostics();
+}
+
+clang::Preprocessor& LangPlugin::getPreprocessor()
+{
+    return getASTUnit()->getPreprocessor();
+}
+
+clang::SourceManager& LangPlugin::getSourceManager()
+{
+    return getASTUnit()->getSourceManager();
 }
 
 std::string LangPlugin::getCacheFilename(const char *suffix)

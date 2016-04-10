@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/calypso.h"
 #include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
@@ -152,7 +151,7 @@ void ClassDeclaration::semantic(Scope *sc)
 
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {
-//     auto& S = calypso.pch.AST->getSema();
+//     auto& S = calypso.getSema();
 //     auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
 //
 //     auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
@@ -331,7 +330,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 
 ::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)
 {
-    auto& S = calypso.pch.AST->getSema();
+    auto& S = calypso.getSema();
     auto RD = getRecordDecl(sd);
 
     if (sd->isUnionDeclaration() || !RD->getDefinition())

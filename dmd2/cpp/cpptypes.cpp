@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/modulemap.h"
 #include "cpp/calypso.h"
 #include "cpp/cppaggregate.h"
@@ -266,7 +265,7 @@ Visitor *LangPlugin::getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *b
 
 bool isNonSupportedType(clang::QualType T)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
 
     // (u)int128_t or any pointer/reference to (TODO: function types as well?)
     auto Pointee = T->getPointeeType();
@@ -406,7 +405,7 @@ Type *TypeMapper::FromType::fromTypeBuiltin(const clang::BuiltinType *T)
 
 Type *TypeMapper::FromType::fromTypeComplex(const clang::ComplexType *T)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
     auto dT = T->desugar();
 
     if (dT == Context.FloatComplexTy)
@@ -1631,8 +1630,8 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         const clang::FunctionDecl *FD)
 {
     auto& Context = calypso.getASTContext();
-    auto& S = calypso.pch.AST->getSema();
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.getDiagnostics();
 
     auto params = new Parameters;
     params->reserve(T->getNumParams());
@@ -1726,7 +1725,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
 static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
 {
 #ifdef USE_CLANG_MODULES
-    auto& SrcMgr = calypso.getASTUnit()->getSourceManager();
+    auto& SrcMgr = calypso.getSourceManager();
     auto MMap = calypso.pch.MMap;
 
     if (!MMap)
@@ -2055,7 +2054,7 @@ void TypeMapper::rebuildScope(const clang::Decl *RightMost)
 
 clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
 
     if (stc & STCref)
     {

@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/modulemap.h"
 #include "aggregate.h"
 #include "attrib.h"
@@ -34,6 +33,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Frontend/ASTUnit.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Lookup.h"
 
@@ -338,8 +338,8 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
 
 static void MarkFunctionForEmit(const clang::FunctionDecl *D)
 {
-    auto& S = calypso.pch.AST->getSema();
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.getDiagnostics();
 
     if (!D->getDeclContext()->isDependentContext())
     {
@@ -376,9 +376,9 @@ inline bool isPolymorphic(const clang::RecordDecl *D)
 
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
-    auto& S = calypso.pch.AST->getSema();
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& Context = calypso.getASTContext();
+    auto& S = calypso.getSema();
+    auto& Diags = *calypso.pch.Diags;
     auto Canon = D->getCanonicalDecl();
 
     if (D->isImplicit() && !(flags & MapImplicitRecords))
@@ -561,7 +561,7 @@ Ldeclaration:
 
 Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
     auto Ty = D->getUnderlyingType();
 
     if (isAnonTagTypedef(D))
@@ -733,7 +733,7 @@ bool isMapped(const clang::Decl *D) // TODO
 
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
-    auto& S = calypso.pch.AST->getSema();
+    auto& S = calypso.getSema();
 
     if (!isMapped(D))
         return nullptr;
@@ -1292,8 +1292,7 @@ std::string moduleName(Identifiers *packages, Identifier *ident)
 static clang::DeclContext::lookup_const_result lookup(const clang::DeclContext *DC,
                                                    Identifier *id)
 {
-    auto& AST = calypso.pch.AST;
-    auto& Table = AST->getPreprocessor().getIdentifierTable();
+    auto& Table = calypso.getPreprocessor().getIdentifierTable();
 
     const char prefix[] = u8"§";
     bool prefixed = strncmp(id->string, prefix, sizeof(prefix)-1) == 0;
@@ -1432,7 +1431,7 @@ static void mapNamespace(DeclMapper &mapper,
 {
     auto CanonDC = cast<clang::Decl>(DC)->getCanonicalDecl();
     auto MMap = calypso.pch.MMap;
-    auto& SrcMgr = calypso.getASTUnit()->getSourceManager();
+    auto& SrcMgr = calypso.getSourceManager();
 
     auto D = DC->decls_begin(),
             DE = DC->decls_end();
@@ -1471,7 +1470,7 @@ static void mapClangModule(DeclMapper &mapper,
                              Dsymbols *members)
 {
     auto AST = calypso.getASTUnit();
-    auto& SrcMgr = AST->getSourceManager();
+    auto& SrcMgr = calypso.getSourceManager();
 
     llvm::SmallVector<clang::Decl*, 32> RegionDecls;
 
@@ -1567,7 +1566,7 @@ static void mapClangModule(DeclMapper &mapper,
 Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
 {
     auto& Context = calypso.getASTContext();
-    auto& S = calypso.pch.AST->getSema();
+    auto& S = calypso.getSema();
     auto& Diags = calypso.pch.Diags;
 
     S.CurContext = Context.getTranslationUnitDecl(); // HACK? Needed for declaring implicit ctors and dtors

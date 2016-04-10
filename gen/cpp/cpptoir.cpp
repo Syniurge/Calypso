@@ -1,5 +1,4 @@
 // Contributed by Elie Morisse, same license DMD uses
-#include "cpp/astunit.h"
 #include "cpp/calypso.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppaggregate.h"
@@ -860,7 +859,7 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
 void LangPlugin::EmitInternalDeclsForFields(const clang::RecordDecl *RD)
 {
     auto& Context = getASTContext();
-    auto& S = pch.AST->getSema();
+    auto& S = getSema();
 
     InternalDeclEmitter Emitter(Context, *CGM);
 
@@ -882,7 +881,7 @@ void LangPlugin::EmitInternalDeclsForFields(const clang::RecordDecl *RD)
 
 void LangPlugin::toDefineStruct(::StructDeclaration* sd)
 {
-    auto& S = pch.AST->getSema();
+    auto& S = getSema();
 
     if (sd->isUnionDeclaration())
         return;

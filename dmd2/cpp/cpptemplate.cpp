@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/astunit.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppexpression.h"
@@ -131,7 +130,7 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
                                 TypeMapper& tymap, ExprMapper& expmap)
 {
-    auto& Context = calypso.pch.AST->getASTContext();
+    auto& Context = calypso.getASTContext();
 
     SpecValue spec(tymap);
     getIdentifierOrNull(Temp, &spec);
@@ -197,7 +196,7 @@ const clang::TemplateArgumentList *getTemplateInstantiationArgs(const clang::Dec
 clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListInfo& Args,
                                 clang::FunctionTemplateDecl *FuncTemp)
 {
-    auto& S = calypso.pch.AST->getSema();
+    auto& S = calypso.getSema();
 
     // Converts TemplateArgumentListInfo to something suitable for TemplateArgumentList
     llvm::SmallVector<clang::TemplateArgument, 4> Converted;
@@ -226,7 +225,7 @@ clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListI
 bool TemplateDeclaration::evaluateConstraint(::TemplateInstance* ti, Scope* sc, Scope* paramscope,
                                             Objects* dedtypes, ::FuncDeclaration* fd)
 {
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& Diags = calypso.getDiagnostics();
     auto Temp = getPrimaryTemplate();
 
     TypeMapper tymap;
@@ -278,7 +277,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         return m;
     }
 
-    auto& S = calypso.pch.AST->getSema();
+    auto& S = calypso.getSema();
     auto Temp = getPrimaryTemplate();
 
     TypeMapper tymap;
@@ -374,8 +373,8 @@ clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
 ::TemplateInstance* TemplateDeclaration::foreignInstance(::TemplateInstance* tithis,
                                                        Scope* sc)
 {
-    auto& S = calypso.pch.AST->getSema();
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.getDiagnostics();
 
     if (isForeignInstance(tithis))
         return nullptr;
@@ -574,9 +573,9 @@ Identifier *TemplateInstance::getIdent()
 
 bool TemplateInstance::completeInst()
 {
-    auto& Context = calypso.pch.AST->getASTContext();
-    auto& S = calypso.pch.AST->getSema();
-    auto& Diags = calypso.pch.AST->getDiagnostics();
+    auto& Context = calypso.getASTContext();
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.getDiagnostics();
 
     auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(Inst);
 

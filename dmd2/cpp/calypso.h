@@ -30,6 +30,7 @@ namespace clang
 class IdentifierInfo;
 class CodeGenFunction;
 class Sema;
+class ASTUnit;
 }
 
 namespace cpp
@@ -41,8 +42,8 @@ class TemplateInstance;
 class TypeMapper;
 class DeclReferencer;
 
-namespace reclang { class ASTUnit; class ModuleMap; class DiagnosticPrinter; }
-using reclang::ASTUnit;
+namespace reclang { class ModuleMap; class DiagnosticPrinter; }
+using clang::ASTUnit;
 using reclang::ModuleMap;
 using reclang::DiagnosticPrinter;
 
@@ -97,11 +98,10 @@ public:
     Strings headers; // array of all C/C++ header names with the "" or <>, required as long as we're using a PCH
             // the array is initialized at the first Modmap::semantic and kept in sync with a cache file named 'calypso_cache.list'
             // TODO: it's currently pretty basic and dumb and doesn't check whether the same header might be named differently or is already included by another
-    bool needEmit = false;
+    bool needHeadersReload = false;
     ASTUnit *AST = nullptr;
     clang::MangleContext *MangleCtx = nullptr;
 
-    InstantiationChecker instChecker;
     DiagnosticPrinter *DiagClient;
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
     
@@ -117,10 +117,11 @@ public:
 
     std::string pchHeader;
     std::string pchFilename;
-    std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
+//     std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
 
 protected:
-    void emit();
+    void loadFromHeaders();
+    void loadFromPCH();
 };
 
 class LangPlugin : public ::LangPlugin, public ::ForeignCodeGen
@@ -238,8 +239,13 @@ public:
 
     LangPlugin();
     void init(const char *Argv0);
+
     ASTUnit *getASTUnit() { return pch.AST; }
     clang::ASTContext &getASTContext();
+    clang::Sema &getSema();
+    clang::DiagnosticsEngine &getDiagnostics();
+    clang::Preprocessor &getPreprocessor();
+    clang::SourceManager &getSourceManager();
 
     std::string getCacheFilename(const char *suffix = nullptr);
 
