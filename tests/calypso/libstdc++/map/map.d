@@ -18,7 +18,7 @@ void main()
 
     immutable char a = '0';
     immutable char b = 'z';
-    m[a] = *new cppstring("Sedna");
+    m[a] = /+cppstring(+/"Sedna"/+)+/; // FIXME copy ctor instead of memcpy
     m[b] = "90377";
 
     writeln(m[b].c_str.to!string, " ", m[a].c_str.to!string);
