@@ -808,21 +808,18 @@ void PCH::update()
                             PP.getLangOpts(), &PP.getTargetInfo(), PP.getHeaderSearchInfo());
 
     llvm::DenseSet<const clang::DirectoryEntry*> CheckedDirs;
-    for (size_t i = 0; i < SrcMgr.loaded_sloc_entry_size(); i++)
-    {
-        auto SLoc = SrcMgr.getLoadedSLocEntry(i);
-
+    auto lookForModuleMap = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
         if (SLoc.isExpansion())
-            continue;
+            return;
 
         auto OrigEntry = SLoc.getFile().getContentCache()->OrigEntry;
         if (!OrigEntry)
-            continue;
+            return;
 
         auto Dir = OrigEntry->getDir();
 
         if (CheckedDirs.count(Dir))
-            continue;
+            return;
         CheckedDirs.insert(Dir);
 
         std::error_code err;
@@ -846,7 +843,12 @@ void PCH::update()
                 }
             }
         }
-    }
+    };
+
+    for (size_t i = 0; i < SrcMgr.local_sloc_entry_size(); i++)
+        lookForModuleMap(SrcMgr.getLocalSLocEntry(i));
+    for (size_t i = 0; i < SrcMgr.loaded_sloc_entry_size(); i++)
+        lookForModuleMap(SrcMgr.getLoadedSLocEntry(i));
 
     // Since the out-of-dateness of headers are checked lazily for most of them, it might only be detected
     // by walking through all the SLoc entries. If an error occurred start over and trigger a loadFromHeaders.

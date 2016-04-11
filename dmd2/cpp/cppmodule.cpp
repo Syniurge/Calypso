@@ -1477,9 +1477,7 @@ static void mapClangModule(DeclMapper &mapper,
     // HACK-ish but Clang doesn't offer a straightforward way
     // SourceManager::translateFile() only offers the first FID of a FileEntry which doesn't contain all the decls,
     // so we need to loop over all the FID corresponding to Header.Entry.
-    for (unsigned I = 0, N = SrcMgr.loaded_sloc_entry_size(); I != N; ++I)
-    {
-        auto& SLoc = SrcMgr.getLoadedSLocEntry(I);
+    auto findRegionDecls = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
         if (SLoc.isFile() && SLoc.getFile().getContentCache())
         {
             for (auto Header: M->Headers[clang::Module::HK_Normal])
@@ -1493,7 +1491,12 @@ static void mapClangModule(DeclMapper &mapper,
                 AST->findFileRegionDecls(FID, 0, (1U << 31) - 1 - SID, RegionDecls); // passed Length is the maximum value before offset overflow kicks in
             }
         }
-    }
+    };
+
+    for (unsigned I = 0, N = SrcMgr.local_sloc_entry_size(); I != N; ++I)
+        findRegionDecls(SrcMgr.getLocalSLocEntry(I));
+    for (unsigned I = 0, N = SrcMgr.loaded_sloc_entry_size(); I != N; ++I)
+        findRegionDecls(SrcMgr.getLoadedSLocEntry(I));
 
     // Not forgetting namespace redecls
     llvm::SmallVector<clang::Decl*, 8> RootDecls, ParentDecls;
