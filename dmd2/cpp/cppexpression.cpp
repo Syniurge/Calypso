@@ -735,6 +735,9 @@ clang::Expr* ExprMapper::toExpression(Expression* e)
     auto& Context = calypso.getASTContext();
     clang::SourceLocation Loc;
 
+    if (e->op == TOKvar)
+        e = e->optimize(WANTvalue);
+
     switch (e->op)
     {
         case TOKint64:
