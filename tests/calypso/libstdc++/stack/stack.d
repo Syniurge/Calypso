@@ -20,13 +20,12 @@ void main()
     for (int i = 0;i<10; i++)
       dq.push_back(i);
 
-    //auto v = new vector!(int)(2,200);   //FAILURE
+    auto v = new vector!(int)(2,200);
 
     auto st1 = new stack!char;
     auto dq2 = new stack!(int)(*dq);
-    //auto st2 = new stack!(int, vector!int);    //FAILURE
+    auto st2 = new stack!(int, vector!int);
 
-    writeln("stack appears to work");
     writeln("empty stack size = ", st1.size());
     writeln("10 element deque stack size = ", dq2.size());
 
