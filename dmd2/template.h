@@ -99,6 +99,7 @@ public:
     Prot prot();
 
     virtual bool evaluateConstraint(TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, FuncDeclaration *fd); // CALYPSO
+    virtual void prepareBestMatch(TemplateInstance* ti, Scope* sc, Expressions* fargs); // CALYPSO
 
     virtual MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag); // CALYPSO
     MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs);
@@ -109,7 +110,9 @@ public:
     TemplateInstance *findExistingInstance(TemplateInstance *tithis, Expressions *fargs);
     TemplateInstance *addInstance(TemplateInstance *ti);
     void removeInstance(TemplateInstance *handle);
+
     virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; } // CALYPSO
+    virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti); // CALYPSO
 
     TemplateDeclaration *isTemplateDeclaration() { return this; }
 

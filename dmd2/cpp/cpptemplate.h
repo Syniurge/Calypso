@@ -31,12 +31,18 @@ public:
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
     TemplateDeclaration(const TemplateDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
+    bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, ::TemplateInstance *ti) override;
     bool evaluateConstraint(::TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, ::FuncDeclaration *fd) override;
+    void prepareBestMatch(::TemplateInstance *ti, Scope *sc, Expressions *fargs) override;
     MATCH matchWithInstance(Scope *sc, ::TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag) override;
+
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
 
+    clang::Decl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti );
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
+    TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
+    ::TemplateDeclaration *getCorrespondingTempDecl(clang::Decl *Inst);
     void correctTempDecl(TemplateInstance *ti);
 };
 
@@ -45,10 +51,9 @@ class TemplateInstance : public ::TemplateInstance
 public:
     CALYPSO_LANGPLUGIN
 
+    bool isForeignInst = false;
     clang::Decl *Inst = nullptr;
-    llvm::SmallVector<clang::Decl*, 4> Dependencies; // Functions external to the template but instantiated during completeInst(), since they weren't instantiated before we need to emit them as well
-
-    Objects *origTiargs = nullptr; // needed for deco mangling
+    Objects* primTiargs = nullptr;
 
     TemplateInstance(Loc loc, Identifier *temp_id);
     TemplateInstance(Loc loc, ::TemplateDeclaration *tempdecl, Objects *tiargs);

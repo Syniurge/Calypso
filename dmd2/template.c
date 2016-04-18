@@ -6584,6 +6584,14 @@ bool TemplateInstance::findTempDecl(Scope *sc, WithScopeSymbol **pwithsym)
     }
     assert(tempdecl);
 
+    OverloadSet *tovers = tempdecl->isOverloadSet();
+    auto firstTempDecl = (tovers ? tovers->a[0] : tempdecl)->isTemplateDeclaration();
+    assert(firstTempDecl);
+    return firstTempDecl->checkTempDeclFwdRefs(sc, tempdecl, this); // CALYPSO
+}
+
+bool TemplateDeclaration::checkTempDeclFwdRefs(Scope* sc, Dsymbol* tempdecl, TemplateInstance* ti) // CALYPSO
+{
   struct ParamFwdTi
   {
     static int fp(void *param, Dsymbol *s)
@@ -6615,7 +6623,7 @@ bool TemplateInstance::findTempDecl(Scope *sc, WithScopeSymbol **pwithsym)
     size_t overs_dim = tovers ? tovers->a.dim : 1;
     for (size_t oi = 0; oi < overs_dim; oi++)
     {
-        if (overloadApply(tovers ? tovers->a[oi] : tempdecl, (void *)this, &ParamFwdTi::fp))
+        if (overloadApply(tovers ? tovers->a[oi] : tempdecl, (void *)ti, &ParamFwdTi::fp))
             return false;
     }
     return true;
@@ -6998,8 +7006,19 @@ bool TemplateInstance::semanticTiargs(Loc loc, Scope *sc, Objects *tiargs, int f
     return !err;
 }
 
+void TemplateDeclaration::prepareBestMatch(TemplateInstance* ti, Scope* sc, Expressions* fargs)
+{
+}
+
 bool TemplateInstance::findBestMatch(Scope *sc, Expressions *fargs)
 {
+    {
+        OverloadSet *tovers = tempdecl->isOverloadSet();
+        auto firstTempDecl = static_cast<TemplateDeclaration*>(tovers ? tovers->a[0] : tempdecl);
+        assert(firstTempDecl->isTemplateDeclaration());
+        firstTempDecl->prepareBestMatch(this, sc, fargs); // CALYPSO hook (kinda ugly)
+    }
+
     if (havetempdecl)
     {
         TemplateDeclaration *tempdecl = this->tempdecl->isTemplateDeclaration();
