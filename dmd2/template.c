@@ -7688,7 +7688,7 @@ Identifier *TemplateInstance::genIdent(Objects *args)
 Identifier *TemplateInstance::getIdent()
 {
     if (!ident && inst && !errors)
-        ident = genIdent(tiargs);         // need an identifier for name mangling purposes.
+        ident = genIdent(inst->tiargs);         // need an identifier for name mangling purposes. // CALYPSO
     return ident;
 }
 
