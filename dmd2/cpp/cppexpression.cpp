@@ -359,7 +359,21 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (!TT->isValueDependent())
             e = new IntegerExp(loc, TT->getValue() ? 1 : 0, Type::tbool);
         else
-            return new NullExp(loc);  // TODO replace by D traits
+        {
+            switch (TT->getTrait())
+            {
+                case clang::UTT_IsPOD:
+                {
+                    auto args = new Objects;
+                    auto t = tymap.fromType(TT->getArg(0)->getType(), loc);
+                    args->push(t);
+                    e = new TraitsExp(loc, Id::isPOD, args);
+                    break;
+                }
+                default:
+                    return new NullExp(loc);  // TODO replace by D traits
+            }
+        }
     }
     else if (auto SOP = dyn_cast<clang::SizeOfPackExpr>(E))
     {
