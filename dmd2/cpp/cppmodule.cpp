@@ -1068,13 +1068,13 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
 
             if (NTTPD->hasDefaultArgument())
             {
-//                 tp_defaultvalue = expmap.fromExpression(NTTPD->getDefaultArgument());
+                tp_defaultvalue = expmap.fromExpression(NTTPD->getDefaultArgument());
 
-                // TEMPORARY HACK: we choose a simple default value to make defaultArg()'s life easier
-                //  (there were obscure identifier errors, e.g in __iterator_traits<_normal_iterator>).
-                //  This doesn't affect anything other than reflection since the default argument evaluation is done by Clang
-                //  We could btw use Clang's evaluation while keeping the mapped expression for reflection
-                tp_defaultvalue = new DotIdExp(loc, new TypeExp(loc, valTy), Id::init);
+//                 // TEMPORARY HACK: we choose a simple default value to make defaultArg()'s life easier
+//                 //  (there were obscure identifier errors, e.g in __iterator_traits<_normal_iterator>).
+//                 //  This doesn't affect anything other than reflection since the default argument evaluation is done by Clang
+//                 //  We could btw use Clang's evaluation while keeping the mapped expression for reflection
+//                 tp_defaultvalue = new DotIdExp(loc, new TypeExp(loc, valTy), Id::init);
             }
 
             tp = new TemplateValueParameter(loc, id, valTy,
