@@ -306,10 +306,19 @@ TypeTuple *toArgTypes(Type *t)
             result = new TypeTuple(Type::tvoidptr, Type::tvoidptr);
         }
 
-        void visit(TypeStruct *t)
+        void visitAggregate(AggregateDeclaration *sym) // CALYPSO
         {
+            StructDeclaration* sd = sym->isStructDeclaration();
+            ClassDeclaration* cd = sym->isClassDeclaration();
+
+            if (cd && cd->byRef())
+            {
+                result = new TypeTuple(Type::tvoidptr);
+                return;
+            }
+
             //printf("TypeStruct::toArgTypes() %s\n", t->toChars());
-            if (!t->sym->isPOD() || t->sym->fields.dim == 0)
+            if (cd || (sd && !sd->isPOD()) || sym->fields.dim == 0)
             {
             Lmemory:
                 //printf("\ttoArgTypes() %s => [ ]\n", t->toChars());
@@ -318,7 +327,7 @@ TypeTuple *toArgTypes(Type *t)
             }
             Type *t1 = NULL;
             Type *t2 = NULL;
-            d_uns64 sz = t->size(Loc());
+            d_uns64 sz = sym->getType()->size(Loc());
             assert(sz < 0xFFFFFFFF);
             switch ((unsigned)sz)
             {
@@ -359,13 +368,13 @@ TypeTuple *toArgTypes(Type *t)
                 default:
                     goto Lmemory;
             }
-            if (global.params.is64bit && t->sym->fields.dim)
+            if (global.params.is64bit && sym->fields.dim)
             {
         #if 1
                 t1 = NULL;
-                for (size_t i = 0; i < t->sym->fields.dim; i++)
+                for (size_t i = 0; i < sym->fields.dim; i++)
                 {
-                    VarDeclaration *f = t->sym->fields[i];
+                    VarDeclaration *f = sym->fields[i];
                     //printf("f->type = %s\n", f->type->toChars());
 
                     TypeTuple *tup = toArgTypes(f->type);
@@ -445,9 +454,9 @@ TypeTuple *toArgTypes(Type *t)
                         ;
                 }
         #else
-                if (t->sym->fields.dim == 1)
+                if (sym->fields.dim == 1)
                 {
-                    VarDeclaration *f = t->sym->fields[0];
+                    VarDeclaration *f = sym->fields[0];
                     //printf("f->type = %s\n", f->type->toChars());
                     TypeTuple *tup = toArgTypes(f->type);
                     if (tup)
@@ -474,14 +483,19 @@ TypeTuple *toArgTypes(Type *t)
                 goto Lmemory;
         }
 
+        void visit(TypeStruct *t)
+        {
+            visitAggregate(t->sym); // CALYPSO
+        }
+
         void visit(TypeEnum *t)
         {
             t->toBasetype()->accept(this);
         }
 
-        void visit(TypeClass *)
+        void visit(TypeClass *t)
         {
-            result = new TypeTuple(Type::tvoidptr);
+            visitAggregate(t->sym); // CALYPSO
         }
     };
 
