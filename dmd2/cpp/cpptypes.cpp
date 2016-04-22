@@ -327,11 +327,10 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 {
     if (auto BT = dyn_cast<clang::BuiltinType>(T))
         return fromTypeBuiltin(BT);
-    else if (auto CT = T->getAs<clang::ComplexType>())
-        return fromTypeComplex(CT);
-
-    if (auto FT = dyn_cast<clang::FunctionProtoType>(T))
+    else if (auto FT = dyn_cast<clang::FunctionProtoType>(T))
         return fromTypeFunction(FT);
+    else if (auto AT = dyn_cast<clang::AtomicType>(T))
+        return fromType(AT->getValueType());
 
     // Purely cosmetic sugar types
     if (auto PT = dyn_cast<clang::ParenType>(T))
@@ -349,6 +348,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     if (auto Ty##T = dyn_cast<clang::Ty##Type>(T)) \
         return fromType##Ty(Ty##T);
 
+    TYPEMAP(Complex)
     TYPEMAP(Typedef)
     TYPEMAP(Enum)
     TYPEMAP(Record)
@@ -364,11 +364,8 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     TYPEMAP(TypeOfExpr)
     TYPEMAP(PackExpansion)
     TYPEMAP(Vector)
+    TYPEMAP(Array)
 #undef TYPEMAP
-
-    // Array types
-    if (auto AT = dyn_cast<clang::ArrayType>(T))
-        return fromTypeArray(AT);
 
     // Pointer and reference types
     auto Pointer = dyn_cast<clang::PointerType>(T);
