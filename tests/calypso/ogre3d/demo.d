@@ -53,7 +53,7 @@ public:
 //   ~this() {}
 
 protected:
-    override void setupResources()
+    extern(C++) override void setupResources()
     {
         super.setupResources();
 
@@ -66,7 +66,7 @@ protected:
         ResourceGroupManager.getSingleton().addResourceLocation(s_resMatScripts, s_FileSystem, s_Popular);
     }
 
-    override void createScene()
+    extern(C++) override void createScene()
     {
         // Set our camera to orbit around the origin at a suitable distance
         mCameraMan.setStyle(CameraStyle.CS_ORBIT);
@@ -300,7 +300,7 @@ protected:
         }
     }
 
-    override bool frameRenderingQueued(ref const(FrameEvent) evt)
+    extern(C++) override bool frameRenderingQueued(ref const(FrameEvent) evt)
     {
         // Move the lights along their paths
         mGreenLightAnimState.addTime(evt.timeSinceLastFrame);
@@ -344,7 +344,7 @@ protected:
     }
 
     // Event raised when render single object started.
-    override void notifyRenderSingleObject(Renderable* rend, const(Pass)* pass, const(AutoParamDataSource)* source,
+    extern(C++) override void notifyRenderSingleObject(Renderable* rend, const(Pass)* pass, const(AutoParamDataSource)* source,
             const(LightList)* pLightList, bool suppressRenderStateChanges)
     {
         //
