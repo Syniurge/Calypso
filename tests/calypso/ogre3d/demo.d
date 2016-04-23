@@ -103,7 +103,7 @@ protected:
         NameValuePairList params;
         params[s_numberOfChains] = "2";
         params[s_maxElements] = "80";
-        mTrail = cast(RibbonTrail*) mSceneMgr.createMovableObject(s_RibbonTrail, &params);
+        mTrail = cast(RibbonTrail*) cast(void*) mSceneMgr.createMovableObject(s_RibbonTrail, &params); // TODO implement dynamic casts
         mSceneMgr.getRootSceneNode().attachObject(mTrail);
         mTrail.setMaterialName(s_ribbonMatName);
         mTrail.setTrailLength(400);
