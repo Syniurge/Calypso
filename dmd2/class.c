@@ -887,7 +887,7 @@ LafterSizeok:
  * This is used to detect circular inheritance only.
  */
 
-bool ClassDeclaration::isBaseOf2(ClassDeclaration *cd)
+bool AggregateDeclaration::isBaseOf2(ClassDeclaration *cd)
 {
     if (!cd)
         return false;
@@ -905,7 +905,7 @@ bool ClassDeclaration::isBaseOf2(ClassDeclaration *cd)
  * Determine if 'this' is a base class of cd.
  */
 
-bool ClassDeclaration::isBaseOf(ClassDeclaration *cd, int *poffset)
+bool AggregateDeclaration::isBaseOf(ClassDeclaration *cd, int *poffset) // CALYPSO
 {
     //printf("ClassDeclaration::isBaseOf(this = '%s', cd = '%s')\n", toChars(), cd->toChars());
     if (poffset)

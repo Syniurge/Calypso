@@ -47,8 +47,11 @@ LLValue *DtoClassHandle(DValue *val)
         return val->getLVal();
 }
 
-DValue *DtoClassDValue(Type *t, LLValue *v)
+DValue *DtoAggregateDValue(Type *t, LLValue *v)
 {
+    if (t->ty == Tstruct)
+        return new DVarValue(t, v);
+
     assert(t->ty == Tclass);
     auto tc = static_cast<TypeClass*>(t);
     if (tc->byRef())
@@ -110,6 +113,14 @@ void DtoResolveAggregate(AggregateDeclaration* ad) // CALYPSO
         assert(ad->isStructDeclaration());
         DtoResolveStruct(static_cast<StructDeclaration*>(ad));
     }
+}
+
+LLType* DtoAggregateHandleType(Type* t)
+{
+    if (t->ty == Tclass) return DtoClassHandleType(static_cast<TypeClass*>(t));
+    if (t->ty == Tstruct) return DtoType(t)->getPointerTo();
+    assert(false);
+    return nullptr;
 }
 
 LLType* DtoClassHandleType(TypeClass *tc) // CALYPSO
@@ -296,8 +307,8 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   }
 
   // must be class/interface
-  assert(to->ty == Tclass);
-  TypeClass *tc = static_cast<TypeClass *>(to);
+  assert(to->ty == Tclass || /* CALYPSO */ to->ty == Tstruct);
+  AggregateDeclaration *tsym = getAggregateSym(to);
 
   // from type
   TypeClass *fc = static_cast<TypeClass *>(from);
@@ -309,7 +320,7 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   }
 
   // x -> interface
-  if (InterfaceDeclaration *it = tc->sym->isInterfaceDeclaration()) {
+  if (InterfaceDeclaration *it = tsym->isInterfaceDeclaration()) {
     Logger::println("to interface");
     // interface -> interface
     if (fc->sym->isInterfaceDeclaration()) {
@@ -369,9 +380,9 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   }
   // class -> class - static down cast
   int offset;
-  if (tc->sym->isBaseOf(fc->sym, &offset)) {
+  if (tsym->isBaseOf(fc->sym, &offset)) {
     Logger::println("static down cast");
-    LLType* tolltype = DtoClassHandleType(tc); // CALYPSO
+    LLType* tolltype = DtoAggregateHandleType(to); // CALYPSO
     // CALYPSO
     LLValue* rval = DtoBitCast(v,
             llvm::Type::getInt8PtrTy(gIR->context()));
@@ -382,7 +393,7 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
                                     baseOffset, "add.ptr");
     }
     rval = DtoBitCast(rval, tolltype);
-    return DtoClassDValue(tc, rval);
+    return DtoAggregateDValue(to, rval);
   }
   // class -> class - dynamic up cast
 

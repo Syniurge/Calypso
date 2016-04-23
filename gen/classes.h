@@ -26,7 +26,8 @@ class TypeClass;
 
 /// CALYPSO
 llvm::Value* DtoClassHandle(DValue* val);
-DValue *DtoClassDValue(Type *t, LLValue *v);
+DValue *DtoAggregateDValue(Type *t, LLValue *v);
+llvm::Type* DtoAggregateHandleType( Type* t );
 LLType* DtoClassHandleType(TypeClass *tc);
 
 void DtoResolveAggregate(AggregateDeclaration* ad);

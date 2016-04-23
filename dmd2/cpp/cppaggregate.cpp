@@ -25,6 +25,8 @@ using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
 
+template<typename AggTy> void buildAggLayout(AggTy *ad);
+
 StructDeclaration::StructDeclaration(Loc loc, Identifier* id,
                                      const clang::RecordDecl* RD)
     : ::StructDeclaration(loc, id)
@@ -179,9 +181,12 @@ bool ClassDeclaration::mayBeAnonymous()
     return true;
 }
 
-bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
+template <typename AggTy>
+ bool isBaseOfImpl(AggTy* base, ::ClassDeclaration* cd, int* poffset)
 {
-    if (!isBaseOf2(cd))
+    auto RD = cast<clang::CXXRecordDecl>(getRecordDecl(base));
+
+    if (!base->isBaseOf2(cd))
         return false;
 
     if (poffset)
@@ -210,6 +215,16 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
     }
 
     return true;
+}
+
+bool StructDeclaration::isBaseOf(::ClassDeclaration* cd, int *poffset)
+{
+    return isBaseOfImpl(this, cd, poffset);
+}
+
+bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
+{
+    return isBaseOfImpl(this, cd, poffset);
 }
 
 void ClassDeclaration::interfaceSemantic(Scope *sc)

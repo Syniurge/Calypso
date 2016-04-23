@@ -1203,7 +1203,7 @@ public:
       // Get the actual function value to call.
       LLValue *funcval = nullptr;
       if (nonFinal) {
-        funcval = DtoVirtualFunctionPointer(DtoClassDValue(e1type, vthis), fdecl, e->toChars()); // CALYPSO
+        funcval = DtoVirtualFunctionPointer(DtoAggregateDValue(e1type, vthis), fdecl, e->toChars()); // CALYPSO
       } else {
         funcval = getIrFunc(fdecl)->func;
       }

@@ -129,6 +129,10 @@ public:
     bool isExport();
     Dsymbol *searchCtor();
 
+    bool isBaseOf2(ClassDeclaration *cd); // CALYPSO
+    #define OFFSET_RUNTIME 0x76543210
+    virtual bool isBaseOf(ClassDeclaration *cd, int *poffset); // CALYPSO
+
     Prot prot();
 
     Type *handleType() { return type; } // 'this' type
@@ -287,10 +291,6 @@ public:
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses, bool inObject = false);
     virtual Dsymbol *syntaxCopy(Dsymbol *s); // CALYPSO
     virtual void semantic(Scope *sc);
-    bool isBaseOf2(ClassDeclaration *cd);
-
-    #define OFFSET_RUNTIME 0x76543210
-    virtual bool isBaseOf(ClassDeclaration *cd, int *poffset);
 
     bool isBaseInfoComplete();
     Dsymbol *search(Loc, Identifier *ident, int flags = IgnoreNone);
