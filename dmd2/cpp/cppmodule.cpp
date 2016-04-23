@@ -240,9 +240,6 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
     auto& Context = calypso.getASTContext();
     ExprMapper expmap(*this);
 
-    if (isNonSupportedType(D->getType()))
-        return nullptr;
-
     if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
         return nullptr;
 
@@ -569,10 +566,6 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 
     if (isSameNameTagTypedef(D)) // e.g typedef union pthread_attr_t pthread_attr_t needs to be discarded
         return nullptr;
-
-    if (D->isImplicit())
-        if (Ty == Context.Int128Ty || Ty == Context.UnsignedInt128Ty)
-            return nullptr; // any function using those typedefs will be discarded anyway
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
@@ -1032,7 +1025,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
         id = getIdentifierForTemplateNonTypeParm(NTTPD);
         auto valTy = fromType(NTTPD->getType(), loc);
 
-        if (!valTy || isNonSupportedType(NTTPD->getType()))
+        if (!valTy)
             return nullptr;
 
         if (NTTPD->isParameterPack())
@@ -1101,7 +1094,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
             {
                 auto SpecTy = SpecArg->getAsType();
                 auto specArg = FromType(*this, loc).fromTemplateArgument(SpecArg);
-                if (!specArg || isNonSupportedType(SpecTy))
+                if (!specArg)
                     return nullptr; // might be a non supported type
                 tp_spectype = isType(specArg);
                 assert(tp_spectype);

@@ -302,6 +302,9 @@ TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix)
 
 Type *TypeMapper::FromType::operator()(const clang::QualType T)
 {
+    if (isNonSupportedType(T))
+        return nullptr;
+
     Type *t = fromTypeUnqual(T.getTypePtr());
 
     if (!t)
@@ -1637,16 +1640,9 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     if (FD)
         PI = FD->param_begin();
 
-    // We're ignoring functions with unhandled types i.e int128_t
-    if (isNonSupportedType(T->getReturnType()))
-        return nullptr;
-
     for (auto I = T->param_type_begin(), E = T->param_type_end();
                 I != E; I++)
     {
-        if (isNonSupportedType(*I))
-            return nullptr;
-
         StorageClass stc = STCundefined;
         auto at = tm.fromType(*I, loc);
         Identifier *ident = nullptr;
