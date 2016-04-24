@@ -100,6 +100,15 @@ Expression *ExprMapper::fixIntegerExp(IntegerExp *e, clang::QualType T)
     return e;
 }
 
+inline bool isMemberFuncPtrCall(const clang::Expr* E)
+{
+    if (!isa<clang::BinaryOperator>(E))
+        return false;
+
+    auto Op = cast<clang::BinaryOperator>(E)->getOpcode();
+    return Op == clang::BO_PtrMemD || Op == clang::BO_PtrMemD;
+}
+
 Expression *ExprMapper::fromUnaExp(clang::SourceLocation Loc,
                                    const clang::UnaryOperator::Opcode Op,
                                    const clang::Expr *SubExpr)
@@ -172,6 +181,11 @@ Expression *ExprMapper::fromBinExp(clang::SourceLocation Loc,
         case clang::BO_DivAssign: return new DivAssignExp(loc, lhs, rhs);
 
         case clang::BO_Comma: return new CommaExp(loc, lhs, rhs);
+
+        // Member function pointers calls (.* and ->*) using UFCS
+        // TODO Itanium virtual function pointers
+        case clang::BO_PtrMemD: return new CallExp(loc, new PtrExp(loc, rhs), lhs);
+        case clang::BO_PtrMemI: return new CallExp(loc, new PtrExp(loc, rhs), lhs);
     }
 
     llvm::llvm_unreachable_internal("Unhandled C++ binary operation exp");
@@ -530,7 +544,15 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
             if (!callee)
                 return nullptr;
 
-            auto args = new Expressions;
+            Expressions* args;
+            if (isMemberFuncPtrCall(C->getCallee()))
+            {
+                assert(callee->op == TOKcall);
+                args = static_cast<CallExp*>(callee)->arguments;
+            }
+            else
+                args = new Expressions;
+
             for (auto Arg: C->arguments())
                 args->push(fromExpression(Arg));
 
