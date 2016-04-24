@@ -127,6 +127,11 @@ Expression *ExprMapper::fromUnaExp(clang::SourceLocation Loc,
         case clang::UO_LNot: return new NotExp(loc, sub);
         case clang::UO_AddrOf: return new AddrExp(loc, sub);
         case clang::UO_Deref: return new PtrExp(loc, sub);
+
+        case clang::UO_PreInc: return new PreExp(TOKplusplus, loc, sub);
+        case clang::UO_PostInc: return new PreExp(TOKminusminus, loc, sub);
+        case clang::UO_PreDec: return new PostExp(TOKplusplus, loc, sub);
+        case clang::UO_PostDec: return new PostExp(TOKminusminus, loc, sub);
     }
 
     llvm::llvm_unreachable_internal("Unhandled C++ unary operation exp");
@@ -177,8 +182,15 @@ Expression *ExprMapper::fromBinExp(clang::SourceLocation Loc,
         case clang::BO_Assign: return new AssignExp(loc, lhs, rhs);
         case clang::BO_MulAssign: return new MulAssignExp(loc, lhs, rhs);
         case clang::BO_AddAssign: return new AddAssignExp(loc, lhs, rhs);
-        case clang::BO_RemAssign: return new MinAssignExp(loc, lhs, rhs);
+        case clang::BO_SubAssign: return new MinAssignExp(loc, lhs, rhs);
         case clang::BO_DivAssign: return new DivAssignExp(loc, lhs, rhs);
+        case clang::BO_RemAssign: return new ModAssignExp(loc, lhs, rhs);
+
+        case clang::BO_AndAssign: return new AndAssignExp(loc, lhs, rhs);
+        case clang::BO_OrAssign: return new OrAssignExp(loc, lhs, rhs);
+        case clang::BO_XorAssign: return new XorAssignExp(loc, lhs, rhs);
+        case clang::BO_ShlAssign: return new ShlAssignExp(loc, lhs, rhs);
+        case clang::BO_ShrAssign: return new ShrAssignExp(loc, lhs, rhs);
 
         case clang::BO_Comma: return new CommaExp(loc, lhs, rhs);
 
