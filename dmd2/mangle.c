@@ -228,7 +228,7 @@ public:
         switch (t->linkage)
         {
             case LINKd:             mc = 'F';       break;
-            case LINKc:             mc = 'U';       break;
+            case LINKc:             mc = forEquiv ? 'R' : 'U';       break; // CALYPSO HACK? allows implicit conversion of C function pointers to C++ function pointers FIXME check that the calling conv is the same
             case LINKwindows:       mc = 'W';       break;
             case LINKpascal:        mc = 'V';       break;
             case LINKcpp:           mc = 'R';       break;
