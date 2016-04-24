@@ -681,12 +681,16 @@ void PCH::loadFromHeaders()
     clang::CompilerInvocation::CreateFromArgs(CI, CCArgs.begin(), CCArgs.end(), *Diags);
 
     // Parse the headers
+    DiagClient->muted = false;
+
     AST = ASTUnit::LoadFromCompilerInvocation(&CI, Diags, false, false, false,
                                               clang::TU_Complete, false, false, false,
                                               new InstantiationChecker).release();
     AST->getSema();
     Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
+
     needSaving = true;
+    DiagClient->muted = !opts::cppVerboseDiags;
 
     /* Update the list of headers */
 
@@ -720,11 +724,15 @@ void PCH::loadFromPCH()
 {
     clang::FileSystemOptions FileSystemOpts;
     clang::ASTReader::ASTReadResult ReadResult;
+    
+    DiagClient->muted = false;
 
     AST = ASTUnit::LoadFromASTFile(pchFilename,
                             Diags, FileSystemOpts, false, llvm::None, false,
                             /* AllowPCHWithCompilerErrors = */ true, false,
                             new InstantiationChecker, &ReadResult).release();
+
+    DiagClient->muted = !opts::cppVerboseDiags;
 
     switch (ReadResult) {
         case clang::ASTReader::Success:
