@@ -673,6 +673,9 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         e = new NewExp(loc, nullptr, nullptr, t, args);
     }
 
+    else if (isa<clang::CXXThisExpr>(E))
+        return new ThisExp(loc);
+
     else if (isa<clang::InitListExpr>(E)) // TODO
         return new NullExp(loc);
 
