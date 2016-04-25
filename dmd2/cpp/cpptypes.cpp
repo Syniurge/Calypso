@@ -641,7 +641,7 @@ public:
     {
         auto Parent = cast<clang::Decl>(
                         getDeclContextNonLinkSpec(D));
-        return operator()(Parent);
+        return operator()(Parent, false);
     }
 
     bool extended(const clang::Decl *D)
