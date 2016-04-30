@@ -1654,7 +1654,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         // Turn a TypeReference into « ref nextOf() » as early as possible as this helps function resolving
         if (at->ty == Treference)
         {
-            stc |= STCref;
+            stc |= STCscope | STCref;
             at = at->nextOf();
         }
 

@@ -5576,7 +5576,7 @@ Type *TypeFunction::semantic(Loc loc, Scope *sc)
             if (fparam->type->ty == Treference)
             {
                 fparam->type = fparam->type->nextOf();
-                fparam->storageClass |= STCref;
+                fparam->storageClass |= STCscope | STCref;
             }
 
             fparam->type = fparam->type->addStorageClass(fparam->storageClass);
@@ -5673,7 +5673,8 @@ Type *TypeFunction::semantic(Loc loc, Scope *sc)
                 e = e->implicitCastTo(argsc, fparam->type);
 
                 // default arg must be an lvalue
-                if (fparam->storageClass & (STCout | STCref))
+                if (fparam->storageClass & (STCout | STCref)
+                        && !(fparam->storageClass & STCscope)) // CALYPSO
                     e = e->toLvalue(argsc, e);
 
                 fparam->defaultArg = e;
@@ -6025,7 +6026,7 @@ MATCH TypeFunction::callMatch(Type *tthis, Expressions *args, int flag)
             Type *tp = tprm;
             //printf("fparam[%d] ta = %s, tp = %s\n", u, ta->toChars(), tp->toChars());
 
-            if (m && !arg->isLvalue())
+            if (m && !(p->storageClass & STCscope) && !arg->isLvalue())
             {
                 if (arg->op == TOKstring && tp->ty == Tsarray)
                 {

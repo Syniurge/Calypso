@@ -1636,7 +1636,7 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                 {
                     //printf("arg->type = %s, p->type = %s\n", arg->type->toChars(), p->type->toChars());
                     arg = arg->implicitCastTo(sc, tprm);
-                    arg = arg->optimize(WANTvalue, (p->storageClass & (STCref | STCout)) != 0);
+                    arg = arg->optimize(WANTvalue, (p->storageClass & (STCref | STCout)) != 0 && !(p->storageClass & STCscope)); // CALYPSO
                 }
             }
             if (p->storageClass & STCref)
@@ -1647,7 +1647,7 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                     // suppress deprecation message for auto ref parameter
                     // temporary workaround for Bugzilla 14283
                 }
-                else
+                else if (!(p->storageClass & STCscope)) // CALYPSO
                     arg = arg->toLvalue(sc, arg);
             }
             else if (p->storageClass & STCout)
@@ -1711,7 +1711,7 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                     }
                 }
             }
-            arg = arg->optimize(WANTvalue, (p->storageClass & (STCref | STCout)) != 0);
+            arg = arg->optimize(WANTvalue, (p->storageClass & (STCref | STCout)) != 0 && !(p->storageClass & STCscope));
         }
         else
         {
