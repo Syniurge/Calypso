@@ -610,32 +610,32 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (!e)
             return nullptr;
 
-        if (Ty->getAs<clang::ReferenceType>() && e->op == TOKnull)
-            return nullptr; // FIXME once we may finally pass rvalues to ref arguments
-                    // for other types there are workarounds but for null class references
-                    // I couldn't find any way to turn them into lvalues.
-
-        if (!TempExpr->isLValue())
-        {
-            if (e->op == TOKcall &&
-                    static_cast<CallExp*>(e)->e1->op == TOKtype)
-            {
-                auto call = static_cast<CallExp*>(e);
-                e = new NewExp(loc, nullptr, nullptr,
-                               call->e1->type, call->arguments);
-            }
-            else
-            {
-                t = tymap.fromType(Ty.withoutLocalFastQualifiers(), loc);
-
-                auto args = new Expressions;
-                args->push(e);
-
-                e = new NewExp(loc, nullptr, nullptr, t, args);
-            }
-
-            e = new PtrExp(loc, e);
-        }
+//         if (Ty->getAs<clang::ReferenceType>() && e->op == TOKnull)
+//             return nullptr; // FIXME once we may finally pass rvalues to ref arguments
+//                     // for other types there are workarounds but for null class references
+//                     // I couldn't find any way to turn them into lvalues.
+//
+//         if (!TempExpr->isLValue())
+//         {
+//             if (e->op == TOKcall &&
+//                     static_cast<CallExp*>(e)->e1->op == TOKtype)
+//             {
+//                 auto call = static_cast<CallExp*>(e);
+//                 e = new NewExp(loc, nullptr, nullptr,
+//                                call->e1->type, call->arguments);
+//             }
+//             else
+//             {
+//                 t = tymap.fromType(Ty.withoutLocalFastQualifiers(), loc);
+//
+//                 auto args = new Expressions;
+//                 args->push(e);
+//
+//                 e = new NewExp(loc, nullptr, nullptr, t, args);
+//             }
+//
+//             e = new PtrExp(loc, e);
+//         }
     }
     else if (auto CBT = dyn_cast<clang::CXXBindTemporaryExpr>(E))
     {
