@@ -1462,8 +1462,8 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
             const bool t1b_isFR = (t1b->ty == Tarray || t1b->ty == Tdelegate);
 
             // Reference types
-            const bool tob_isR = (tob_isFR || tob->ty == Tpointer || tob->ty == Taarray || tob->ty == Tclass);
-            const bool t1b_isR = (t1b_isFR || t1b->ty == Tpointer || t1b->ty == Taarray || t1b->ty == Tclass);
+            const bool tob_isR = (tob_isFR || tob->ty == Tpointer || tob->ty == Taarray || (tob->ty == Tclass && !isClassValue(tob))); // CALYPSO
+            const bool t1b_isR = (t1b_isFR || t1b->ty == Tpointer || t1b->ty == Taarray || (t1b->ty == Tclass && !isClassValue(t1b)));
 
             // Arithmetic types (== valueable basic types)
             const bool tob_isA = (tob->isintegral() || tob->isfloating());

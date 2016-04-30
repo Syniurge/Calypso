@@ -8050,6 +8050,17 @@ L1:
     return de->semantic(sc);
 }
 
+bool TypeStruct::isBaseOf(Type* t, int* poffset)
+{
+    if (t && t->ty == Tclass)
+    {
+        ClassDeclaration *cd = ((TypeClass *)t)->sym;
+        if (sym->isBaseOf(cd, poffset))
+            return true;
+    }
+    return false;
+}
+
 structalign_t TypeStruct::alignment()
 {
     if (sym->alignment == 0)
@@ -8807,15 +8818,16 @@ MATCH TypeClass::implicitConvTo(Type *to)
     if (byRef() && isClassValueHandle(to))
         to = to->nextOf(); // CALYPSO downcast from DCXX class to C++ base ptr/ref
 
+    AggregateDeclaration *adto = getAggregateSym(to); // CALYPSO structs may be bases too
     ClassDeclaration *cdto = to->isClassHandle();
-    if (cdto)
+    if (adto)
     {
         //printf("TypeClass::implicitConvTo(to = '%s') %s, isbase = %d %d\n", to->toChars(), toChars(), cdto->isBaseInfoComplete(), sym->isBaseInfoComplete());
-        if (cdto->scope && !cdto->isBaseInfoComplete())
+        if (cdto && cdto->scope && !cdto->isBaseInfoComplete())
             cdto->semantic(NULL);
         if (sym->scope && !sym->isBaseInfoComplete())
             sym->semantic(NULL);
-        if (cdto->isBaseOf(sym, NULL) && MODimplicitConv(mod, to->mod))
+        if (adto->isBaseOf(sym, NULL) && MODimplicitConv(mod, to->mod)) // CALYPSO
         {
             //printf("'to' is base\n");
             return MATCHconvert;

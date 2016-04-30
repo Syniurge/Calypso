@@ -784,6 +784,7 @@ public:
     Type *semantic(Loc loc, Scope *sc);
     Dsymbol *toDsymbol(Scope *sc);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
+    bool isBaseOf(Type *t, int *poffset); // CALYPSO
     structalign_t alignment();
     Expression *defaultInit(Loc loc);
     Expression *defaultInitLiteral(Loc loc);
