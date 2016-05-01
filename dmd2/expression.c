@@ -5336,7 +5336,7 @@ Expression *VarExp::semantic(Scope *sc)
         if (!fd->functionSemantic())
             return new ErrorExp();
     }
-    else if (var->scope)
+    else if (var->scope && var->sem == SemanticStart)
     {
         // CALYPSO DMD BUG: Ogre.d { alias String = cpp.std.string; String BLANKSTRING; } main.d { static import Ogre; class Foo { void Bar(ref Ogre.String S = Ogre.BLANKSTRING) {} } } was resulting in an error 5 lines below because String isn't in sc
         var->semantic(var->scope);

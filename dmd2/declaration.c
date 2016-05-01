@@ -852,6 +852,7 @@ void VarDeclaration::semantic(Scope *sc)
 
     if (sem >= SemanticDone)
         return;
+   sem = SemanticIn; // CALYPSO necessary to avoid recursive evaluation of VarExp if there's a this->edtor
 
     Scope *scx = NULL;
     if (scope)
