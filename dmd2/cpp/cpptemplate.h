@@ -37,6 +37,7 @@ public:
     MATCH matchWithInstance(Scope *sc, ::TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag) override;
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
+    void makeForeignInstance( cpp::TemplateInstance* ti );
 
     clang::Decl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti );
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();

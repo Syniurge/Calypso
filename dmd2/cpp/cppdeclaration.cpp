@@ -318,7 +318,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         overloadApply(s, &p, &DEquals::fp);
         assert(p.s && p.s->isTemplateDeclaration());
 
-        auto td = p.s->isTemplateDeclaration();
+        auto td = static_cast<cpp::TemplateDeclaration*>(p.s->isTemplateDeclaration());
         if (td->semanticRun == PASSinit)
         {
             assert(td->scope);
@@ -336,6 +336,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         tempinst->Inst = const_cast<clang::FunctionDecl*>(Func);
         tempinst->semantictiargsdone = false; // NOTE: the "havetempdecl" ctor of Templateinstance set semantictiargsdone to true...
                                                             // Time was lost finding this out for the second or third time.
+        td->makeForeignInstance(tempinst);
         tempinst->semantic(sc);
     }
 

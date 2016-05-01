@@ -506,6 +506,15 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         return ti;
     }
 
+    makeForeignInstance(ti);
+
+    ti->semanticRun = PASSinit; // WARNING: may disrupt something?
+    ti->semantic(sc);
+    return ti;
+}
+
+void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
+{
     ti->completeInst();
 
     correctTempDecl(ti);
@@ -513,10 +522,6 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     ti->havetempdecl = true;
 
     ti->correctTiargs();
-
-    ti->semanticRun = PASSinit; // WARNING: may disrupt something?
-    ti->semantic(sc);
-    return ti;
 }
 
 clang::Decl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::TemplateInstance* ti)
