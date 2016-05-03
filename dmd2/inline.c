@@ -342,13 +342,15 @@ public:
                 return;
             }
 
-            if (vd->edtor)
-            {
-                // if destructor required
-                // needs work to make this work
-                cost = COST_MAX;
-                return;
-            }
+            // CALYPSO HACK the following check was disabled for default arguments SomeClass() which gets semantic'd to (SomeClass __ctmp1653 = null;\n , __ctmp1653).this()
+            // Not measured the full extent of that hack yet, but strange that StructLiteralExp don't get such a check, structs may have dtors too..
+//             if (vd->edtor)
+//             {
+//                 // if destructor required
+//                 // needs work to make this work
+//                 cost = COST_MAX;
+//                 return;
+//             }
             // Scan initializer (vd->init)
             if (vd->init)
             {
@@ -411,6 +413,8 @@ struct InlineDoState
     FuncDeclaration *fd; // function being inlined (old parent)
     // inline result
     bool foundReturn;
+    // CALYPSO
+    Scope *sc = nullptr;
 };
 
 Expression *doInline(Statement *s, InlineDoState *ids);
@@ -868,6 +872,14 @@ Expression *doInline(Expression *e, InlineDoState *ids)
                     VarDeclaration *vto = new VarDeclaration(vd->loc, vd->type, vd->ident, vd->init);
                     memcpy((void *)vto, (void *)vd, sizeof(VarDeclaration));
                     vto->parent = ids->parent;
+                    vto->edtor = vto->callScopeDtor(ids->sc); // CALYPSO
+                    if (vto->edtor)
+                    {
+                        if (ids->sc->func && vto->storage_class & (STCstatic | STCgshared))
+                            vto->edtor = vto->edtor->semantic(ids->sc->module->scope);
+                        else
+                            vto->edtor = vto->edtor->semantic(ids->sc);
+                    }
 #if IN_DMD
                     vto->csym = NULL;
                     vto->isym = NULL;
@@ -2168,6 +2180,7 @@ Expression *inlineCopy(Expression *e, Scope *sc)
     InlineDoState ids;
     memset(&ids, 0, sizeof(ids));
     ids.parent = sc->parent;
+    ids.sc = sc; // CALYPSO
     return doInline(e, &ids);
 }
 
