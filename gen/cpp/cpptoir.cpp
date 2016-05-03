@@ -672,7 +672,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
             !(scopes->cleanupScopes.empty() && scopes->catchScopes.empty()))
     {
         if (scopes->currentLandingPads().empty())
-            scopes->currentLandingPads().push_back(0);
+            scopes->currentLandingPads().push_back(nullptr);
 
         auto& landingPad = scopes->currentLandingPads().back();
         if (!landingPad)
@@ -682,6 +682,8 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         postinvoke = llvm::BasicBlock::Create(gIR->context(),
             "postinvoke", gIR->topfunc(), landingPad);
     }
+
+    updateCGFInsertPoint(); // emitLandingPad() may have run the cleanups and call C++ dtors, hence changing the insert point
 
     auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
     RV = CGF()->EmitCall(FInfo, callable, ReturnValue, Args, FD,
