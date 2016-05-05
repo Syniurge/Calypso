@@ -4748,9 +4748,10 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
         TemplateParameters *tparams;
         size_t iStart;
         Type *result;
+        Type *startType; // CALYPSO
 
-        ReliesOnTident(TemplateParameters *tparams, size_t iStart)
-            : tparams(tparams), iStart(iStart)
+        ReliesOnTident(TemplateParameters *tparams, size_t iStart, Type *startType = NULL)
+            : tparams(tparams), iStart(iStart), startType(startType)
         {
             result = NULL;
         }
@@ -4790,7 +4791,18 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
                 t->next->accept(this);
         }
 
-        void visitIdentifier(Type *t, Identifier *id)
+        bool hasParamIdentifier(Identifier *id) // CALYPSO
+        {
+            for (size_t i = iStart; i < tparams->dim; i++)
+            {
+                TemplateParameter *tp = (*tparams)[i];
+                if (tp->ident->equals(id))
+                    return true;
+            }
+            return false;
+        }
+
+        void visitIdentifier(Type *t, Identifier *id) // CALYPSO
         {
             if (!tparams)
             {
@@ -4798,43 +4810,51 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
                 return;
             }
 
-            for (size_t i = iStart; i < tparams->dim; i++)
+            if (hasParamIdentifier(id))
             {
-                TemplateParameter *tp = (*tparams)[i];
-                if (tp->ident->equals(id))
-                {
-                    result = t;
-                    return;
-                }
+                result = t;
+                return;
             }
         }
 
-        void visitTempInst(Type *t, TemplateInstance *ti)
+        void visitTempArgs(Type *t, Objects* tiargs)
         {
-            if (!tparams)
-                return;
-
-            for (size_t i = iStart; i < tparams->dim; i++)
+            for (size_t i = 0; i < tiargs->dim; i++)
             {
-                TemplateParameter *tp = (*tparams)[i];
-                if (ti->name == tp->ident)
-                {
-                    result = t;
-                    return;
-                }
-            }
-            if (!ti->tiargs)
-                return;
-            for (size_t i = 0; i < ti->tiargs->dim; i++)
-            {
-                Type *ta = isType((*ti->tiargs)[i]);
+                RootObject* oarg = (*tiargs)[i];
+                Type *ta = isType(oarg);
+                Expression *ea = isExpression(oarg);
                 if (ta)
                 {
                     ta->accept(this);
                     if (result)
                         return;
                 }
+                else if (ea)
+                {
+                    ReliesOnTident v(tparams, iStart, t);
+                    v.visit(ea);
+                    result = v.result;
+                    if (result)
+                        return;
+                }
             }
+        }
+
+        void visitTempInst(Type *t, TemplateInstance *ti) // CALYPSO
+        {
+            if (!tparams)
+                return;
+
+            if (hasParamIdentifier(ti->name))
+            {
+                result = t;
+                return;
+            }
+
+            if (!ti->tiargs)
+                return;
+            visitTempArgs(t, ti->tiargs);
         }
 
         void visitIdents(TypeQualified *t)
@@ -4885,6 +4905,44 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
                     if (result)
                         return;
                 }
+            }
+        }
+
+        void visit(IdentifierExp* e)
+        {
+            if (!tparams || hasParamIdentifier(e->ident))
+                result = startType;
+        }
+
+        void visit(DotIdExp* e)
+        {
+            if (!tparams || hasParamIdentifier(e->ident))
+                result = startType;
+            visit(e->e1);
+        }
+
+        void visit(DotTemplateInstanceExp* e)
+        {
+            visit(e->e1);
+            if (!tparams || result)
+                return;
+            
+            if (hasParamIdentifier(e->ti->name))
+                result = startType;
+            if (result || !e->ti->tiargs)
+                return;
+            visitTempArgs(startType, e->ti->tiargs);
+        }
+
+        void visit(Expression* e)
+        {
+            switch(e->op)
+            {
+                case TOKidentifier: visit((IdentifierExp*)e); break;
+                case TOKdot: visit((DotIdExp*)e); break;
+                case TOKdotti: visit((DotTemplateInstanceExp*)e); break;
+                default:
+                    break;
             }
         }
     };
