@@ -5322,18 +5322,18 @@ MATCH TemplateAliasParameter::matchArg(Scope *sc, RootObject *oarg,
             if (!talias)
                 goto Lnomatch;
 
-            TemplateInstance *ti = sx->isTemplateInstance();
-            if (!ti && sx->parent)
-            {
-                ti = sx->parent->isTemplateInstance();
-                if (ti && ti->name != sx->ident)
-                    goto Lnomatch;
-            }
-            if (!ti)
-                goto Lnomatch;
-
-            Type *t = new TypeInstance(Loc(), ti);
-            MATCH m2 = deduceType(t, sc, talias, parameters, dedtypes);
+//             TemplateInstance *ti = sx->isTemplateInstance();
+//             if (!ti && sx->parent)
+//             {
+//                 ti = sx->parent->isTemplateInstance();
+//                 if (ti && ti->name != sx->ident)
+//                     goto Lnomatch;
+//             }
+//             if (!ti)
+//                 goto Lnomatch;
+//
+//             Type *t = new TypeInstance(Loc(), ti);
+            MATCH m2 = deduceType(ta, sc, talias, parameters, dedtypes);
             if (m2 <= MATCHnomatch)
                 goto Lnomatch;
         }
