@@ -1733,7 +1733,7 @@ Lretry:
                 }
             }
 
-            if (m > MATCHnomatch && (fparam->storageClass & (STCref | STCauto)) == STCref)
+            if (m > MATCHnomatch && (fparam->storageClass & (STCref | STCauto | STCscope)) == STCref) // CALYPSO
             {
                 if (!farg->isLvalue())
                 {
