@@ -213,13 +213,26 @@ void LangPlugin::updateCGFInsertPoint()
 
 struct ResolvedFunc
 {
-    llvm::Function *Func;
-    llvm::FunctionType *Ty;
+    llvm::Function *Func = nullptr;
+    llvm::FunctionType *Ty = nullptr;
+
+    static bool isIncompleteTagType(const clang::QualType T)
+    {
+        return T->isIncompleteType() && !T->isBuiltinType();
+    }
 
     static ResolvedFunc get(clangCG::CodeGenModule &CGM, const clang::FunctionDecl *FD)
     {
         ResolvedFunc result;
         const clangCG::CGFunctionInfo *FInfo;
+
+        // If there's an incomplete type, don't declare it
+        if (isIncompleteTagType(FD->getReturnType()))
+            return result;
+
+        for (auto& Param: FD->params())
+            if (isIncompleteTagType(Param->getType()))
+                return result;
 
         auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
 
