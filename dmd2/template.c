@@ -3606,6 +3606,12 @@ MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *par
                         // The template parameter was not from this template
                         // (it may be from a parent template, for example)
                     }
+                    else if (e2->op == TOKidentifier) // CALYPSO NOTE: and we're not handling more complex cases DotIdExp, DotTemplateInstanceExp etc....
+                    {
+                        j = templateIdentifierLookup(((IdentifierExp *)e2)->ident, parameters);
+                        if (j != IDX_NOTFOUND)
+                            goto L1;
+                    }
 
                     e2 = e2->semantic(sc);      // Bugzilla 13417
                     e2 = e2->ctfeInterpret();
