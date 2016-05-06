@@ -39,7 +39,7 @@ public:
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance( cpp::TemplateInstance* ti );
 
-    clang::Decl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti );
+    clang::NamedDecl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti );
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
@@ -53,7 +53,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     bool isForeignInst = false;
-    clang::Decl *Inst = nullptr;
+    clang::NamedDecl *Inst = nullptr;
     Objects* primTiargs = nullptr;
 
     TemplateInstance(Loc loc, Identifier *temp_id);

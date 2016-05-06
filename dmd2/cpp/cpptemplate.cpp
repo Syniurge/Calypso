@@ -524,7 +524,7 @@ void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
     ti->correctTiargs();
 }
 
-clang::Decl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::TemplateInstance* ti)
+clang::NamedDecl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::TemplateInstance* ti)
 {
     if (isCPP(ti))
         if (auto existingInst = static_cast<TemplateInstance*>(ti)->Inst)
