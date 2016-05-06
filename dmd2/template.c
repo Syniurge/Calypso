@@ -4922,20 +4922,13 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
 
         void visit(DotIdExp* e)
         {
-            if (!tparams || hasParamIdentifier(e->ident))
-                result = startType;
             visit(e->e1);
         }
 
         void visit(DotTemplateInstanceExp* e)
         {
             visit(e->e1);
-            if (!tparams || result)
-                return;
-            
-            if (hasParamIdentifier(e->ti->name))
-                result = startType;
-            if (result || !e->ti->tiargs)
+            if (!tparams || !e->ti->tiargs || result)
                 return;
             visitTempArgs(startType, e->ti->tiargs);
         }
