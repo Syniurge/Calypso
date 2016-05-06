@@ -5389,8 +5389,9 @@ MATCH TemplateAliasParameter::matchArg(Scope *sc, RootObject *oarg,
             if (!ti)
                 goto Lnomatch;
 
-            Type *t = new TypeInstance(Loc(), ti);
-            MATCH m2 = deduceType(t, sc, talias, parameters, dedtypes);
+//             Type *t = new TypeInstance(Loc(), ti);
+            assert(ta);
+            MATCH m2 = deduceType(ta, sc, talias, parameters, dedtypes); // CALYPSO
             if (m2 <= MATCHnomatch)
                 goto Lnomatch;
         }
