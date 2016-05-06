@@ -369,7 +369,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
                         Temp->getTemplateParameters());
 
         SpecValue spec(tymap);
-        getIdentifier(TempOrSpec, &spec);
+        getIdentifier(Inst, &spec, true);
         if (spec)
             tdtypes->shift(spec.toTemplateArg(loc));
 

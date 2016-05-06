@@ -257,10 +257,14 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
 }
 
 static Identifier *getConversionIdentifier(const clang::CXXConversionDecl *D,
-                TypeMapper &mapper, Type *&t, clang::QualType T = clang::QualType())
+                TypeMapper &mapper, Type *&t, clang::QualType T = clang::QualType(),
+                bool wantCanonicalType = false)
 {
     if (D)
         T = D->getConversionType();
+
+    if (wantCanonicalType)
+        T = T.getCanonicalType();
 
     t = mapper.fromType(T, Loc());
     return Id::cast;
@@ -297,7 +301,7 @@ Identifier *fromDeclarationName(const clang::DeclarationName N,
     llvm_unreachable("Unhandled DeclarationName");
 }
 
-Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec)
+Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool useCanonicalType)
 {
     if (auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D))
         D = FTD->getTemplatedDecl(); // same ident, can dyn_cast
@@ -309,7 +313,8 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec)
     else if (auto Conv = dyn_cast<clang::CXXConversionDecl>(D))
     {
         assert(spec);
-        return getConversionIdentifier(Conv, spec->mapper, spec->t);
+        return getConversionIdentifier(Conv, spec->mapper, spec->t,
+                                       clang::QualType(), useCanonicalType);
     }
     else if (auto FD = dyn_cast<clang::FunctionDecl>(D))
         if (FD->isOverloadedOperator())
@@ -351,9 +356,9 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec)
     return ident;
 }
 
-Identifier *getIdentifier(const clang::NamedDecl *D, SpecValue *spec)
+Identifier *getIdentifier(const clang::NamedDecl *D, SpecValue *spec, bool useCanonicalType)
 {
-    auto result = getIdentifierOrNull(D, spec);
+    auto result = getIdentifierOrNull(D, spec, useCanonicalType);
     assert(result);
 
     return result;

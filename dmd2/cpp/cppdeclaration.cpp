@@ -329,7 +329,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
         assert(tiargs);
         SpecValue spec(mapper);
-        getIdentifier(Func, &spec);
+        getIdentifier(Func, &spec, true);
         if (spec)
             tiargs->shift(spec.toTemplateArg(loc));
         auto tempinst = new cpp::TemplateInstance(loc, td, tiargs);
