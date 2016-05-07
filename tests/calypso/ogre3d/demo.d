@@ -300,7 +300,7 @@ protected:
         }
     }
 
-    extern(C++) override bool frameRenderingQueued(ref const(FrameEvent) evt)
+    extern(C++) override bool frameRenderingQueued(scope ref const(FrameEvent) evt)
     {
         // Move the lights along their paths
         mGreenLightAnimState.addTime(evt.timeSinceLastFrame);
