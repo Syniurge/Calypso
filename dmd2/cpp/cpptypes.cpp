@@ -952,8 +952,10 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
 //         }
     }
 
+    auto DK = GetImplicitImportKeyForDecl(D);
     auto ModDC = GetNonNestedContext(D);
-    if (mod && ModDC->getCanonicalDecl() == mod->rootKey.first)
+
+    if (mod && DK == mod->rootKey)
     {
         if (isa<clang::TagDecl>(ModDC))
             return ModDC;
