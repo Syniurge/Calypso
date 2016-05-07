@@ -1485,8 +1485,7 @@ static void mapClangModule(DeclMapper &mapper,
 
                 auto Loc = clang::SourceLocation::getFromRawEncoding(SLoc.getOffset());
                 auto FID = SrcMgr.getFileID(Loc); // NOTE: getting a FileID without a SourceLocation is impossible, it's locked tight
-                auto SID = SrcMgr.getLocForStartOfFile(FID).getRawEncoding();
-                AST->findFileRegionDecls(FID, 0, (1U << 31) - 1 - SID, RegionDecls); // passed Length is the maximum value before offset overflow kicks in
+                AST->findFileRegionDecls(FID, 0, SrcMgr.getFileIDSize(FID), RegionDecls); // passed Length is the maximum value before offset overflow kicks in
             }
         }
     };
