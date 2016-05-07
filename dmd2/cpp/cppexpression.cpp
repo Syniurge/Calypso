@@ -227,13 +227,23 @@ static const clang::Expr* skipIgnoredCast(const clang::CastExpr *E)
 
     auto CastDestTy = E->getType();
 
-    if (Kind == clang::CK_NoOp || Kind == clang::CK_ConstructorConversion ||
-            Kind == clang::CK_LValueToRValue)
-        skipCast = true;
-
-    if (Kind == clang::CK_Dependent &&
-            SubExpr->getType().getCanonicalType() == CastDestTy.getCanonicalType())
-        skipCast = true;
+    switch(Kind)
+    {
+        case clang::CK_NullToPointer:
+            skipCast = false;
+            break;
+        case clang::CK_NoOp:
+        case clang::CK_ConstructorConversion:
+        case clang::CK_LValueToRValue:
+            skipCast = true;
+            break;
+        case clang::CK_Dependent:
+            if (SubExpr->getType().getCanonicalType() == CastDestTy.getCanonicalType())
+                skipCast = true;
+            break;
+        default:
+            break;
+    }
 
     return skipCast ? SubExpr : E;
 }
@@ -245,8 +255,17 @@ static const clang::Expr* skipIgnored(const clang::Expr *E)
     if (auto CastExpr = dyn_cast<clang::CastExpr>(E))
         SubExpr = skipIgnoredCast(CastExpr);
     else if (auto ConstructExpr = dyn_cast<clang::CXXConstructExpr>(E))
-        if (ConstructExpr->isElidable())
-            SubExpr = ConstructExpr->getArg(0);
+    {
+        if (ConstructExpr->getNumArgs())
+        {
+            auto Ctor = ConstructExpr->getConstructor();
+            auto Arg0 = ConstructExpr->getArg(0);
+
+            if (ConstructExpr->isElidable() ||
+                    (Ctor->isCopyConstructor() && Ctor->isTrivial() && isa<clang::MaterializeTemporaryExpr>(Arg0)))
+                SubExpr = Arg0;
+        }
+    }
 
     return (SubExpr != E) ? skipIgnored(SubExpr) : E;
 }
@@ -274,6 +293,7 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
 Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  // TODO implement interpret properly
 {
     auto loc = fromLoc(E->getLocStart());
+    E = skipIgnored(E);
 
     Expression *e = nullptr;
     Type *t = nullptr;
