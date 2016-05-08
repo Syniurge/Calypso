@@ -666,7 +666,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 //                                 L.getAlignment());
 //             Args.add(clangCG::RValue::getAggregate(tmp), type);
             Args.add(clangCG::RValue::getAggregate(argval->getRVal()),
-                     ArgTy, /*NeedsCopy*/true);
+                     ArgTy, /*NeedsCopy*/ false);
         }
         else
             Args.add(clangCG::RValue::get(argval->getRVal()), ArgTy);
