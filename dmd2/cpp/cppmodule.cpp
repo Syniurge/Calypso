@@ -1271,6 +1271,20 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
     return oneSymbol(e);
 }
 
+Dsymbol* DeclMapper::VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E)
+{
+    Loc loc;
+    auto ident = fromIdentifier(II);
+
+    ExprMapper expmap(*this);
+    auto e = expmap.fromExpression(E);
+    auto ie = new ExpInitializer(loc, e);
+
+    auto v = new ::VarDeclaration(loc, nullptr, ident, ie);
+    v->storage_class = STCmanifest;
+    return v;
+}
+
 /*****/
 
 std::string moduleName(Identifiers *packages, Identifier *ident)
@@ -1478,7 +1492,7 @@ static void mapClangModule(DeclMapper &mapper,
     auto findRegionDecls = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
         if (SLoc.isFile() && SLoc.getFile().getContentCache())
         {
-            for (auto Header: M->Headers[clang::Module::HK_Normal])
+            for (auto& Header: M->Headers[clang::Module::HK_Normal])
             {
                 if (SLoc.getFile().getContentCache()->OrigEntry != Header.Entry)
                     continue;
@@ -1558,9 +1572,23 @@ static void mapClangModule(DeclMapper &mapper,
         for (auto R: RootDecls)
             mapNamespace(mapper, cast<clang::DeclContext>(R), members, true);
     else
+    {
+        // Map the macros contained in the module headers (currently limited to numerical constants)
+        for (auto& Header: M->Headers[clang::Module::HK_Normal])
+        {
+            auto MacroMapEntry = calypso.MacroMap[&Header];
+            if (!MacroMapEntry)
+                continue;
+
+            for (auto& P: *MacroMapEntry)
+                if (auto s = mapper.VisitMacro(P.first, P.second))
+                    members->push(s);
+        }
+
         for (auto D: RegionDecls)
             if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
                 Map(D);
+    }
 }
 
 Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)

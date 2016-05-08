@@ -165,6 +165,8 @@ public:
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                                                     const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
+    Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
+
     enum
     {
         ForcePolymorphic = 1 << 0, // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false

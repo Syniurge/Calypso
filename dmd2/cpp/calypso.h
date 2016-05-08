@@ -31,6 +31,7 @@ class IdentifierInfo;
 class CodeGenFunction;
 class Sema;
 class ASTUnit;
+class MacroInfo;
 }
 
 namespace cpp
@@ -215,6 +216,9 @@ public:
     PCH pch;
     llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
 
+    typedef std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMapEntryTy;
+    llvm::DenseMap<const clang::Module::Header*, MacroMapEntryTy*> MacroMap;
+
     BuiltinTypes &builtinTypes;
     DeclReferencer &declReferencer;
 
@@ -239,6 +243,8 @@ public:
 
     LangPlugin();
     void init(const char *Argv0);
+
+    void buildMacroMap();
 
     ASTUnit *getASTUnit() { return pch.AST; }
     clang::ASTContext &getASTContext();

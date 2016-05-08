@@ -33,6 +33,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
 #include "llvm/ADT/StringExtras.h"
@@ -880,8 +881,63 @@ void PCH::update()
     // Build the builtin type map
     calypso.builtinTypes.build(AST->getASTContext());
 
+    // Since macros aren't sorted by file (unlike decls) we build a map of macros in order to only go through every macro once
+    calypso.buildMacroMap();
+
     // Initialize the mangling context
     MangleCtx = AST->getASTContext().createMangleContext();
+}
+
+void LangPlugin::buildMacroMap()
+{
+    auto& MMap = pch.MMap;
+    auto& PP = getPreprocessor();
+    auto& Sema = getSema();
+    auto& SM = getSourceManager();
+
+    for (auto I = PP.macro_begin(), E = PP.macro_end(); I != E; I++)
+    {
+        auto II = (*I).getFirst();
+        if (!II->hasMacroDefinition())
+            continue;
+
+        auto MDir = (*I).getSecond();
+        auto MInfo = MDir->getMacroInfo();
+
+        if (!MInfo->isObjectLike() || MInfo->getNumTokens() != 1)
+            continue;
+
+        auto& Tok = MInfo->getReplacementToken(0);
+        if (Tok.getKind() != clang::tok::numeric_constant)
+            continue;
+
+        // Find the corresponding module header this macro is from
+        auto MLoc = MDir->getLocation();
+        auto MFileID = SM.getFileID(MLoc);
+        auto MFileEntry = SM.getFileEntryForID(MFileID);
+
+        const clang::Module::Header *FoundHeader = nullptr;
+        for (auto ModI = MMap->module_begin(), ModE = MMap->module_end(); ModI != ModE; ModI++) {
+            for (auto& Header: ModI->getValue()->Headers[clang::Module::HK_Normal])
+                if (MFileEntry == Header.Entry) {
+                    FoundHeader = &Header; break;
+                }
+            if (FoundHeader) break;
+        }
+
+        if (!FoundHeader)
+            continue;
+
+        auto& MacroMapEntry = MacroMap[FoundHeader];
+        if (!MacroMapEntry)
+            MacroMapEntry = new MacroMapEntryTy;
+
+        auto ResultExpr = Sema.ActOnNumericConstant(Tok);
+        assert(!ResultExpr.isInvalid());
+        auto Expr = ResultExpr.get();
+
+        MacroMapEntry->emplace_back(II, Expr);
+    }
 }
 
 void PCH::save()
