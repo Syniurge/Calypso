@@ -399,6 +399,32 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     return m;
 }
 
+// In some cases DMD's leastAsSpecialized isn't enough, for ex. to disambiguate "this(_Tp)(vector!(vector!_Tp))" over "this(_Tp)(vector!_Tp)"
+// (and in that particular case, we can't even supply explicit template arguments to the ctor..)
+// Fortunately Sema has a method helping refine DMD's result
+MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* td2, Expressions* fargs)
+{
+    auto Prim = getPrimaryTemplate();
+
+    auto m = ::TemplateDeclaration::leastAsSpecialized(sc, td2, fargs);
+    if (m == MATCHnomatch || !isCPP(td2) || !isa<clang::FunctionTemplateDecl>(Prim))
+        return m;
+
+    auto& Sema = calypso.getSema();
+
+    auto c_td2 = static_cast<cpp::TemplateDeclaration*>(td2);
+    auto FuncTemp1 = cast<clang::FunctionTemplateDecl>(Prim);
+    auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(c_td2->getPrimaryTemplate());
+
+    auto Better = Sema.getMoreSpecializedTemplate(FuncTemp1, FuncTemp2, clang::SourceLocation(),
+                                isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
+                                fargs->dim, fargs->dim);
+    if (Better == FuncTemp2)
+        m = MATCHnomatch;
+
+    return m;
+}
+
 bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
 {
     return isCPP(ti) && static_cast<TemplateInstance*>(ti)->isForeignInst;

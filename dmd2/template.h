@@ -102,7 +102,7 @@ public:
     virtual void prepareBestMatch(TemplateInstance* ti, Scope* sc, Expressions* fargs); // CALYPSO
 
     virtual MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag); // CALYPSO
-    MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs);
+    virtual MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs); // CALYPSO
 
     MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs);
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);
