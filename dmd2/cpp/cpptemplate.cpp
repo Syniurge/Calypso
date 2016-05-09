@@ -309,7 +309,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
 
     auto m = ::TemplateDeclaration::matchWithInstance(sc, ti, dedtypes, fargs, flag);
 
-    if (m == MATCHnomatch)
+    if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
     // Although the match result is ok, the types deducted by DMD may have been stripped of C++-specific info and end up wrong.
