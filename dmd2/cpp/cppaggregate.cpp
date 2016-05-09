@@ -117,6 +117,13 @@ void StructDeclaration::buildLayout()
     buildAggLayout(this);
 }
 
+void StructDeclaration::finalizeSize(Scope* sc)
+{
+    ::StructDeclaration::finalizeSize(sc);
+    if (defaultCtor)
+        zeroInit = 0;
+}
+
 void ClassDeclaration::semantic(Scope *sc)
 {
     if (semanticRun >= PASSsemanticdone)

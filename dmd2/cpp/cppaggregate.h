@@ -38,6 +38,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     void buildLayout() override;
+    void finalizeSize(Scope *sc) override;
     Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;

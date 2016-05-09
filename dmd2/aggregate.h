@@ -192,7 +192,7 @@ public:
     void semanticTypeInfoMembers();
     Dsymbol *search(Loc, Identifier *ident, int flags = IgnoreNone);
     const char *kind();
-    void finalizeSize(Scope *sc);
+    virtual void finalizeSize(Scope *sc); // CALYPSO
     bool fit(Loc loc, Scope *sc, Expressions *elements, Type *stype);
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     bool isPOD();
