@@ -352,20 +352,13 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 
 ::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)
 {
-    auto& S = calypso.getSema();
-    auto RD = getRecordDecl(sd);
+    if (auto f = hasIdentityOpAssign(sd, sc))
+    {
+        sd->hasIdentityAssign = true;
+        return f;
+    }
 
-    if (sd->isUnionDeclaration() || !RD->getDefinition())
-        return nullptr;
-
-    auto CRD = const_cast<clang::CXXRecordDecl*>(
-                cast<clang::CXXRecordDecl>(RD));
-    auto MD = S.LookupCopyingAssignment(CRD, clang::Qualifiers::Const, false, 0);
-
-    if (!MD || MD->isDeleted() || !isMapped(MD))
-        return nullptr;
-
-    return findMethod(sd, MD);
+    return nullptr; // do not build an opAssign if none was mapped
 }
 
 template <typename AggTy>
