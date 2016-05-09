@@ -15,6 +15,17 @@
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 
+struct RefParamPartialOrderingComparison;
+namespace clang {
+    bool isAtLeastAsSpecializedAs(Sema &S,
+                                     SourceLocation Loc,
+                                     FunctionTemplateDecl *FT1,
+                                     FunctionTemplateDecl *FT2,
+                                     TemplatePartialOrderingContext TPOC,
+                                     unsigned NumCallArguments1,
+                llvm::SmallVectorImpl<RefParamPartialOrderingComparison> *RefParamComparisons);
+}
+
 namespace cpp
 {
 
@@ -416,10 +427,10 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     auto FuncTemp1 = cast<clang::FunctionTemplateDecl>(Prim);
     auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(c_td2->getPrimaryTemplate());
 
-    auto Better = Sema.getMoreSpecializedTemplate(FuncTemp1, FuncTemp2, clang::SourceLocation(),
+    auto Better1 = clang::isAtLeastAsSpecializedAs(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
                                 isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
-                                fargs->dim, fargs->dim);
-    if (Better == FuncTemp2)
+                                fargs->dim, nullptr);
+    if (!Better1)
         m = MATCHnomatch;
 
     return m;
