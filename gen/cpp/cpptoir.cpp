@@ -471,8 +471,9 @@ void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
 
 bool LangPlugin::toIsReturnInArg(CallExp* ce)
 {
-    auto fd = static_cast<cpp::FuncDeclaration*>(ce->f);
-    auto FD = fd->FD;
+    auto FD = getFD(ce->f);
+    if (isa<clang::CXXConstructorDecl>(FD) || isa<clang::CXXDestructorDecl>(FD))
+        return false;
 
     auto& fnInfo = CGM->getTypes().arrangeFunctionDeclaration(FD);
     auto& RetAI = fnInfo.getReturnInfo();
