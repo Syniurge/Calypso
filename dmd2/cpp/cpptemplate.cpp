@@ -335,6 +335,17 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         return m;
     }
 
+    int minNumExplicitArgs = 0;
+    for (auto param: *parameters)
+    {
+        minNumExplicitArgs++;
+        if (param->hasDefaultArg())
+            break;
+    }
+    auto tdtypes = TemplateInstance::arraySyntaxCopy(ti->tiargs);
+    for (int i = (int)ti->tiargs->dim; i < minNumExplicitArgs; i++)
+        tdtypes->push(objectSyntaxCopy((*dedtypes)[i])); // template arguments deducted from fargs or from the opCast type need to be pushed, and yes that means relying on DMD's template deduction..
+
     auto& S = calypso.getSema();
     auto Temp = getPrimaryTemplate();
 
@@ -349,7 +360,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         // This may be a temporary limitation of Clang.
 
         clang::TemplateArgumentListInfo ExplicitArgs;
-        fillTemplateArgumentListInfo(ti->loc, sc, ExplicitArgs, ti->tiargs, Temp, tymap, expmap);
+        fillTemplateArgumentListInfo(ti->loc, sc, ExplicitArgs, tdtypes, Temp, tymap, expmap);
 
         auto fillDedtypes = [&] (llvm::ArrayRef<clang::TemplateArgument> Deduced)
         {
@@ -374,9 +385,12 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     }
     else
     {
-        auto Inst = getClangTemplateInst(sc, ti);
+        auto Inst = getClangTemplateInst(sc, ti, tdtypes);
         auto InstArgs = (isForeignInstance(ti) ? getTemplateInstantiationArgs(Inst) : getTemplateArgs(Inst))->asArray();
-        auto tdtypes = TypeMapper::FromType(tymap, loc).fromTemplateArguments(InstArgs.begin(), InstArgs.end(),
+
+        if (tdtypes)
+            delete tdtypes;
+        tdtypes = TypeMapper::FromType(tymap, loc).fromTemplateArguments(InstArgs.begin(), InstArgs.end(),
                         Temp->getTemplateParameters());
 
         SpecValue spec(tymap);
@@ -485,12 +499,15 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 
     cpp::TemplateInstance* ti;
     if (isCPP(tithis))
-        ti = static_cast<cpp::TemplateInstance *>(
-            tithis->syntaxCopy(nullptr));
+        ti = static_cast<cpp::TemplateInstance *>(tithis);
     else
     {
         ti = new cpp::TemplateInstance(tithis->loc, tithis->name);
         tithis->syntaxCopy(ti);
+
+        ti->tdtypes.setDim(tithis->tdtypes.dim);
+        for (size_t i = 0; i < tithis->tdtypes.dim; i++)
+            ti->tdtypes[i] = objectSyntaxCopy(tithis->tdtypes[i]);
     }
 
     if (ti->Inst)
@@ -527,6 +544,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
                     TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg, *Param));
             assert(e);
             tiargs[i] = e->semantic(globalScope(sc->instantiatingModule()));
+            ti->tdtypes[i] = objectSyntaxCopy(tiargs[i]);
         }
     }
 
@@ -561,7 +579,7 @@ void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
     ti->correctTiargs();
 }
 
-clang::NamedDecl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::TemplateInstance* ti)
+clang::NamedDecl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes)
 {
     if (isCPP(ti))
         if (auto existingInst = static_cast<TemplateInstance*>(ti)->Inst)
@@ -577,8 +595,11 @@ clang::NamedDecl* TemplateDeclaration::getClangTemplateInst(Scope* sc, ::Templat
 
     auto Temp = getPrimaryTemplate();
 
+    if (!tdtypes)
+        tdtypes = &ti->tdtypes;
+
     clang::TemplateArgumentListInfo Args;
-    fillTemplateArgumentListInfo(loc, sc, Args, ti->tiargs, Temp, tymap, expmap);
+    fillTemplateArgumentListInfo(loc, sc, Args, tdtypes, Temp, tymap, expmap);
 
     clang::TemplateName Name(Temp);
 

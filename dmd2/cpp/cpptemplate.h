@@ -40,7 +40,7 @@ public:
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance( cpp::TemplateInstance* ti );
 
-    clang::NamedDecl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti );
+    clang::NamedDecl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
