@@ -6141,7 +6141,13 @@ Lerror:
     inst = tempdecl->findExistingInstance(this, fargs);
     TemplateInstance *errinst = NULL;
     if (!inst)
-        inst = tempdecl->foreignInstance(this, sc);  // CALYPSO
+    {
+        TemplateInstance* foreignInst = tempdecl->foreignInstance(this, sc);  // CALYPSO
+        if (!inst) // an existing instance may have been found during foreignInstance if tempdecl is a partial specialization
+            inst = foreignInst;
+        if (inst == this)
+            return; // nothing else to do, foreignInstance already called semantic
+    }
 
     if (!inst)
     {
