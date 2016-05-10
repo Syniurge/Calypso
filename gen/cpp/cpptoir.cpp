@@ -862,12 +862,10 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
     if (ce->f && !ce->f->isCtorDeclaration())
         return false; // is this enough? are we sure that A a = B(); where A and B are value types will never happen?
 
-    DValue* fnval = toElem(ce->e1);
-    auto dfnval = fnval->isFunc();
-    assert(dfnval && isCPP(dfnval->func));
+    DtoResolveFunction(ce->f);
+    auto fnval = new DFuncValue(ce->f, getIrFunc(ce->f)->func, value);
 
-    dfnval->vthis = value;
-    DtoCallFunction(ce->loc, ce->type, dfnval, ce->arguments);
+    DtoCallFunction(ce->loc, ce->type, fnval, ce->arguments);
     return true;
 }
 
