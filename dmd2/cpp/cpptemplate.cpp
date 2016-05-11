@@ -564,6 +564,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     makeForeignInstance(ti);
 
     ti->semanticRun = PASSinit; // WARNING: may disrupt something?
+    ti->hash = 0;
     ti->semantic(sc);
     return ti;
 }
