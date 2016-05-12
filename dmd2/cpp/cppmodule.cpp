@@ -67,7 +67,7 @@ static void combine(char *&objfn, Identifier *id)
     auto idlen = id->len;
     objfn = (char *)mem.xmalloc(objlen + 1 + idlen + 1);
     memcpy(objfn, prevobjfn, objlen);
-    objfn[objlen] = '_';
+    objfn[objlen] = '-';
     objlen++;
     memcpy(objfn + objlen, id->string, idlen + 1);
 
