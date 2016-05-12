@@ -317,19 +317,20 @@ Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
 Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int)
 {
-    if (!ad->isClassDeclaration()) // FIXME handle 2nd, 3rd etc. struct base, or revert the inherit from struct commit
-        return nullptr;
-
-    auto cd = static_cast<cpp::ClassDeclaration*>(ad);
-
     Type *t = e1->type->toBasetype();
-    if (ad->getType()->constConv(t) > MATCHnomatch)
+    AggregateDeclaration* tad;
+    if (t->ty == Tpointer)
+        tad = getAggregateSym(t->nextOf());
+    else
+        tad = getAggregateSym(t);
+
+    if (ad == tad)
         return e1;
 
     ::ClassDeclaration *tcd = t->isClassHandle();
-    assert(tcd && cd->isBaseOf2(tcd));
+    assert(tcd && ad->isBaseOf2(tcd));
 
-    e1 = new CastExp(loc, e1, ad->getType());
+    e1 = new CastExp(loc, e1, ad->getType()); // NOTE: not strictly necessary if first base
     e1 = e1->semantic(sc);
 
     return e1;
