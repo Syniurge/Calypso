@@ -1346,6 +1346,28 @@ import (C++) QtPrivate.FunctionPointer,
         QtPrivate.QSlotObject,
         QtPrivate.List_Left;
 
+// Adapted from: https://wiki.dlang.org/Memory_Management#Explicit_Class_Instance_Allocation
+T* cppHeapAllocate(T, Args...) (Args args)
+{
+    import core.stdc.stdlib : malloc;
+    import core.memory : GC;
+
+    // get class size of class instance in bytes
+    auto size = __traits(classInstanceSize, T);
+
+    // allocate memory for the object
+    auto memory = malloc(size)[0..size];
+    if(!memory) {
+        import core.exception : onOutOfMemoryError;
+        onOutOfMemoryError();
+    }
+
+    // call T's constructor and emplace instance on newly allocated memory
+    auto result = cast(T*) memory.ptr;
+    result.__ctor(args);
+    return result;
+}
+
 // Using QObject.connect directly probably isn't what you want as D's template argument deduction can't handle Func(T)(SomeTemplate!T arg1, T arg2)
 // This wrapper also handles C++ <-> DCXX connections (which are slightly tricky since T1 might be a pointer while T2 might be class for example).
 QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 receiver,
@@ -1398,10 +1420,12 @@ QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 
     auto _signal = MFP!(_T1, signal);
     auto _slot = MFP!(_T2, slot);
 
+    auto _slotBase = cast(QSlotObjectBase*) cppHeapAllocate!(QSlotObject!(Func2, List_Left!(SignalType.Arguments, SlotType.ArgumentCount).Value,
+                                        SignalType.ReturnType))(_slot); // HACK to prevent the GC from freeing the QSlotObject at the next collect
+
     return QObject.connectImpl(sender, cast(void**) &_signal,
                         receiver, cast(void**) &_slot,
-                        cast(QSlotObjectBase*) new QSlotObject!(Func2, List_Left!(SignalType.Arguments, SlotType.ArgumentCount).Value,
-                                        SignalType.ReturnType)(_slot),
+                        _slotBase,
                         type, types, &_T1.staticMetaObject);
 
     // NOTE: QObject.connect can't be called directly because it will look for the staticMetaObject in the most
