@@ -2108,13 +2108,14 @@ Expression *VarDeclaration::callScopeDtor(Scope *sc)
 
     // Destructors for structs and arrays of structs
     Type *tv = type->baseElemOf();
-    if (tv->ty == Tstruct)
+    if (tv->ty == Tstruct || isClassValue(tv)) // CALYPSO
     {
-        StructDeclaration *sd = ((TypeStruct *)tv)->sym;
-        if (!sd->dtor || !type->size())
+        AggregateDeclaration *ad = getAggregateSym(tv);
+        if (!ad->dtor || !type->size())
             return NULL;
 
-        if (type->toBasetype()->ty == Tstruct)
+        Type *tb = type->toBasetype();
+        if (tb->ty == Tstruct || isClassValue(tb)) // CALYPSO
         {
             // v.__xdtor()
             e = new VarExp(loc, this);
@@ -2125,7 +2126,7 @@ Expression *VarDeclaration::callScopeDtor(Scope *sc)
              */
             e->type = e->type->mutableOf();
 
-            e = new DotVarExp(loc, e, sd->dtor, 0);
+            e = new DotVarExp(loc, e, ad->dtor, 0);
             e = new CallExp(loc, e);
         }
         else
@@ -2133,7 +2134,7 @@ Expression *VarDeclaration::callScopeDtor(Scope *sc)
             // _ArrayDtor(v[0 .. n])
             e = new VarExp(loc, this);
 
-            uinteger_t n = type->size() / sd->type->size();
+            uinteger_t n = type->size() / ad->type->size();
             e = new SliceExp(loc, e, new IntegerExp(loc, 0, Type::tsize_t),
                                      new IntegerExp(loc, n, Type::tsize_t));
             // Prevent redundant bounds check
@@ -2141,7 +2142,7 @@ Expression *VarDeclaration::callScopeDtor(Scope *sc)
             ((SliceExp *)e)->lowerIsLessThanUpper = true;
 
             // This is a hack so we can call destructors on const/immutable objects.
-            e->type = sd->type->arrayOf();
+            e->type = ad->type->arrayOf();
 
             e = new CallExp(loc, new IdentifierExp(loc, Id::_ArrayDtor), e);
         }
