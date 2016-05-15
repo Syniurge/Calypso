@@ -258,6 +258,7 @@ public:
     virtual unsigned alignsize();
     virtual Type *semantic(Loc loc, Scope *sc);
     Type *trySemantic(Loc loc, Scope *sc);
+    virtual bool isMergeable() { return true; } // CALYPSO
     virtual Type *merge(); // CALYPSO
     Type *merge2();
     void modToBuffer(OutBuffer *buf);

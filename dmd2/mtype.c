@@ -1707,7 +1707,7 @@ Type *Type::merge()
         }
         else
         {
-            if (!t->langPlugin()) // CALYPSO
+            if (t->isMergeable()) // CALYPSO
                 sv->ptrvalue = (char *)(t = stripDefaultArgs(t));
             deco = t->deco = (char *)sv->toDchars();
             //printf("new value, deco = '%s' %p\n", t->deco, t->deco);

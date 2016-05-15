@@ -51,6 +51,7 @@ public:
     }
 
     bool isTransitive() override { return false; }
+    bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
 };
 
@@ -77,6 +78,7 @@ public:
     }
 
     bool isTransitive() override { return false; }
+    bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
 };
 
