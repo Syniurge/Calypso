@@ -1707,7 +1707,8 @@ Type *Type::merge()
         }
         else
         {
-            sv->ptrvalue = (char *)(t = stripDefaultArgs(t));
+            if (!t->langPlugin()) // CALYPSO
+                sv->ptrvalue = (char *)(t = stripDefaultArgs(t));
             deco = t->deco = (char *)sv->toDchars();
             //printf("new value, deco = '%s' %p\n", t->deco, t->deco);
 
@@ -1739,7 +1740,7 @@ Type *Type::merge2()
         assert(t->deco);
     }
     else
-        assert(0);
+        assert(langPlugin()); // CALYPSO
     return t;
 }
 
@@ -2848,6 +2849,11 @@ unsigned char TypeNext::deduceWild(Type *t, bool isRef)
     return wm;
 }
 
+Type* TypeNext::merge()
+{
+    transitive(); // CALYPSO
+    return Type::merge();
+}
 
 void TypeNext::transitive()
 {
@@ -5121,6 +5127,13 @@ bool TypePointer::isZeroInit(Loc loc)
 bool TypePointer::hasPointers()
 {
     return true;
+}
+
+void TypePointer::transitive() // CALYPSO
+{
+    if (next->ty == Tfunction)
+        return;
+    TypeNext::transitive();
 }
 
 

@@ -246,8 +246,6 @@ public:
             buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind()));
             buf->writeByte('#');
         }
-        else if (t->ty == Tpointer || t->ty == Treference)
-            buf->writeByte('~');
     }
 };
 

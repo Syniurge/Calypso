@@ -258,7 +258,7 @@ public:
     virtual unsigned alignsize();
     virtual Type *semantic(Loc loc, Scope *sc);
     Type *trySemantic(Loc loc, Scope *sc);
-    Type *merge();
+    virtual Type *merge(); // CALYPSO
     Type *merge2();
     void modToBuffer(OutBuffer *buf);
     char *modToChars();
@@ -393,7 +393,8 @@ public:
     Type *makeMutable();
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
-    void transitive();
+    Type *merge();
+    virtual void transitive(); // CALYPSO
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -555,6 +556,7 @@ public:
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc);
     bool hasPointers();
+    void transitive(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -633,6 +635,7 @@ public:
     static TypeFunction *create(Parameters *parameters, Type *treturn, int varargs, LINK linkage, StorageClass stc = 0);
     const char *kind();
     virtual Type *syntaxCopy(Type *o = NULL); // CALYPSO
+    bool isTransitive() { return false; } // CALYPSO
     Type *semantic(Loc loc, Scope *sc);
     void purityLevel();
     bool hasLazyParameters();

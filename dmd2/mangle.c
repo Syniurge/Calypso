@@ -170,6 +170,7 @@ public:
 
     void visit(TypeNext *t)
     {
+        t->transitive();
         visit((Type *)t);
         visitWithMask(t->next, t->mod);
     }
