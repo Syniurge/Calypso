@@ -159,7 +159,12 @@ void BuiltinTypes::build(clang::ASTContext &Context)
     map(Context.LongDoubleTy, Type::tfloat80);
 
         //===- Language-specific types --------------------------------------------===//
-    map(Context.NullPtrTy, Type::tvoidptr);
+    { // nullptr_t needs to be mangled differently from void*
+        auto BTVoid = Context.VoidTy.getTypePtr()->castAs<clang::BuiltinType>();
+        auto tnull = new cpp::TypeBasic(Tvoid, BTVoid);
+        auto tnullptr = tnull->pointerTo();
+        map(Context.NullPtrTy, tnullptr);
+    }
     map(Context.DependentTy, Type::tnull);  // should work?
 
     clang::TargetInfo::IntType wcharTy = targetInfo.getWCharType();
