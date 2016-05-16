@@ -9173,11 +9173,10 @@ Expression *CallExp::addDtorHook(Scope *sc)
     }
 
     Type *tv = type->baseElemOf();
-    if (tv->ty == Tstruct)
+    if (tv->ty == Tstruct || isClassValue(tv)) // CALYPSO
     {
-        TypeStruct *ts = (TypeStruct *)tv;
-        StructDeclaration *sd = ts->sym;
-        if (sd->dtor)
+        AggregateDeclaration *ad = getAggregateSym(tv);
+        if (ad->dtor)
         {
             /* Type needs destruction, so declare a tmp
              * which the back end will recognize and call dtor on
