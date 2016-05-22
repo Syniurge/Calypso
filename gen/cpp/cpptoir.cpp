@@ -64,6 +64,10 @@ void LangPlugin::enterModule(::Module *, llvm::Module *lm)
 
     CGM.reset(new clangCG::CodeGenModule(Context,
                             *Opts, *lm, *gDataLayout, *pch.Diags));
+    if (!RecordDeclTypes.empty())
+        // restore the CodeGenTypes state, to prevent Clang from recreating types that end up different from the ones LDC knows
+        CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache);
+
     type_infoWrappers.clear();
     EmittedStaticVars.clear();
 }
@@ -177,6 +181,7 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
     // HACK Check and remove duplicate module flags such as "Debug Info Version" created by both Clang and LDC
     removeDuplicateModuleFlags(lm);
 
+    CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache); // save the CodeGenTypes state
     CGM.reset();
 
     if (!global.errors && isCPP(m))
