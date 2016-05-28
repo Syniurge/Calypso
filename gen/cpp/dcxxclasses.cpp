@@ -525,7 +525,7 @@ void LangPlugin::toPostNewClass(Loc& loc, TypeClass* tc, DValue* val)
     auto dcxxInfo = DCXXVTableInfo::get(cd);
 
     auto cxxThis = DtoCast(loc, val,
-                           dcxxInfo->mostDerivedCXXBase->type);
+                           dcxxInfo->mostDerivedCXXBase->type->pointerTo());
     DCXXVptrAdjuster adjuster(*CGM, cxxThis->getRVal(), cd);
 
     auto RD = dcxxInfo->mostDerivedCXXBase->RD;

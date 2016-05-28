@@ -723,7 +723,20 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     if (isa<clang::CXXConstructorDecl>(FD))
     {
         assert(RV.isScalar() && RV.getScalarVal() == nullptr);
-        return new DVarValue(resulttype, This); // EmitCall returns a null value for ctors so we need to return this
+        auto calleead = fd->isAggregateMember2();
+        auto thisTy = calleead->getType();
+        if (!calleead->byRef())
+            thisTy = thisTy->pointerTo();  // resulttype isn't always the This type
+
+        // Mature the C++ vptrs set by C++ constructors after a super() call
+        if (resulttype->ty == Tclass)
+        {
+            auto tc = static_cast<TypeClass*>(resulttype);
+            if (calleead->isBaseOf(tc->sym, nullptr))
+                toPostNewClass(loc, tc, new DImValue(thisTy, This));
+        }
+
+        return new DVarValue(calleead->getType(), This); // EmitCall returns a null value for ctors so we need to return this
     }
     else if (tf->isref)
     {

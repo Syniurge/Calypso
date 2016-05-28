@@ -178,6 +178,14 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     DtoResolveNestedContext(loc, tc->sym, mem);
   }
 
+  DValue *result = new DImValue(newexp->type, mem); // CALYPSO
+
+  // CALYPSO NOTE: while LDC sets the vptr inside DtoInitClass, Clang makes the ctor set it before any user-provided code
+  // We should be "maturing" the C++ vptrs right after the super() call, but since D ctors do not require it,
+  // do it here before the ctor call anyway.
+  for (auto lp: global.langPlugins)
+    lp->codegen()->toPostNewClass(loc, tc, result);
+
   // call constructor
   if (newexp->member) {
     // evaluate argprefix
@@ -192,13 +200,6 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     /*return*/ DtoCallFunction(newexp->loc, tc, &dfn, newexp->arguments); // CALYPSO WARNING: was the return really needed?
                                                                                       // The return value is expected to be "this" but Clang doesn't return it
   }
-
-  DValue *result = new DImValue(newexp->type, mem); // CALYPSO
-
-  // CALYPSO NOTE: while LDC set the vptr inside DtoInitClass, Clang makes the ctor sets it
-  // So here, after the ctor call is the most natural place to make the C++ vptrs "mature" to the derived class vptrs
-  for (auto lp: global.langPlugins)
-    lp->codegen()->toPostNewClass(loc, tc, result);
 
   assert(newexp->argprefix == NULL);
 
