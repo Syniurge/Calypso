@@ -397,17 +397,21 @@ llvm::Constant *LangPlugin::createInitializerConstant(IrAggr *irAggr,
 }
 
 // Required by DCXX classes, which may contain exotic fields such as class values.
-void LangPlugin::addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& constants,
+bool LangPlugin::addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& constants,
             const IrAggr::VarInitMap& explicitInitializers, ::AggregateDeclaration* decl,
             unsigned& offset, bool populateInterfacesWithVtbls)
 {
+    if (decl->isStructDeclaration())
+        return false; // let LDC build POD type inits
+
     auto C = buildAggrNullConstant(decl, explicitInitializers);
 
     if (!C)
-        return; // forward decl
+        return true; // forward decl
 
     constants.push_back(C);
     offset += gDataLayout->getTypeStoreSize(C->getType());
+    return true;
 }
 
 LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,

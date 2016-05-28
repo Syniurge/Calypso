@@ -211,11 +211,9 @@ void IrAggr::addFieldInitializers(
     unsigned &offset, bool populateInterfacesWithVtbls) {
 
   if (auto lp = decl->langPlugin()) // CALYPSO
-  {
-    lp->codegen()->addFieldInitializers(constants, explicitInitializers,
-                          decl, offset, populateInterfacesWithVtbls);
-    return;
-  }
+    if (lp->codegen()->addFieldInitializers(constants, explicitInitializers,
+                          decl, offset, populateInterfacesWithVtbls))
+      return;
 
   if (ClassDeclaration *cd = decl->isClassDeclaration()) {
     if (cd->baseClass) {
