@@ -408,9 +408,9 @@ DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
   // call:
   // Object _d_dynamic_cast(Object o, ClassInfo c)
 
-   // CALYPSO temporary checks, dynamic casts aren't supported
-  assert(!getAggregateSym(val->type)->langPlugin());
-  assert(!getAggregateSym(_to)->langPlugin());
+  AggregateDeclaration* adfrom = getAggregateHandle(val->type);
+  if (auto lp = adfrom->langPlugin())
+      val = lp->codegen()->adjustForDynamicCast(loc, val, _to); // CALYPSO
 
   DtoResolveClass(ClassDeclaration::object);
   DtoResolveClass(Type::typeinfoclass);

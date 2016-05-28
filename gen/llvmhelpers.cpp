@@ -459,8 +459,12 @@ DValue *DtoCastPtr(Loc &loc, DValue *val, Type *to) {
     return val; // CALYPSO workaround DMD semi-BUG? [A*]->constConv([const(A)*]) returns MATCHnomatch, is this intended?
                 // It makes implicitCastTo() not avoid the cast, whereas it would have avoided « cast(const(A*)) someAptr »
 
-  if (isClassValueHandle(fromtype) && isClassValueHandle(totype)) // CALYPSO
-    return DtoCastClass(loc, val, to);
+  // CALYPSO
+  AggregateDeclaration* adfrom = getAggregateSym(fromtype->nextOf());
+  AggregateDeclaration* adto = getAggregateHandle(totype);
+
+  if (adfrom && adto && !adfrom->byRef() /*TODO: cast struct adfrom*/&& adfrom->isClassDeclaration())
+    return DtoCastClass(loc, val, to);  // CALYPSO WARNING: this brings C++-style pointer derived <-> base casts to D struct pointers so changes vanilla behavior slightly
 
   if (totype->ty == Tpointer || totype->ty == Tclass) {
     LLValue *src = val->getRVal();

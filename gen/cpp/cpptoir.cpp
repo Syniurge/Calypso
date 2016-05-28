@@ -487,6 +487,32 @@ void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
     DtoMemCpy(dst, initsym, DtoConstSize_t(dataBytes));
 }
 
+DValue *LangPlugin::adjustForDynamicCast(Loc &loc, DValue *val, Type *_to)
+{
+    TypeClass *to = static_cast<TypeClass *>(_to->toBasetype());
+    auto adfrom = getAggregateHandle(val->getType());
+    auto cdto = to->sym;
+    assert(!cdto->langPlugin() && "dynamic casts between C++ classes aren't supported yet");
+
+    // WARNING: this assumes that val is a pointer towards a C++ part of a DCXX class
+    int offset;
+    bool isUpcastable = adfrom->isBaseOf(cdto, &offset);
+    assert(isUpcastable);
+
+    LLValue *v = DtoClassHandle(val);
+    LLType* tolltype = DtoAggregateHandleType(to);
+    LLValue* rval = DtoBitCast(v,
+            llvm::Type::getInt8PtrTy(gIR->context()));
+    if (offset) {
+        auto baseOffset = llvm::ConstantInt::get(
+                    DtoType(Type::tptrdiff_t), -offset);
+        rval = gIR->ir->CreateGEP(rval,
+                                        baseOffset, "sub.ptr");
+    }
+    rval = DtoBitCast(rval, tolltype);
+    return DtoAggregateDValue(to, rval);
+}
+
 bool LangPlugin::toIsReturnInArg(CallExp* ce)
 {
     auto FD = getFD(ce->f);

@@ -9472,6 +9472,15 @@ AggregateDeclaration *getAggregateSym(Type *t)
     return NULL;
 }
 
+AggregateDeclaration *getAggregateHandle(Type *t)
+{
+    AggregateDeclaration* ad = getAggregateSym(
+                    (t->ty == Tpointer) ? t->nextOf() : t);
+    if (ad && (ad->byRef() == (t->ty == Tpointer)))
+        return NULL; // only interested in handles
+    return ad;
+}
+
 TypeClass *isClassValue(Type *t)
 {
     if (t->ty != Tclass) return NULL;
