@@ -1174,12 +1174,12 @@ public:
       // indexing normal struct
       else if (e1type->ty == Tstruct) {
         TypeStruct *ts = static_cast<TypeStruct *>(e1type);
-        arrptr = DtoIndexAggregate(l->getRVal(), ts->sym, vd);
+        arrptr = DtoIndexAggregate(l->getRVal(), ts->sym, vd, l->getType()); // CALYPSO
       }
       // indexing class
       else if (e1type->ty == Tclass) {
         TypeClass *tc = static_cast<TypeClass *>(e1type);
-        arrptr = DtoIndexAggregate(l->getRVal(), tc->sym, vd);
+        arrptr = DtoIndexAggregate(l->getRVal(), tc->sym, vd, l->getType()); // CALYPSO
       } else {
         llvm_unreachable("Unknown DotVarExp type for VarDeclaration.");
       }

@@ -199,7 +199,7 @@ public:
 
     bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 
-    LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
+    LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd, Type *srcType) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
     void toInitClass(TypeClass* tc, LLValue* dst) override;

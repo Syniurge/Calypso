@@ -48,7 +48,7 @@ public:
 
     virtual bool toConstructVar(VarDeclaration *vd, llvm::Value *value, Expression *rhs) = 0;
 
-    virtual LLValue* toIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaration* vd) = 0;
+    virtual LLValue* toIndexAggregate(LLValue* src, AggregateDeclaration* ad, VarDeclaration* vd, Type *srcType) = 0;
     virtual void addBaseClassData(AggrTypeBuilder &builder, AggregateDeclaration *base) = 0;
     virtual void emitAdditionalClassSymbols(ClassDeclaration *cd) = 0;
     virtual void toInitClass(TypeClass* tc, LLValue* dst) = 0;

@@ -411,10 +411,19 @@ void LangPlugin::addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& co
 }
 
 LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
-                                      ::VarDeclaration* vd)
+                                      ::VarDeclaration* vd, Type *srcType)
 {
     auto& Context = getASTContext();
     assert(isCPP(ad) && isCPP(vd));
+
+    if (srcType && srcType->ty == Tclass
+            && !isCPP(static_cast<TypeClass*>(srcType)->sym))
+    {
+        Loc loc;
+        DImValue srcValue(srcType, src);
+
+        src = DtoCast(loc, &srcValue, ad->type->pointerTo())->getRVal(); // casting is needed here for this.CppClass.member
+    }
 
     auto Record = getRecordDecl(ad);
     auto Field = cast<clang::FieldDecl>(
