@@ -219,6 +219,9 @@ static const clang::Expr* skipIgnoredCast(const clang::CastExpr *E)
     {
         skipCast = true;
 
+        if (Kind == clang::CK_NullToMemberPointer)
+            skipCast = false; // tptrdiff_t is a signed int type, nullptr needs to be translated to 0
+
         // One exception being if the subexpr is an enum constant, in which case handling the cast to specify the signedness of the expression
         // will prevent some errors during function resolution which overloads for both signed and unsigned arguments.
         if (Kind == clang::CK_IntegralCast && SubExpr->getType()->isEnumeralType())
@@ -276,6 +279,8 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
 
     if (Kind == clang::CK_NullToPointer)
         return new NullExp(loc);
+    else if (Kind == clang::CK_NullToMemberPointer)
+        return new IntegerExp(loc, 0, Type::tptrdiff_t);
 
     auto SubExpr = E->getSubExpr();
     auto CastDestTy = E->getType();
