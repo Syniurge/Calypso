@@ -30,6 +30,8 @@
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Lookup.h"
 #include "llvm/ADT/StringRef.h"
@@ -51,7 +53,8 @@ namespace clangCG = clang::CodeGen;
 
 void LangPlugin::enterModule(::Module *, llvm::Module *lm)
 {
-    if (!getASTUnit())
+    auto AST = getASTUnit();
+    if (!AST)
         return;
 
     pch.save(); // save the numerous instantiations done by DMD back into the PCH
@@ -63,7 +66,9 @@ void LangPlugin::enterModule(::Module *, llvm::Module *lm)
         Opts->setDebugInfo(clang::CodeGenOptions::FullDebugInfo);
 
     CGM.reset(new clangCG::CodeGenModule(Context,
-                            *Opts, *lm, *gDataLayout, *pch.Diags));
+                            AST->getPreprocessor().getHeaderSearchInfo().getHeaderSearchOpts(),
+                            AST->getPreprocessor().getPreprocessorOpts(),
+                            *Opts, *lm, *pch.Diags));
     if (!RecordDeclTypes.empty())
         // restore the CodeGenTypes state, to prevent Clang from recreating types that end up different from the ones LDC knows
         CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache);
@@ -435,8 +440,9 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
 
     updateCGFInsertPoint();
 
-    auto LV = clang::CodeGen::LValue::MakeAddr(src, Context.getRecordType(Record),
-                        clang::CharUnits::One(), Context);
+    clangCG::Address address(src, clang::CharUnits::One());
+    auto LV = clang::CodeGen::LValue::MakeAddr(address, Context.getRecordType(Record),
+                        Context, clangCG::AlignmentSource::Decl);
 
     // NOTE: vd might be a field from an anon struct or union injected to ad->fields during semantic
     // LDC differs from Clang in that it also injects the fields to the LLVM type, and access to indirect fields
@@ -470,9 +476,9 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     Index(Field);
 
     if (LV.isBitField())
-        return LV.getBitFieldAddr();
+        return LV.getBitFieldPointer();
 
-    return LV.getAddress();
+    return LV.getPointer();
 }
 
 void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
@@ -534,7 +540,9 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     LLValue* vthis = inst->getRVal();
     auto Ty = toFunctionType(fdecl);
     
-    return CGM->getCXXABI().getVirtualFunctionPointer(*CGF(), MD, vthis, Ty);
+    clangCG::Address This(vthis, clang::CharUnits::One());
+    return CGM->getCXXABI().getVirtualFunctionPointer(
+                            *CGF(), MD, This, Ty, clang::SourceLocation());
 }
 
 static const clangCG::CGFunctionInfo &arrangeFunctionCall(
@@ -672,7 +680,8 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     InternalDeclEmitter(Context, *CGM).Emit(FD);
 
-    auto This = MD ? dfnval->vthis : nullptr;
+    auto ThisVal = MD ? dfnval->vthis : nullptr;
+    clangCG::Address This(ThisVal, clang::CharUnits::One());
 
     auto Dtor = dyn_cast<clang::CXXDestructorDecl>(FD);
     if (Dtor && Dtor->isVirtual())
@@ -691,7 +700,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                 *CGF(), MD, This, true);
         }
 
-        Args.add(clangCG::RValue::get(This),
+        Args.add(clangCG::RValue::get(This.getPointer()),
                  MD->getThisType(getASTContext()));
     }
 
@@ -710,14 +719,17 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 //             CGF()->EmitAggregateCopy(tmp, L.getAddress(), type, /*IsVolatile*/false,
 //                                 L.getAlignment());
 //             Args.add(clangCG::RValue::getAggregate(tmp), type);
-            Args.add(clangCG::RValue::getAggregate(argval->getRVal()),
+            clangCG::Address addr(argval->getRVal(), CGF()->getNaturalTypeAlignment(ArgTy));
+            Args.add(clangCG::RValue::getAggregate(addr),
                      ArgTy, /*NeedsCopy*/ false);
         }
         else
             Args.add(clangCG::RValue::get(argval->getRVal()), ArgTy);
     }
 
-    clangCG::ReturnValueSlot ReturnValue(retvar, false);
+    clangCG::Address Addr(retvar,
+                          CGF()->getNaturalTypeAlignment(FD->getReturnType()));
+    clangCG::ReturnValueSlot ReturnValue(Addr, false);
     
     // Setup a landing pad if needed
     llvm::BasicBlock *invokeDest = nullptr,
@@ -763,10 +775,10 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         {
             auto tc = static_cast<TypeClass*>(resulttype);
             if (calleead->isBaseOf(tc->sym, nullptr))
-                toPostNewClass(loc, tc, new DImValue(thisTy, This));
+                toPostNewClass(loc, tc, new DImValue(thisTy, This.getPointer()));
         }
 
-        return new DVarValue(calleead->getType(), This); // EmitCall returns a null value for ctors so we need to return this
+        return new DVarValue(calleead->getType(), This.getPointer()); // EmitCall returns a null value for ctors so we need to return this
     }
     else if (tf->isref)
     {
@@ -777,7 +789,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     if (RV.isScalar())
         return new DImValue(resulttype, RV.getScalarVal());
     else if (RV.isAggregate())
-        return new DVarValue(resulttype, RV.getAggregateAddr());
+        return new DVarValue(resulttype, RV.getAggregatePointer());
 
     llvm_unreachable("Complex RValue FIXME");
 }

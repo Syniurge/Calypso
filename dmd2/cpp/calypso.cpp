@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/modulemap.h"
 #include "cpp/calypso.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppimport.h"
@@ -32,6 +31,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
@@ -689,7 +689,13 @@ void PCH::loadFromHeaders()
     // Parse the headers
     DiagClient->muted = false;
 
-    AST = ASTUnit::LoadFromCompilerInvocation(&CI, Diags, false, false, false,
+    llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
+        new clang::vfs::OverlayFileSystem(clang::vfs::getRealFileSystem()));
+    auto Files = new clang::FileManager(clang::FileSystemOptions(), OverlayFileSystem);
+
+    PCHContainerOps.reset(new clang::PCHContainerOperations);
+
+    AST = ASTUnit::LoadFromCompilerInvocation(&CI, PCHContainerOps, Diags, Files, false, false, false,
                                               clang::TU_Complete, false, false, false,
                                               new InstantiationChecker).release();
     AST->getSema();
@@ -733,8 +739,11 @@ void PCH::loadFromPCH()
     
     DiagClient->muted = false;
 
-    AST = ASTUnit::LoadFromASTFile(pchFilename,
-                            Diags, FileSystemOpts, false, llvm::None, false,
+    PCHContainerOps.reset(new clang::PCHContainerOperations);
+    auto *Reader = PCHContainerOps->getReaderOrNull("raw");
+
+    AST = ASTUnit::LoadFromASTFile(pchFilename, *Reader,
+                            Diags, FileSystemOpts, false, false, llvm::None, false,
                             /* AllowPCHWithCompilerErrors = */ true, false,
                             new InstantiationChecker, &ReadResult).release();
 
@@ -901,7 +910,7 @@ void LangPlugin::buildMacroMap()
         if (!II->hasMacroDefinition())
             continue;
 
-        auto MDir = (*I).getSecond();
+        auto MDir = (*I).getSecond().getLatest();
         auto MInfo = MDir->getMacroInfo();
 
         if (!MInfo->isObjectLike() || MInfo->getNumTokens() != 1)
@@ -954,10 +963,22 @@ void PCH::save()
     llvm::raw_fd_ostream OS(pchFilename, EC, llvm::sys::fs::F_None);
 
     auto& Sysroot = PP.getHeaderSearchInfo().getHeaderSearchOpts().Sysroot;
-    auto GenPCH = llvm::make_unique<clang::PCHGenerator>(PP, pchFilename,
-                                         nullptr, Sysroot, &OS, true);
+    auto Buffer = std::make_shared<clang::PCHBuffer>();
+    auto *Writer = PCHContainerOps->getWriterOrNull("raw");
+
+    auto GenPCH = new clang::PCHGenerator(PP, pchFilename,
+                                          nullptr, Sysroot, Buffer,
+                                          llvm::ArrayRef<llvm::IntrusiveRefCntPtr<clang::ModuleFileExtension>>(),
+                                          true);
     GenPCH->InitializeSema(AST->getSema());
-    GenPCH->HandleTranslationUnit(AST->getASTContext());
+
+    std::vector<std::unique_ptr<clang::ASTConsumer>> Consumers;
+    Consumers.push_back(std::unique_ptr<clang::ASTConsumer>(GenPCH));
+    Consumers.push_back(Writer->CreatePCHContainerGenerator(
+        *static_cast<clang::CompilerInstance*>(nullptr), pchHeader, pchFilename, &OS, Buffer));
+
+    auto Mutiplex = llvm::make_unique<clang::MultiplexConsumer>(std::move(Consumers));
+    Mutiplex->HandleTranslationUnit(AST->getASTContext());
 
     needSaving = false;
 }

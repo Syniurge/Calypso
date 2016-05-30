@@ -19,6 +19,10 @@
 namespace cpp
 {
 
+using llvm::cast;
+using llvm::dyn_cast;
+using llvm::isa;
+
 namespace clangCG = clang::CodeGen;
 
 // A D class derived from a C++ one overriding virtual C++ methods must,
@@ -170,7 +174,6 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     mangleNumber(Out, Thunk.This.NonVirtual);
     Out << '_';
     Out << callee->ident->toChars();
-    Out.flush();
 
     auto thunkId = Identifier::idPool(thunkName.c_str());
     auto calleetf = static_cast<TypeFunction*>(callee->type);
@@ -353,6 +356,7 @@ struct DCXXVptrAdjuster
     llvm::IRBuilder<true> &Builder;
 
     ::ClassDeclaration *cd;
+    DCXXVTableInfo& dcxxInfo;
     llvm::Value *cxxThis;
 
     inline clang::ASTContext& getContext() {
@@ -360,11 +364,12 @@ struct DCXXVptrAdjuster
     }
 
     DCXXVptrAdjuster(clangCG::CodeGenModule &CGM,
-            llvm::Value *cxxThis, ::ClassDeclaration *cd)
+            llvm::Value *cxxThis, ::ClassDeclaration *cd, DCXXVTableInfo& dcxxInfo)
         : CGM(CGM),
           CGF(*calypso.CGF()),
           Builder(gIR->scope().builder),
           cd(cd),
+          dcxxInfo(dcxxInfo),
           cxxThis(cxxThis)
     {}
 
@@ -394,6 +399,12 @@ struct DCXXVptrAdjuster
         return ptr;
     }
 
+    clangCG::Address GetCXXThisAddress(llvm::Value* cxxThis) {
+        // Just use the best known alignment for the parent.
+        auto CXXThisAlignment = CGM.getClassPointerAlignment(dcxxInfo.MostDerivedBase);
+        return clangCG::Address(cxxThis, CXXThisAlignment);
+    }
+
     void
     InitializeVTablePointer(clang::BaseSubobject Base,
                                             const clang::CXXRecordDecl *NearestVBase,
@@ -401,10 +412,9 @@ struct DCXXVptrAdjuster
                                             const clang::CXXRecordDecl *VTableClass)
     {
         // Compute the address point.
-        bool NeedsVirtualOffset;
         llvm::Value *VTableAddressPoint =
             CGM.getCXXABI().getVTableAddressPointInStructor(
-                CGF, VTableClass, Base, NearestVBase, NeedsVirtualOffset);
+                CGF, VTableClass, Base, NearestVBase);
         if (!VTableAddressPoint)
             return;
 
@@ -423,11 +433,12 @@ struct DCXXVptrAdjuster
         llvm::Value *VirtualOffset = nullptr;
         clang::CharUnits NonVirtualOffset = clang::CharUnits::Zero();
 
-        if (NeedsVirtualOffset) {
+        clangCG::CodeGenFunction::VPtr Vptr = { Base, NearestVBase, OffsetFromNearestVBase, VTableClass };
+        if (CGM.getCXXABI().isVirtualOffsetNeededForVTableField(CGF, Vptr)) {
             // We need to use the virtual base offset offset because the virtual base
             // might have a different offset in the most derived class.
             VirtualOffset = CGM.getCXXABI().GetVirtualBaseClassOffset(CGF,
-                                                                    cxxThis,
+                                                                    GetCXXThisAddress(cxxThis),
                                                                     VTableClass,
                                                                     NearestVBase);
             NonVirtualOffset = OffsetFromNearestVBase;
@@ -526,7 +537,7 @@ void LangPlugin::toPostNewClass(Loc& loc, TypeClass* tc, DValue* val)
 
     auto cxxThis = DtoCast(loc, val,
                            dcxxInfo->mostDerivedCXXBase->type->pointerTo());
-    DCXXVptrAdjuster adjuster(*CGM, cxxThis->getRVal(), cd);
+    DCXXVptrAdjuster adjuster(*CGM, cxxThis->getRVal(), cd, *dcxxInfo);
 
     auto RD = dcxxInfo->mostDerivedCXXBase->RD;
 

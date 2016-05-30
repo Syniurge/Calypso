@@ -32,6 +32,8 @@ class CodeGenFunction;
 class Sema;
 class ASTUnit;
 class MacroInfo;
+class ModuleMap;
+class PCHContainerOperations;
 }
 
 namespace cpp
@@ -43,9 +45,9 @@ class TemplateInstance;
 class TypeMapper;
 class DeclReferencer;
 
-namespace reclang { class ModuleMap; class DiagnosticPrinter; }
+namespace reclang { class DiagnosticPrinter; }
 using clang::ASTUnit;
-using reclang::ModuleMap;
+using clang::ModuleMap;
 using reclang::DiagnosticPrinter;
 
 namespace clangCG = clang::CodeGen;
@@ -105,6 +107,7 @@ public:
 
     DiagnosticPrinter *DiagClient;
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
+    std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps;
     
     ModuleMap *MMap = nullptr;
 

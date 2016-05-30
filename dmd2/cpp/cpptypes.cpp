@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/modulemap.h"
 #include "cpp/calypso.h"
 #include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
@@ -16,6 +15,7 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/Type.h"
+#include "clang/Lex/ModuleMap.h"
 #include "clang/Sema/Sema.h"
 
 namespace cpp
@@ -1679,7 +1679,6 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
                 {
                     DefaultArgExpr = S.BuildCXXDefaultArgExpr(FD->getPointOfInstantiation(),
                                                               const_cast<clang::FunctionDecl*>(FD), *PI).get();
-                    S.ActOnParamDefaultArgument(*PI, FD->getPointOfInstantiation(), DefaultArgExpr); // saves the default argument in the Clang AST, useful for debugging
                 }
                 else
                     DefaultArgExpr = isUninstantiated ?

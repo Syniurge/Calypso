@@ -1,6 +1,5 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-#include "cpp/modulemap.h"
 #include "aggregate.h"
 #include "attrib.h"
 #include "declaration.h"
@@ -32,9 +31,11 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Sema/Lookup.h"
 
 extern llvm::cl::opt<bool> preservePaths;
@@ -384,7 +385,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
 
-    if (S.RequireCompleteType(D->getLocation(), Context.getRecordType(D), 0))
+    if (S.RequireCompleteType(D->getLocation(),
+                Context.getRecordType(D), clang::diag::err_incomplete_type))
         Diags.Reset();
 
     if (!D->isCompleteDefinition() && D->getDefinition())
@@ -558,9 +560,6 @@ Ldeclaration:
 
 Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 {
-    auto& Context = calypso.getASTContext();
-    auto Ty = D->getUnderlyingType();
-
     if (isAnonTagTypedef(D))
         return nullptr;  // the anon tag will be mapped by VisitRecordDecl to an aggregate named after the typedef identifier
 
@@ -1301,7 +1300,7 @@ std::string moduleName(Identifiers *packages, Identifier *ident)
 }
 
 // Look into namespace redecls if there are any
-static clang::DeclContext::lookup_const_result lookup(const clang::DeclContext *DC,
+static clang::DeclContext::lookup_result lookup(const clang::DeclContext *DC,
                                                    Identifier *id)
 {
     auto& Table = calypso.getPreprocessor().getIdentifierTable();
@@ -1687,8 +1686,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         // Lookups can't find the implicit __va_list_tag record
         if (id == Identifier::idPool("__va_list_tag") && packages->dim == 1)
         {
-            D = Context.getVaListTagType()
-                ->getAs<clang::RecordType>()->getDecl();
+            D = cast<clang::NamedDecl>(Context.getVaListTagDecl());
         }
         else
         {

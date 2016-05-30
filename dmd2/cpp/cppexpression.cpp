@@ -52,12 +52,13 @@ RootObject *typeQualifiedRoot(TypeQualified *tqual)
 }
 
 Objects *fromASTTemplateArgumentListInfo(Loc loc,
-            const clang::ASTTemplateArgumentListInfo &Args,
+            const clang::TemplateArgumentLoc *Args,
+            unsigned NumTemplateArgs,
             TypeMapper &tymap)
 {
     auto tiargs = new Objects;
 
-    for (unsigned i = 0; i < Args.NumTemplateArgs; i++)
+    for (unsigned i = 0; i < NumTemplateArgs; i++)
     {
         auto Arg = &Args[i].getArgument();
         tiargs->push(TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg));
@@ -494,7 +495,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
             auto tempinst = new TemplateInstance(loc,
                             static_cast<Identifier*>(member));
             tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
-                        CDSM->getExplicitTemplateArgs(), tymap);
+                        CDSM->getTemplateArgs(), CDSM->getNumTemplateArgs(), tymap);
 
             member = tempinst;
         }
@@ -530,7 +531,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (DSDR->hasExplicitTemplateArgs())
         {
             auto tiargs = fromASTTemplateArgumentListInfo(loc,
-                              DSDR->getExplicitTemplateArgs(), tymap);
+                        DSDR->getTemplateArgs(), DSDR->getNumTemplateArgs(), tymap);
 
             tempinst = new ::TemplateInstance(loc, ident);
             tempinst->tiargs = tiargs;
@@ -609,10 +610,9 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
 
         if (UL->hasExplicitTemplateArgs())
         {
-            auto& ExplicitTempArgs = UL->getExplicitTemplateArgs();
-
             auto tempinst = new ::TemplateInstance(loc, id);
-            tempinst->tiargs = fromASTTemplateArgumentListInfo(loc, ExplicitTempArgs, tymap);
+            tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
+                        UL->getTemplateArgs(), UL->getNumTemplateArgs(), tymap);
             e = new ScopeExp(loc, tempinst);
         }
         else

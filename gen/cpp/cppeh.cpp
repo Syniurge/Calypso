@@ -10,6 +10,7 @@
 #include "gen/rttibuilder.h"
 #include "gen/tollvm.h"
 
+#include "clang/lib/CodeGen/Address.h"
 #include "clang/lib/CodeGen/CGCXXABI.h"
 #include "clang/lib/CodeGen/CGException.h"
 #include "clang/lib/CodeGen/CodeGenFunction.h"
@@ -65,10 +66,11 @@ void LangPlugin::toBeginCatch(IRState *irs, ::Catch *cj)
 
             auto CatchParamTy = TypeMapper().toType(cj->loc, cj->var->type,
                                                         irs->func()->decl->scope, cj->var->storage_class);
-            auto CatchParamAlign = clang::CharUnits();
+            clangCG::Address ParamAddr(irLocal->value,
+                                       CGF()->getNaturalTypeAlignment(CatchParamTy));
 
-            clangCG::InitCatchParam(*CGF(), ehPtr, CatchParamTy, CatchParamAlign,
-                                    nullptr, irLocal->value, clang::SourceLocation());
+            clangCG::InitCatchParam(*CGF(), ehPtr, CatchParamTy,
+                                    nullptr, ParamAddr, clang::SourceLocation());
 //         }
     }
     else
@@ -109,7 +111,6 @@ llvm::Constant *LangPlugin::toCatchScopeType(IRState *irs, Type *t)
         llvm::SmallString<256> InitName("_D");
         llvm::raw_svector_ostream Out(InitName);
         CGM->getCXXABI().getMangleContext().mangleCXXRTTI(ThrowType, Out);
-        Out.flush();
         InitName.append("7__tiwrap");
 
         wrapper = getOrCreateGlobal(irs->func()->decl->loc,

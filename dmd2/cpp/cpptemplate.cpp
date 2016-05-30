@@ -12,6 +12,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 
@@ -22,8 +23,7 @@ namespace clang {
                                      FunctionTemplateDecl *FT1,
                                      FunctionTemplateDecl *FT2,
                                      TemplatePartialOrderingContext TPOC,
-                                     unsigned NumCallArguments1,
-                llvm::SmallVectorImpl<RefParamPartialOrderingComparison> *RefParamComparisons);
+                                     unsigned NumCallArguments1);
 }
 
 namespace cpp
@@ -443,7 +443,7 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
 
     auto Better1 = clang::isAtLeastAsSpecializedAs(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
                                 isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
-                                fargs->dim, nullptr);
+                                fargs->dim);
     if (!Better1)
         m = MATCHnomatch;
 
@@ -740,7 +740,7 @@ bool TemplateInstance::completeInst()
     {
         auto Ty = Context.getRecordType(CTSD);
 
-        if (S.RequireCompleteType(CTSD->getLocation(), Ty, 0))
+        if (S.RequireCompleteType(CTSD->getLocation(), Ty, clang::diag::err_incomplete_type))
             Diags.Reset();
     }
 
