@@ -23,7 +23,8 @@ namespace clang {
                                      FunctionTemplateDecl *FT1,
                                      FunctionTemplateDecl *FT2,
                                      TemplatePartialOrderingContext TPOC,
-                                     unsigned NumCallArguments1);
+                                     unsigned NumCallArguments1,
+                                     unsigned TDF);
 }
 
 namespace cpp
@@ -441,9 +442,10 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     auto FuncTemp1 = cast<clang::FunctionTemplateDecl>(Prim);
     auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(c_td2->getPrimaryTemplate());
 
+    const unsigned TDF_IgnoreQualifiers = 0x02;
     auto Better1 = clang::isAtLeastAsSpecializedAs(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
                                 isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
-                                fargs->dim);
+                                fargs->dim, TDF_IgnoreQualifiers);
     if (!Better1)
         m = MATCHnomatch;
 
