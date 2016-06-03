@@ -74,7 +74,6 @@ void LangPlugin::enterModule(::Module *, llvm::Module *lm)
         CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache);
 
     type_infoWrappers.clear();
-    EmittedStaticVars.clear();
 }
 
 void removeDuplicateModuleFlags(llvm::Module *lm)
@@ -174,14 +173,6 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
 
     MergeGlobalStors(ldcCtor, clangCtor, "llvm.global_ctors", llvm::appendToGlobalCtors);
     MergeGlobalStors(ldcDtor, clangDtor, "llvm.global_dtors", llvm::appendToGlobalDtors);
-
-    // HACK to set the linkage of static variables to External, D modules being more fragmented than C++ translation unit
-    // This is done here since most decls are emitted by CodeGenModule::Release()
-    for (auto VD: EmittedStaticVars)
-    {
-        auto GV = cast<llvm::GlobalValue>(CGM->GetAddrOfGlobalVar(VD));
-        GV->setLinkage(llvm::GlobalValue::ExternalLinkage);
-    }
 
     // HACK Check and remove duplicate module flags such as "Debug Info Version" created by both Clang and LDC
     removeDuplicateModuleFlags(lm);
@@ -564,101 +555,9 @@ static const clangCG::CGFunctionInfo &arrangeFunctionCall(
         return CGM->getTypes().arrangeFreeFunctionCall(Args, FPT, false);
 }
 
-// Emits decls with internal linkage that functions being defined or called depends upon.
-class InternalDeclEmitter : public clang::RecursiveASTVisitor<InternalDeclEmitter>
-{
-    clang::ASTContext &Context;
-    clangCG::CodeGenModule &CGM;
-
-    llvm::DenseSet<const clang::Decl *> Emitted;
-
-public:
-    InternalDeclEmitter(clang::ASTContext &Context,
-                        clangCG::CodeGenModule &CGM) : Context(Context), CGM(CGM) {}
-    bool Emit(const clang::FunctionDecl *Callee);
-    void Traverse(const clang::FunctionDecl *Def);
-
-    bool VisitDeclRef(const clang::Decl *D);
-
-    bool VisitCXXConstructExpr(const clang::CXXConstructExpr *E);
-    bool VisitCXXNewExpr(const clang::CXXNewExpr *E);
-    bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E);
-    bool VisitDeclRefExpr(const clang::DeclRefExpr *E);
-    bool VisitMemberExpr(const clang::MemberExpr *E);
-};
-
-void InternalDeclEmitter::Traverse(const clang::FunctionDecl *Def)
-{
-    TraverseStmt(Def->getBody());
-
-    if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
-        for (auto& Init: Ctor->inits())
-            TraverseStmt(Init->getInit());
-}
-
-bool InternalDeclEmitter::Emit(const clang::FunctionDecl *Func)
-{
-    const clang::FunctionDecl *Def;
-
-    if (!Func || !Func->hasBody(Def))
-        return true;
-
-    if (Emitted.count(Def))
-        return true;
-    Emitted.insert(Def);
-
-    ResolvedFunc::get(CGM, Func);
-    Traverse(Def);
-    return true;
-}
-
-bool InternalDeclEmitter::VisitDeclRef(const clang::Decl *D)
-{
-    if (auto Func = dyn_cast<clang::FunctionDecl>(D))
-        return Emit(Func);
-
-    return true;
-}
-
-bool InternalDeclEmitter::VisitCXXConstructExpr(const clang::CXXConstructExpr *E)
-{
-    return Emit(E->getConstructor());
-}
-
-bool InternalDeclEmitter::VisitCXXNewExpr(const clang::CXXNewExpr *E)
-{
-    return Emit(E->getOperatorNew());
-}
-
-bool InternalDeclEmitter::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E)
-{
-    auto DestroyedType = E->getDestroyedType();
-    if (!DestroyedType.isNull()) {
-        if (const clang::RecordType *RT = DestroyedType->getAs<clang::RecordType>()) {
-            clang::CXXRecordDecl *RD = cast<clang::CXXRecordDecl>(RT->getDecl());
-            if (RD->hasDefinition())
-                Emit(RD->getDestructor());
-        }
-    }
-
-    return Emit(E->getOperatorDelete());
-}
-
-bool InternalDeclEmitter::VisitDeclRefExpr(const clang::DeclRefExpr *E)
-{
-    return VisitDeclRef(E->getDecl());
-}
-
-bool InternalDeclEmitter::VisitMemberExpr(const clang::MemberExpr *E)
-{
-    return VisitDeclRef(E->getMemberDecl());
-}
-
 DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval, 
                                    Expressions* arguments, llvm::Value *retvar)
 {
-    auto& Context = getASTContext();
-
     updateCGFInsertPoint();
     
     DFuncValue* dfnval = fnval->isFunc();
@@ -677,8 +576,6 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     auto FD = getFD(fd);
     auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
-
-    InternalDeclEmitter(Context, *CGM).Emit(FD);
 
     auto ThisVal = MD ? dfnval->vthis : nullptr;
     clangCG::Address This(ThisVal, clang::CharUnits::One());
@@ -816,18 +713,11 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
 
 void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 {
-    auto& Context = getASTContext();
-
     auto FD = getFD(fdecl);
     const clang::FunctionDecl *Def;
 
     if (FD->hasBody(Def) && getIrFunc(fdecl)->func->isDeclaration())
-    {
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
-
-        // Emit inline functions this function depends upon
-        InternalDeclEmitter(Context, *CGM).Traverse(Def);
-    }
 }
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
@@ -883,14 +773,7 @@ void LangPlugin::toDefineVariable(::VarDeclaration* vd)
 
     VD = VD->getDefinition(Context);
     if (VD && VD->hasGlobalStorage() && !VD->hasExternalStorage())
-    {
         CGM->EmitTopLevelDecl(const_cast<clang::VarDecl*>(VD));
-
-        EmittedStaticVars.push_back(VD);
-        // NOTE: We need to dishonor internal linkages, which will be done after deferred decls get emitted at CGM->Release()
-        // In C++ static variables are emitted for each translation unit, but since Calypso modules are more fragmented,
-        // in D they need to be unique and available to other modules relying on them.
-    }
 }
 
 // Handle ConstructExp initializers of struct and class vars
@@ -941,14 +824,11 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
 
 void LangPlugin::EmitInternalDeclsForFields(const clang::RecordDecl *RD)
 {
-    auto& Context = getASTContext();
     auto& S = getSema();
-
-    InternalDeclEmitter Emitter(Context, *CGM);
 
     auto Emit = [&] (clang::CXXMethodDecl *D) {
         if (D && !D->isDeleted())
-            Emitter.Emit(D);
+            ResolvedFunc::get(*CGM, D);
     };
 
     for (auto F: RD->fields())
