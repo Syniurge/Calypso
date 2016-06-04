@@ -723,6 +723,12 @@ void PCH::loadFromHeaders()
     needSaving = true;
     DiagClient->muted = !opts::cppVerboseDiags;
 
+    if (Diags->hasErrorOccurred())
+    {
+        ::error(Loc(), "Invalid C/C++ header(s)");
+        fatal();
+    }
+
     /* Update the list of headers */
 
     auto headerList = calypso.getCacheFilename();
