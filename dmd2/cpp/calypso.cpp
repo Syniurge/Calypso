@@ -336,6 +336,22 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
         return nullptr;
 
     auto ident = fromIdentifier(II);
+    bool needsPrefixing = false;
+
+    auto ParentTag = dyn_cast<clang::TagDecl>(D->getDeclContext());
+    if (II && isa<clang::TagDecl>(D) && ParentTag)
+    {
+        auto R = ParentTag->lookup(D->getDeclName());
+        for (auto Match: R)
+        {
+            if (!isa<clang::ValueDecl>(*Match))
+                continue;
+
+            // The nested tag shares a common name with a field, mapping it directly would cause a symbol conflict
+            needsPrefixing = true;
+            break;
+        }
+    }
 
     if (isa<clang::RecordDecl>(D))
     {
@@ -347,11 +363,14 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
             ident == Id::TypeInfo_Enum || ident == Id::TypeInfo_Function || ident == Id::TypeInfo_Delegate ||
             ident == Id::TypeInfo_Tuple || ident == Id::TypeInfo_Const || ident == Id::TypeInfo_Invariant ||
             ident == Id::TypeInfo_Shared || ident == Id::TypeInfo_Wild || ident == Id::TypeInfo_Vector) // thanks C++...
-        {
-            llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards
-            s += llvm::StringRef(ident->string, ident->len);
-            ident = Identifier::idPool(s.c_str());
-        }
+            needsPrefixing = true;
+    }
+
+    if (needsPrefixing)
+    {
+        llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards
+        s += llvm::StringRef(ident->string, ident->len);
+        ident = Identifier::idPool(s.c_str());
     }
 
     return ident;
