@@ -858,8 +858,9 @@ void LangPlugin::toDefineStruct(::StructDeclaration* sd)
     auto Emit = [&] (clang::CXXMethodDecl *D) {
         if (D && !D->isDeleted())
         {
-            ResolvedFunc::get(*CGM, D); // mark it used
-            CGM->EmitTopLevelDecl(D); // mark it emittable
+            auto R = ResolvedFunc::get(*CGM, D); // mark it used
+            if (R.Func->isDeclaration())
+                CGM->EmitTopLevelDecl(D); // mark it emittable
         }
     };
 
