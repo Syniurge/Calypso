@@ -770,7 +770,7 @@ int Port::isNan(double r)
     return isnan(r);
 #else
     #undef isnan
-    return ::isnan(r);
+    return std::isnan(r);
 #endif
 }
 
@@ -786,7 +786,7 @@ int Port::isNan(longdouble r)
     return isnan(r);
 #else
     #undef isnan
-    return ::isnan(r);
+    return std::isnan(r);
 #endif
 }
 
@@ -814,7 +814,7 @@ int Port::isInfinity(double r)
     return isinf(r);
 #else
     #undef isinf
-    return ::isinf(r);
+    return std::isinf(r);
 #endif
 }
 
