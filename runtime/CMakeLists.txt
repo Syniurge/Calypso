@@ -134,6 +134,18 @@ list(APPEND CORE_D ${CORE_D_INTERNAL} ${CORE_D_SYNC} ${CORE_D_SYS} ${CORE_D_STDC
 list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object.d)
 file(GLOB CORE_C ${RUNTIME_DIR}/src/core/stdc/*.c)
 
+# CALYPSO HACK to link automatically generated __cpp*.o files
+# This is an issue for separate compilation and build systems, __cpp*.o files are known only after compilation
+set(CORE_CPP_FILES "__cpp-__cxxabiv1-__base_class_type_info.o;__cpp-__cxxabiv1-__class_type_info.o;\
+__cpp-__cxxabiv1-__cxa_dependent_exception.o;__cpp-__cxxabiv1-__cxa_eh_globals.o;\
+__cpp-__cxxabiv1-__cxa_exception.o;__cpp-__cxxabiv1-__cxa_refcounted_exception.o;\
+__cpp-__cxxabiv1-_.o;__cpp-std-_.o;__cpp-std-type_info.o;__cpp-_Unwind_Action.o;\
+__cpp-_Unwind_Context.o;__cpp-_Unwind_Exception.o;__cpp-_Unwind_Reason_Code.o")
+set(CORE_CPP_O "")
+foreach(cpp_file ${CORE_CPP_FILES})
+    set(CORE_CPP_O "${CORE_CPP_O} ${PROJECT_BINARY_DIR}/${cpp_file}")
+endforeach(cpp_file)
+
 if(PHOBOS2_DIR)
     file(GLOB PHOBOS2_D ${PHOBOS2_DIR}/std/*.d)
     file(GLOB PHOBOS2_D_ALGORITHM ${PHOBOS2_DIR}/std/algorithm/*.d)
@@ -404,7 +416,8 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
         LIBRARY_OUTPUT_DIRECTORY    ${output_path}
         RUNTIME_OUTPUT_DIRECTORY    ${output_path}
         COMPILE_FLAGS               "${c_flags}"
-        LINK_FLAGS                  "${ld_flags}"
+        LINK_FLAGS                  "${ld_flags} ${CORE_CPP_O}" # CALYPSO HACK
+        STATIC_LIBRARY_FLAGS        "${CORE_CPP_O}"
     )
 
     # When building a shared library, we need to link in all the default
