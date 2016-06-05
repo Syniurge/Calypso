@@ -1517,7 +1517,7 @@ static void mapClangModule(DeclMapper &mapper,
         if (isa<clang::TranslationUnitDecl>(D))
             return true;
 
-        if (!Corresponding(cast<clang::Decl>(D->getDeclContext())->getCanonicalDecl()))
+        if (!Corresponding(cast<clang::Decl>(getDeclContextNonLinkSpec(D))->getCanonicalDecl()))
             return false;
 
         ParentDecls.swap(RootDecls);
@@ -1533,7 +1533,7 @@ static void mapClangModule(DeclMapper &mapper,
             }
         else
             for (auto ModDecl: RegionDecls)
-                if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
+                if (isa<clang::TranslationUnitDecl>(getDeclContextNonLinkSpec(ModDecl)))
                     if (D->getCanonicalDecl() == ModDecl->getCanonicalDecl())
                         RootDecls.push_back(ModDecl);
 
