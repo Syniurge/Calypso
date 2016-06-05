@@ -264,11 +264,10 @@ struct ResolvedFunc
         auto FPT = FD->getType()->getAs<clang::FunctionProtoType>();
         const clang::FunctionDecl *Def;
 
-        // If this is a static or always inlined function, emit it in any module calling or referencing it
+        // If this is a always inlined function, emit it in any module calling or referencing it
         if (result.Func->isDeclaration() && FD->hasBody(Def) &&
                 FPT->getExceptionSpecType() != clang::EST_Unevaluated)
-            if (!FD->hasExternalFormalLinkage() ||
-                    FD->hasAttr<clang::AlwaysInlineAttr>())
+            if (FD->hasAttr<clang::AlwaysInlineAttr>())
                 CGM.EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def));
 
         return result;
