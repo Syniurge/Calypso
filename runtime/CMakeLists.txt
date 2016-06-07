@@ -392,8 +392,16 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
     set(druntime_bc "")
     compile_druntime("${d_flags}" "${lib_suffix}" "${path_suffix}" druntime_o druntime_bc)
 
+    # CALYPSO HACK link automatically generated __cpp*.o files into druntime
+    set(cpp_monolith_o "${CMAKE_CURRENT_BINARY_DIR}/__cpp_monolith${target_suffix}.o")
+    add_custom_command(
+        OUTPUT "${cpp_monolith_o}"
+        COMMAND ${CMAKE_COMMAND} -Dcpp_monolith_o="${cpp_monolith_o}" -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+        DEPENDS ${druntime_o}
+    )
+
     add_library(druntime-ldc${target_suffix} ${D_LIBRARY_TYPE}
-        ${druntime_o} ${CORE_C} ${DCRT_C} ${DCRT_ASM})
+        ${druntime_o} ${CORE_C} ${DCRT_C} ${DCRT_ASM} "${cpp_monolith_o}")
     set_target_properties(
         druntime-ldc${target_suffix} PROPERTIES
         OUTPUT_NAME                 druntime-ldc${lib_suffix}
