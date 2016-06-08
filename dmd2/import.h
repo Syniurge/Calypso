@@ -124,6 +124,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    virtual void adjustLinkerArgs(std::vector<std::string>& args) = 0;
+
+    // ===== - - - - - ===== //
+
      virtual ForeignCodeGen *codegen() = 0;
      virtual bool needsCodegen(Module *m) = 0;
 };

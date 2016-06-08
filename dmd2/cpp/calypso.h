@@ -34,6 +34,7 @@ class ASTUnit;
 class MacroInfo;
 class ModuleMap;
 class PCHContainerOperations;
+namespace driver { class Compilation; }
 }
 
 namespace cpp
@@ -123,9 +124,11 @@ public:
     std::string pchFilename;
 //     std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
 
+    int cxxStdlibType;
+
 protected:
-    void loadFromHeaders();
-    void loadFromPCH();
+    void loadFromHeaders(clang::driver::Compilation* C);
+    void loadFromPCH(clang::driver::Compilation* C);
 };
 
 class LangPlugin : public ::LangPlugin, public ::ForeignCodeGen
@@ -161,6 +164,8 @@ public:
 
     ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
     ::FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) override;
+
+    void adjustLinkerArgs(std::vector<std::string>& args) override;
 
     // ==== CodeGen ====
     ForeignCodeGen *codegen() override { return this; }

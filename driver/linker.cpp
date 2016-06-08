@@ -9,6 +9,7 @@
 
 #include "driver/linker.h"
 #include "mars.h"
+#include "import.h"
 #include "module.h"
 #include "root.h"
 #include "driver/cl_options.h"
@@ -194,6 +195,9 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
     // FIXME: Win32.
     break;
   }
+
+  for (auto lp: global.langPlugins)
+      lp->adjustLinkerArgs(args); // CALYPSO
 
   if (global.params.targetTriple.isWindowsGNUEnvironment()) {
     // This is really more of a kludge, as linking in the Winsock functions

@@ -25,6 +25,7 @@
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/Tool.h"
+#include "clang/Driver/ToolChain.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/Preprocessor.h"
@@ -37,6 +38,7 @@
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Option/ArgList.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/IR/LLVMContext.h"
@@ -645,54 +647,9 @@ void PCH::add(const char* header, ::Module *from)
     needHeadersReload = true;
 }
 
-void PCH::loadFromHeaders()
+void PCH::loadFromHeaders(clang::driver::Compilation* C)
 {
-//     llvm::sys::fs::remove(pchFilenameNew, true);
-
-    // Re-emit the source file with #include directives
-    auto fmono = fopen(pchHeader.c_str(), "w");
-    if (!fmono)
-    {
-        ::error(Loc(), "C++ monolithic header couldn't be created");
-        fatal();
-    }
-
-    for (unsigned i = 0; i < headers.dim; ++i)
-    {
-        if (headers[i][0] == '<')
-            fprintf(fmono, "#include %s\n", headers[i]);
-        else
-            fprintf(fmono, "#include \"%s\"\n", headers[i]);
-    }
-
-    fclose(fmono);
-
-    // Compiler flags, we use a hack from clang-interpreter to extract -cc1 flags from "puny human" flags
-    // The driver doesn't do anything except computing the flags.
-    std::string TripleStr = llvm::sys::getProcessTriple();
-    llvm::Triple T(TripleStr);
-
-    clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
-    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
-    auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
-    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
-                                        &*CC1DiagOpts, CC1DiagClient);
-
-    clang::driver::Driver TheDriver(calypso.executablePath, T.str(), *CC1Diags);
-    TheDriver.setTitle("Calypso PCH");
-
-    llvm::SmallVector<const char *, 16> Argv;
-    Argv.push_back("clang");
-    for (auto& cppArg: opts::cppArgs)
-        Argv.push_back(cppArg.c_str());
-    Argv.push_back("-c");
-    Argv.push_back("-x");
-    Argv.push_back("c++-header");
-    Argv.push_back(pchHeader.c_str());
-
-    std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
-    assert(C);
-
+    // We use a trick from clang-interpreter to extract -cc1 flags from "puny human" flags
     // We expect to get back exactly one command job, if we didn't something
     // failed. Extract that job from the compilation.
     const clang::driver::JobList &Jobs = C->getJobs();
@@ -757,7 +714,7 @@ public:
     bool shouldVisitTemplateInstantiations() const { return true; }
 };
 
-void PCH::loadFromPCH()
+void PCH::loadFromPCH(clang::driver::Compilation* C)
 {
     clang::FileSystemOptions FileSystemOpts;
     clang::ASTReader::ASTReadResult ReadResult;
@@ -787,7 +744,7 @@ void PCH::loadFromPCH()
             Diags->Reset();
 
             // Headers or flags may have changed since the PCH was generated, fall back to headers.
-            loadFromHeaders();
+            loadFromHeaders(C);
             return;
 
         default:
@@ -838,14 +795,60 @@ void PCH::update()
 
     if (needHeadersReload)
     {
+        // Re-emit the source file with #include directives
+        auto fmono = fopen(pchHeader.c_str(), "w");
+        if (!fmono) {
+            ::error(Loc(), "C++ monolithic header couldn't be created");
+            fatal();
+        }
+
+        for (unsigned i = 0; i < headers.dim; ++i) {
+            if (headers[i][0] == '<')
+                fprintf(fmono, "#include %s\n", headers[i]);
+            else
+                fprintf(fmono, "#include \"%s\"\n", headers[i]);
+        }
+        fclose(fmono);
+    }
+
+    // The driver doesn't do anything except computing the flags and informing us of the toolchain's C++ standard lib.
+    std::string TripleStr = llvm::sys::getProcessTriple();
+    llvm::Triple T(TripleStr);
+
+    clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
+    auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
+                                        &*CC1DiagOpts, CC1DiagClient);
+
+    clang::driver::Driver TheDriver(calypso.executablePath, T.str(), *CC1Diags);
+    TheDriver.setTitle("Calypso");
+
+    llvm::SmallVector<const char *, 16> Argv;
+    Argv.push_back("clang");
+    for (auto& cppArg: opts::cppArgs)
+        Argv.push_back(cppArg.c_str());
+    Argv.push_back("-c");
+    Argv.push_back("-x");
+    Argv.push_back("c++-header");
+    Argv.push_back(pchHeader.c_str());
+
+    std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
+    assert(C);
+
+    llvm::opt::InputArgList ArgList(Argv.begin(), Argv.end());
+    cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(ArgList);
+
+    if (needHeadersReload)
+    {
         // The PCH either doesn't exist or is obsolete, reparse the header files
-        loadFromHeaders();
+        loadFromHeaders(C.get());
         needHeadersReload = false;
     }
     else
     {
         // The PCH is up-to-date, use it
-        loadFromPCH();
+        loadFromPCH(C.get());
     }
 
     /* Collect Clang module map files */
@@ -1101,6 +1104,20 @@ int LangPlugin::doesHandleModmap(const utf8_t* lang)
 {
     return new Modmap(loc,
                 static_cast<StringExp*>(arg));
+}
+
+void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
+{
+    const char* cxxstdlib = (pch.cxxStdlibType ==
+                    clang::driver::ToolChain::CST_Libcxx) ? "-lc++" : "-lstdc++";
+
+    auto it_pthread = std::find(args.begin(), args.end(), "-lpthread");
+    auto it_m = std::find(args.begin(), args.end(), "-lm");
+
+    if (it_pthread != args.end())
+        args.insert(it_pthread, cxxstdlib);
+    else if (it_m != args.end())
+        args.insert(it_m, cxxstdlib); // Solaris
 }
 
 std::string GetExecutablePath(const char *Argv0) {
