@@ -397,7 +397,7 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
     add_custom_command(
         OUTPUT "${cpp_monolith_o}"
         COMMAND ${CMAKE_COMMAND} -Dcpp_monolith_o="${cpp_monolith_o}" -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-        DEPENDS ${druntime_o}
+        DEPENDS ${druntime_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
     )
 
     add_library(druntime-ldc${target_suffix} ${D_LIBRARY_TYPE}
