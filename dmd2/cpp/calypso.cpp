@@ -368,7 +368,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
 
     if (needsPrefixing)
     {
-        llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards
+        llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards (in France)
         s += llvm::StringRef(ident->string, ident->len);
         ident = Identifier::idPool(s.c_str());
     }
