@@ -821,24 +821,34 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
     return true;
 }
 
-void LangPlugin::EmitInternalDeclsForFields(const clang::RecordDecl *RD)
+// Even if never visible from D, C++ functions may depend on these methods, so they still need to be emitted
+static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
+                                      clang::Sema& S,
+                                      clang::CXXRecordDecl* RD)
 {
-    auto& S = getSema();
+    if (!RD || RD->isInvalidDecl() || !RD->getDefinition())
+        return;
 
     auto Emit = [&] (clang::CXXMethodDecl *D) {
         if (D && !D->isDeleted())
-            ResolvedFunc::get(*CGM, D);
+        {
+            auto R = ResolvedFunc::get(CGM, D); // mark it used
+            if (R.Func->isDeclaration())
+                CGM.EmitTopLevelDecl(D); // mark it emittable
+        }
     };
 
-    for (auto F: RD->fields())
-    {
-        auto FTyRec = F->getType()->getAsCXXRecordDecl();
-        if (!FTyRec)
-            continue;
+    Emit(S.LookupDefaultConstructor(RD));
+    for (int i = 0; i < 2; i++)
+        Emit(S.LookupCopyingConstructor(RD, i ? clang::Qualifiers::Const : 0));
 
-        Emit(S.LookupDefaultConstructor(FTyRec));
-        Emit(S.LookupDestructor(FTyRec));
-    }
+    Emit(S.LookupDestructor(RD));
+
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++)
+            for (int k = 0; k < 2; k++)
+                Emit(S.LookupCopyingAssignment(RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
+                                            k ? clang::Qualifiers::Const : 0));
 }
 
 void LangPlugin::toDefineStruct(::StructDeclaration* sd)
@@ -849,45 +859,18 @@ void LangPlugin::toDefineStruct(::StructDeclaration* sd)
         return;
 
     auto c_sd = static_cast<cpp::StructDeclaration*>(sd);
-    auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD);
-
-    if (!RD || RD->isInvalidDecl() || !RD->getDefinition())
-        return;
-
-    auto _RD = const_cast<clang::CXXRecordDecl *>(RD);
-    auto Emit = [&] (clang::CXXMethodDecl *D) {
-        if (D && !D->isDeleted())
-        {
-            auto R = ResolvedFunc::get(*CGM, D); // mark it used
-            if (R.Func->isDeclaration())
-                CGM->EmitTopLevelDecl(D); // mark it emittable
-        }
-    };
-
-    Emit(S.LookupDefaultConstructor(_RD));
-    for (int i = 0; i < 2; i++)
-        Emit(S.LookupCopyingConstructor(_RD, i ? clang::Qualifiers::Const : 0));
-
-    Emit(S.LookupDestructor(_RD));
-
-    for (int i = 0; i < 2; i++)
-        for (int j = 0; j < 2; j++)
-            for (int k = 0; k < 2; k++)
-                Emit(S.LookupCopyingAssignment(_RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
-                                            k ? clang::Qualifiers::Const : 0));
-
-    EmitInternalDeclsForFields(RD);
+    if (auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD))
+        EmitUnmappedRecordMethods(*CGM, S,
+                                const_cast<clang::CXXRecordDecl *>(RD));
 }
 
 void LangPlugin::toDefineClass(::ClassDeclaration* cd)
 {
+    auto& S = getSema();
+
     auto c_cd = static_cast<cpp::ClassDeclaration*>(cd);
-    auto RD = cast<clang::CXXRecordDecl>(c_cd->RD);
-
-    if (RD->isInvalidDecl() || !RD->getDefinition())
-        return;
-
-    EmitInternalDeclsForFields(RD);
+    EmitUnmappedRecordMethods(*CGM, S,
+                              const_cast<clang::CXXRecordDecl *>(c_cd->RD));
 }
 
 }

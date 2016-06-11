@@ -218,8 +218,6 @@ public:
     void toBeginCatch(IRState *irs, ::Catch *cj) override;
     void toEndCatch(IRState *irs, ::Catch *cj) override;
     llvm::Constant *toCatchScopeType(IRState *irs, Type *t) override;
-
-    void EmitInternalDeclsForFields(const clang::RecordDecl *RD);
          
     // ==== ==== ====
     PCH pch;
