@@ -59,6 +59,7 @@ public:
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
+    bool inNonCodegen() override { return false; } // __cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted
 
     static void cppSemantic(::FuncDeclaration *fd, Scope *sc);
     static void semantic3reference(::FuncDeclaration *fd, Scope *sc);
@@ -79,6 +80,7 @@ public:
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
+    bool inNonCodegen() override { return false; }
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -96,6 +98,7 @@ public:
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
+    bool inNonCodegen() override { return false; }
 };
 
 class EnumDeclaration : public ::EnumDeclaration

@@ -667,7 +667,7 @@ void DtoDefineFunction(FuncDeclaration *fd) {
   // Check whether the frontend knows that the function is already defined
   // in some other module (see DMD's FuncDeclaration::toObjFile).
   for (FuncDeclaration *f = fd; f;) {
-    if (!f->isInstantiated() && f->inNonRoot()) {
+    if (!f->isInstantiated() && f->inNonCodegen()) {
       IF_LOG Logger::println("Skipping '%s'.", fd->toPrettyChars());
       // TODO: Emit as available_externally for inlining purposes instead
       // (see #673).

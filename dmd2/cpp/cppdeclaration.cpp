@@ -250,7 +250,6 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     {
         im->semantic(sc);
         im->semantic2(sc);
-        Module::addDeferredSemantic3(im->mod);
     }
 
     ReferenceTemplateArguments(D);

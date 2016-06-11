@@ -8236,14 +8236,14 @@ bool TemplateInstance::needsCodegen()
         {
             minst = tinst->minst;   // cache result
             assert(minst);
-            assert(minst->isRoot() || minst->rootImports());
+            assert(minst->isCodegen() || minst->rootImports()); // CALYPSO
             return true;
         }
         if (tnext && (tnext->needsCodegen() || tnext->minst))
         {
             minst = tnext->minst;   // cache result
             assert(minst);
-            return minst->isRoot() || minst->rootImports();
+            return minst->isCodegen() || minst->rootImports();
         }
 
         // Elide codegen because this is really speculative.
@@ -8273,7 +8273,7 @@ bool TemplateInstance::needsCodegen()
         global.params.debuglevel)
     {
         // Prefer instantiations from root modules, to maximize link-ability.
-        if (minst->isRoot())
+        if (minst->isCodegen())
             return true;
 
         TemplateInstance *tnext = this->tnext;
@@ -8285,14 +8285,14 @@ bool TemplateInstance::needsCodegen()
         {
             minst = tinst->minst;   // cache result
             assert(minst);
-            assert(minst->isRoot() || minst->rootImports());
+            assert(minst->isCodegen() || minst->rootImports());
             return true;
         }
         if (tnext && tnext->needsCodegen())
         {
             minst = tnext->minst;   // cache result
             assert(minst);
-            assert(minst->isRoot() || minst->rootImports());
+            assert(minst->isCodegen() || minst->rootImports());
             return true;
         }
 
@@ -8319,7 +8319,7 @@ bool TemplateInstance::needsCodegen()
          *
          * See Bugzilla 2500.
          */
-        if (!minst->isRoot() && !minst->rootImports())
+        if (!minst->isCodegen() && !minst->rootImports())
             return false;
 
         TemplateInstance *tnext = this->tnext;
@@ -8328,7 +8328,7 @@ bool TemplateInstance::needsCodegen()
         if (tnext && !tnext->needsCodegen() && tnext->minst)
         {
             minst = tnext->minst;   // cache result
-            assert(!minst->isRoot());
+            assert(!minst->isCodegen());
             return false;
         }
 

@@ -1211,16 +1211,6 @@ int main(int argc, char **argv) {
     fatal();
   }
 
-  // CALYPSO HACK & NOTE: this must be done after the importAll pass for D modules for modmap to kick in
-  // Replace modmap by a monolithic header instead of twisting importAll()?
-  for (auto m: cpp::Module::amodules) {
-    m->importedFrom = m;
-    m->buildTargetFiles(singleObj, createSharedLib || createStaticLib);
-    m->importAll(0);
-
-    modules.push(m);
-  }
-
   // Do semantic analysis
   for (unsigned i = 0; i < modules.dim; i++) {
     if (global.params.verbose) {
@@ -1247,17 +1237,28 @@ int main(int argc, char **argv) {
   }
 
   // Do pass 3 semantic analysis
-  for (unsigned i = 0; i < modules.dim; i++) {
+  auto doSemantic3 = [] (Module* m) {
     if (global.params.verbose) {
-      fprintf(global.stdmsg, "semantic3 %s\n", modules[i]->toChars());
+      fprintf(global.stdmsg, "semantic3 %s\n", m->toChars());
     }
-    modules[i]->semantic3();
-  }
+    m->semantic3();
+  };
+  for (unsigned i = 0; i < modules.dim; i++)
+    doSemantic3(modules[i]);
+  for (unsigned i = 0; i < cpp::Module::amodules.dim; i++)
+    doSemantic3(cpp::Module::amodules[i]); // CALYPSO
   if (global.errors) {
     fatal();
   }
 
   Module::runDeferredSemantic3();
+
+  // CALYPSO HACK __cpp modules need to be codegen'd too, and we only know which
+  // are required after DeclReferencer has completed its task.
+  for (auto m: cpp::Module::amodules) {
+    m->buildTargetFiles(singleObj, createSharedLib || createStaticLib);
+    modules.push(m);
+  }
 
   if (global.errors || global.warnings) {
     fatal();

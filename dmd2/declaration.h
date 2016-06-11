@@ -677,6 +677,8 @@ public:
 
     virtual FuncDeclaration *toAliasFunc() { return this; }
 
+    virtual bool inNonCodegen() { return this->inNonRoot(); } // CALYPSO
+
 #if IN_LLVM
     std::string intrinsicName;
     uint32_t priority;

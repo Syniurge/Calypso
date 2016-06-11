@@ -169,6 +169,7 @@ public:
     bool isRoot() { return this->importedFrom == this; }
                                 // true if the module source file is directly
                                 // listed in command line.
+    virtual bool isCodegen() { return isRoot(); } // CALYPSO
 
     // Back end
 #if IN_DMD
