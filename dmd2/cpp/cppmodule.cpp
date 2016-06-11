@@ -1096,7 +1096,6 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
 
             if (SpecArg)
             {
-                auto SpecTy = SpecArg->getAsType();
                 auto specArg = FromType(*this, loc).fromTemplateArgument(SpecArg);
                 if (!specArg)
                     return nullptr; // might be a non supported type

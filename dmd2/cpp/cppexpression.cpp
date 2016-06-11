@@ -356,6 +356,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         switch (CL->getKind())
         {
             case clang::CharacterLiteral::Ascii:
+            case clang::CharacterLiteral::UTF8:
                 t = Type::tchar;
                 e = new IntegerExp(loc, (d_uns8)Char, t);
                 break;
