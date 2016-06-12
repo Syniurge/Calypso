@@ -81,6 +81,8 @@ void LangPlugin::toEndCatch(IRState *irs, ::Catch *cj)
 {
     auto c_cj = static_cast<cpp::Catch*>(cj);
 
+    updateCGFInsertPoint();
+
     // Call __cxa_end_catch, fall out through the catch cleanups.
     c_cj->ir->CatchScope->ForceCleanup();
     delete c_cj->ir->CatchScope;
