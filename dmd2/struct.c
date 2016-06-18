@@ -673,6 +673,42 @@ Dsymbol *AggregateDeclaration::searchCtor()
     return s;
 }
 
+// CALYPSO
+// While looking for implicit constructors wrap the argument inside a tagged expression to prevent
+// infinite recursion such as Type1(Type2(Type1(Type2(...
+class NoImplicitCtorExp : public TaggedExp
+{
+public:
+    NoImplicitCtorExp(Loc loc, Expression* e1)
+        : TaggedExp(loc, TOKcomment, sizeof(NoImplicitCtorExp), e1) {}
+};
+
+CtorDeclaration* AggregateDeclaration::hasImplicitCtor(Expression* farg)
+{
+    if (farg->op == TOKcomment) // do not go beyond depth of 1
+        return nullptr;
+
+    size(loc);
+    assert(sizeok == SIZEOKdone); // forward ref
+
+    if (!ctor)
+        return nullptr;
+
+    auto e = new NoImplicitCtorExp(farg->loc, farg);
+    e->type = farg->type;
+
+    Expressions *fargs = new Expressions;
+    fargs->push(e);
+    FuncDeclaration *fd = resolveFuncCall(farg->loc, NULL, ctor, NULL, NULL, fargs, 1|4);
+    if (fd && (fd->storage_class & STCimplicit)) // explicitly enabled @implicit constructor calls
+    {
+        assert(fd->isCtorDeclaration());
+        return static_cast<CtorDeclaration*>(fd);
+    }
+
+    return nullptr;
+}
+
 /********************************* StructDeclaration ****************************/
 
 StructDeclaration::StructDeclaration(Loc loc, Identifier *id)

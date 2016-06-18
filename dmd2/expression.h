@@ -1621,6 +1621,15 @@ private:
     } u;
 };
 
+// CALYPSO
+class TaggedExp : public UnaExp
+{
+public:
+    TaggedExp (Loc loc, TOK op, int size, Expression* e1);
+    Expression *semantic(Scope *) { return this; }
+    void accept(Visitor *v) { v->visit(this); }
+};
+
 /****************************************************************/
 
 /* Special values used by the interpreter

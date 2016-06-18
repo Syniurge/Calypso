@@ -3483,6 +3483,7 @@ struct FuncCandidateWalker
  *      fargs           arguments to function
  *      flags           1: do not issue error message on no match, just return NULL
  *                      2: overloadResolve only
+ *                      4: do not issue error message on multiple matches, return NULL // CALYPSO
  */
 
 FuncDeclaration *resolveFuncCall(Loc loc, Scope *sc, Dsymbol *s,
@@ -3532,6 +3533,8 @@ FuncDeclaration *resolveFuncCall(Loc loc, Scope *sc, Dsymbol *s,
         {
             return m.lastf;
         }
+        if (flags & 4)
+            return NULL; // CALYPSO
     }
 
     /* Failed to find a best match.

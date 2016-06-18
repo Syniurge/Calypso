@@ -280,6 +280,7 @@ class PrettyFuncInitExp;
 class ClassReferenceExp;
 class VoidInitExp;
 class ThrownExceptionExp;
+class TaggedExp;
 
 class TemplateParameter;
 class TemplateTypeParameter;
@@ -566,6 +567,7 @@ public:
     virtual void visit(ClassReferenceExp *e) { visit((Expression *)e); }
     virtual void visit(VoidInitExp *e) { visit((Expression *)e); }
     virtual void visit(ThrownExceptionExp *e) { visit((Expression *)e); }
+    virtual void visit(TaggedExp *e) { visit((UnaExp *)e); } // CALYPSO
 
     virtual void visit(TemplateParameter *) { assert(0); }
     virtual void visit(TemplateTypeParameter *tp) { visit((TemplateParameter *)tp); }

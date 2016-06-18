@@ -147,6 +147,8 @@ public:
     virtual bool byRef() { return false; }
     virtual Expression *defaultInit(Loc loc) { assert(false); return NULL; }
 
+    CtorDeclaration* hasImplicitCtor(Expression* farg);
+
     AggregateDeclaration *isAggregateDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
 };

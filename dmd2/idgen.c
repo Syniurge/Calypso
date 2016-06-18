@@ -392,6 +392,8 @@ Msgtable msgtable[] =
     { "basic_ostream" },
     { "basic_iostream" },
     { "char_traits" },
+
+    { "implicit" }, // CALYPSO @implicit
 };
 
 

@@ -1047,6 +1047,8 @@ StorageClass Parser::parseAttribute(Expressions **pudas)
             stc = STCsystem;
         else if (token.ident == Id::disable)
             stc = STCdisable;
+        else if (token.ident == Id::implicit) // CALYPSO
+            stc = STCimplicit;
         else
         {
             // Allow identifier, template instantiation, or function call

@@ -6029,6 +6029,14 @@ MATCH TypeFunction::callMatch(Type *tthis, Expressions *args, int flag)
             else
                 m = arg->implicitConvTo(tprm);
             //printf("match %d\n", m);
+
+            // CALYPSO explicit @implicit ctor
+            if (m == MATCHnomatch)
+            {
+                auto toad = getAggregateSym(tprm);
+                if (toad && toad->hasImplicitCtor(arg))
+                    m = MATCHconvert;
+            }
         }
 
         // Non-lvalues do not match ref or out parameters

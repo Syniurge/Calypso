@@ -1635,6 +1635,15 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                 if (!tprm->equivs(arg->type)) // CALYPSO
                 {
                     //printf("arg->type = %s, p->type = %s\n", arg->type->toChars(), p->type->toChars());
+                    if (arg->implicitConvTo(tprm) == MATCHnomatch) // CALYPSO
+                    {
+                        AggregateDeclaration *toad = getAggregateSym(tprm);
+                        if (toad && toad->hasImplicitCtor(arg))
+                        {
+                            arg = new CallExp(arg->loc, new TypeExp(arg->loc, toad->getType()), arg);
+                            arg = arg->semantic(sc);
+                        }
+                    }
                     arg = arg->implicitCastTo(sc, tprm);
                     arg = arg->optimize(WANTvalue, (p->storageClass & (STCref | STCout)) != 0 && !(p->storageClass & STCscope)); // CALYPSO
                 }
@@ -14367,4 +14376,9 @@ Expression *BinExp::reorderSettingAAElem(Scope *sc)
     de = de->semantic(sc);
     //printf("-de = %s, be = %s\n", de->toChars(), be->toChars());
     return Expression::combine(de, be);
+}
+
+TaggedExp::TaggedExp (Loc loc, TOK op, int size, Expression* e1)  // CALYPSO
+    : UnaExp (loc, op, size, e1)
+{
 }

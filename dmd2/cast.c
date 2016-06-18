@@ -1364,6 +1364,11 @@ MATCH implicitConvTo(Expression *e, Type *t)
             if (tb->ty == Tpointer && e->e1->op == TOKstring)
                 e->e1->accept(this);
         }
+
+        void visit(TaggedExp *e) // CALYPSO
+        {
+            e->e1->accept(this);
+        }
     };
 
     ImplicitConvTo v(t);
