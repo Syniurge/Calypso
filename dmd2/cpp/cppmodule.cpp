@@ -736,6 +736,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
     auto loc = fromLoc(D->getLocation());
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
+    auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
     MarkFunctionForEmit(D);
     if (D->isInvalidDecl())
@@ -777,6 +778,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
         if (isa<clang::CXXDestructorDecl>(D))
             stc &= ~(STCoverride|STCabstract); // dtors aren't added to D's VTBLs
+
+        if (CCD && !CCD->isExplicit() && FPT->getNumParams() == 1)
+            stc |= STCimplicit;
     }
     tf->addSTC(stc);
     
