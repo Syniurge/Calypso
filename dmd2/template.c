@@ -2321,7 +2321,10 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
         LfIsBetter:
             td_best = NULL;
             ti_best = NULL;
-            ta_last = MATCHexact;
+            ta_last = (mfa >= MATCHconst) ? MATCHexact : mfa; // CALYPSO IMPORTANT WARNING not always setting ta_last to MATCHexact
+                                                        // may break code, although MATCHconvert seems to be returned by vanilla in very few cases.
+                                                        // This change is needed for @implicit ctors. If an implicit ctor is available, callMatch returns MATCHconvert
+                                                        // but we do not want a non-template function to take precedence over a better matching template function.
             m->last = mfa;
             m->lastf = fd;
             tthis_best = tthis_fd;
