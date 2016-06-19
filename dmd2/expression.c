@@ -11453,7 +11453,7 @@ Expression *AssignExp::semantic(Scope *sc)
             }
             else if (!e2x->implicitConvTo(t1))
             {
-                if (sd->ctor)
+                if (ad->ctor) // CALYPSO
                 {
                     /* Look for implicit constructor call
                      * Rewrite as:
@@ -11470,7 +11470,7 @@ Expression *AssignExp::semantic(Scope *sc)
                     e = e->semantic(sc);
                     return e;
                 }
-                if (search_function(sd, Id::call))
+                if (search_function(ad, Id::call)) // CALYPSO
                 {
                     /* Look for static opCall
                      * (See bugzilla 2702 for more discussion)
