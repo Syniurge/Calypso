@@ -6036,7 +6036,7 @@ MATCH TypeFunction::callMatch(Type *tthis, Expressions *args, int flag)
                 auto toad = getAggregateSym(tprm);
                 if (toad && toad->hasImplicitCtor(arg))
                 {
-                    m = MATCHconvert;
+                    m = MATCHimplicitctor;
                     targ = toad->getType();
                 }
             }

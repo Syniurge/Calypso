@@ -378,6 +378,7 @@ enum DYNCAST
 enum MATCH
 {
     MATCHnomatch,       // no match
+    MATCHimplicitctor,  // match with implicit ctor calls // CALYPSO
     MATCHconvert,       // match with conversions
     MATCHconst,         // match with conversion to const
     MATCHexact          // exact match
