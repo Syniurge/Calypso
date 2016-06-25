@@ -116,10 +116,8 @@ llvm::Constant *LangPlugin::toCatchScopeType(IRState *irs, Type *t)
         InitName.append("7__tiwrap");
 
         wrapper = getOrCreateGlobal(irs->func()->decl->loc,
-            gIR->module, initType, true, llvm::GlobalValue::ExternalLinkage, NULL, InitName);
+            gIR->module, initType, true, llvm::GlobalValue::LinkOnceODRLinkage, finalinit, InitName);
         wrapper->setAlignment(DtoAlignment(type_info_ptr->type));
-        wrapper->setInitializer(finalinit);
-        wrapper->setLinkage(DtoLinkage(type_info_ptr).first);
     }
 
     return wrapper;
