@@ -23,6 +23,7 @@ public:
     Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 
     ::Module *loadModule(Loc loc, Identifiers *packages, Identifier *id);
+    void load(Scope *sc) override; // HACK
 };
 
 struct Modmap : public ::Modmap

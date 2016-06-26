@@ -50,6 +50,7 @@ endif()
 get_directory_property(PROJECT_PARENT_DIR DIRECTORY ${PROJECT_SOURCE_DIR} PARENT_DIRECTORY)
 set(RUNTIME_DIR ${PROJECT_SOURCE_DIR}/druntime CACHE PATH "druntime root directory")
 set(PHOBOS2_DIR ${PROJECT_SOURCE_DIR}/phobos CACHE PATH "Phobos root directory")
+set(CALYPSORT_DIR ${PROJECT_SOURCE_DIR}/calypso) # CALYPSO
 
 #
 # Gather source files.
@@ -186,6 +187,9 @@ else()
     set(CONFIG_NAME ${LDC_EXE})
 endif()
 
+# CALYPSO
+file(GLOB_RECURSE CALYPSORT_D ${CALYPSORT_DIR}/*.d)
+
 # should only be necessary if run independently from ldc cmake project
 if(NOT LDC_EXE)
     find_program(LDC_EXE ldc2 ${PROJECT_BINARY_DIR}/../bin DOC "path to ldc binary")
@@ -296,9 +300,6 @@ macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
         set(dc_flags --output-o)
     endif()
 
-    # CALYPSO
-    list(APPEND dc_flags "-cpp-cachedir=${PROJECT_BINARY_DIR}")
-
     add_custom_command(
         OUTPUT
             ${outfiles}
@@ -383,6 +384,22 @@ macro(compile_phobos2 d_flags lib_suffix path_suffix outlist_o outlist_bc)
     endforeach()
 endmacro()
 
+# CALYPSO
+macro(compile_calypsort d_flags lib_suffix path_suffix outlist_o outlist_bc calypsort_cppdir)
+    get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
+
+    foreach(f ${CALYPSORT_D})
+         dc(
+            ${f}
+            "${d_flags};-I${CALYPSORT_DIR};-cpp-cachedir=${calypsort_cppdir}"
+            ${CALYPSORT_DIR}
+            "${target_suffix}"
+            ${outlist_o}
+            ${outlist_bc}
+        )
+    endforeach()
+endmacro()
+
 # Builds a copy of druntime/Phobos from the source files gathered above. The
 # names of the added library targets are appended to outlist_targets.
 macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targets)
@@ -392,16 +409,8 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
     set(druntime_bc "")
     compile_druntime("${d_flags}" "${lib_suffix}" "${path_suffix}" druntime_o druntime_bc)
 
-    # CALYPSO HACK link automatically generated __cpp*.o files into druntime
-    set(cpp_monolith_o "${CMAKE_CURRENT_BINARY_DIR}/__cpp_monolith${target_suffix}.o")
-    add_custom_command(
-        OUTPUT "${cpp_monolith_o}"
-        COMMAND ${CMAKE_COMMAND} -Dcpp_monolith_o="${cpp_monolith_o}" -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-        DEPENDS ${druntime_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-    )
-
     add_library(druntime-ldc${target_suffix} ${D_LIBRARY_TYPE}
-        ${druntime_o} ${CORE_C} ${DCRT_C} ${DCRT_ASM} "${cpp_monolith_o}")
+        ${druntime_o} ${CORE_C} ${DCRT_C} ${DCRT_ASM})
     set_target_properties(
         druntime-ldc${target_suffix} PROPERTIES
         OUTPUT_NAME                 druntime-ldc${lib_suffix}
@@ -455,6 +464,37 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
 
         list(APPEND ${outlist_targets} "phobos2-ldc${target_suffix}")
     endif()
+
+    # CALYPSO
+    set(calypsort_o "")
+    set(calypsort_bc "")
+    set(calypsort_cppdir "${CMAKE_CURRENT_BINARY_DIR}/calypso-ldc${lib_suffix}-cpp")
+    file(MAKE_DIRECTORY ${calypsort_cppdir})
+    compile_calypsort("${d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc "${calypsort_cppdir}")
+
+    set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
+    add_custom_command(
+        OUTPUT "${cpp_monolith_o}"
+        COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir="${calypsort_cppdir}" -Dcpp_monolith_o="${cpp_monolith_o}"
+                -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+        DEPENDS ${druntime_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+    ) # FIXME: support linkers other than ld
+
+    add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} "${cpp_monolith_o}")
+    set_target_properties(
+        calypso-ldc${target_suffix} PROPERTIES
+        OUTPUT_NAME                 calypso-ldc${lib_suffix}
+        VERSION                     ${DMDFE_VERSION}
+        SOVERSION                   ${DMDFE_PATCH_VERSION}
+        LINKER_LANGUAGE             C
+        ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+        LIBRARY_OUTPUT_DIRECTORY    ${output_path}
+        RUNTIME_OUTPUT_DIRECTORY    ${output_path}
+        COMPILE_FLAGS               "${c_flags}"
+        LINK_FLAGS                  "${ld_flags}"
+    )
+    list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
 
     if(BUILD_BC_LIBS)
         find_program(LLVM_AR_EXE llvm-ar

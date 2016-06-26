@@ -1108,6 +1108,21 @@ int LangPlugin::doesHandleModmap(const utf8_t* lang)
 
 void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
 {
+    if (!getASTUnit())
+        return;
+
+    // Insert -lcalypso-ldc before -ldruntime-ldc
+    auto it_druntime = std::find(args.begin(), args.end(), "-ldruntime-ldc");
+    auto it_druntime_debug = std::find(args.begin(), args.end(), "-ldruntime-ldc-debug");
+
+    if (it_druntime != args.end())
+        args.insert(it_druntime, "-lcalypso-ldc");
+    else {
+        assert(it_druntime_debug != args.end());
+        args.insert(it_druntime_debug, "-lcalypso-ldc-debug");
+    }
+
+    // Insert -lstdc++ or -lc++
     const char* cxxstdlib = (pch.cxxStdlibType ==
                     clang::driver::ToolChain::CST_Libcxx) ? "-lc++" : "-lstdc++";
 

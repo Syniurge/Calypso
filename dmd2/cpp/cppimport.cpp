@@ -16,10 +16,10 @@ namespace cpp
 Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic)
     : ::Import(loc, packages, id, aliasId, isstatic)
 {
-    // add "cpp" as leftmost package to avoid name clashes
+    // add "_cpp" as leftmost package to avoid name clashes
     if (!this->packages)
         this->packages = new Identifiers;
-    this->packages->shift(Identifier::idPool("cpp"));  // any better idea ?
+    this->packages->shift(Identifier::idPool("_cpp"));  // any better idea ?
 
     if (!aliasId)
         setSymIdent();
@@ -30,6 +30,21 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
     calypso.pch.update();
     
     return Module::load(loc, packages, id);
+}
+
+void Import::load(Scope* sc)
+{
+    // Ugly HACK to anticipate the modmap from cpp.eh.gnu and prevent the AST merging assert
+    static ::Import* im_cpp_core = nullptr;
+    if (!im_cpp_core) {
+        auto packages = new Identifiers;
+        packages->push(Identifier::idPool("cpp"));
+        im_cpp_core = new ::Import(Loc(), packages, Identifier::idPool("core"), nullptr, true);
+        im_cpp_core->importAll(nullptr);
+        return;
+    }
+
+    ::Import::load(sc);
 }
 
 Modmap::Modmap(Loc loc, StringExp *arg)

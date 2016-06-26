@@ -54,7 +54,7 @@ Modules Module::amodules;
 
 void Module::init()
 {
-    rootPackage = new Package(Identifier::idPool("cpp"));
+    rootPackage = new Package(Identifier::idPool("_cpp"));
     rootPackage->symtab = new DsymbolTable;
 
     modules->insert(rootPackage);
@@ -109,13 +109,22 @@ Dsymbol *Module::search(Loc loc, Identifier *ident, int flags)
 void Module::addPreambule()
 {
     // Statically import object.d for object and size_t (used by buildXtoHash)
+    // and cpp.core to initialize the foreign exception handler.
 
     // TODO This still makes "object" susceptible to collide with C++ names.
     // We could eventually choose a random unused alias name if necessary.
     if (members->dim == 0 || ((*members)[0])->ident != Id::object)
     {
-        ::Import *im = new ::Import(Loc(), NULL, Id::object, NULL, true);
-        members->shift(im);
+        { // cpp.core
+            auto packages = new Identifiers;
+            packages->push(Identifier::idPool("cpp"));
+            ::Import *im = new ::Import(Loc(), packages, Identifier::idPool("core"), nullptr, true);
+            members->shift(im);
+        }
+        { // object
+            ::Import *im = new ::Import(Loc(), nullptr, Id::object, nullptr, true);
+            members->shift(im);
+        }
     }
 }
 
