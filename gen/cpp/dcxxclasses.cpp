@@ -153,12 +153,11 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
 //   return clang::ItaniumVTableBuilder::ComputeBaseOffset(Context, BaseRD, DerivedRD);
 }
 
-// HACK? We're taking advantage of DMD semantic caps to generate C++ thunk-like functions
-// except at codegen time! Since they are final they shouldn't affect the aggregate they're member of, but still...
+// HACK? We're generating C++ thunk-like functions at codegen time!
+// Since they are final they shouldn't affect the aggregate they're member of, but still...
 //
 // Pro: this avoids redundant "manual" function code generation (even though thunks are simple)
 // Con: Clang's way of doing things avoids meddling with the AST, doesn't have any hard-to-foresee consequence
-// hmm calling conventions
 ::FuncDeclaration *getDCXXThunk(::FuncDeclaration *callee,
                              const clang::ThunkInfo &Thunk)
 {
@@ -184,7 +183,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
         return fd;
 
     Type *tf = new TypeFunction(calleetf->parameters,
-                                calleetf->next, 0, LINKd, STCfinal);
+                                calleetf->next, 0, LINKcpp, STCfinal);
     auto fthunk = new ::FuncDeclaration(loc, loc,
                     thunkId, STCfinal, tf);
 
