@@ -3,6 +3,9 @@
  */
 module cpp.eh.gnu;
 
+version (CRuntime_Microsoft) {} else
+{
+
 modmap (C++) "unwind-cxx.h";
 
 import ldc.eh.common;
@@ -72,7 +75,10 @@ class CppHandlerFactory : ForeignHandlerFactory
     }
 }
 
-shared static this()
+// shared static this()
+extern(C) void _d_cpp_init_eh()
 {
     foreignHandlerFactories ~=  new CppHandlerFactory;
 }
+
+} // !CRuntime_Microsoft
