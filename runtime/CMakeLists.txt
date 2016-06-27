@@ -478,7 +478,7 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
         COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir="${calypsort_cppdir}" -Dcpp_monolith_o="${cpp_monolith_o}"
                 -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-        DEPENDS ${druntime_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+        DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
     ) # FIXME: support linkers other than ld
 
     add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} "${cpp_monolith_o}")
