@@ -636,7 +636,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitSubProgram(FuncDeclaration *fd) {
       CreateFunctionType(static_cast<TypeFunction *>(fd->type));
 
   // FIXME: duplicates?
-  return DBuilder.createFunction(
+  auto SP = DBuilder.createFunction(
       CU,                            // context
       fd->toPrettyChars(),           // name
       mangleExact(fd),               // linkage name
@@ -653,6 +653,12 @@ ldc::DISubprogram ldc::DIBuilder::EmitSubProgram(FuncDeclaration *fd) {
       getIrFunc(fd)->func
 #endif
       );
+#if LDC_LLVM_VER >= 308
+  if (fd->fbody) {
+    getIrFunc(fd)->func->setSubprogram(SP);
+  }
+#endif
+  return SP;
 }
 
 ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
@@ -697,7 +703,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
 #endif
 
   // FIXME: duplicates?
-  return DBuilder.createFunction(
+  auto SP = DBuilder.createFunction(
       CU,            // context
       prettyname,    // name
       Fn->getName(), // linkage name
@@ -714,6 +720,10 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
       Fn
 #endif
       );
+#if LDC_LLVM_VER >= 308
+  Fn->setSubprogram(SP);
+#endif
+  return SP;
 }
 
 void ldc::DIBuilder::EmitFuncStart(FuncDeclaration *fd) {
