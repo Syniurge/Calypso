@@ -630,6 +630,9 @@ static ClassFlags::Type build_classinfo_flags(ClassDeclaration *cd) {
   if (cd->isabstract) {
     flags |= ClassFlags::isAbstract;
   }
+  if (!cd->byRef()) { // CALYPSO
+    flags |= ClassFlags::byVal;
+  }
   for (AggregateDeclaration *pa = cd; pa; pa = toAggregateBase(pa)) { // CALYPSO
     if (pa->members) {
       for (size_t i = 0; i < pa->members->dim; i++) {
