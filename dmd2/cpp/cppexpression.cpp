@@ -61,7 +61,7 @@ Objects *fromASTTemplateArgumentListInfo(Loc loc,
     for (unsigned i = 0; i < NumTemplateArgs; i++)
     {
         auto Arg = &Args[i].getArgument();
-        tiargs->push(TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg));
+        tiargs->append(TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg));
     }
 
     return tiargs;
@@ -675,7 +675,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         {
             t = tymap.fromType(E->getType().withoutLocalFastQualifiers(), loc);
 
-            if (CCE->getNumArgs() == 0 && CCE->getConstructor()->isTrivial())
+            if (!isMapped(CCE->getConstructor()) && CCE->getNumArgs() == 0)
             {
                 // Avoid CallExp, which may rewrite T() into T.opCall() if there isn't a ctor (trivial implicit ctors do not get mapped)
                 auto idtmp = Identifier::generateId("__cntmp");

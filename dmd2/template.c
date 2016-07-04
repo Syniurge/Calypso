@@ -1553,6 +1553,10 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(
                         delete xt;
                     }
                 }
+                // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
+                // WARNING: is this appropriate to do it this early? can C++ template functions have default function args which template args get inferred from?
+                if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
+                    goto Lnomatch;
                 for (size_t i = ntargs; i < dedargs->dim; i++)
                 {
                     TemplateParameter *tparam = (*parameters)[i];
@@ -1907,6 +1911,9 @@ Lmatch:
             (*dedtypes)[i] = at->merge2();
         }
     }
+    // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
+    if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
+        goto Lnomatch;
     for (size_t i = ntargs; i < dedargs->dim; i++)
     {
         TemplateParameter *tparam = (*parameters)[i];
@@ -6651,10 +6658,7 @@ bool TemplateInstance::findTempDecl(Scope *sc, WithScopeSymbol **pwithsym)
     }
     assert(tempdecl);
 
-    OverloadSet *tovers = tempdecl->isOverloadSet();
-    auto firstTempDecl = (tovers ? tovers->a[0] : tempdecl)->isTemplateDeclaration();
-    assert(firstTempDecl);
-    return firstTempDecl->checkTempDeclFwdRefs(sc, tempdecl, this); // CALYPSO
+    return firstTempDecl()->checkTempDeclFwdRefs(sc, tempdecl, this); // CALYPSO
 }
 
 bool TemplateDeclaration::checkTempDeclFwdRefs(Scope* sc, Dsymbol* tempdecl, TemplateInstance* ti) // CALYPSO
@@ -6801,6 +6805,14 @@ bool TemplateInstance::updateTempDecl(Scope *sc, Dsymbol *s)
         }
     }
     return (tempdecl != NULL);
+}
+
+TemplateDeclaration* TemplateInstance::firstTempDecl()
+{
+    OverloadSet *tovers = tempdecl->isOverloadSet();
+    auto first = tovers ? tovers->a[0] : tempdecl;
+    assert(first->isTemplateDeclaration());
+    return (TemplateDeclaration*) first;
 }
 
 /**********************************
@@ -7079,12 +7091,7 @@ void TemplateDeclaration::prepareBestMatch(TemplateInstance* ti, Scope* sc, Expr
 
 bool TemplateInstance::findBestMatch(Scope *sc, Expressions *fargs)
 {
-    {
-        OverloadSet *tovers = tempdecl->isOverloadSet();
-        auto firstTempDecl = static_cast<TemplateDeclaration*>(tovers ? tovers->a[0] : tempdecl);
-        assert(firstTempDecl->isTemplateDeclaration());
-        firstTempDecl->prepareBestMatch(this, sc, fargs); // CALYPSO hook (kinda ugly)
-    }
+    firstTempDecl()->prepareBestMatch(this, sc, fargs); // CALYPSO hook (kinda ugly)
 
     if (havetempdecl)
     {

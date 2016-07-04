@@ -165,7 +165,8 @@ void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
         assert(ti && isCPP(ti->inst));
         auto c_ti = static_cast<cpp::TemplateInstance*>(ti->inst);
 
-        auto Inst = cast<clang::FunctionDecl>(c_ti->Inst);
+        auto Inst = cast<clang::FunctionDecl>(
+                    c_ti->Inst.get<clang::NamedDecl*>());
 
         assert(isCPP(sc->module));
         DeclMapper m(static_cast<cpp::Module*>(sc->module));
@@ -331,10 +332,13 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         getIdentifier(Func, &spec, true);
         if (spec)
             tiargs->shift(spec.toTemplateArg(loc));
+        
         auto tempinst = new cpp::TemplateInstance(loc, td, tiargs);
         tempinst->Inst = const_cast<clang::FunctionDecl*>(Func);
         tempinst->semantictiargsdone = false; // NOTE: the "havetempdecl" ctor of Templateinstance set semantictiargsdone to true...
-                                                            // Time was lost finding this out for the second or third time.
+        if (!tempinst->semanticTiargs(sc))
+            assert(false && "DeclReferencer semanticTiargs failed");
+
         td->makeForeignInstance(tempinst);
         tempinst->semantic(sc);
     }

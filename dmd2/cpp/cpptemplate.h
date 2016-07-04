@@ -20,6 +20,8 @@ namespace cpp
 {
 class TemplateInstance;
 
+using TemplateInstUnion = llvm::PointerUnion<clang::NamedDecl*, const clang::TemplateSpecializationType*>;
+
 class TemplateDeclaration : public ::TemplateDeclaration
 {
 public:
@@ -33,6 +35,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *) override;
     bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, ::TemplateInstance *ti) override;
     bool evaluateConstraint(::TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, ::FuncDeclaration *fd) override;
+    bool earlyFunctionValidityCheck(::TemplateInstance *ti, Scope *sc, Objects *dedtypes) override;
     void prepareBestMatch(::TemplateInstance *ti, Scope *sc, Expressions *fargs) override;
     MATCH matchWithInstance(Scope *sc, ::TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag) override;
     MATCH leastAsSpecialized(Scope *sc, ::TemplateDeclaration *td2, Expressions *fargs) override;
@@ -40,11 +43,12 @@ public:
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance( cpp::TemplateInstance* ti );
 
-    clang::NamedDecl* getClangTemplateInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
+    TemplateInstUnion hasExistingClangInst(::TemplateInstance* ti);
+    TemplateInstUnion getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
-    ::TemplateDeclaration *getCorrespondingTempDecl(clang::Decl *Inst);
+    ::TemplateDeclaration *getCorrespondingTempDecl(TemplateInstUnion Inst);
     void correctTempDecl(TemplateInstance *ti);
 };
 
@@ -54,7 +58,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     bool isForeignInst = false;
-    clang::NamedDecl *Inst = nullptr;
+    TemplateInstUnion Inst;
     Objects* primTiargs = nullptr;
 
     TemplateInstance(Loc loc, Identifier *temp_id);
@@ -62,9 +66,12 @@ public:
     TemplateInstance(const TemplateInstance&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
     Identifier *getIdent() override;
+    bool semanticTiargs(Scope *sc) override;
 
     bool completeInst();
     void correctTiargs();
+
+    const clang::NamedDecl* getInstantiatedTemplate();
 };
 
 }

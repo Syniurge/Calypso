@@ -99,6 +99,7 @@ public:
     Prot prot();
 
     virtual bool evaluateConstraint(TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, FuncDeclaration *fd); // CALYPSO
+    virtual bool earlyFunctionValidityCheck(TemplateInstance *ti, Scope *sc, Objects *dedtypes) { return true; } // CALYPSO
     virtual void prepareBestMatch(TemplateInstance* ti, Scope* sc, Expressions* fargs); // CALYPSO
 
     virtual MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag); // CALYPSO
@@ -359,8 +360,9 @@ public:
     // Internal
     bool findTempDecl(Scope *sc, WithScopeSymbol **pwithsym);
     bool updateTempDecl(Scope *sc, Dsymbol *s);
+    TemplateDeclaration* firstTempDecl(); // CALYPSO returns the first overload
     static bool semanticTiargs(Loc loc, Scope *sc, Objects *tiargs, int flags);
-    bool semanticTiargs(Scope *sc);
+    virtual bool semanticTiargs(Scope *sc); // CALYPSO
     bool findBestMatch(Scope *sc, Expressions *fargs);
     bool needsTypeInference(Scope *sc, int flag = 0);
     bool hasNestedArgs(Objects *tiargs, bool isstatic);

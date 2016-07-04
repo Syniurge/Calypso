@@ -372,7 +372,7 @@ static void MarkFunctionForEmit(const clang::FunctionDecl *D)
 }
 
 // For simplicity's sake (or confusion's) let's call records with either virtual functions or bases polymorphic
-inline bool isPolymorphic(const clang::RecordDecl *D)
+bool isPolymorphic(const clang::RecordDecl *D)
 {
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
@@ -1036,6 +1036,16 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
     auto loc = fromLoc(Param->getLocation());
     Identifier *id;
 
+    RootObject *specArg = nullptr;
+    if (SpecArg)
+    {
+        auto a = FromType(*this, loc).fromTemplateArgument(SpecArg);
+        if (!a->dim)
+            return nullptr; // might a non-supported type
+        assert(a->dim == 1);
+        specArg = (*a)[0];
+    }
+
     if (auto NTTPD =
             dyn_cast<clang::NonTypeTemplateParmDecl>(Param))
     {
@@ -1072,7 +1082,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
                         assert(false && "Unsupported template specialization value");
                 }
 
-                tp_specvalue = isExpression(FromType(*this, loc).fromTemplateArgument(SpecArg));
+                tp_specvalue = isExpression(specArg);
                 assert(tp_specvalue);
             }
 
@@ -1109,9 +1119,6 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
 
             if (SpecArg)
             {
-                auto specArg = FromType(*this, loc).fromTemplateArgument(SpecArg);
-                if (!specArg)
-                    return nullptr; // might be a non supported type
                 tp_spectype = isType(specArg);
                 assert(tp_spectype);
             }
@@ -1139,7 +1146,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
 
             if (SpecArg)
             {
-                tp_spectype = isType(FromType(*this, loc).fromTemplateArgument(SpecArg));
+                tp_spectype = isType(specArg);
                 assert(tp_spectype);
             }
 

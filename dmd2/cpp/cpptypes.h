@@ -65,6 +65,7 @@ public:
 
     bool addImplicitDecls = true;
     Dsymbols *substsyms = nullptr; // only for TempateInstance::correctTiargs (partial spec arg deduction)
+    bool desugar = false;
     bool cppPrefix = true; // if false, the ".cpp" prefix won't be appended, disabled only for « C++ global scope search »
 
     std::stack<const clang::Decl *> CXXScope;
@@ -82,6 +83,7 @@ public:
         Loc loc;
         TypeQualified *prefix; // special case for NNS qualified types
 
+        bool isDependent = false; // if dependent type do not assign TemplateInstance.Inst (causes issues with template default arguments)
         const clang::Expr *TypeOfExpr = nullptr;
 
         FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix = nullptr);
@@ -109,9 +111,11 @@ public:
         TypeFunction *fromTypeFunction(const clang::FunctionProtoType *T,
                         const clang::FunctionDecl *FD = nullptr);
 
-        RootObject *fromTemplateArgument(const clang::TemplateArgument *Arg,
+        template<bool wantTuple = false>
+            Objects *fromTemplateArgument(const clang::TemplateArgument *Arg,
                     const clang::NamedDecl *Param = nullptr);  // NOTE: Param is required when the parameter type is an enum, because in the AST enum template arguments are resolved to uint while DMD expects an enum constant or it won't find the template decl. Is this a choice or a compiler bug/limitation btw?
-        Objects *fromTemplateArguments(const clang::TemplateArgument *First,
+        template<bool wantTuple = false>
+            Objects *fromTemplateArguments(const clang::TemplateArgument *First,
                     const clang::TemplateArgument *End,
                     const clang::TemplateParameterList *ParamList = nullptr);
         TypeQualified *fromNestedNameSpecifier(const clang::NestedNameSpecifier *NNS);

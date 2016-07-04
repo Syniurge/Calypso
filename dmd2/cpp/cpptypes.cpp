@@ -305,10 +305,13 @@ TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix)
 {
 }
 
-Type *TypeMapper::FromType::operator()(const clang::QualType T)
+Type *TypeMapper::FromType::operator()(const clang::QualType _T)
 {
-    if (isNonSupportedType(T))
+    if (isNonSupportedType(_T))
         return nullptr;
+
+    auto& Context = calypso.getASTContext();
+    clang::QualType T = tm.desugar ? _T.getDesugaredType(Context) : _T;
 
     Type *t = fromTypeUnqual(T.getTypePtr());
 
@@ -333,6 +336,9 @@ Type *TypeMapper::FromType::fromType(const clang::QualType T)
 
 Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 {
+    if (T->isDependentType())
+        isDependent = true;
+
     if (auto BT = dyn_cast<clang::BuiltinType>(T))
         return fromTypeBuiltin(BT);
     else if (auto FT = dyn_cast<clang::FunctionProtoType>(T))
@@ -458,82 +464,104 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
     llvm::llvm_unreachable_internal("Unrecognized C++ array type");
 }
 
-RootObject* TypeMapper::FromType::fromTemplateArgument(const clang::TemplateArgument* Arg,
+template<bool wantTuple>
+  Objects* TypeMapper::FromType::fromTemplateArgument(const clang::TemplateArgument* Arg,
                 const clang::NamedDecl *Param)
 {
     ExprMapper expmap(tm);
+    auto tiargs = new Objects;
 
-    RootObject *tiarg = nullptr;
-    switch (Arg->getKind())
+    std::function<void(const clang::TemplateArgument*, Objects*)>
+        addArg = [&] (const clang::TemplateArgument* Arg, Objects* tuple = nullptr)
     {
-        case clang::TemplateArgument::Expression:
-            tiarg = expmap.fromExpression(Arg->getAsExpr());
-            break;
-        case clang::TemplateArgument::Integral:
+        RootObject *tiarg = nullptr;
+
+        switch (Arg->getKind())
         {
-            auto e = expmap.fromAPInt(loc, Arg->getAsIntegral());
+            case clang::TemplateArgument::Expression:
+                tiarg = expmap.fromExpression(Arg->getAsExpr());
+                break;
+            case clang::TemplateArgument::Integral:
+            {
+                auto e = expmap.fromAPInt(loc, Arg->getAsIntegral());
 
-            if (auto NTTP = llvm::dyn_cast_or_null<clang::NonTypeTemplateParmDecl>(Param))
-                e = expmap.fixIntegerExp(static_cast<IntegerExp*>(e), NTTP->getType());
+                if (auto NTTP = llvm::dyn_cast_or_null<clang::NonTypeTemplateParmDecl>(Param))
+                    e = expmap.fixIntegerExp(static_cast<IntegerExp*>(e), NTTP->getType());
 
-            tiarg = e;
-            break;
+                tiarg = e;
+                break;
+            }
+            case clang::TemplateArgument::NullPtr:
+                tiarg = new NullExp(loc/*, fromType(Arg->getNullPtrType())*/);
+                break;
+            case clang::TemplateArgument::Type:
+                tiarg = FromType(tm, loc)(Arg->getAsType());
+                break;
+            case clang::TemplateArgument::Template:
+                tiarg = fromTemplateName(Arg->getAsTemplate());
+                break;
+            case clang::TemplateArgument::Pack:
+                if (wantTuple)
+                {
+                    auto tup = new Tuple;
+                    for (auto& PackArg: Arg->pack_elements())
+                        addArg(&PackArg, &tup->objects);
+                    tiarg = tup;
+                    break;
+                }
+                else
+                {
+                    for (auto& PackArg: Arg->pack_elements())
+                        addArg(&PackArg, nullptr);
+                    return;
+                }
+            default:
+                assert(false && "Unsupported template arg kind");
         }
-        case clang::TemplateArgument::NullPtr:
-            tiarg = new NullExp(loc/*, fromType(Arg->getNullPtrType())*/);
-            break;
-        case clang::TemplateArgument::Type:
-            tiarg = FromType(tm, loc)(Arg->getAsType());
-            break;
-        case clang::TemplateArgument::Template:
-            tiarg = fromTemplateName(Arg->getAsTemplate());
-            break;
-        case clang::TemplateArgument::Pack:
-            tiarg = fromTemplateArgument(Arg->pack_begin(), Param); // FIXME: this only takes the first arg of the pack
-            break;
-        default:
-            assert(false && "Unsupported template arg kind");
-    }
 
-    assert((tiarg || Arg->getKind() == clang::TemplateArgument::Type) && "Template argument not supported");
-    return tiarg;
+        assert((tiarg || Arg->getKind() == clang::TemplateArgument::Type) && "Template argument not supported");
+        if (tuple)
+            tuple->push(tiarg);
+        else
+            tiargs->push(tiarg);
+    };
+
+    addArg(Arg, nullptr);
+    return tiargs;
 }
 
-Objects* TypeMapper::FromType::fromTemplateArguments(const clang::TemplateArgument *First,
+template Objects *TypeMapper::FromType::fromTemplateArgument<true>(const clang::TemplateArgument *Arg,
+                                                                                const clang::NamedDecl *Param);
+
+template<bool wantTuple>
+  Objects* TypeMapper::FromType::fromTemplateArguments(const clang::TemplateArgument *First,
                                         const clang::TemplateArgument *End,
                                         const clang::TemplateParameterList *ParamList)
 {
     auto tiargs = new Objects;
     auto Param = ParamList ? ParamList->begin() : nullptr;
 
-    const clang::TemplateArgument *Pack = nullptr;
-
     for (auto Arg = First; Arg != End; Arg++)
     {
         auto P = Param ? *Param : nullptr;
-        auto arg = fromTemplateArgument(Arg, P);
-        if (!arg)
-            return nullptr;
-        tiargs->push(arg);
+        auto arg = fromTemplateArgument<wantTuple>(Arg, P);
+        if (!arg->dim) {
+            auto A = Arg;
+            assert(++A == End);
+        }
+        tiargs->append(arg);
 
         if (ParamList)
             Param++;
-
-        if (Arg->getKind() == clang::TemplateArgument::Pack)
-            Pack = Arg;
-    }
-
-    if (Pack && Pack->pack_size() > 1)
-    {
-        auto Arg = Pack->pack_begin();
-        Arg++;
-
-        for (; Arg != Pack->pack_end(); Arg++)
-            tiargs->push(fromTemplateArgument(Arg));
     }
 
     return tiargs;
 }
+
+template
+  Objects* TypeMapper::FromType::fromTemplateArguments<true>(const clang::TemplateArgument *First,
+                                        const clang::TemplateArgument *End,
+                                        const clang::TemplateParameterList *ParamList);
 
 Objects *TypeMapper::fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                                            const clang::TemplateParameterList *ParamList)
@@ -762,7 +790,7 @@ void TypeQualifiedBuilder::pushInst(TypeQualified *&tqual,
     // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible,
     // i.e when the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to
     // complete its instantiation and determine whether it is non-polymorphic or not.
-    if (Spec)
+    if (Spec && !from.isDependent)
         tempinst->Inst = Spec;
 
     addInst(tqual, tempinst);
@@ -1318,7 +1346,27 @@ Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::Template
     if (!tqual)
         return nullptr; // discard types leading to recursive template expansion
 
-    if (T->isSugared())
+    auto setInst = [&] (TemplateInstUnion Inst) {
+        if (isDependent)
+            return;
+
+        auto o = tqual->idents.empty() ? typeQualifiedRoot(tqual) : tqual->idents.back();
+
+        // NOTE: o may be an identifier if this is an « injected scope name »
+        if (o && o->dyncast() == DYNCAST_DSYMBOL)
+        {
+            auto s = static_cast<Dsymbol*>(o);
+            assert(s->isTemplateInstance() && isCPP(s));
+
+            auto ti = static_cast<cpp::TemplateInstance*>(s);
+
+            ti->Inst = Inst;
+        }
+    };
+
+    if (T->isTypeAlias())
+        setInst(T);
+    else if (T->isSugared())
     {
         auto RT = T->getAs<clang::RecordType>();
 
@@ -1334,21 +1382,8 @@ Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::Template
 
         // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible, i.e when
         // the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to complete its instantiation.
-        if (RT && !RT->isDependentType())
-        {
-            auto o = tqual->idents.empty() ? typeQualifiedRoot(tqual) : tqual->idents.back();
-
-            // NOTE: o may be an identifier if this is an « injected scope name »
-            if (o && o->dyncast() == DYNCAST_DSYMBOL)
-            {
-                auto s = static_cast<Dsymbol*>(o);
-                assert(s->isTemplateInstance() && isCPP(s));
-
-                auto ti = static_cast<cpp::TemplateInstance*>(s);
-
-                ti->Inst = RT->getDecl();
-            }
-        }
+        if (RT)
+            setInst(RT->getDecl());
     }
 
     return tqual;
