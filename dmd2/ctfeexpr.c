@@ -116,11 +116,12 @@ char *VoidInitExp::toChars()
 
 // Return index of the field, or -1 if not found
 // Same as getFieldIndex, but checks for a direct match with the VarDeclaration
-int findFieldIndexByName(StructDeclaration *sd, VarDeclaration *v)
+int findFieldIndexByName(AggregateDeclaration *ad, VarDeclaration *v)
 {
-    for (size_t i = 0; i < sd->fields.dim; ++i)
+    assert(ad->isStructDeclaration() || !((ClassDeclaration*)ad)->baseClass); // CALYPSO HACK
+    for (size_t i = 0; i < ad->fields.dim; ++i)
     {
-        if (sd->fields[i] == v)
+        if (ad->fields[i] == v)
             return (int)i;
     }
     return -1;
@@ -2273,7 +2274,7 @@ void showCtfeExpr(Expression *e, int level)
     for (int i = level; i > 0; --i) printf(" ");
     Expressions *elements = NULL;
     // We need the struct definition to detect block assignment
-    StructDeclaration *sd = NULL;
+    AggregateDeclaration *sd = NULL; // CALYPSO
     ClassDeclaration *cd = NULL;
     if (e->op == TOKstructliteral)
     {

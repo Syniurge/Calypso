@@ -129,6 +129,9 @@ public:
     bool isExport();
     Dsymbol *searchCtor();
 
+    bool fit(Loc loc, Scope *sc, Expressions *elements, Type *stype); // CALYPSO
+    bool fill(Loc loc, Expressions *elements, bool ctorinit); // CALYPSO
+
     bool isBaseOf2(ClassDeclaration *cd); // CALYPSO
     #define OFFSET_RUNTIME 0x76543210
     virtual bool isBaseOf(ClassDeclaration *cd, int *poffset); // CALYPSO
@@ -195,8 +198,6 @@ public:
     Dsymbol *search(Loc, Identifier *ident, int flags = IgnoreNone);
     const char *kind();
     virtual void finalizeSize(Scope *sc); // CALYPSO
-    bool fit(Loc loc, Scope *sc, Expressions *elements, Type *stype);
-    bool fill(Loc loc, Expressions *elements, bool ctorinit);
     bool isPOD();
 
     // CALYPSO

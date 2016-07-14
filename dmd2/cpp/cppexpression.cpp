@@ -675,25 +675,11 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         {
             t = tymap.fromType(E->getType().withoutLocalFastQualifiers(), loc);
 
-            if (!isMapped(CCE->getConstructor()) && CCE->getNumArgs() == 0)
-            {
-                // Avoid CallExp, which may rewrite T() into T.opCall() if there isn't a ctor (trivial implicit ctors do not get mapped)
-                auto idtmp = Identifier::generateId("__cntmp");
+            auto args = new Expressions;
+            for (auto Arg: CCE->arguments())
+                args->push(fromExpression(Arg));
 
-                auto tmp = new ::VarDeclaration(loc, t, idtmp, nullptr);
-                tmp->storage_class |= STCtemp | STCctfe;
-
-                e = new DeclarationExp(loc, tmp);
-                e = new CommaExp(loc, e, new VarExp(loc, tmp));
-            }
-            else
-            {
-                auto args = new Expressions;
-                for (auto Arg: CCE->arguments())
-                    args->push(fromExpression(Arg));
-
-                e = new CallExp(loc, new TypeExp(loc, t), args);
-            }
+            e = new CallExp(loc, new TypeExp(loc, t), args);
         }
     }
     else if (auto CNE = dyn_cast<clang::CXXNewExpr>(E))

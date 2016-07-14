@@ -474,7 +474,7 @@ public:
 class StructLiteralExp : public Expression
 {
 public:
-    StructDeclaration *sd;      // which aggregate this is for
+    AggregateDeclaration *sd;      // which aggregate this is for    // CALYPSO HACK: StructLiteralExp is also used for C++ classes, but only zeroinit
     Expressions *elements;      // parallels sd->fields[] with
                                 // NULL entries for fields to skip
     Type *stype;                // final type of result (can be different from sd's type)
@@ -502,8 +502,8 @@ public:
     // (with infinite recursion) of this expression.
     int stageflags;
 
-    StructLiteralExp(Loc loc, StructDeclaration *sd, Expressions *elements, Type *stype = NULL);
-    static StructLiteralExp *create(Loc loc, StructDeclaration *sd, void *elements, Type *stype = NULL);
+    StructLiteralExp(Loc loc, AggregateDeclaration *sd, Expressions *elements, Type *stype = NULL);
+    static StructLiteralExp *create(Loc loc, AggregateDeclaration *sd, void *elements, Type *stype = NULL);
     bool equals(RootObject *o);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);

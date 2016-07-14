@@ -610,7 +610,7 @@ public:
       result = getIrAggr(ts->sym)->getDefaultInit();
     } else {
       // make sure the struct is resolved
-      DtoResolveStruct(e->sd);
+      DtoResolveAggregate(e->sd); // CALYPSO
 
       std::map<VarDeclaration *, llvm::Constant *> varInits;
       const size_t nexprs = e->elements->dim;

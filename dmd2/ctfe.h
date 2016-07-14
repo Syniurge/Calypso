@@ -62,7 +62,7 @@ void setValue(VarDeclaration *vd, Expression *newval);
 
 /// Return index of the field, or -1 if not found
 /// Same as getFieldIndex, but checks for a direct match with the VarDeclaration
-int findFieldIndexByName(StructDeclaration *sd, VarDeclaration *v);
+int findFieldIndexByName(AggregateDeclaration *ad, VarDeclaration *v);
 
 
 /** An uninitialized value

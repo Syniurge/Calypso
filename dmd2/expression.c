@@ -4344,7 +4344,7 @@ bool AssocArrayLiteralExp::isBool(bool result)
 
 // sd( e1, e2, e3, ... )
 
-StructLiteralExp::StructLiteralExp(Loc loc, StructDeclaration *sd, Expressions *elements, Type *stype)
+StructLiteralExp::StructLiteralExp(Loc loc, AggregateDeclaration *sd, Expressions *elements, Type *stype)
     : Expression(loc, TOKstructliteral, sizeof(StructLiteralExp))
 {
     this->sd = sd;
@@ -4369,7 +4369,7 @@ StructLiteralExp::StructLiteralExp(Loc loc, StructDeclaration *sd, Expressions *
     //printf("StructLiteralExp::StructLiteralExp(%s)\n", toChars());
 }
 
-StructLiteralExp *StructLiteralExp::create(Loc loc, StructDeclaration *sd, void *elements, Type *stype)
+StructLiteralExp *StructLiteralExp::create(Loc loc, AggregateDeclaration *sd, void *elements, Type *stype)
 {
     return new StructLiteralExp(loc, sd, (Expressions *)elements, stype);
 }
@@ -8510,7 +8510,6 @@ Lagain:
         AggregateDeclaration *ad = getAggregateSym(t1);
         if (ad && !ad->byRef()) // CALYPSO
         {
-            StructDeclaration *sd = ad->isStructDeclaration();
             ad->size(loc);      // Resolve forward references to construct object
             if (ad->sizeok != SIZEOKdone)
                 return new ErrorExp();
@@ -8518,15 +8517,13 @@ Lagain:
             // First look for constructor
             if (e1->op == TOKtype && ad->ctor)
             {
-                if (sd && !sd->noDefaultCtor && !(arguments && arguments->dim) && !sd->defaultCtor) // CALYPSO
+                if (!ad->noDefaultCtor && !(arguments && arguments->dim) && !ad->langPlugin()) // CALYPSO HACK
                     goto Lx;
 
                 Expression *e = NULL;
 
-                if (t1->ty == Tstruct && /* HACK */ !ad->langPlugin()) // CALYPSO the default inits may be C++ ctor calls
-                {
-                StructLiteralExp *sle = new StructLiteralExp(loc, sd, NULL, e1->type);
-                if (!sd->fill(loc, sle->elements, true))
+                StructLiteralExp *sle = new StructLiteralExp(loc, ad, NULL, e1->type);
+                if (!ad->fill(loc, sle->elements, true))
                     return new ErrorExp();
                 // Bugzilla 14556: Set concrete type to avoid further redundant semantic().
                 sle->type = e1->type;
@@ -8534,31 +8531,14 @@ Lagain:
                 /* Copy from the initializer symbol for larger symbols,
                  * otherwise the literals expressed as code get excessively large.
                  */
-                if (sd->size(loc) > Target::ptrsize * 4 && !t1->needsNested())
+                if (ad->size(loc) > Target::ptrsize * 4 && !t1->needsNested())
 #if IN_LLVM
                     {} // FIXME!!!
 #else
-                    sle->sinit = toInitializer(sd);
+                    sle->sinit = toInitializer(ad);
 #endif
 
                 e = sle;
-                }
-                else
-                {
-                    // CALYPSO HACK back to DMD 2.066, in ConstructExp the variable is ignored anyway in DtoVarDeclaration
-                    Identifier *idtmp = Identifier::generateId("__ctmp");
-
-                    ExpInitializer *ei = new ExpInitializer(loc, new NullExp(loc, t1));
-                    VarDeclaration *tmp = new VarDeclaration(loc, t1, idtmp, ei);
-                    tmp->storage_class |= STCtemp | STCctfe;
-
-                    e = new DeclarationExp(loc, tmp);
-                    e = new CommaExp(loc, e, new VarExp(loc, tmp));
-
-                    // NOTE/TODO: NullExp can't be used yet, because in a regular method call such as someMethod(someCtor())
-                    // for the time being someCtor() needs to be a temporary
-//                     e = new NullExp(loc, t1);
-                }
 
                 if (CtorDeclaration *cf = ad->ctor->isCtorDeclaration())
                 {
@@ -8578,6 +8558,8 @@ Lagain:
                 e = e->semantic(sc);
                 return e;
             }
+            else if (e1->op == TOKtype && ad->langPlugin()) // CALYPSO HACK
+                goto Lx;
             // No constructor, look for overload of opCall
             if (search_function(ad, Id::call))
                 goto L1;        // overload of opCall, therefore it's a call
@@ -8598,7 +8580,7 @@ Lagain:
             /* It's a struct literal
              */
         Lx:
-            Expression *e = new StructLiteralExp(loc, (StructDeclaration *)ad, arguments, e1->type);
+            Expression *e = new StructLiteralExp(loc, ad, arguments, e1->type);
             e = e->semantic(sc);
             return e;
         }

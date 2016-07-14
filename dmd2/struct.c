@@ -1116,7 +1116,7 @@ void StructDeclaration::finalizeSize(Scope *sc)
  * Returns false if any errors occur.
  * Otherwise, returns true and elements[] are rewritten for the output.
  */
-bool StructDeclaration::fit(Loc loc, Scope *sc, Expressions *elements, Type *stype)
+bool AggregateDeclaration::fit(Loc loc, Scope *sc, Expressions *elements, Type *stype)
 {
     if (!elements)
         return true;
@@ -1205,7 +1205,7 @@ bool StructDeclaration::fit(Loc loc, Scope *sc, Expressions *elements, Type *sty
  * Returns false if any errors occur.
  * Otherwise, returns true and the missing arguments will be pushed in elements[].
  */
-bool StructDeclaration::fill(Loc loc, Expressions *elements, bool ctorinit)
+bool AggregateDeclaration::fill(Loc loc, Expressions *elements, bool ctorinit)
 {
     //printf("StructDeclaration::fill() %s\n", toChars());
     assert(sizeok == SIZEOKdone);

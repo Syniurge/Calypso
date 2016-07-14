@@ -180,6 +180,27 @@ static void write_struct_literal(Loc loc, LLValue *mem, StructDeclaration *sd,
   }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+static void write_class_literal(Loc loc, LLValue *mem, ClassDeclaration *cd, // CALYPSO
+                                 Expressions *elements) {
+  // ready elements data
+  assert(elements && "struct literal has null elements");
+//   const size_t nexprs = elements->dim;
+//   Expression **exprs = reinterpret_cast<Expression **>(elements->data);
+
+  // might be reset to an actual i8* value so only a single bitcast is emitted.
+  LLValue *voidptr = mem;
+  unsigned offset = 0;
+
+  // FIXME go through fields
+
+  // initialize trailing padding
+  if (cd->structsize != offset) {
+    voidptr = write_zeroes(voidptr, offset, cd->structsize);
+  }
+}
+
 namespace {
 void pushVarDtorCleanup(IRState *p, VarDeclaration *vd) {
   llvm::BasicBlock *beginBB = llvm::BasicBlock::Create(
@@ -2529,13 +2550,18 @@ public:
     }
 
     // make sure the struct is fully resolved
-    DtoResolveStruct(e->sd);
+    DtoResolveAggregate(e->sd); // CALYPSO
 
     // alloca a stack slot
     e->inProgressMemory = DtoAlloca(e->type, ".structliteral");
 
     // fill the allocated struct literal
-    write_struct_literal(e->loc, e->inProgressMemory, e->sd, e->elements);
+    if (auto sd = e->sd->isStructDeclaration())
+      write_struct_literal(e->loc, e->inProgressMemory, sd, e->elements); // CALYPSO
+    else {
+      assert(e->sd->isClassDeclaration());
+      write_class_literal(e->loc, e->inProgressMemory, static_cast<ClassDeclaration*>(e->sd), e->elements);
+    }
 
     // return as a var
     result = new DVarValue(e->type, e->inProgressMemory);
