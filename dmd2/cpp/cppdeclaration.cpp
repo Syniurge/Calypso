@@ -328,6 +328,16 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
         assert(tiargs);
+
+        auto checkTiargs = [] (Objects* tiargs) {
+            for (auto& tiarg: *tiargs)
+                if (!tiarg)
+                    return false;
+            return true;
+        };
+        if (!checkTiargs(tiargs)) // TODO: C++11 code may use lambdas, should we reference them as well?
+            goto Lcleanup;
+
         SpecValue spec(mapper);
         getIdentifier(Func, &spec, true);
         if (spec)
@@ -343,6 +353,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         tempinst->semantic(sc);
     }
 
+Lcleanup:
     // Memory usage can skyrocket when using a large library
     if (im->packages) delete im->packages;
     delete im;
