@@ -61,7 +61,7 @@ public:
     bool allowFinalOverride() override { return true; }
     bool inNonCodegen() override { return false; } // __cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted
 
-    static void cppSemantic(::FuncDeclaration *fd, Scope *sc);
+    static bool cppSemantic(::FuncDeclaration *fd, Scope *sc);
     static void semantic3reference(::FuncDeclaration *fd, Scope *sc);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
 };

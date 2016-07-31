@@ -1180,9 +1180,13 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
     pushTempParamList(D);
 
-    auto a = VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations);
-    assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
-    return static_cast<::FuncDeclaration*>((*a)[0]);
+    if (auto a = VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations))
+    {
+        assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
+        return static_cast<::FuncDeclaration*>((*a)[0]);
+    }
+
+    return nullptr;
 }
 
 // Explicit specializations only

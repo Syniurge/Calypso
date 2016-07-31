@@ -146,17 +146,17 @@ IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
 IMPLEMENT_syntaxCopy(DtorDeclaration, CDD)
 IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
 
-void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
+bool FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
 {
     if (fd->semanticRun >= PASSsemanticdone)
-        return;
+        return true;
 
     auto FD = getFD(fd);
 
     if (!FD)
     {
         assert(fd->storage_class & STCdisable); // e.g added @disable this for structs without a C++ default ctor
-        return;
+        return true;
     }
 
     if (FD->getDescribedFunctionTemplate())
@@ -172,28 +172,38 @@ void FuncDeclaration::cppSemantic(::FuncDeclaration *fd, Scope *sc)
         DeclMapper m(static_cast<cpp::Module*>(sc->module));
         m.addImplicitDecls = false;
 
-        auto inst = m.VisitInstancedFunctionTemplate(Inst);
-        assert(inst);
-
-        inst->syntaxCopy(fd);
+        if (auto inst = m.VisitInstancedFunctionTemplate(Inst))
+            inst->syntaxCopy(fd);
+        else
+        {
+            assert(fd->parent->isTemplateInstance());
+            auto ti = static_cast<::TemplateInstance*>(fd->parent);
+            fd->errors = ti->errors = true;
+            return false;
+        }
     }
+
+    return true;
 }
 
 void FuncDeclaration::semantic(Scope *sc)
 {
-    FuncDeclaration::cppSemantic(this, sc);
+    if (!FuncDeclaration::cppSemantic(this, sc))
+        return;
     ::FuncDeclaration::semantic(sc);
 }
 
 void CtorDeclaration::semantic(Scope *sc)
 {
-    cpp::FuncDeclaration::cppSemantic(this, sc);
+    if (!cpp::FuncDeclaration::cppSemantic(this, sc))
+        return;
     ::CtorDeclaration::semantic(sc);
 }
 
 void DtorDeclaration::semantic(Scope *sc)
 {
-    cpp::FuncDeclaration::cppSemantic(this, sc);
+    if (!cpp::FuncDeclaration::cppSemantic(this, sc))
+        return;
     ::DtorDeclaration::semantic(sc);
 }
 
