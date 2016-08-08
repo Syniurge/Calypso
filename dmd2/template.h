@@ -112,8 +112,10 @@ public:
     TemplateInstance *addInstance(TemplateInstance *ti);
     void removeInstance(TemplateInstance *handle);
 
-    virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; } // CALYPSO
-    virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti); // CALYPSO
+    // CALYPSO
+    virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
+    virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti);
+    virtual bool allowTupleParameterAnywhere() { return false; }
 
     TemplateDeclaration *isTemplateDeclaration() { return this; }
 

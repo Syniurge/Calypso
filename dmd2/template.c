@@ -576,7 +576,7 @@ void TemplateDeclaration::semantic(Scope *sc)
         {
             errors = true;
         }
-        if (i + 1 != parameters->dim && tp->isTemplateTupleParameter())
+        if (i + 1 != parameters->dim && tp->isTemplateTupleParameter() && !allowTupleParameterAnywhere() /* CALYPSO */)
         {
             error("template tuple parameter must be last one");
             errors = true;
