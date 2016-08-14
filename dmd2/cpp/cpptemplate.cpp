@@ -809,8 +809,8 @@ bool TemplateInstance::completeInst()
     auto CTSD = dyn_cast_or_null<clang::ClassTemplateSpecializationDecl>(
                     Inst.dyn_cast<clang::NamedDecl*>());
 
-    if (CTSD && !CTSD->hasDefinition() &&
-        CTSD->getSpecializedTemplate()->getTemplatedDecl()->hasDefinition()) // unused forward template specialization decls will exist but as empty aggregates
+    if (CTSD && !CTSD->hasDefinition()/* &&
+        CTSD->getSpecializedTemplate()->getTemplatedDecl()->hasDefinition()*/) // unused forward template specialization decls will exist but as empty aggregates
     {
         auto Ty = Context.getRecordType(CTSD);
 
