@@ -1517,7 +1517,10 @@ Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemp
 
 Type* TypeMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClassNameType* T) // e.g in template <...> class A { A &next; } next has an injected class name type
 {
-    return typeSubstOrQualifiedFor(T->getDecl());
+    // A simple identifier is preferrable when possible, as mapping template arguments requires switching to a different parameter scope
+    return new TypeIdentifier(loc, getIdentifier(T->getDecl()));
+
+//     return typeSubstOrQualifiedFor(T->getDecl());
         // NOTE: this will return typeof(this) if we aren't in a nested class, but if we are the name of the record is (without template arguments)
 }
 
