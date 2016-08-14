@@ -429,12 +429,17 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (Inst.is<clang::NamedDecl*>())
         getIdentifier(Inst.get<clang::NamedDecl*>(), &spec, true);
     if (spec)
-                cpptdtypes->shift(spec.toTemplateArg(loc));
+        cpptdtypes->shift(spec.toTemplateArg(loc));
 
     if (isVariadic() && cpptdtypes->dim == dedtypes->dim - 1)
-                cpptdtypes->push(new Tuple);
-
+        cpptdtypes->push(new Tuple);
+    if (cpptdtypes->dim == dedtypes->dim + 1) { // might happen for explicit spec where the pack has zero argument. This feels like a hack, needs cleanup.
+        auto tup = isTuple(cpptdtypes->data[0]);
+        assert(tup && tup->objects.dim == 0);
+        cpptdtypes->dim--;
+    }
     assert(cpptdtypes->dim == dedtypes->dim);
+
     for (unsigned i = 0; i < cpptdtypes->dim; i++)
         (*dedtypes)[i] = (*cpptdtypes)[i];
 

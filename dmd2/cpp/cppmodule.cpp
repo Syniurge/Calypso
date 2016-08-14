@@ -1222,6 +1222,11 @@ Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTem
     for (auto PI = TPL->begin(), PE = TPL->end();
         PI != PE; PI++)
     {
+        if (AI && isTemplateParameterPack(*PI)
+                && AI->getKind() == clang::TemplateArgument::Pack
+                && AI->pack_size() == 0)
+            break; // ex.: std::tuple<> explicit spec of std::tuple<Elem..>
+
         auto tp = VisitTemplateParameter(*PI, AI);
         if (!tp)
             return nullptr;
