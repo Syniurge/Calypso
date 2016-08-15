@@ -60,8 +60,10 @@ class TypeReference : public ::TypeReference
 public:
     CALYPSO_LANGPLUGIN
 
-    TypeReference(Type *t)
-        : ::TypeReference(t) {}
+    bool isRvalueRef;
+
+    TypeReference(Type *t, bool isRvalueRef = false)
+        : ::TypeReference(t), isRvalueRef(isRvalueRef) {}
 
     Type *syntaxCopy(Type *o = nullptr) override
     {
@@ -70,9 +72,10 @@ public:
         {
             assert(isCPP(o) && o->ty == Treference);
             t = static_cast<TypeReference*>(o);
+            t->isRvalueRef = isRvalueRef;
         }
         else
-            t = new TypeReference(nullptr);
+            t = new TypeReference(nullptr, isRvalueRef);
 
         return ::TypeReference::syntaxCopy(t);
     }
@@ -253,6 +256,14 @@ public:
             buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind()));
             buf->writeByte('#');
         }
+        else if (t->ty == Treference)
+        {
+            auto tref = static_cast<cpp::TypeReference*>(t);
+            if (tref->isRvalueRef) {
+                buf->writeByte('#');
+                buf->writeByte('#');
+            }
+        }
     }
 };
 
@@ -398,7 +409,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
         if (Pointer || BlockPointer)
             t = new TypePointer(pt);
         else
-            t = new TypeReference(pt);
+            t = new TypeReference(pt, isa<clang::RValueReferenceType>(Reference));
         return t->merge();
     }
 
@@ -2157,8 +2168,11 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 
             if (t->ty == Tpointer)
                 return Context.getPointerType(Pointee);
-            else
-                return Context.getLValueReferenceType(Pointee);
+            else {
+                auto tref = static_cast<TypeReference*>(t);
+                return tref->isRvalueRef ? Context.getRValueReferenceType(Pointee)
+                            : Context.getLValueReferenceType(Pointee);
+            }
         }
         case Tfunction:
         {
