@@ -517,7 +517,7 @@ Expression *Expression_optimize(Expression *e, int result, bool keepLvalue)
             // Optimize parameters with keeping lvalue-ness
             if (expOptimize(e->e1, result))
                 return;
-            if (e->arguments)
+            if (e->arguments && /* CALYPSO */ e->arguments->dim)
             {
                 Type *t1 = e->e1->type->toBasetype();
                 if (t1->ty == Tdelegate) t1 = t1->nextOf();
