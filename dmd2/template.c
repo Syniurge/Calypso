@@ -5783,7 +5783,7 @@ MATCH TemplateTupleParameter::matchArg(Loc instLoc, Scope *sc, Objects *tiargs,
     /* The rest of the actual arguments (tiargs[]) form the match
      * for the variadic parameter.
      */
-    assert(i + 1 == dedtypes->dim);     // must be the last one
+//     assert(i + 1 == dedtypes->dim);     // must be the last one // CALYPSO allowTupleParameterAnywhere() may be true
     Tuple *ovar;
 
     if (Tuple *u = isTuple((*dedtypes)[i]))
@@ -5797,10 +5797,11 @@ MATCH TemplateTupleParameter::matchArg(Loc instLoc, Scope *sc, Objects *tiargs,
     {
         ovar = new Tuple();
         //printf("ovar = %p\n", ovar);
-        if (i < tiargs->dim)
+        size_t packDim = tiargs->dim - dedtypes->dim + 1; // CALYPSO: assumes that there is only one pack for now, but not necessarily at the end
+        if (packDim > 0)
         {
             //printf("i = %d, tiargs->dim = %d\n", i, tiargs->dim);
-            ovar->objects.setDim(tiargs->dim - i);
+            ovar->objects.setDim(packDim);
             for (size_t j = 0; j < ovar->objects.dim; j++)
                 ovar->objects[j] = (*tiargs)[i + j];
         }
@@ -6848,6 +6849,7 @@ bool TemplateInstance::semanticTiargs(Scope *sc)
  *      tiargs  array of template arguments
  *      flags   1: replace const variables with their initializers
  *              2: don't devolve Parameter to Type
+ *              CALYPSO 4: handle Tuple (TODO: should become a template parameter after the switch to DDMD)
  * Returns:
  *      false if one or more arguments have errors.
  */
@@ -6865,6 +6867,7 @@ bool TemplateInstance::semanticTiargs(Loc loc, Scope *sc, Objects *tiargs, int f
         Type *ta = isType(o);
         Expression *ea = isExpression(o);
         Dsymbol *sa = isDsymbol(o);
+        Tuple *tupa = isTuple(o); // CALYPSO
 
         //printf("1: (*tiargs)[%d] = %p, s=%p, v=%p, ea=%p, ta=%p\n", j, o, isDsymbol(o), isTuple(o), ea, ta);
         if (ta)
@@ -7059,6 +7062,10 @@ bool TemplateInstance::semanticTiargs(Loc loc, Scope *sc, Objects *tiargs, int f
             FuncDeclaration *fd = sa->isFuncDeclaration();
             if (fd)
                 fd->functionSemantic();
+        }
+        else if ((flags & 4) && tupa) // CALYPSO
+        {
+            semanticTiargs(loc, sc, &tupa->objects, flags);
         }
         else if (isParameter(o))
         {

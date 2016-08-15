@@ -461,16 +461,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
             assert(false);
     }
 
-    if (isVariadic())
-        dedtypes->dim--; // semanticTiargs doesn't handle Tuple
-    ::TemplateInstance::semanticTiargs(ti->loc, paramscope, dedtypes, 0);
-    if (isVariadic())
-    {
-        dedtypes->dim++;
-        auto tup = isTuple((*dedtypes)[dedtypes->dim-1]);
-        assert(tup);
-        ::TemplateInstance::semanticTiargs(ti->loc, paramscope, &tup->objects, 0);
-    }
+    ::TemplateInstance::semanticTiargs(ti->loc, paramscope, dedtypes, 4);
     return m;
 }
 

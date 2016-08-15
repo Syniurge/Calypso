@@ -958,7 +958,7 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     for (auto P: *TPL)
     {
-        if (packFound)
+        if (packFound && isTemplateParameterPack(P))
         {
             ::warning(loc, "Template %s has more than one parameter pack, ignore for now", id->toChars());
             return nullptr;
