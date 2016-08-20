@@ -475,7 +475,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     }
     else if (auto SNTTP = dyn_cast<clang::SubstNonTypeTemplateParmExpr>(E))
     {
-        if (!interpret || SNTTP->isValueDependent())
+        if (/*!interpret || */SNTTP->isValueDependent()) // NOTE/FIXME(?): this doesn't work with packs, which get added n times if they have n elements, and Clang doesn't store pack info in the SNTTP
             e = fromExpressionNonTypeTemplateParm(loc,
                                 SNTTP->getParameter());
         else
