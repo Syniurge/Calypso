@@ -608,7 +608,8 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     tymap.addImplicitDecls = false;
     tymap.cppPrefix = false;
 
-    auto Temp = getPrimaryTemplate();
+    auto Temp = const_cast<clang::RedeclarableTemplateDecl*>
+                                (getDefinition(getPrimaryTemplate(), false));
 
     if (!tdtypes)
         tdtypes = &ti->tdtypes;

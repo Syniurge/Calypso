@@ -180,6 +180,8 @@ RootObject *typeQualifiedRoot(TypeQualified *tqual);
 
 const clang::ClassTemplateDecl *getDefinition(const clang::ClassTemplateDecl *D);
 const clang::FunctionTemplateDecl *getDefinition(const clang::FunctionTemplateDecl *D);
+const clang::RedeclarableTemplateDecl *getDefinition(const clang::RedeclarableTemplateDecl *D,
+                                                     bool lookIntoMemberTemplate = true);
 const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTemplateSpecializationDecl *D);
 
 bool isNonSupportedType(clang::QualType T);

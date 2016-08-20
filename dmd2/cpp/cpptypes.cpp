@@ -2212,9 +2212,9 @@ TypeMapper::TypeMapper(cpp::Module* mod)
 {
 }
 
-// NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameters.
+// NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.
 template <typename RedeclTempDecl>
- const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D)
+ const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D, bool memberTemplate = true)
 {
     for (auto RI: D->redecls()) // find the definition if any
     {
@@ -2225,9 +2225,10 @@ template <typename RedeclTempDecl>
 
     // This is more heuristical than anything else.. I'm not sure yet why templates inside
     // specializations (e.g std::allocator::rebind) do not get defined.
-    if (auto MemberTemp = const_cast<RedeclTempDecl*>(D)->getInstantiatedFromMemberTemplate())
-        if (auto MemberDef = getDefinition(MemberTemp))
-            return MemberDef;
+    if (memberTemplate)
+        if (auto MemberTemp = const_cast<RedeclTempDecl*>(D)->getInstantiatedFromMemberTemplate())
+            if (auto MemberDef = getRTDDefinition(MemberTemp))
+                return MemberDef;
 
     return cast<RedeclTempDecl>(getCanonicalDecl(D));
 }
@@ -2240,6 +2241,18 @@ const clang::ClassTemplateDecl *getDefinition(const clang::ClassTemplateDecl *D)
 const clang::FunctionTemplateDecl *getDefinition(const clang::FunctionTemplateDecl *D)
 {
     return getRTDDefinition(D);
+}
+
+const clang::RedeclarableTemplateDecl* getDefinition(const clang::RedeclarableTemplateDecl* D,
+                                                     bool lookIntoMemberTemplate)
+{
+    if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
+        return getRTDDefinition(CTD, lookIntoMemberTemplate);
+    else if (auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D))
+        return getRTDDefinition(FTD, lookIntoMemberTemplate);
+    else if (auto VTD = dyn_cast<clang::VarTemplateDecl>(D))
+        return getRTDDefinition(VTD, lookIntoMemberTemplate);
+    return D;
 }
 
 const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTemplateSpecializationDecl *D)
