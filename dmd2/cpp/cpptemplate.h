@@ -69,6 +69,8 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *) override;
     Identifier *getIdent() override;
     bool semanticTiargs(Scope *sc) override;
+    size_t correspondingParamIdx(size_t argi) override;
+    TemplateParameter* correspondingParam(size_t argi) override;
 
     bool completeInst();
     void correctTiargs();

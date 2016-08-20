@@ -115,6 +115,9 @@ public:
     // CALYPSO
     virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
     virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti);
+
+    // CALYPSO variadic template generalization (pretty intrusive...)
+    size_t numParameterPacks();
     virtual bool allowTupleParameterAnywhere() { return false; }
 
     TemplateDeclaration *isTemplateDeclaration() { return this; }
@@ -175,8 +178,9 @@ public:
 
     /* Match actual argument against parameter.
      */
-    virtual MATCH matchArg(Loc instLoc, Scope *sc, Objects *tiargs, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
+    virtual MATCH matchArg(Loc instLoc, Scope *sc, Objects *tiargs, size_t prmi, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     virtual MATCH matchArg(Scope *sc, RootObject *oarg, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam) = 0;
+        // CALYPSO TODO: the second matchArg overload is used by deduceType which doesn't handle multiple parameter packs yet
 
     /* Create dummy argument based on parameter.
      */
@@ -293,7 +297,7 @@ public:
     RootObject *specialization();
     RootObject *defaultArg(Loc instLoc, Scope *sc);
     bool hasDefaultArg();
-    MATCH matchArg(Loc loc, Scope *sc, Objects *tiargs, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
+    MATCH matchArg(Loc loc, Scope *sc, Objects *tiargs, size_t prmi, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     MATCH matchArg(Scope *sc, RootObject *oarg, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     void *dummyArg();
     void accept(Visitor *v) { v->visit(this); }
@@ -329,7 +333,6 @@ public:
     bool gagged;                        // if the instantiation is done with error gagging
     hash_t hash;                        // cached result of hashCode()
     Expressions *fargs;                 // for function template, these are the function arguments
-    int explicitargs;    // CALYPSO: remember the number of explicit arguments (that was lost after findBestMatch())
 
     TemplateInstances* deferred;
 
@@ -374,6 +377,10 @@ public:
     void expandMembers(Scope *sc);
     void tryExpandMembers(Scope *sc);
     void trySemantic3(Scope *sc2);
+
+    // CALYPSO variadic template generalization (pretty intrusive...)
+    virtual size_t correspondingParamIdx(size_t argi);
+    virtual TemplateParameter* correspondingParam(size_t argi);
 
     TemplateInstance *isTemplateInstance() { return this; }
     void accept(Visitor *v) { v->visit(this); }

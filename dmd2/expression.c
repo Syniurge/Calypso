@@ -6524,12 +6524,13 @@ Expression *IsExp::semantic(Scope *sc)
 
             /* Declare trailing parameters
              */
+            size_t argi = 1; // CALYPSO
             for (size_t i = 1; i < parameters->dim; i++)
             {
                 TemplateParameter *tp = (*parameters)[i];
                 Declaration *s = NULL;
 
-                m = tp->matchArg(loc, sc, &tiargs, i, parameters, &dedtypes, &s);
+                m = tp->matchArg(loc, sc, &tiargs, i, &argi, parameters, &dedtypes, &s);
                 if (m <= MATCHnomatch)
                     goto Lno;
                 s->semantic(sc);

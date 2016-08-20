@@ -16,6 +16,8 @@
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 
+size_t correspondingParamIdx(size_t argi, TemplateDeclaration* tempdecl, Objects* tiargs);
+
 struct RefParamPartialOrderingComparison;
 namespace clang {
     bool isAtLeastAsSpecializedAs(Sema &S,
@@ -776,19 +778,40 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
 
         auto sc2 = globalScope(sc->instantiatingModule());
 
-        for (int i = spec ? 1 : 0; i < explicitargs; i++, Arg++, Param++)
+        for (size_t i = spec ? 1 : 0; i < tiargs->dim; Arg++, Param++)
         {
-            if (!isExpression((*tiargs)[i]))
+            auto NTTPD = dyn_cast<clang::NonTypeTemplateParmDecl>(*Param);
+            if (!NTTPD && !isTemplateParameterPack(*Param)) {
+                i++;
                 continue;
+            }
 
             auto a = TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg, *Param);
-            Expression* e = a->dim ? isExpression((*a)[0]) : nullptr;
-            assert(e);
-            (*tiargs)[i] = e->semantic(sc2);
+            for (auto arg: *a) {
+                if (auto e = isExpression(arg)) {
+                    assert(isExpression((*tiargs)[i]));
+                    (*tiargs)[i] = e->semantic(sc2);
+                }
+                i++;
+            }
         }
     }
 
     return result;
+}
+
+size_t TemplateInstance::correspondingParamIdx(size_t argi)
+{
+    assert(tempdecl && tempdecl->isTemplateDeclaration() && isCPP(tempdecl));
+    auto primtemp = static_cast<cpp::TemplateDeclaration*>(tempdecl)->primaryTemplate();
+    return ::correspondingParamIdx(argi, primtemp, tiargs);
+}
+
+TemplateParameter* TemplateInstance::correspondingParam(size_t argi)
+{
+    assert(tempdecl && tempdecl->isTemplateDeclaration() && isCPP(tempdecl));
+    auto primtemp = static_cast<cpp::TemplateDeclaration*>(tempdecl)->primaryTemplate();
+    return (*primtemp->parameters)[::correspondingParamIdx(argi, primtemp, tiargs)];
 }
 
 bool TemplateInstance::completeInst()

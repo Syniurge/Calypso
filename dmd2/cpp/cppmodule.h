@@ -42,6 +42,8 @@ public:
     File* buildFilePath(const char* forcename, const char* path, const char* ext) override;
 };
 
+bool isTemplateParameterPack(const clang::NamedDecl *Param);
+
 }
 
 #endif /* DMD_CPP_CPPMODULE_H */

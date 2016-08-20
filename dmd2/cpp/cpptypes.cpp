@@ -556,10 +556,7 @@ template<bool wantTuple>
     {
         auto P = Param ? *Param : nullptr;
         auto arg = fromTemplateArgument<wantTuple>(Arg, P);
-        if (!arg->dim) {
-            auto A = Arg;
-            assert(++A == End);
-        }
+        assert(arg->dim || Arg->getKind() == clang::TemplateArgument::Pack);
         tiargs->append(arg);
 
         if (ParamList)

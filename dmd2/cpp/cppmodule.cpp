@@ -952,19 +952,8 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     TempParamScope.push_back(TPL);
 
-    // FIXME: C++ templates may have multiple parameter packs, which isn't supported by D
-    // Since this is a rare occurence ignore them for now
-    bool packFound = false;
-
     for (auto P: *TPL)
     {
-        if (packFound && isTemplateParameterPack(P))
-        {
-            ::warning(loc, "Template %s has more than one parameter pack, ignore for now", id->toChars());
-            return nullptr;
-        }
-        packFound = isTemplateParameterPack(P);
-
         auto tp = VisitTemplateParameter(P);
         if (!tp)
             return nullptr; // should be extremely rare, e.g if there's a int128_t value parameter
@@ -1056,10 +1045,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
             return nullptr;
 
         if (NTTPD->isParameterPack())
-        {
-            ::warning(Loc(), "%s", "C++ template non-type parameter packs do not strictly map to D tuple parameters");
             return new TemplateTupleParameter(loc, id);
-        }
         else
         {
             Expression *tp_specvalue = nullptr;
@@ -1108,10 +1094,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
         id = getIdentifierForTemplateTypeParm(TTPD);
 
         if (TTPD->isParameterPack())
-        {
-            ::warning(Loc(), "%s", "C++ template type parameter packs do not strictly map to D tuple parameters");
             return new TemplateTupleParameter(loc, id);
-        }
         else
         {
             Type *tp_spectype = nullptr;
@@ -1135,10 +1118,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
         id = getIdentifierForTemplateTemplateParm(TempTemp);
 
         if (TempTemp->isParameterPack())
-        {
-            ::warning(Loc(), "%s", "C++ template template parameter packs do not strictly map to D tuple parameters");
             return new TemplateTupleParameter(loc, id);
-        }
         else
         {
             Type *tp_spectype = nullptr;

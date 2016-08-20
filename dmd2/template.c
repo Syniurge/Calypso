@@ -869,6 +869,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, TemplateInstance *ti,
 
     // Attempt type deduction
     m = MATCHexact;
+    size_t argi = 0; // CALYPSO
     for (size_t i = 0; i < dedtypes_dim; i++)
     {
         MATCH m2;
@@ -883,7 +884,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, TemplateInstance *ti,
             printf("\tparameter[%d] is %s : %s\n", i, tp->ident->toChars(), ttp->specType ? ttp->specType->toChars() : "");
 #endif
 
-        m2 = tp->matchArg(ti->loc, paramscope, ti->tiargs, i, parameters, dedtypes, &sparam);
+        m2 = tp->matchArg(ti->loc, paramscope, ti->tiargs, i, &argi /* CALYPSO */, parameters, dedtypes, &sparam);
         //printf("\tm2 = %d\n", m2);
 
         if (m2 == MATCHnomatch)
@@ -1236,11 +1237,12 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(
 
         memcpy(dedargs->tdata(), tiargs->tdata(), n * sizeof(*dedargs->tdata()));
 
+        size_t argi = 0; // CALYPSO
         for (size_t i = 0; i < n; i++)
         {
             assert(i < parameters->dim);
             Declaration *sparam = NULL;
-            MATCH m = (*parameters)[i]->matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, &sparam);
+            MATCH m = (*parameters)[i]->matchArg(instLoc, paramscope, dedargs, i, &argi, parameters, dedtypes, &sparam);
             //printf("\tdeduceType m = %d\n", m);
             if (m <= MATCHnomatch)
                 goto Lnomatch;
@@ -1557,6 +1559,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(
                 // WARNING: is this appropriate to do it this early? can C++ template functions have default function args which template args get inferred from?
                 if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
                     goto Lnomatch;
+                { size_t argidx = ntargs; // CALYPSO FIXME: this is wrong if there are packs before [ntargs]
                 for (size_t i = ntargs; i < dedargs->dim; i++)
                 {
                     TemplateParameter *tparam = (*parameters)[i];
@@ -1573,7 +1576,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(
                                  * the oded == oarg
                                  */
                                 (*dedargs)[i] = oded;
-                                MATCH m2 = tparam->matchArg(loc, paramscope, dedargs, i, parameters, dedtypes, NULL);
+                                MATCH m2 = tparam->matchArg(loc, paramscope, dedargs, i, &argidx, parameters, dedtypes, NULL);
                                 //printf("m2 = %d\n", m2);
                                 if (m2 <= MATCHnomatch)
                                     goto Lnomatch;
@@ -1596,6 +1599,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(
                                 (*dedargs)[i] = declareParameter(paramscope, tparam, oded);
                         }
                     }
+                }
                 }
             }
             nfargs2 = argi + 1;
@@ -1914,6 +1918,7 @@ Lmatch:
     // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
     if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
         goto Lnomatch;
+    { size_t argidx = ntargs; // CALYPSO FIXME: this is wrong if there are packs before [ntargs]
     for (size_t i = ntargs; i < dedargs->dim; i++)
     {
         TemplateParameter *tparam = (*parameters)[i];
@@ -1936,7 +1941,7 @@ Lmatch:
                      * the oded == oarg
                      */
                     (*dedargs)[i] = oded;
-                    MATCH m2 = tparam->matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, NULL);
+                    MATCH m2 = tparam->matchArg(instLoc, paramscope, dedargs, i, &argidx, parameters, dedtypes, NULL);
                     //printf("m2 = %d\n", m2);
                     if (m2 <= MATCHnomatch)
                         goto Lnomatch;
@@ -1982,7 +1987,7 @@ Lmatch:
                 if (tparam->specialization())
                 {
                     (*dedargs)[i] = oded;
-                    MATCH m2 = tparam->matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, NULL);
+                    MATCH m2 = tparam->matchArg(instLoc, paramscope, dedargs, i, &argidx, parameters, dedtypes, NULL);
                     //printf("m2 = %d\n", m2);
                     if (m2 <= MATCHnomatch)
                         goto Lnomatch;
@@ -2007,6 +2012,7 @@ Lmatch:
             else
                 (*dedargs)[i] = oded;
         }
+    }
     }
 
     // Partially instantiate function for constraint and fd->leastAsSpecialized()
@@ -2140,14 +2146,30 @@ TemplateTupleParameter *isVariadic(TemplateParameters *parameters)
     size_t dim = parameters->dim;
     TemplateTupleParameter *tp = NULL;
 
-    if (dim)
-        tp = ((*parameters)[dim - 1])->isTemplateTupleParameter();
+    for (auto param: *parameters)
+        if (tp = param->isTemplateTupleParameter())
+            break;
     return tp;
 }
 
 TemplateTupleParameter *TemplateDeclaration::isVariadic()
 {
     return ::isVariadic(parameters);
+}
+
+// CALYPSO
+size_t numParameterPacks(TemplateParameters* parameters)
+{
+    size_t numPacks = 0;
+    for (auto param: *parameters)
+        if (param->isTemplateTupleParameter())
+            numPacks++;
+    return numPacks;
+}
+
+size_t TemplateDeclaration::numParameterPacks()
+{
+    return ::numParameterPacks(parameters);
 }
 
 /***********************************
@@ -5009,13 +5031,16 @@ TemplateThisParameter  *TemplateParameter::isTemplateThisParameter()
  *      *psparam        set to symbol declared and initialized to dedtypes[i]
  */
 MATCH TemplateParameter::matchArg(Loc instLoc, Scope *sc, Objects *tiargs,
-        size_t i, TemplateParameters *parameters, Objects *dedtypes,
+        size_t i, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes,
         Declaration **psparam)
 {
     RootObject *oarg;
 
-    if (i < tiargs->dim)
-        oarg = (*tiargs)[i];
+    if (*argi < tiargs->dim)
+    {
+        oarg = (*tiargs)[*argi];
+        (*argi)++;
+    }
     else
     {
         // Get default argument instead
@@ -5777,7 +5802,7 @@ bool TemplateTupleParameter::semantic(Scope *sc, TemplateParameters *parameters)
 }
 
 MATCH TemplateTupleParameter::matchArg(Loc instLoc, Scope *sc, Objects *tiargs,
-        size_t i, TemplateParameters *parameters, Objects *dedtypes,
+        size_t i, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes,
         Declaration **psparam)
 {
     /* The rest of the actual arguments (tiargs[]) form the match
@@ -5791,19 +5816,25 @@ MATCH TemplateTupleParameter::matchArg(Loc instLoc, Scope *sc, Objects *tiargs,
         // It has already been deduced
         ovar = u;
     }
-    else if (i + 1 == tiargs->dim && isTuple((*tiargs)[i]))
+    else if ((*argi) + 1 == tiargs->dim && isTuple((*tiargs)[(*argi)]))
         ovar = isTuple((*tiargs)[i]);
     else
     {
         ovar = new Tuple();
         //printf("ovar = %p\n", ovar);
-        size_t packDim = tiargs->dim - dedtypes->dim + 1; // CALYPSO: assumes that there is only one pack for now, but not necessarily at the end
+        int numPrevPacks = 0; // CALYPSO
+        for (size_t pidx = 0; pidx < i; pidx++)
+            if ((*parameters)[pidx]->isTemplateTupleParameter())
+                numPrevPacks++;
+        size_t numParamPacks = numParameterPacks(parameters);
+        size_t packDim =
+                (2*numParamPacks + tiargs->dim - parameters->dim - 1 - numPrevPacks) / numParamPacks;
         if (packDim > 0)
         {
             //printf("i = %d, tiargs->dim = %d\n", i, tiargs->dim);
             ovar->objects.setDim(packDim);
-            for (size_t j = 0; j < ovar->objects.dim; j++)
-                ovar->objects[j] = (*tiargs)[i + j];
+            for (size_t j = 0; j < ovar->objects.dim; j++, (*argi)++)
+                ovar->objects[j] = (*tiargs)[*argi];
         }
     }
     return matchArg(sc, ovar, i, parameters, dedtypes, psparam);
@@ -5912,7 +5943,6 @@ TemplateInstance::TemplateInstance(Loc loc, Identifier *ident)
     this->gagged = false;
     this->hash = 0;
     this->fargs = NULL;
-    this->explicitargs = -1; // CALYPSO
 }
 
 /*****************
@@ -5944,7 +5974,6 @@ TemplateInstance::TemplateInstance(Loc loc, TemplateDeclaration *td, Objects *ti
     this->gagged = false;
     this->hash = 0;
     this->fargs = NULL;
-    this->explicitargs = -1; // CALYPSO
 
     assert(tempdecl->scope);
 }
@@ -5969,7 +5998,6 @@ Dsymbol *TemplateInstance::syntaxCopy(Dsymbol *s)
         s ? (TemplateInstance *)s
           : new TemplateInstance(loc, name);
     ti->tiargs = arraySyntaxCopy(tiargs);
-    ti->explicitargs = explicitargs;
 
     TemplateDeclaration *td;
     if (inst && tempdecl && (td = tempdecl->isTemplateDeclaration()) != NULL)
@@ -6110,9 +6138,6 @@ void TemplateInstance::semantic(Scope *sc, Expressions *fargs)
 #if LOG
     printf("\tdo semantic\n");
 #endif
-    // CALYPSO : Record the number of explicit arguments.
-    if (explicitargs == -1)
-        explicitargs = tiargs->dim;
     /* Find template declaration first,
      * then run semantic on each argument (place results in tiargs[]),
      * last find most specialized template from overload list/set.
@@ -7112,7 +7137,7 @@ bool TemplateInstance::findBestMatch(Scope *sc, Expressions *fargs)
             error("incompatible arguments for template instantiation");
             return false;
         }
-        // TODO: Normalizing tiargs for bugzilla 7469 is necessary?
+        // TODO: Normalizing tiargs for bugzilla 7469 is necessary? // CALYPSO FIXME yeah probably
         return true;
     }
 
@@ -7245,27 +7270,30 @@ bool TemplateInstance::findBestMatch(Scope *sc, Expressions *fargs)
          *    S!num s;             // S!1 is instantiated, not S!num
          *  }
          */
-        size_t dim = td_last->parameters->dim - (td_last->isVariadic() ? 1 : 0);
-        for (size_t i = 0; i < dim; i++)
-        {
-            if (tiargs->dim <= i)
-                tiargs->push(tdtypes[i]);
-            assert(i < tiargs->dim);
+        size_t i = 0;
+        std::function<void(RootObject* a)> addTiarg
+          = [&] (RootObject* a) { // CALYPSO generalize parameter packs
+            if (Tuple *va = isTuple(a)) {
+                for (auto va_obj: va->objects)
+                    addTiarg(va_obj);
+            } else if (tiargs->dim <= i) {
+                tiargs->push(a);
+            } else
+                (*tiargs)[i] = a;
+            i++;
+        };
 
-            TemplateValueParameter *tvp = (*td_last->parameters)[i]->isTemplateValueParameter();
-            if (!tvp)
-                continue;
-            assert(tdtypes[i]);
-            // tdtypes[i] is already normalized to the required type in matchArg
-
-            (*tiargs)[i] = tdtypes[i];
-        }
-        if (td_last->isVariadic() && tiargs->dim == dim && tdtypes[dim])
+        for (size_t pidx = 0; pidx < td_last->parameters->dim; pidx++)
         {
-            Tuple *va = isTuple(tdtypes[dim]);
-            assert(va);
-            for (size_t i = 0; i < va->objects.dim; i++)
-                tiargs->push(va->objects[i]);
+//             TemplateValueParameter *tvp = (*td_last->parameters)[pidx]->isTemplateValueParameter();
+//             if (!tvp) {
+//                 i++;
+//                 continue; // CALYPSO WARNING: not sure about what happens if a pack is before a non-value parameter
+//             }
+//             assert(tdtypes[pidx]);
+//             // tdtypes[i] is already normalized to the required type in matchArg
+
+            addTiarg(tdtypes[pidx]);
         }
     }
     else if (errors && inst)
@@ -7676,7 +7704,8 @@ Identifier *TemplateInstance::genIdent(Objects *args)
     }
     else
         buf.printf("__T%llu%s", (ulonglong)strlen(id), id);
-    size_t nparams = tempdecl->parameters->dim - (tempdecl->isVariadic() ? 1 : 0);
+    std::function<void(Objects*, bool)> processArgs =
+        [&] (Objects* args, bool insideTuple = false) {
     for (size_t i = 0; i < args->dim; i++)
     {
         RootObject *o = (*args)[i];
@@ -7685,8 +7714,11 @@ Identifier *TemplateInstance::genIdent(Objects *args)
         Dsymbol *sa = isDsymbol(o);
         Tuple *va = isTuple(o);
         //printf("\to [%d] %p ta %p ea %p sa %p va %p\n", i, o, ta, ea, sa, va);
-        if (i < nparams && (*tempdecl->parameters)[i]->specialization())
-            buf.writeByte('H');     // Bugzilla 6574
+        if (!insideTuple) {
+            auto tp = correspondingParam(i); // CALYPSO
+            if (!tp->isTemplateTupleParameter() && tp->specialization())
+                buf.writeByte('H');     // Bugzilla 6574
+        }
         if (ta)
         {
             buf.writeByte('T');
@@ -7767,13 +7799,14 @@ Identifier *TemplateInstance::genIdent(Objects *args)
         }
         else if (va)
         {
-            assert(i + 1 == args->dim);         // must be last one
-            args = &va->objects;
-            i = -(size_t)1;
+            assert(i + 1 == args->dim || tempdecl->allowTupleParameterAnywhere() /* CALYPSO */);         // must be last one
+            processArgs(&va->objects, true); // CALYPSO wonderful code, but why and how does writeln get a Tuple in its tiargs? this seems inconsistent with the flattening in findBestMatch..
         }
         else
             assert(0);
     }
+    };
+    processArgs(args, false);
     buf.writeByte('Z');
     id = buf.peekString();
     //printf("\tgenIdent = %s\n", id);
@@ -8130,6 +8163,44 @@ hash_t TemplateInstance::hashCode()
         hash += arrayObjectHash(&tdtypes);
     }
     return hash;
+}
+
+// CALYPSO
+size_t correspondingParamIdx(size_t argi, TemplateDeclaration* tempdecl, Objects* tiargs)
+{
+    auto numParamPacks = tempdecl->numParameterPacks();
+    auto numArgsInOnePack = numParamPacks ?
+                ((2*numParamPacks + tiargs->dim - tempdecl->parameters->dim - 1) / numParamPacks) : 0;
+
+    // NOTE: template<typename... _Args1, std::size_t... _Indexes1, typename... _Args2, std::size_t... _Indexes2> pair
+    //   may be instantiated with only two arguments, so we add (numParamPacks-1) to tiargs->dim to ensure
+    //   that any remainder counts as one in numArgsInOnePack
+
+    size_t aidx = 0, pidx = 0;
+    for (;; pidx++) {
+        assert(pidx < tempdecl->parameters->dim);
+        if ((*tempdecl->parameters)[pidx]->isTemplateTupleParameter())
+            aidx += numArgsInOnePack;
+        else
+            aidx++;
+        if (aidx > argi)
+            break;
+    }
+    return pidx;
+}
+
+size_t TemplateInstance::correspondingParamIdx(size_t argi)
+{
+    assert(tempdecl && tempdecl->isTemplateDeclaration());
+    auto tempdecl = static_cast<TemplateDeclaration*>(this->tempdecl);
+    return ::correspondingParamIdx(argi, tempdecl, tiargs);
+}
+
+TemplateParameter* TemplateInstance::correspondingParam(size_t argi)
+{
+    assert(tempdecl && tempdecl->isTemplateDeclaration());
+    auto tempdecl = static_cast<TemplateDeclaration*>(this->tempdecl);
+    return (*tempdecl->parameters)[::correspondingParamIdx(argi, tempdecl, tiargs)];
 }
 
 /**************************************
