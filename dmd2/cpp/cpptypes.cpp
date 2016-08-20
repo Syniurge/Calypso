@@ -1275,19 +1275,34 @@ bool TypeMapper::isRecursivelyInstantiated(const clang::TemplateName Name,
 
     if (InjectedName)
     {
+        int packRecurse = 0;
+
         for (auto Arg = ArgBegin; Arg != ArgEnd; Arg++)
         {
             switch (Arg->getKind())
             {
                 case clang::TemplateArgument::Expression:
-                    if (RecursiveInstChecker(InjectedName).Visit(Arg->getAsExpr()) == RC_RecursiveMaybe)
+                {
+                    auto E = Arg->getAsExpr();
+
+                    if (RecursiveInstChecker(InjectedName).Visit(E) == RC_RecursiveMaybe)
                         return true;
+
+                    auto SNTP = dyn_cast<clang::SubstNonTypeTemplateParmExpr>(E);
+                    if (SNTP && SNTP->getParameter() && SNTP->getParameter()->isParameterPack())
+                        packRecurse |= 2;
+                    else
+                        packRecurse |= 1;
+                }
                 case clang::TemplateArgument::Type:
                     break;
                 default:
                     break;
             }
         }
+
+        if (packRecurse == 3)
+            return true;
     }
 
     return false;
