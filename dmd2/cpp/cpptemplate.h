@@ -76,6 +76,10 @@ public:
     void correctTiargs();
 
     const clang::NamedDecl* getInstantiatedTemplate();
+
+    // Debug methods
+    clang::NamedDecl* getInstND();
+    const clang::TemplateSpecializationType* getInstTST();
 };
 
 }

@@ -875,4 +875,15 @@ const clang::NamedDecl* TemplateInstance::getInstantiatedTemplate()
                                                 ->getTemplateName().getAsTemplateDecl();
 }
 
+// Debug functions
+clang::NamedDecl* TemplateInstance::getInstND()
+{
+    return Inst.get<clang::NamedDecl*>();
+}
+
+const clang::TemplateSpecializationType* TemplateInstance::getInstTST()
+{
+    return Inst.get<const clang::TemplateSpecializationType*>();
+}
+
 }
