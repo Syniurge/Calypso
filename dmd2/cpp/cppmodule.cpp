@@ -1069,7 +1069,8 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
                 }
 
                 tp_specvalue = isExpression(specArg);
-                assert(tp_specvalue);
+                if (!tp_specvalue)
+                    return nullptr;
             }
 
             if (NTTPD->hasDefaultArgument())
@@ -1103,7 +1104,8 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
             if (SpecArg)
             {
                 tp_spectype = isType(specArg);
-                assert(tp_spectype);
+                if (!tp_spectype)
+                    return nullptr;
             }
 
             if (TTPD->hasDefaultArgument())
@@ -1127,7 +1129,8 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
             if (SpecArg)
             {
                 tp_spectype = isType(specArg);
-                assert(tp_spectype);
+                if (!tp_spectype)
+                    return nullptr;
             }
 
             if (TempTemp->hasDefaultArgument())
