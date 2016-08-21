@@ -929,6 +929,7 @@ void LangPlugin::buildMacroMap()
 {
     auto& MMap = pch.MMap;
     auto& PP = getPreprocessor();
+    auto& Context = getASTContext();
     auto& Sema = getSema();
     auto& SM = getSourceManager();
 
@@ -941,11 +942,7 @@ void LangPlugin::buildMacroMap()
         auto MDir = (*I).getSecond().getLatest();
         auto MInfo = MDir->getMacroInfo();
 
-        if (!MInfo->isObjectLike() || MInfo->getNumTokens() != 1)
-            continue;
-
-        auto& Tok = MInfo->getReplacementToken(0);
-        if (Tok.getKind() != clang::tok::numeric_constant)
+        if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
             continue;
 
         // Find the corresponding module header this macro is from
@@ -969,9 +966,21 @@ void LangPlugin::buildMacroMap()
         if (!MacroMapEntry)
             MacroMapEntry = new MacroMapEntryTy;
 
-        auto ResultExpr = Sema.ActOnNumericConstant(Tok);
-        assert(!ResultExpr.isInvalid());
-        auto Expr = ResultExpr.get();
+        clang::Expr* Expr;
+
+        if (MInfo->getNumTokens() == 0) {
+            unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
+            Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
+                                        Context.BoolTy, MLoc);
+        } else {
+            auto& Tok = MInfo->getReplacementToken(0);
+            if (Tok.getKind() != clang::tok::numeric_constant)
+                continue;
+
+            auto ResultExpr = Sema.ActOnNumericConstant(Tok);
+            assert(!ResultExpr.isInvalid());
+            Expr = ResultExpr.get();
+        }
 
         MacroMapEntry->emplace_back(II, Expr);
     }
