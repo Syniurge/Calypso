@@ -221,6 +221,7 @@ public:
          
     // ==== ==== ====
     PCH pch;
+    llvm::StringSet<> TargetFeatures;
     llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
 
     typedef std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMapEntryTy;

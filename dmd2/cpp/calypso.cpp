@@ -18,6 +18,7 @@
 
 #include "driver/tool.h"
 #include "driver/cl_options.h"
+#include "gen/irstate.h"
 
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/SourceLocation.h"
@@ -42,6 +43,7 @@
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/Target/TargetMachine.h"
 
 namespace cpp
 {
@@ -1163,6 +1165,20 @@ void LangPlugin::init(const char *Argv0)
 
     Module::init();
     pch.init();
+
+    auto TargetFS = gTargetMachine->getTargetFeatureString();
+
+    llvm::SmallVector<StringRef, 1> AttrFeatures;
+    TargetFS.split(AttrFeatures, ",");
+
+    for (auto &Feature : AttrFeatures) {
+        Feature = Feature.trim();
+
+        if (Feature.startswith("-"))
+                continue;
+
+        TargetFeatures.insert(Feature);
+    }
 }
 
 clang::ASTContext& LangPlugin::getASTContext()

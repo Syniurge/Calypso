@@ -709,7 +709,7 @@ bool FunctionReferencer::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E)
 }
 }
 
-bool isMapped(const clang::Decl *D) // TODO
+bool isMapped(const clang::Decl *D)
 {
     if (auto FD = dyn_cast<clang::FunctionDecl>(D))
     {
@@ -726,6 +726,15 @@ bool isMapped(const clang::Decl *D) // TODO
                 return false;
             if (MD->isImplicit() && MD->isTrivial()/* && !isPolymorphic(Parent)*/)
                 return false;
+        }
+
+        // Clang runtime functions making use of target-specific intrisics always have __target__("feature") attributes
+        // do not map the ones not supported by the target machine set by LDC
+        if (auto TD = FD->getAttr<clang::TargetAttr>()) {
+            auto ParsedAttr = TD->parse();
+            for (auto& Feature: ParsedAttr.first)
+                if (!calypso.TargetFeatures.count(Feature))
+                    return false;
         }
     }
 
