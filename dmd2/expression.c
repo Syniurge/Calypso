@@ -8527,7 +8527,7 @@ Lagain:
                 if (!ad->fill(loc, sle->elements, true))
                     return new ErrorExp();
                 // Bugzilla 14556: Set concrete type to avoid further redundant semantic().
-                sle->type = e1->type;
+//                 sle->type = e1->type; // CALYPSO: since default init of C++ aggregates need semantic, sle->type needs to be NULL
 
                 /* Copy from the initializer symbol for larger symbols,
                  * otherwise the literals expressed as code get excessively large.
