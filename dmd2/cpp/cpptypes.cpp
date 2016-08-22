@@ -541,6 +541,8 @@ template<bool wantTuple>
     return tiargs;
 }
 
+template Objects *TypeMapper::FromType::fromTemplateArgument<false>(const clang::TemplateArgument *Arg,
+                                                                                const clang::NamedDecl *Param);
 template Objects *TypeMapper::FromType::fromTemplateArgument<true>(const clang::TemplateArgument *Arg,
                                                                                 const clang::NamedDecl *Param);
 
