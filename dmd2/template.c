@@ -7285,15 +7285,15 @@ bool TemplateInstance::findBestMatch(Scope *sc, Expressions *fargs)
 
         for (size_t pidx = 0; pidx < td_last->parameters->dim; pidx++)
         {
-//             TemplateValueParameter *tvp = (*td_last->parameters)[pidx]->isTemplateValueParameter();
-//             if (!tvp) {
-//                 i++;
-//                 continue; // CALYPSO WARNING: not sure about what happens if a pack is before a non-value parameter
-//             }
-//             assert(tdtypes[pidx]);
-//             // tdtypes[i] is already normalized to the required type in matchArg
+            auto tvp = (*td_last->parameters)[pidx]->isTemplateValueParameter(); // CALYPSO
+            auto tup = (*td_last->parameters)[pidx]->isTemplateTupleParameter();
 
-            addTiarg(tdtypes[pidx]);
+            if (tvp || tup)
+                addTiarg(tdtypes[pidx]);
+            else
+                i++; // tdtypes[i] is already normalized to the required type in matchArg
+                    // CALYPSO NOTE/potential DMD BUG: if we addTiarg for every parameter, then VarExp get replaced by Dsymbol which messes up genIdent,
+                    // but so what about Tuple containing VarExp?
         }
     }
     else if (errors && inst)
