@@ -4,6 +4,7 @@
 #include "cpp/cppdeclaration.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/cpptypes.h"
+#include "aggregate.h"
 #include "id.h"
 #include "template.h"
 
@@ -726,7 +727,7 @@ Type *getAPIntDType(const llvm::APSInt &i)
 }
 
 Expression *ExprMapper::fromAPValue(Loc loc, const clang::APValue &Val,
-                        clang::QualType Ty)
+                        clang::QualType Ty, Expression **result)
 {
     using clang::APValue;
 
@@ -736,6 +737,39 @@ Expression *ExprMapper::fromAPValue(Loc loc, const clang::APValue &Val,
             return fromAPInt(loc, Val.getInt(), Ty);
         case APValue::Float:
             return fromAPFloat(loc, Val.getFloat());
+        case APValue::Struct:
+        {
+            if (!result)
+                return nullptr; // FIXME DeclMapper::VisitValueDecl relies on fromAPValue being limited, fix it
+
+            assert((*result)->op == TOKstructliteral);
+            auto sle = static_cast<StructLiteralExp*>(*result);
+
+            size_t elem_i = 0;
+            std::function<void(const APValue &Val, AggregateDeclaration* ad)>
+                fromFields = [&] (const APValue &Val, AggregateDeclaration* ad)
+            {
+                auto cd = ad->isClassDeclaration();
+
+                unsigned numBases = 0;
+                if (cd && cd->baseclasses)
+                    numBases = cd->baseclasses->dim;
+
+                if (auto base = toAggregateBase(ad))  // FIXME numBases > 1
+                    fromFields(Val.getStructBase(0), base);
+
+                for (size_t i = 0; i < ad->fields.dim; i++, elem_i++) {
+                    assert(elem_i < sle->elements->dim);
+                    (*sle->elements)[elem_i] = fromAPValue(loc, Val.getStructField(i),
+                                    clang::QualType(), &(sle->elements->data[i]));
+                }
+
+                return true;
+            };
+
+            fromFields(Val, sle->sd);
+            return sle;
+        }
         default:
             return nullptr;
     }
@@ -805,6 +839,97 @@ Expression* ExprMapper::fromExpressionNonTypeTemplateParm(Loc loc, const clang::
 {
     auto ident = DeclMapper::getIdentifierForTemplateNonTypeParm(D);
     return new IdentifierExp(loc, ident);
+}
+
+bool ExprMapper::toAPValue(clang::APValue& Result, Expression* e)
+{
+    using clang::APValue;
+
+    auto& Context = calypso.getASTContext();
+
+    if (e->op == TOKvar)
+        e = e->optimize(WANTvalue);
+
+    switch (e->op)
+    {
+        case TOKint64:
+        {
+            auto exp = static_cast<IntegerExp*>(e);
+            auto value = exp->getInteger();
+
+            auto IntType = tymap.toType(e->loc, e->type, nullptr);
+            unsigned IntSize = Context.getTypeSize(IntType);
+
+            llvm::APInt IntVal(IntSize, value);
+            Result = APValue(llvm::APSInt(IntVal, exp->type->isunsigned()));
+
+            return true;
+        }
+        case TOKfloat64:
+        {
+            auto exp = static_cast<RealExp *>(e);
+
+            auto tofltSemantics = [] (Type *t) {
+                switch(t->ty) {
+                    case Tfloat32: return &llvm::APFloat::IEEEsingle;
+                    case Tfloat64: return &llvm::APFloat::IEEEdouble;
+                    default: llvm_unreachable("Unhandled tofltSemantics");
+                }
+            };
+
+            llvm::APFloat Val(*tofltSemantics(exp->type));
+
+            switch(exp->type->ty) {
+                case Tfloat32:
+                    Val = llvm::APFloat((float) exp->value);
+                    break;
+                case Tfloat64:
+                    Val = llvm::APFloat((double) exp->value);
+                    break;
+                default:
+                    llvm_unreachable("Unhandled float type");
+            }
+
+            Result = APValue(Val);
+            return true;
+        }
+        case TOKstructliteral:
+        {
+            auto sle = static_cast<StructLiteralExp*>(e);
+
+            unsigned elem_i = 0;
+            std::function<bool(APValue &Val, AggregateDeclaration* ad)>
+                toFields = [&] (APValue &Val, AggregateDeclaration* ad)
+            {
+                auto cd = ad->isClassDeclaration();
+
+                unsigned numBases = 0;
+                if (cd && cd->baseclasses)
+                    numBases = cd->baseclasses->dim;
+
+                Val = APValue(APValue::UninitStruct(),
+                                        numBases, ad->fields.dim);
+
+                if (auto base = toAggregateBase(ad))  // FIXME numBases > 1
+                    if (!toFields(Val.getStructBase(0), base))
+                        return false;
+
+                for (unsigned i = 0; i < ad->fields.dim; i++, elem_i++)
+                    if (!toAPValue(Val.getStructField(i), (*sle->elements)[elem_i]))
+                        return false;
+
+                return true;
+            };
+
+            if (!toFields(Result, sle->sd))
+                return false;
+
+            assert(elem_i == sle->elements->dim);
+            return true;
+        }
+        default:
+            return false;
+    }
 }
 
 clang::Expr* ExprMapper::toExpression(Expression* e)
