@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/complex.h"
 #include "gen/irstate.h"
@@ -23,6 +24,7 @@
 #include "template.h"
 // Needs other includes.
 #include "ctfe.h"
+#include "import.h"
 
 extern dinteger_t undoStrideMul(Loc &loc, Type *t, dinteger_t offset);
 
@@ -611,6 +613,14 @@ public:
     } else {
       // make sure the struct is resolved
       DtoResolveAggregate(e->sd); // CALYPSO
+
+      // CALYPSO HACK? Translating a StructLiteralExp to an APValue and calling CodeGenModule::EmitConstantValue
+      // is easier than handling a map of field <-> llvm::Constant. An alternative would be to , but it looks more complicated as well.
+      if (auto lp = e->sd->langPlugin())
+        if (auto c = lp->codegen()->createStructLiteralConstant(e)) {
+          result = c;
+          return;
+        }
 
       std::map<VarDeclaration *, llvm::Constant *> varInits;
       const size_t nexprs = e->elements->dim;

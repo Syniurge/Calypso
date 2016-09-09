@@ -1170,11 +1170,6 @@ LLConstant *DtoConstExpInit(Loc &loc, Type *targetType, Expression *exp) {
                          targetType->toChars(), exp->toChars());
   LOG_SCOPE
 
-  if (auto tsym = targetType->toDsymbol(nullptr)) // CALYPSO
-    if (auto lp = tsym->langPlugin())
-      if (auto C = lp->codegen()->toConstExpInit(loc, targetType, exp))
-        return C;
-
   LLConstant *val = toConstElem(exp, gIR);
 
   // The situation here is a bit tricky: In an ideal world, we would always

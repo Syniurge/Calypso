@@ -311,23 +311,36 @@ llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but 
     return nullptr;
 }
 
-LLConstant *LangPlugin::toConstExpInit(Loc, Type *targetType, Expression *exp)
+llvm::Constant *LangPlugin::createStructLiteralConstant(StructLiteralExp *e)
 {
-    if (exp->op != TOKcall)
-        return nullptr;
-
-    auto ce = static_cast<CallExp*>(exp);
-    if (ce->e1->op != TOKtype || (ce->arguments && ce->arguments->dim))
-        return nullptr; // we only handle C++ structs and class values default inits
-
-    if (targetType->ty != Tclass && targetType->ty != Tstruct)
-        return nullptr;
-
     auto& Context = calypso.getASTContext();
     auto& CGM = calypso.CGM;
 
-    auto DestType = Context.getRecordType(getRecordDecl(targetType)).withConst();
-    return CGM->EmitNullConstant(DestType);
+    if (e->op == TOKstructliteral) {
+        auto RD = getRecordDecl(e->sd);
+
+        TypeMapper tymap;
+        ExprMapper expmap(tymap);
+        tymap.addImplicitDecls = false;
+
+        clang::APValue Value;
+        expmap.toAPValue(Value, e);
+
+        return CGM->EmitConstantValue(Value, Context.getRecordType(RD), /*CGF=*/nullptr);
+    }/* else if (exp->op == TOKcall) {
+        // assume that the C++ ctor gets called later
+        auto ce = static_cast<CallExp*>(exp);
+        if (ce->e1->op != TOKtype || (ce->arguments && ce->arguments->dim))
+            return nullptr; // we only handle C++ structs and class values default inits
+
+        if (targetType->ty != Tclass && targetType->ty != Tstruct)
+            return nullptr;
+
+        auto DestType = Context.getRecordType(getRecordDecl(targetType)).withConst();
+        return CGM->EmitNullConstant(DestType);
+    }*/
+
+    return nullptr;
 }
 
 static llvm::Constant *buildAggrNullConstant(::AggregateDeclaration *decl,
@@ -342,18 +355,6 @@ static llvm::Constant *buildAggrNullConstant(::AggregateDeclaration *decl,
         return nullptr;
 
     auto DestType = Context.getRecordType(RD).withConst();
-
-    // TODO: What we probably want is to have a default value if there's no constructor or a default trivial one,
-    // but a null value if that's not the case i.e when context matters.
-//     llvm::ArrayRef<clang::Expr*> initExprs;
-//     auto ILE = new (Context) clang::InitListExpr(
-//             Context, clang::SourceLocation(),
-//             initExprs, clang::SourceLocation());
-//     ILE->setType(DestType);
-//
-//     clang::Expr::EvalResult Result;
-//     ILE->EvaluateAsLValue(Result, Context);
-
     return CGM->EmitNullConstant(DestType);  // NOTE: neither EmitConstantExpr nor EmitConstantValue will work with CXXConstructExpr
 }
 
@@ -375,8 +376,7 @@ llvm::Constant *LangPlugin::createInitializerConstant(IrAggr *irAggr,
     }
 
     // Reconstruct the constant with LDC's type, not Clang's
-    // NOTE: Constant::mutateType is too dangerous because EmitNullConstant might return
-    // the same constant e.g for empty records.
+    // NOTE: and do not use Constant::mutateType which doesn't do anything good.
 
     if (isa<llvm::ConstantAggregateZero>(C))
         return llvm::ConstantAggregateZero::get(initializerType);

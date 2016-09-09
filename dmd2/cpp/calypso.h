@@ -184,11 +184,10 @@ public:
     llvm::FunctionType *toFunctionType(::FuncDeclaration *fdecl) override;
     llvm::Type *IrTypeStructHijack(::StructDeclaration *sd) override;
 
-    LLConstant *toConstExpInit(Loc loc, Type *targetType, Expression *exp) override;
-
     llvm::Constant *createInitializerConstant(IrAggr *irAggr,
         const IrAggr::VarInitMap& explicitInitializers,
         llvm::StructType* initializerType = 0) override;
+    llvm::Constant *createStructLiteralConstant(StructLiteralExp *e) override;
     bool addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& constants,
         const IrAggr::VarInitMap& explicitInitializers, ::AggregateDeclaration* decl,
         unsigned& offset, bool populateInterfacesWithVtbls) override;

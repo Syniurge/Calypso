@@ -25,11 +25,10 @@ public:
     virtual llvm::FunctionType *toFunctionType(FuncDeclaration *fdecl) = 0;
     virtual llvm::Type *IrTypeStructHijack(StructDeclaration *sd) = 0; // UGLY HACK
 
-    virtual LLConstant *toConstExpInit(Loc loc, Type *targetType, Expression *exp) = 0;
-
     virtual llvm::Constant *createInitializerConstant(IrAggr *irAggr,
         const IrAggr::VarInitMap& explicitInitializers,
         llvm::StructType* initializerType = 0) = 0;
+    virtual llvm::Constant *createStructLiteralConstant(StructLiteralExp *e) = 0;
     virtual bool addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& constants,
             const IrAggr::VarInitMap& explicitInitializers, AggregateDeclaration* decl,
             unsigned& offset, bool populateInterfacesWithVtbls) = 0; // used for "hybrid" classes i.e D classes inheriting from foreign ones
