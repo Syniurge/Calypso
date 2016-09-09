@@ -1300,7 +1300,7 @@ L1:
         StructDeclaration *sd = tb->toDsymbol(NULL)->isStructDeclaration();
         assert(sd);
         Expressions *elements = new Expressions;
-        for (size_t i = 0; i < sd->fields.dim; i++)
+        for (size_t i = 0; i < sd->fields.dim - sd->isNested(); i++) // CALYPSO DMD BUG: missing -isNested() to stay consistent with other SLE creation
         {
             VarDeclaration *v = sd->fields[i];
             UnionExp zero;

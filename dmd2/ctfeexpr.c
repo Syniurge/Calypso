@@ -305,7 +305,7 @@ UnionExp copyLiteral(Expression *e)
             Expression *m = (*oldelems)[i];
             // We need the struct definition to detect block assignment
             AggregateDeclaration *sd = se->sd;
-            VarDeclaration *v = sd->fields[i];
+            VarDeclaration *v = se->correspondingField(i); // CALYPSO
             // If it is a void assignment, use the default initializer
             if (!m)
                 m = voidInitLiteral(v->type, v).copy();
@@ -2414,7 +2414,7 @@ UnionExp voidInitLiteral(Type *t, VarDeclaration *var)
         TypeStruct *ts = (TypeStruct *)t;
         Expressions *exps = new Expressions();
         exps->setDim(ts->sym->fields.dim);
-        for (size_t i = 0; i < ts->sym->fields.dim; i++)
+        for (size_t i = 0; i < ts->sym->fields.dim - ts->sym->isNested(); i++) // CALYPSO DMD BUG: missing -isNested()
         {
             (*exps)[i] = voidInitLiteral(ts->sym->fields[i]->type, ts->sym->fields[i]).copy();
         }

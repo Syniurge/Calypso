@@ -2839,22 +2839,23 @@ public:
 
         size_t elemdim = e->elements ? e->elements->dim : 0;
         Expressions *expsx = NULL;
-        for (size_t i = 0; i < e->sd->fields.dim; i++)
+        for (size_t i = 0; i < e->elements->dim; i++)
         {
-            VarDeclaration *v = e->sd->fields[i];
+            VarDeclaration *v = e->correspondingField(i);
             Expression *ex = NULL;
             Expression *exp = NULL;
             if (i >= elemdim)
             {
                 /* If a nested struct has no initialized hidden pointer,
                  * set it to null to match the runtime behaviour.
-                 */
-                if (i == e->sd->fields.dim - 1 && e->sd->isNested())
-                {
-                    // Context field has not been filled
-                    ex = new NullExp(e->loc);
-                    ex->type = v->type;
-                }
+                 */ // CALYPSO NOTE about BUG: this isn't consistent with defaultInitLiteral and fill that do not add the nested this field
+//                 if (i == e->sd->fields.dim - 1 && e->sd->isNested())
+//                 {
+//                     // Context field has not been filled
+//                     ex = new NullExp(e->loc);
+//                     ex->type = v->type;
+//                 }
+                assert(false);
             }
             else
             {
@@ -2886,7 +2887,7 @@ public:
                 {
                     expsx = new Expressions();
                     ++CtfeStatus::numArrayAllocs;
-                    expsx->setDim(e->sd->fields.dim);
+                    expsx->setDim(e->elements->dim); // CALYPSO
                     for (size_t j = 0; j < e->elements->dim; j++)
                     {
                         (*expsx)[j] = (*e->elements)[j];
@@ -2899,7 +2900,7 @@ public:
         if (e->elements && expsx)
         {
             expandTuples(expsx);
-            if (expsx->dim != e->sd->fields.dim)
+            if (expsx->dim != e->sd->literalElemDim())
             {
                 e->error("CTFE internal error: invalid struct literal");
                 result = CTFEExp::cantexp;
@@ -3025,7 +3026,7 @@ public:
             Expressions *elems = new Expressions;
             elems->setDim(totalFieldCount);
             size_t fieldsSoFar = totalFieldCount;
-            for (AggregateDeclaration *c = cd; c; c = toAggregateBase(c)) // CALYPSO
+            for (AggregateDeclaration *c = cd; c; c = toAggregateBase(c)) // CALYPSO // FIXME: multiple base support
             {
                 fieldsSoFar -= c->fields.dim;
                 for (size_t i = 0; i < c->fields.dim; i++)

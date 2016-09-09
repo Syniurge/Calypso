@@ -132,6 +132,8 @@ public:
     bool fit(Loc loc, Scope *sc, Expressions *elements, Type *stype); // CALYPSO
     bool fill(Loc loc, Expressions *elements, bool ctorinit); // CALYPSO
 
+    size_t literalElemDim();
+
     bool isBaseOf2(ClassDeclaration *cd); // CALYPSO
     #define OFFSET_RUNTIME 0x76543210
     virtual bool isBaseOf(ClassDeclaration *cd, int *poffset); // CALYPSO
@@ -149,6 +151,7 @@ public:
     // CALYPSO
     virtual bool byRef() { return false; }
     virtual Expression *defaultInit(Loc loc) { assert(false); return NULL; }
+    Expression *defaultInitLiteral(Loc loc);
 
     CtorDeclaration* hasImplicitCtor(Expression* farg);
 

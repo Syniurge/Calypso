@@ -8106,53 +8106,7 @@ Expression *TypeStruct::defaultInitLiteral(Loc loc)
 #if LOGDEFAULTINIT
     printf("TypeStruct::defaultInitLiteral() '%s'\n", toChars());
 #endif
-    sym->size(loc);
-    if (sym->sizeok != SIZEOKdone)
-        return new ErrorExp();
-    Expressions *structelems = new Expressions();
-    structelems->setDim(sym->fields.dim - sym->isNested());
-    unsigned offset = 0;
-    for (size_t j = 0; j < structelems->dim; j++)
-    {
-        VarDeclaration *vd = sym->fields[j];
-        Expression *e;
-        if (vd->inuse)
-        {
-            error(loc, "circular reference to '%s'", vd->toPrettyChars());
-            return new ErrorExp();
-        }
-        if (vd->offset < offset || vd->type->size() == 0)
-            e = NULL;
-        else if (vd->init)
-        {
-            if (vd->init->isVoidInitializer())
-                e = NULL;
-            else
-                e = vd->getConstInitializer(false);
-        }
-        else
-            e = vd->type->defaultInitLiteral(loc);
-        if (e && e->op == TOKerror)
-            return e;
-        if (e)
-            offset = vd->offset + (unsigned)vd->type->size();
-        (*structelems)[j] = e;
-    }
-    StructLiteralExp *structinit = new StructLiteralExp(loc, (StructDeclaration *)sym, structelems);
-
-    /* Copy from the initializer symbol for larger symbols,
-     * otherwise the literals expressed as code get excessively large.
-     */
-    if (size(loc) > Target::ptrsize * 4 && !needsNested())
-#if IN_LLVM
-        structinit->sinit = static_cast<SymbolDeclaration *>(
-            static_cast<VarExp *>(defaultInit(loc))->var);
-#else
-        structinit->sinit = toInitializer(sym);
-#endif
-
-    structinit->type = this;
-    return structinit;
+    return sym->defaultInitLiteral(loc); // CALYPSO
 }
 
 
@@ -8921,6 +8875,14 @@ Type *TypeClass::toHeadMutable()
 Expression *TypeClass::defaultInit(Loc loc)
 {
     return sym->defaultInit(loc); // CALYPSO
+}
+
+Expression* TypeClass::defaultInitLiteral(Loc loc) // CALYPSO
+{
+    if (!byRef()) // hmm?
+        return sym->defaultInitLiteral(loc);
+    else
+        return Type::defaultInitLiteral(loc);
 }
 
 bool TypeClass::isZeroInit(Loc loc)

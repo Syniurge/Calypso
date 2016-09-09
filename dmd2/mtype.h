@@ -873,6 +873,7 @@ public:
     unsigned char deduceWild(Type *t, bool isRef);
     Type *toHeadMutable();
     Expression *defaultInit(Loc loc);
+    Expression *defaultInitLiteral(Loc loc); // CALYPSO
     bool isZeroInit(Loc loc);
     bool isscope();
     bool isBoolean();

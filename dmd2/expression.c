@@ -4562,6 +4562,28 @@ int StructLiteralExp::getFieldIndex(Type *type, unsigned offset)
     return -1;
 }
 
+// CALYPSO
+VarDeclaration* StructLiteralExp::correspondingField(size_t elemIdx)
+{
+    size_t i = 0;
+    std::function<VarDeclaration*(AggregateDeclaration*)>
+        impl = [&] (AggregateDeclaration* ad)
+    {
+        auto cd = ad->isClassDeclaration();
+        if (cd && cd->baseclasses)
+            for (auto b: *cd->baseclasses)
+                if (auto field = impl(b->base))
+                    return field;
+
+        auto nextI = i + ad->fields.dim - ad->isNested();
+        if (i <= elemIdx && elemIdx < nextI)
+            return ad->fields[elemIdx - i];
+        i = nextI;
+        return (VarDeclaration*) nullptr;
+    };
+    return impl(sd);
+}
+
 /************************ TypeDotIdExp ************************************/
 
 /* Things like:

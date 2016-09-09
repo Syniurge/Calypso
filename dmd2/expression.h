@@ -475,7 +475,7 @@ class StructLiteralExp : public Expression
 {
 public:
     AggregateDeclaration *sd;      // which aggregate this is for    // CALYPSO HACK: StructLiteralExp is also used for C++ classes, but only zeroinit
-    Expressions *elements;      // parallels sd->fields[] with
+    Expressions *elements;      // parallels sd->fields[] with // CALYPSO NOTE: to stay consistent with interpret.c base fields are added before, in the order in which bases are declared
                                 // NULL entries for fields to skip
     Type *stype;                // final type of result (can be different from sd's type)
 
@@ -510,6 +510,9 @@ public:
     Expression *getField(Type *type, unsigned offset);
     int getFieldIndex(Type *type, unsigned offset);
     Expression *addDtorHook(Scope *sc);
+
+    // CALYPSO
+    VarDeclaration* correspondingField(size_t elemIdx);
 #if IN_LLVM
     // With the introduction of pointers returned from CTFE, struct literals can
     // now contain pointers to themselves. While in toElem, contains a pointer

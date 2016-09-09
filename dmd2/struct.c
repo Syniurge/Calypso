@@ -21,6 +21,7 @@
 #include "module.h"
 #include "id.h"
 #include "statement.h"
+#include "target.h"
 #include "template.h"
 #include "tokens.h"
 
@@ -674,6 +675,86 @@ Dsymbol *AggregateDeclaration::searchCtor()
 }
 
 // CALYPSO
+size_t AggregateDeclaration::literalElemDim()
+{
+    size_t n = 0;
+    auto cd = isClassDeclaration();
+    if (cd && cd->baseclasses)
+        for (auto b: *cd->baseclasses)
+            n += b->base->literalElemDim();
+    n += fields.dim - isNested();
+    return n;
+}
+
+// CALYPSO NOTE: couldn't defaultInitLiteral and fill be merged?
+Expression *AggregateDeclaration::defaultInitLiteral(Loc loc)
+{
+    size(loc);
+    if (sizeok != SIZEOKdone)
+        return new ErrorExp();
+    Expressions *structelems = new Expressions();
+    structelems->setDim(literalElemDim());
+
+    size_t elem_i = 0;
+    std::function<Expression*(Loc, AggregateDeclaration*)>
+        addAgg = [&] (Loc loc, AggregateDeclaration* ad) // returns nullptr if ok, ErrorExp if not
+    {
+        if (auto base = toAggregateBase(ad))
+            if (auto e = addAgg(loc, base))
+                return e;
+
+        unsigned offset = 0;
+        auto fieldsDim = ad->fields.dim - ad->isNested();
+        for (size_t j = 0; j < fieldsDim; j++, elem_i++)
+        {
+            VarDeclaration *vd = ad->fields[j];
+            Expression *e;
+            if (vd->inuse)
+            {
+                error(loc, "circular reference to '%s'", vd->toPrettyChars());
+                return (Expression*) new ErrorExp();
+            }
+            if (vd->offset < offset || vd->type->size() == 0)
+                e = NULL;
+            else if (vd->init)
+            {
+                if (vd->init->isVoidInitializer())
+                    e = NULL;
+                else
+                    e = vd->getConstInitializer(false);
+            }
+            else
+                e = vd->type->defaultInitLiteral(loc);
+            if (e && e->op == TOKerror)
+                return e;
+            if (e)
+                offset = vd->offset + (unsigned)vd->type->size();
+            (*structelems)[elem_i] = e;
+        }
+        return (Expression*) nullptr;
+    };
+
+    if (auto e = addAgg(loc, this))
+        return e;
+    assert(elem_i == structelems->dim);
+
+    StructLiteralExp *structinit = new StructLiteralExp(loc, this, structelems);
+
+    /* Copy from the initializer symbol for larger symbols,
+     * otherwise the literals expressed as code get excessively large.
+     */
+    if (size(loc) > Target::ptrsize * 4 && !type->needsNested())
+#if IN_LLVM
+        structinit->sinit = static_cast<SymbolDeclaration *>(
+            static_cast<VarExp *>(defaultInit(loc))->var);
+#else
+        structinit->sinit = toInitializer(sym);
+#endif
+
+    structinit->type = type;
+    return structinit;
+}
+
 // While looking for implicit constructors wrap the argument inside a tagged expression to prevent
 // infinite recursion such as Type1(Type2(Type1(Type2(...
 class NoImplicitCtorExp : public TaggedExp
@@ -1209,156 +1290,168 @@ bool AggregateDeclaration::fill(Loc loc, Expressions *elements, bool ctorinit)
 {
     //printf("StructDeclaration::fill() %s\n", toChars());
     assert(sizeok == SIZEOKdone);
-    size_t nfields = fields.dim - isNested();
-    bool errors = false;
+
+    // CALYPSO fill was generalized for class values
+    auto nelems = literalElemDim();
 
     if (elements)
     {
         size_t dim = elements->dim;
-        elements->setDim(nfields);
-        for (size_t i = dim; i < nfields; i++)
+        elements->setDim(nelems);
+        for (size_t i = dim; i < nelems; i++)
             (*elements)[i] = NULL;
     }
 
-    // Fill in missing any elements with default initializers
-    for (size_t i = 0; i < nfields; i++)
+    // CALYPSO TODO: C++ multiple inheritance support
+
+    std::function<bool(Loc, Expression **, bool, AggregateDeclaration*)>
+        fillImpl = [&] (Loc loc, Expression **elements, bool ctorinit, AggregateDeclaration* ad)
     {
-        if (elements && (*elements)[i])
-            continue;
-        VarDeclaration *vd = fields[i];
-        VarDeclaration *vx = vd;
-        if (vd->init && vd->init->isVoidInitializer())
-            vx = NULL;
-        // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
-        size_t fieldi = i;
-        for (size_t j = 0; j < nfields; j++)
+        size_t nfields = ad->fields.dim - ad->isNested();
+        bool errors = false;
+
+        // Fill in missing any elements with default initializers
+        for (size_t i = 0; i < nfields; i++)
         {
-            if (i == j)
+            if (elements && elements[i])
                 continue;
-            VarDeclaration *v2 = fields[j];
-            bool overlap = (vd->offset < v2->offset + v2->type->size() &&
-                            v2->offset < vd->offset + vd->type->size());
-            if (!overlap)
-                continue;
-
-            // vd and v2 are overlapping. If either has destructors, postblits, etc., then error
-            //printf("overlapping fields %s and %s\n", vd->toChars(), v2->toChars());
-
-            VarDeclaration *v = vd;
-            for (int k = 0; k < 2; ++k, v = v2)
+            VarDeclaration *vd = ad->fields[i];
+            VarDeclaration *vx = vd;
+            if (vd->init && vd->init->isVoidInitializer())
+                vx = NULL;
+            // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
+            size_t fieldi = i;
+            for (size_t j = 0; j < nfields; j++)
             {
-                Type *tv = v->type->baseElemOf();
-                Dsymbol *sv = tv->toDsymbol(NULL);
-                if (sv && !errors)
+                if (i == j)
+                    continue;
+                VarDeclaration *v2 = ad->fields[j];
+                bool overlap = (vd->offset < v2->offset + v2->type->size() &&
+                                v2->offset < vd->offset + vd->type->size());
+                if (!overlap)
+                    continue;
+
+                // vd and v2 are overlapping. If either has destructors, postblits, etc., then error
+                //printf("overlapping fields %s and %s\n", vd->toChars(), v2->toChars());
+
+                VarDeclaration *v = vd;
+                for (int k = 0; k < 2; ++k, v = v2)
                 {
-                    StructDeclaration *sd = sv->isStructDeclaration();
-                    if (sd && (sd->dtor || sd->inv || sd->postblit))
+                    Type *tv = v->type->baseElemOf();
+                    Dsymbol *sv = tv->toDsymbol(NULL);
+                    if (sv && !errors)
                     {
-                        error("destructors, postblits and invariants are not allowed in overlapping fields %s and %s", vd->toChars(), v2->toChars());
-                        errors = true;
+                        StructDeclaration *sd = sv->isStructDeclaration();
+                        if (sd && (sd->dtor || sd->inv || sd->postblit))
+                        {
+                            error("destructors, postblits and invariants are not allowed in overlapping fields %s and %s", vd->toChars(), v2->toChars());
+                            errors = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (elements)
+                {
+                    if (elements[j])
+                    {
+                        vx = NULL;
                         break;
                     }
                 }
-            }
-
-            if (elements)
-            {
-                if ((*elements)[j])
+                else
                 {
-                    vx = NULL;
-                    break;
+                    vd->overlapped = true;
                 }
-            }
-            else
-            {
-                vd->overlapped = true;
-            }
-            if (v2->init && v2->init->isVoidInitializer())
-                continue;
+                if (v2->init && v2->init->isVoidInitializer())
+                    continue;
 
-            if (elements)
-            {
-                /* Prefer first found non-void-initialized field
-                 * union U { int a; int b = 2; }
-                 * U u;    // Error: overlapping initialization for field a and b
-                 */
-                if (!vx)
-                    vx = v2, fieldi = j;
-                else if (v2->init)
+                if (elements)
                 {
-                    ::error(loc, "overlapping initialization for field %s and %s",
-                        v2->toChars(), vd->toChars());
-                }
-            }
-            else
-            {
-                // Will fix Bugzilla 1432 by enabling this path always
-
-                /* Prefer explicitly initialized field
-                 * union U { int a; int b = 2; }
-                 * U u;    // OK (u.b == 2)
-                 */
-                if (!vx || !vx->init && v2->init)
-                    vx = v2, fieldi = j;
-                else if (vx != vd &&
-                    !(vx->offset < v2->offset + v2->type->size() &&
-                      v2->offset < vx->offset + vx->type->size()))
-                {
-                    // Both vx and v2 fills vd, but vx and v2 does not overlap
-                }
-                else if (vx->init && v2->init)
-                {
-                    ::error(loc, "overlapping default initialization for field %s and %s",
-                        v2->toChars(), vd->toChars());
+                    /* Prefer first found non-void-initialized field
+                    * union U { int a; int b = 2; }
+                    * U u;    // Error: overlapping initialization for field a and b
+                    */
+                    if (!vx)
+                        vx = v2, fieldi = j;
+                    else if (v2->init)
+                    {
+                        ::error(loc, "overlapping initialization for field %s and %s",
+                            v2->toChars(), vd->toChars());
+                    }
                 }
                 else
-                    assert(vx->init || !vx->init && !v2->init);
-            }
-        }
-        if (elements && vx)
-        {
-            Expression *e;
-            if (vx->type->size() == 0)
-            {
-                e = NULL;
-            }
-            else if (vx->init)
-            {
-                assert(!vx->init->isVoidInitializer());
-                e = vx->getConstInitializer(false);
-            }
-            else
-            {
-                if ((vx->storage_class & STCnodefaultctor) && !ctorinit)
                 {
-                    ::error(loc, "field %s.%s must be initialized because it has no default constructor",
-                            type->toChars(), vx->toChars());
-                }
+                    // Will fix Bugzilla 1432 by enabling this path always
 
-                /* Bugzilla 12509: Get the element of static array type.
-                 */
-                Type *telem = vx->type;
-                if (telem->ty == Tsarray)
+                    /* Prefer explicitly initialized field
+                    * union U { int a; int b = 2; }
+                    * U u;    // OK (u.b == 2)
+                    */
+                    if (!vx || !vx->init && v2->init)
+                        vx = v2, fieldi = j;
+                    else if (vx != vd &&
+                        !(vx->offset < v2->offset + v2->type->size() &&
+                        v2->offset < vx->offset + vx->type->size()))
+                    {
+                        // Both vx and v2 fills vd, but vx and v2 does not overlap
+                    }
+                    else if (vx->init && v2->init)
+                    {
+                        ::error(loc, "overlapping default initialization for field %s and %s",
+                            v2->toChars(), vd->toChars());
+                    }
+                    else
+                        assert(vx->init || !vx->init && !v2->init);
+                }
+            }
+            if (elements && vx)
+            {
+                Expression *e;
+                if (vx->type->size() == 0)
                 {
-                    /* We cannot use Type::baseElemOf() here.
-                     * If the bottom of the Tsarray is an enum type, baseElemOf()
-                     * will return the base of the enum, and its default initializer
-                     * would be different from the enum's.
-                     */
-                    while (telem->toBasetype()->ty == Tsarray)
-                        telem = ((TypeSArray *)telem->toBasetype())->next;
-
-                    if (telem->ty == Tvoid)
-                        telem = Type::tuns8->addMod(telem->mod);
+                    e = NULL;
                 }
-                if (telem->needsNested() && ctorinit)
-                    e = telem->defaultInit(loc);
+                else if (vx->init)
+                {
+                    assert(!vx->init->isVoidInitializer());
+                    e = vx->getConstInitializer(false);
+                }
                 else
-                    e = telem->defaultInitLiteral(loc);
+                {
+                    if ((vx->storage_class & STCnodefaultctor) && !ctorinit)
+                    {
+                        ::error(loc, "field %s.%s must be initialized because it has no default constructor",
+                                type->toChars(), vx->toChars());
+                    }
+
+                    /* Bugzilla 12509: Get the element of static array type.
+                    */
+                    Type *telem = vx->type;
+                    if (telem->ty == Tsarray)
+                    {
+                        /* We cannot use Type::baseElemOf() here.
+                        * If the bottom of the Tsarray is an enum type, baseElemOf()
+                        * will return the base of the enum, and its default initializer
+                        * would be different from the enum's.
+                        */
+                        while (telem->toBasetype()->ty == Tsarray)
+                            telem = ((TypeSArray *)telem->toBasetype())->next;
+
+                        if (telem->ty == Tvoid)
+                            telem = Type::tuns8->addMod(telem->mod);
+                    }
+                    if (telem->needsNested() && ctorinit)
+                        e = telem->defaultInit(loc);
+                    else
+                        e = telem->defaultInitLiteral(loc);
+                }
+                elements[fieldi] = e;
             }
-            (*elements)[fieldi] = e;
         }
-    }
+        return !errors;
+    };
+    auto hasErrors = fillImpl(loc, elements ? elements->data : nullptr, ctorinit, this);
 
     if (elements)
     {
@@ -1369,7 +1462,8 @@ bool AggregateDeclaration::fill(Loc loc, Expressions *elements, bool ctorinit)
                 return false;
         }
     }
-    return !errors;
+
+    return hasErrors;
 }
 
 /***************************************
