@@ -803,8 +803,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
                     prefixVolatile = true;
                     break;
                 }
-                assert((volatileNumber != funcVolatileNumber) &&
-                        "Same number of volatile qualifiers, unhandled case!");
+
+                if (volatileNumber == funcVolatileNumber)
+                    ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
             }
     }
 
