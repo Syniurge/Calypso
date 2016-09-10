@@ -10,7 +10,7 @@ modmap (C++) "<QtCore>";
 modmap (C++) "<private/qmetaobject_p.h>";
 
 import
-    std.traits : isCallable;
+    std.traits : isCallable, hasUDA;
 
 import (C++)
     QArrayData,
@@ -25,39 +25,12 @@ public import (C++)
     QMetaObjectPrivate,
     MetaDataFlags,
     MethodFlags,
+    QBasicAtomicInteger,
     QtCore : qRegisterMetaType;
 
 public alias QByteArrayData = QArrayData;
 
 enum QT_NO_DEBUG = true;
-
-///////////////////////////////////////////////////////////////////////////////
-
-//// BACKPORT from LDC 0.17, TODO remove
-
-/**
- * Determine if a symbol has a given $(LINK2 ../attribute.html#uda, user-defined attribute).
- */
-template hasUDA(alias symbol, alias attribute)
-{
-    import std.typetuple : staticIndexOf;
-    import std.traits : staticMap;
-
-    static if (is(attribute == struct) || is(attribute == class))
-    {
-        template GetTypeOrExp(alias S)
-        {
-            static if (is(typeof(S)))
-                alias GetTypeOrExp = typeof(S);
-            else
-                alias GetTypeOrExp = S;
-        }
-        enum bool hasUDA = staticIndexOf!(attribute, staticMap!(GetTypeOrExp,
-                __traits(getAttributes, symbol))) != -1;
-    }
-    else
-        enum bool hasUDA = staticIndexOf!(attribute, __traits(getAttributes, symbol)) != -1;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -68,15 +41,16 @@ enum slots;
 
 enum isSignal(alias F) = is(typeof(F) == function) && hasUDA!(F, signals);
 enum isSlot(alias F) = is(typeof(F) == function) && hasUDA!(F, slots);
+enum isConstructor(alias F) = is(typeof(F) == function) && __traits(identifier, F) == "__ctor";
 template isMethod(alias F)
 {
     private enum ident = __traits(identifier, F);
-    static if (ident == "qt_metacast" || ident == "qt_metacall")
+    static if (ident == "qt_metacast" || ident == "qt_metacall" || ident == "metaObject"
+                    || ident == "__ctor" || ident == "__dtor")
         enum isMethod = false;
     else
         enum isMethod = is(typeof(F) == function) && !__traits(isStaticFunction, F) && !isSignal!F && !isSlot!F;
 }
-enum isConstructor(alias F) = is(typeof(F) == function) && __traits(identifier, F) == "this";
 
 public alias symalias(alias S) = S;
 
@@ -279,7 +253,9 @@ public:
                     strreg(s);
                     foreach (f; __traits(getOverloads, C, s)) {
                         alias RetType = ReturnType!(typeof(f));
-                        static if (!isQBuiltinType!RetType)
+                        static if (isConstructor!f)
+                            strreg("");
+                        else static if (!isQBuiltinType!RetType)
                             strreg(DtoCXXType!RetType);
 //                          strreg(f.tag);
 
@@ -296,7 +272,7 @@ public:
             registerFunctionStrings!signalList();
             registerFunctionStrings!slotList();
             registerFunctionStrings!methodList();
-//             registerFunctionStrings!constructorList();
+            registerFunctionStrings!constructorList();
 //             registerPropertyStrings();
 //             registerEnumStrings();
 
@@ -306,7 +282,11 @@ public:
         static string QT_MOC_LITERAL(ulong idx, ulong ofs, ulong len)
         {
             // TODO replace first arg by Q_REFCOUNT_INITIALIZE_STATIC?
-            return "{ { { -1 } }, " ~ len.to!string ~ ", 0, 0, " ~
+            static if (__traits(hasMember, QBasicAtomicInteger!int, "__ctor"))
+                string s = "{ { QBasicAtomicInteger!int(-1) }, ";
+            else
+                string s = "{ { { -1 } }, ";
+            return s ~ len.to!string ~ ", 0, 0, " ~
                 "cast(ptrdiff_t) (qt_meta_stringdata_t.stringdata0.offsetof + " ~ ofs.to!string ~
                 " - " ~ idx.to!string ~ " * QByteArrayData.sizeof)" ~ "}";
         }
@@ -592,12 +572,15 @@ public:
                         result ~= "    ";
 
                         // Types
-                        genTypeInfo!(ReturnType!f)(/*allowEmptyName=*/isConstructor!f);
+                        static if (isConstructor!f)
+                            genTypeInfoByName("");
+                        else
+                            genTypeInfo!(ReturnType!f)();
                         result ~= ",";
                         foreach (ArgType; ParameterTypeTuple!(typeof(f)))
                         {
                             result ~= " ";
-                            genTypeInfo!ArgType(/*allowEmptyName=*/isConstructor!f);
+                            genTypeInfo!ArgType();
                             result ~= ",";
                         }
 
@@ -610,7 +593,7 @@ public:
                 }
             }
 
-            void genTypeInfo(T)(bool allowEmptyName)
+            void genTypeInfo(T)()
             {
                 static if (isQBuiltinType!T) {
                     static if (is(T == qreal)) {
@@ -627,9 +610,13 @@ public:
                         result ~= format("%4d", type);
                     }
                 } else {
-//                     assert(!typeName.empty() || allowEmptyName);
                     result ~= format("0x%.8x | %d", MetaDataFlags.IsUnresolvedType, stridx(T.stringof));
                 }
+            }
+
+            void genTypeInfoByName()(string typeName)
+            {
+                result ~= format("0x%.8x | %d", MetaDataFlags.IsUnresolvedType, stridx(typeName));
             }
 
             genFunctionParameters!signalList("signal");
@@ -651,8 +638,8 @@ public:
         //
         // Build constructors array
         //
-//             if (isConstructible)
-//                 genFunctions(constructorList, "constructor", MethodConstructor, paramsIndex);
+            if (isConstructible)
+                genFunctions!constructorList("constructor", MethodFlags.MethodConstructor, paramsIndex);
 
         //
         // Terminate data array
@@ -713,7 +700,7 @@ public:
                 result ~= "if (_c == QMetaObject.Call.InvokeMetaMethod) {\n";
                 static if (hasQObject && !QT_NO_DEBUG)
                     result ~= "        assert(staticMetaObject.cast(_o));\n"; // FIXME identifier taken
-                result ~= format("        auto _t = cast(%s *)(_o);\n", __traits(identifier, C));
+                result ~= format("        auto _t = cast(%s)(_o);\n", __traits(identifier, C));
                 result ~= "        final switch (_id) {\n";
 
                 int methodindex = 0;
@@ -1311,10 +1298,11 @@ public:
             qt_meta_data.ptr,  &qt_static_metacall, null, null);
     }
 
-//     extern(C++) override const const(QMetaObject)* metaObject()
-//     {
-//         return QObject.d_ptr.metaObject ? QObject.d_ptr.dynamicMetaObject() : &staticMetaObject;
-//     }
+    extern(C++) override const const(QMetaObject)* metaObject()
+    {
+        auto d_ptr = QObject.d_ptr.data;
+        return d_ptr.metaObject ? d_ptr.dynamicMetaObject() : &staticMetaObject;
+    }
 
     extern(C++) override void *qt_metacast(const(char) *_clname)
     {
@@ -1345,28 +1333,6 @@ import (C++) QtPrivate.FunctionPointer,
         QtPrivate.QSlotObjectBase,
         QtPrivate.QSlotObject,
         QtPrivate.List_Left;
-
-// Adapted from: https://wiki.dlang.org/Memory_Management#Explicit_Class_Instance_Allocation
-T* cppHeapAllocate(T, Args...) (Args args)
-{
-    import core.stdc.stdlib : malloc;
-    import core.memory : GC;
-
-    // get class size of class instance in bytes
-    auto size = __traits(classInstanceSize, T);
-
-    // allocate memory for the object
-    auto memory = malloc(size)[0..size];
-    if(!memory) {
-        import core.exception : onOutOfMemoryError;
-        onOutOfMemoryError();
-    }
-
-    // call T's constructor and emplace instance on newly allocated memory
-    auto result = cast(T*) memory.ptr;
-    result.__ctor(args);
-    return result;
-}
 
 // Using QObject.connect directly probably isn't what you want as D's template argument deduction can't handle Func(T)(SomeTemplate!T arg1, T arg2)
 // This wrapper also handles C++ <-> DCXX connections (which are slightly tricky since T1 might be a pointer while T2 might be class for example).
@@ -1420,8 +1386,9 @@ QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 
     auto _signal = MFP!(_T1, signal);
     auto _slot = MFP!(_T2, slot);
 
-    auto _slotBase = cast(QSlotObjectBase*) cppHeapAllocate!(QSlotObject!(Func2, List_Left!(SignalType.Arguments, SlotType.ArgumentCount).Value,
-                                        SignalType.ReturnType))(_slot); // HACK to prevent the GC from freeing the QSlotObject at the next collect
+    import moc.cpputils : cppNew;
+    auto _slotBase = cast(QSlotObjectBase*) cppNew!(QSlotObject!(Func2, List_Left!(SignalType.Arguments, SlotType.ArgumentCount).Value,
+                                        SignalType.ReturnType))(_slot); // the QSlotObject is owned by the QMetaObject.Connection object, not the GC
 
     return QObject.connectImpl(sender, cast(void**) &_signal,
                         receiver, cast(void**) &_slot,
