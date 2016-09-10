@@ -1414,18 +1414,30 @@ Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::Template
     return tqual;
 }
 
-Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D)
+Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
+                                const clang::TemplateTypeParmType *T)
 {
-    if (auto Id = D->getIdentifier())
-        return fromIdentifier(Id);
+    unsigned Depth, Index;
+
+    if (D) {
+        if (auto Id = D->getIdentifier())
+            return fromIdentifier(Id);
+        Depth = D->getDepth();
+        Index = D->getIndex();
+    } else {
+        assert(T);
+        Depth = T->getDepth();
+        Index = T->getIndex();
+    }
 
     // NOTE: Most of the time the identifier does exist in the TemplateTypeParmDecl even if TemplateTypeParmType::getIdentifier() returns null
     // Parameter without identifier should only ever happen in template param decl mapping
-    ::warning(fromLoc(D->getLocation()), "Generating identifier for anonymous C++ type template parameter");
+    ::warning(D ? fromLoc(D->getLocation()) : Loc(),
+                    "Generating identifier for anonymous C++ type template parameter");
 
     std::string str;
     llvm::raw_string_ostream OS(str);
-    OS << "type_parameter_" << D->getDepth() << '_' << D->getIndex();
+    OS << "type_parameter_" << Depth << '_' << Index;
 
     return Identifier::idPool(OS.str().c_str());
 }
@@ -1474,6 +1486,9 @@ unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
 const clang::TemplateTypeParmDecl *TypeMapper::FromType::getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T)
 {
     auto ParmDecl = T->getDecl();
+    if (!ParmDecl)
+        return nullptr; // may happen for partial template specs arguments (meant for the master template params)
+
     auto ParmCtx = cast<clang::Decl>(ParmDecl->getDeclContext())->getCanonicalDecl();
 
     for (auto I = tm.TempParamScope.rbegin(), E = tm.TempParamScope.rend();
@@ -1501,7 +1516,7 @@ Type* TypeMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypePa
         assert(T->isDependentType());
 
     auto D = OrigDecl ? OrigDecl : T->getDecl();
-    auto ident = tm.getIdentifierForTemplateTypeParm(D);
+    auto ident = tm.getIdentifierForTemplateTypeParm(D, T);
     return new TypeIdentifier(loc, ident);
 }
 
