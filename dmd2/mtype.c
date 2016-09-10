@@ -8828,7 +8828,9 @@ MATCH TypeClass::constConv(Type *to)
     if (equivs(to)) // CALYPSO
         return MATCHexact;
     if (ty == to->ty && sym == ((TypeClass *)to)->sym &&
-        MODimplicitConv(mod, to->mod))
+        (MODimplicitConv(mod, to->mod)
+            || !byRef() /* CALYPSO HACK: TypeStruct returns MATCHconst for mutable -> immutable conv,
+                    we need it for immutable initializers, but reusing TypeStruct::implicitConvTo would be cleaner */))
         return MATCHconst;
 
     /* Conversion derived to const(base)
