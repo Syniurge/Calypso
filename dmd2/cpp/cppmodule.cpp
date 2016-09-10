@@ -1040,7 +1040,6 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
         auto a = FromType(*this, loc).fromTemplateArgument(SpecArg);
         if (!a->dim)
             return nullptr; // might a non-supported type
-        assert(a->dim == 1);
         specArg = (*a)[0];
     }
 
@@ -1204,12 +1203,12 @@ Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTem
     auto TPL = CT->getTemplateParameters();
     auto AI = D->getTemplateArgs().asArray().begin();
 
-    if (Partial)
-    {
-        TPL = Partial->getTemplateParameters(); // SEMI-HACK #1 because we alter the tiargs to match the partial spec params
-        AI = nullptr; // SEMI-HACK #2 because partial spec args won't matter during semantic
+    if (Partial) {
+        TPL = Partial->getTemplateParameters(); // IMPORTANT NOTE: tiargs are made to match the partial spec params during TemplateInstance::semantic()
+        AI = nullptr;
     }
     TempParamScope.push_back(TPL);
+    CXXScope.push(D);
 
     for (auto PI = TPL->begin(), PE = TPL->end();
         PI != PE; PI++)
@@ -1217,7 +1216,7 @@ Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTem
         if (AI && isTemplateParameterPack(*PI)
                 && AI->getKind() == clang::TemplateArgument::Pack
                 && AI->pack_size() == 0)
-            break; // ex.: std::tuple<> explicit spec of std::tuple<Elem..>
+            break; // ex.: std::tuple<> explicit spec of std::tuple<Elem..> // FIXME this doesn't work if there's an argument after a pack
 
         auto tp = VisitTemplateParameter(*PI, AI);
         if (!tp)
@@ -1227,6 +1226,13 @@ Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTem
         if (AI) AI++;
     }
 
+    if (Partial)
+        // SEMI-HACK: even if we don't map partial specialization arguments, we still need to call fromTemplateArgument() to import module dependencies
+        for (auto& SpecArg: D->getTemplateArgs().asArray())
+            FromType(*this, loc).fromTemplateArgument(&SpecArg);
+
+    CXXScope.pop();
+    
     if (!Partial)
         TempParamScope.pop_back(); // the depth of template parameters does not consider explicit specs to be in the TempParamScope
 
