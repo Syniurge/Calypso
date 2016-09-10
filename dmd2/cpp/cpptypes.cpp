@@ -333,7 +333,7 @@ Type *TypeMapper::FromType::operator()(const clang::QualType _T)
         t = t->makeConst();
 
     if (T.isVolatileQualified())
-        ::warning(loc, "volatile qualifier found, declaration will be exposed anyway");
+        tm.volatileNumber++;
 
     // restrict qualifiers are inconsequential
 
@@ -1714,6 +1714,9 @@ bool TypeMapper::isInjectedScopeName(const clang::Decl *D)
 TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
         const clang::FunctionDecl *FD)
 {
+    if (T->isVolatile())
+        tm.volatileNumber++;
+
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
     auto& Diags = calypso.getDiagnostics();

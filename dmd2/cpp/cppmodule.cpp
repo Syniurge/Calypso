@@ -766,6 +766,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
+    volatileNumber = 0; // reset the number of volatile qualifiers found
     auto tf = FromType(*this, loc).fromTypeFunction(FPT, D);
     if (!tf)
     {
@@ -774,6 +775,38 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         return nullptr;
     }
     assert(tf->ty == Tfunction);
+
+    // If a function has overloads with the same signature except for volatile qualifiers, volatile overloads need to be
+    // renamed to not interfere with the non-volatile ones (ex. std::atomic).
+    bool prefixVolatile = false;
+    auto funcVolatileNumber = volatileNumber;
+    if (funcVolatileNumber)
+    {
+            auto R = getDeclContextNonLinkSpec(D)->lookup(D->getDeclName());
+
+            for (auto Match: R)
+            {
+                if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
+                    Match = MatchTemp->getTemplatedDecl();
+
+                if (Match->getCanonicalDecl() == D->getCanonicalDecl())
+                    continue;
+
+                auto Overload = dyn_cast<clang::FunctionDecl>(Match);
+                if (!Overload || Overload->isTemplateInstantiation())
+                    continue;
+                auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
+                volatileNumber = 0;
+                FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
+
+                if (volatileNumber < funcVolatileNumber) {
+                    prefixVolatile = true;
+                    break;
+                }
+                assert((volatileNumber != funcVolatileNumber) &&
+                        "Same number of volatile qualifiers, unhandled case!");
+            }
+    }
 
     StorageClass stc = STCundefined;
     if (MD)
@@ -801,6 +834,20 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             stc |= STCimplicit;
     }
     tf->addSTC(stc);
+
+    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
+        if (!prefixVolatile)
+            return baseIdent;
+
+        std::string idStr(baseIdent->string, baseIdent->len);
+        // insert _vtlNUM_ backwards
+        idStr.insert(0, "_");
+        idStr.insert(0, std::to_string(funcVolatileNumber));
+        idStr.insert(0, "_vtl");
+
+        ::warning(loc, "volatile overload %s renamed to %s", baseIdent->string, idStr.c_str());
+        return Identifier::idPool(idStr.c_str());
+    };
     
     auto a = new Dsymbols;
     ::FuncDeclaration *fd;
@@ -861,8 +908,10 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         else
             fullIdent = opIdent;
 
+        auto funcIdent = applyVolatilePrefix(fullIdent);
+
         // Add the overridable method (or the static function)
-        fd = new FuncDeclaration(loc, fullIdent, stc, tf, D);
+        fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
         a->push(fd);
 
         if (wrapInTemp && isFirstOverloadInScope)
@@ -886,6 +935,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     else
     {
         auto id = fromIdentifier(D->getIdentifier());
+        id = applyVolatilePrefix(id);
         fd = new FuncDeclaration(loc, id, stc, tf, D);
     }
 
@@ -973,6 +1023,11 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     if (!s)
         return nullptr;
+
+    if (FTD) {
+        assert(s->dim && (*s)[0]->isFuncDeclaration());
+        id = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
+    }
 
     auto decldefs = new Dsymbols;
     decldefs->append(s);

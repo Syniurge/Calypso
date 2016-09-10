@@ -64,9 +64,11 @@ public:
     TypeMapper(cpp::Module *mod = nullptr);  // mod can be null if no implicit import is needed
 
     bool addImplicitDecls = true;
-    Dsymbols *substsyms = nullptr; // only for TempateInstance::correctTiargs (partial spec arg deduction)
+    Dsymbols *substsyms = nullptr; // only for TemplateInstance::correctTiargs (partial spec arg deduction)
     bool desugar = false;
     bool cppPrefix = true; // if false, the ".cpp" prefix won't be appended, disabled only for « C++ global scope search »
+
+    unsigned volatileNumber = 0; // number of volatile qualifiers found, needs to be reset when mapping functions
 
     std::stack<const clang::Decl *> CXXScope;
     void rebuildScope(const clang::Decl *RightMost); // rebuild both CXXScope and TempParamScope
