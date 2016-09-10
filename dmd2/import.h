@@ -79,6 +79,7 @@ public:
     Modmap(Loc loc, StringExp *arg);
 };
 
+struct InterState;
 class ForeignCodeGen;
 
 class LangPlugin
@@ -121,6 +122,12 @@ public:
 
     virtual FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc) = 0;
     virtual FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) = 0;
+
+    // ===== - - - - - ===== //
+
+    virtual Expression *interpret(FuncDeclaration *fd, InterState *istate, Expressions *arguments,
+                                  Expression *thisarg) = 0;
+    virtual bool canInterpret(FuncDeclaration *fd) = 0;
 
     // ===== - - - - - ===== //
 

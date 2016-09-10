@@ -165,6 +165,10 @@ public:
     ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
     ::FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) override;
 
+    Expression *interpret(FuncDeclaration *fd, InterState *istate, Expressions *arguments,
+                                  Expression *thisarg) override;
+    bool canInterpret(FuncDeclaration *fd) override;
+
     void adjustLinkerArgs(std::vector<std::string>& args) override;
 
     // ==== CodeGen ====

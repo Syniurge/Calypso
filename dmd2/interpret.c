@@ -19,6 +19,7 @@
 #include "statement.h"
 #include "expression.h"
 #include "cond.h"
+#include "import.h"
 #include "init.h"
 #include "staticassert.h"
 #include "mtype.h"
@@ -4884,13 +4885,20 @@ public:
 
         if (!fd->fbody)
         {
-            e->error("%s cannot be interpreted at compile time,"
-                " because it has no available source code", fd->toChars());
-            result = CTFEExp::cantexp;
-            return;
+            auto lp = fd->langPlugin();
+            if (lp && lp->canInterpret(fd))
+                result = lp->interpret(fd, istate, e->arguments, pthis);  // CALYPSO
+            else
+            {
+                e->error("%s cannot be interpreted at compile time,"
+                    " because it has no available source code", fd->toChars());
+                result = CTFEExp::cantexp;
+                return;
+            }
         }
 
-        result = interpret(fd, istate, e->arguments, pthis);
+        if (!result)
+            result = interpret(fd, istate, e->arguments, pthis);
         if (result->op == TOKvoidexp)
             return;
         if (!exceptionOrCantInterpret(result))
