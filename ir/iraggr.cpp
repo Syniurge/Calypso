@@ -69,12 +69,7 @@ llvm::Constant *IrAggr::getDefaultInit() {
   DtoType(type);
   VarInitMap noExplicitInitializers;
 
-  if (auto lp = aggrdecl->langPlugin()) // CALYPSO
-    constInit = lp->codegen()->createInitializerConstant(
-          this, noExplicitInitializers, init_type);
-
-  if (!constInit)
-    constInit = createInitializerConstant(noExplicitInitializers, init_type);
+  constInit = createInitializerConstant(noExplicitInitializers, init_type);
   return constInit;
 }
 
@@ -155,6 +150,10 @@ IrAggr::createInitializerConstant(const VarInitMap &explicitInitializers,
   IF_LOG Logger::println("Creating initializer constant for %s",
                          aggrdecl->toChars());
   LOG_SCOPE;
+
+  if (auto lp = aggrdecl->langPlugin()) // CALYPSO
+    if (auto c = lp->codegen()->createInitializerConstant(this, explicitInitializers, initializerType))
+        return c;
 
   llvm::SmallVector<llvm::Constant *, 16> constants;
 
