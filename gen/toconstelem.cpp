@@ -768,6 +768,16 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   void visit(Expression *e) override {
+    if (e->op == TOKcall) {  // CALYPSO ugly HACK FIXME for C++ ctor call inits (emit a null constant and assume that the ctor gets called at some point)
+      auto ce = static_cast<CallExp*>(e);
+      if (auto tsym = ce->e1->type->toDsymbol(nullptr))
+        if (auto lp = tsym->langPlugin())
+          if (auto C = lp->codegen()->toConstElemFallback(e)) {
+            result = C;
+            return;
+          }
+    }
+
     e->error("expression '%s' is not a constant", e->toChars());
     if (!global.gag) {
       fatal();

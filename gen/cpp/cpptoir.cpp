@@ -314,31 +314,42 @@ llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but 
 llvm::Constant *LangPlugin::createStructLiteralConstant(StructLiteralExp *e)
 {
     auto& Context = calypso.getASTContext();
-    auto& CGM = calypso.CGM;
 
-    if (e->op == TOKstructliteral) {
-        auto RD = getRecordDecl(e->sd);
+    auto RD = getRecordDecl(e->sd);
 
-        TypeMapper tymap;
-        ExprMapper expmap(tymap);
-        tymap.addImplicitDecls = false;
+    TypeMapper tymap;
+    ExprMapper expmap(tymap);
+    tymap.addImplicitDecls = false;
 
-        clang::APValue Value;
-        expmap.toAPValue(Value, e);
+    clang::APValue Value;
+    expmap.toAPValue(Value, e);
 
-        return CGM->EmitConstantValue(Value, Context.getRecordType(RD), /*CGF=*/nullptr);
-    }/* else if (exp->op == TOKcall) {
-        // assume that the C++ ctor gets called later
-        auto ce = static_cast<CallExp*>(exp);
+    return CGM->EmitConstantValue(Value, Context.getRecordType(RD), /*CGF=*/nullptr);
+}
+
+// This is a HACK for ctor call initializers
+llvm::Constant *LangPlugin::toConstElemFallback(Expression *e)
+{
+    auto& Context = calypso.getASTContext();
+
+    if (e->op == TOKcall) {
+        // emit and a null constant and assume that the C++ ctor gets called later
+        auto ce = static_cast<CallExp*>(e);
         if (ce->e1->op != TOKtype || (ce->arguments && ce->arguments->dim))
             return nullptr; // we only handle C++ structs and class values default inits
 
-        if (targetType->ty != Tclass && targetType->ty != Tstruct)
+        auto tsym = ce->e1->type->toDsymbol(nullptr);
+        if (tsym->langPlugin() != this)
             return nullptr;
 
-        auto DestType = Context.getRecordType(getRecordDecl(targetType)).withConst();
+        if (!ce->type)
+            ce->type = ce->e1->type; // Wonderful.. prevents a segfault in DtoConstExpInit
+                // NOTE: e isn't semantic'd if created by get_default_initializer, which is why this is needed
+
+        auto RD = getRecordDecl(ce->e1->type);
+        auto DestType = Context.getRecordType(RD).withConst();
         return CGM->EmitNullConstant(DestType);
-    }*/
+    }
 
     return nullptr;
 }
