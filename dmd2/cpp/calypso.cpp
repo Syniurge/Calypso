@@ -1167,6 +1167,8 @@ void LangPlugin::init(const char *Argv0)
     pch.init();
 
     auto TargetFS = gTargetMachine->getTargetFeatureString();
+    if (TargetFS.empty())
+        return; // always empty for MSVC 
 
     llvm::SmallVector<StringRef, 1> AttrFeatures;
     TargetFS.split(AttrFeatures, ",");
@@ -1175,7 +1177,7 @@ void LangPlugin::init(const char *Argv0)
         Feature = Feature.trim();
 
         if (Feature.startswith("-"))
-                continue;
+            continue;
 
         TargetFeatures.insert(Feature);
     }

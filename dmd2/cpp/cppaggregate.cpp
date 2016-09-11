@@ -341,6 +341,7 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
 Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 {
     // TODO
+    return nullptr;
 }
 
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)

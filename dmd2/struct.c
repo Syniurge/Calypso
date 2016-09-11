@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <functional>
 
 #include "root.h"
 #include "aggregate.h"

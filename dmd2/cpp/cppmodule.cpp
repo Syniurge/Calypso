@@ -895,7 +895,13 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
                     { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
         }
 
-        auto FirstOverload = *std::find_if(R.begin(), R.end(), pred);
+        auto FirstOverload =
+#if defined(_MSC_VER)
+                *std::_Find_if_unchecked( // MSVC's find_if tries to assign a new value to First, which doesn't work
+#else
+                *std::find_if(
+#endif
+                    R.begin(), R.end(), pred);
         assert(FirstOverload);
         bool isFirstOverloadInScope = FirstOverload->getCanonicalDecl() == D->getCanonicalDecl();
 

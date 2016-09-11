@@ -472,16 +472,20 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
     file(MAKE_DIRECTORY ${calypsort_cppdir})
     compile_calypsort("${d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc ${calypsort_cppdir})
 
-    set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
-    add_custom_command(
-        OUTPUT "${cpp_monolith_o}"
-        COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir=${calypsort_cppdir} -Dcpp_monolith_o=${cpp_monolith_o}
-                -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-        DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-    ) # FIXME: support linkers other than ld
+	if (MSVC)
+		set(cpp_monolith_o "")
+	else()
+		set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
+		add_custom_command(
+			OUTPUT "${cpp_monolith_o}"
+			COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir=${calypsort_cppdir} -Dcpp_monolith_o=${cpp_monolith_o}
+					-DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+					-DMSVC=${MSVC} -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+			DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+		)
+    endif()
 
-    add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} "${cpp_monolith_o}")
+    add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} ${cpp_monolith_o})
     set_target_properties(
         calypso-ldc${target_suffix} PROPERTIES
         OUTPUT_NAME                 calypso-ldc${lib_suffix}

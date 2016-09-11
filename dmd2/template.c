@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stack>
+#include <functional>
 
 #include "root.h"
 #include "aav.h"

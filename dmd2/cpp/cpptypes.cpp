@@ -1469,6 +1469,7 @@ unsigned getTemplateParmIndex(const clang::NamedDecl *ParmDecl)
         return TTempPD->getIndex();
     else
         assert(false && "Unrecognized template parameter decl");
+    return 0;
 }
 
 unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
@@ -1481,6 +1482,7 @@ unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
         return TTempPD->getDepth();
     else
         assert(false && "Unrecognized template parameter decl");
+    return 0;
 }
 
 const clang::TemplateTypeParmDecl *TypeMapper::FromType::getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T)

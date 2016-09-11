@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <assert.h>
+#include <functional>
 
 #include "rmem.h"
 #include "port.h"

@@ -187,7 +187,8 @@ if (UNIX AND NOT "${LLVM_LDFLAGS}" STREQUAL "")
 endif()
 
 # CALYPSO
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # LLVM_CXXFLAGS may contain -Wcovered-switch-default and -fcolor-diagnostics
 # which are clang-only options
@@ -467,7 +468,7 @@ include_directories(
 set(CLANG_TARGETS "clang-headers")
 
 macro(add_clang_lib _libname_)
-    set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/lib${_libname_}.a)
+    set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
     set(CLANG_TARGETS ${CLANG_TARGETS} ${_libname_})
 endmacro(add_clang_lib)
@@ -492,7 +493,8 @@ ExternalProject_Add(clang
     BINARY_DIR ${CLANG_BINARY_DIR}
     STAMP_DIR ${CLANG_STAMP_DIR}
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG}
-    BUILD_COMMAND $(MAKE) ${CLANG_TARGETS}
+    BUILD_COMMAND ${CMAKE_BUILD_TOOL} ${CLANG_TARGETS}
+	BUILD_BYPRODUCTS ${CLANG_LIBS}
     INSTALL_COMMAND ""
     STEP_TARGETS rtcopy
 )
