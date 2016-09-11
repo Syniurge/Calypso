@@ -2,7 +2,7 @@
  * std::array example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ -cpp-args -std=c++11 array.d
+ *   $ ldc2 -cpp-args -std=c++11 array.d
  */
 
 modmap (C++) "<array>";

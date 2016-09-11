@@ -2,11 +2,11 @@
  * std::regex example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ regex.d
+ *   $ ldc2 -cpp-args -std=c++11 regex.d
  */
 
 modmap (C++) "<regex>";
-modmap (C++) "<string>";  // fails because of -std=c++11!!!
+modmap (C++) "<string>";
 
 import std.string;
 import (C++) std.regex;

@@ -2,7 +2,7 @@
  * std::complex example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ algorithm.d
+ *   $ ldc2 complex.d
  */
 
 modmap (C++) "<complex>";

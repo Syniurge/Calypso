@@ -2,7 +2,7 @@
  * std::utility example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ utility.d
+ *   $ ldc2 utility.d
  */
 
 modmap (C++) "<utility>";

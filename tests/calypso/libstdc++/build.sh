@@ -55,7 +55,7 @@ function builder() {
     # Compile here but save the output for later
     retVal=""
     errorVal=""
-    retVal="$(ldc2 -L-lstdc++ $targetDir/$target.d 2>&1 > /dev/null)"
+    retVal="$(ldc2 $targetDir/$target.d 2>&1 > /dev/null)"
     errorVal="$retVal"
 
     # Now check the output of the compile command and act on it

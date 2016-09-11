@@ -2,7 +2,7 @@
  * std::algorithm example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ future.d
+ *   $ ldc2 future.d
  */
 
 modmap (C++) "<future>";

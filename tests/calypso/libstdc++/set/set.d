@@ -2,7 +2,7 @@
  * std::set example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ set.d
+ *   $ ldc2 set.d
  */
 
 modmap (C++) "<set>";
@@ -17,15 +17,13 @@ void main()
     auto ms1 = new multiset!int;
     auto ms2 = new multiset!int;
 
-    multiset!(int).iterator it;
+    multiset!(int).iterator it = ms1.begin();
 
     int[] ints = [1,9,55,77,99,33];
+    auto ms3 = new multiset!int(ints.ptr, ints.ptr+3);
 
-    //auto ms3 = new multiset!(int)(ints, ints.ptr+3);  // Unhandled D->Clang conversion
-    //auto ms3 = new multiset!(int)(ints, ints.ptr+3);  // non-canonical or dependent type in IR-generation
-
-    const int x = 7;
-    //ms21.insert(it, x);    // doesn't work, assert in dmd
+    immutable int x = 7;
+    ms1.insert(it, x);
 
     for (int i = 0; i < 5; i++)
         ms1.insert(i);
@@ -46,7 +44,4 @@ void main()
     do {
         writeln("multiset1 using compare and reverse iterator = ", *rit);
     } while ( kcomp(*rit++, highest) );
-
-
-    writeln("set compiles");
 }

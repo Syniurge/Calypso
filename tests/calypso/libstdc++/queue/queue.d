@@ -2,7 +2,7 @@
  * std::queue example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ queue.d
+ *   $ ldc2 queue.d
  */
 
 modmap (C++) "<queue>";

@@ -2,7 +2,7 @@
  * std::bitset example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ bitset.d
+ *   $ ldc2 bitset.d
  */
 
 modmap (C++) "<bitset>";
@@ -53,14 +53,9 @@ void main()
     }
     write('\n');
     writeln("b as ulong = \t ", b.to_ulong); // '13' is correct
+    writeln("b = \t\t", b);
 
-// FAILURE seems like a template argument error due to enum
-//    writeln("A bit is still = ", usedColors[A]);  // false
-
-// FAILURE in phobos format.d
-//    writeln(b);
-
-// FAILURE on operators again
+// FAILURE on operators
 //    auto d = a&b;
 
 }

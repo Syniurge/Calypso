@@ -2,7 +2,7 @@
  * std::deque example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ deque.d
+ *   $ ldc2 deque.d
  */
 
 modmap (C++) "<deque>";
@@ -13,9 +13,9 @@ import (C++) std.deque;
 void main()
 {
     deque!int dq;
-    auto dq2 = deque!(int)(dq);
-    auto dq3 = deque!(double)(10);
-    deque!(int) dq4, dq5;
+    auto dq2 = deque!int(dq);
+    auto dq3 = deque!double(10);
+    deque!int dq4, dq5;
 
     // Fill deque with 10 ints
     writeln("push_back 10 ints onto dq");
@@ -84,24 +84,21 @@ void main()
     dq.assign(10,5);
     auto it = new deque!(int).iterator;
 
+    auto second = new deque!int(4, 100);
+
+    *it = dq5.begin();
+    for (int i=0; i < dq.size(); it++, i++)
+      writeln(*it);
+
+    import cpp.std.range : irange;
+    foreach (deq; dq3.irange) {}
+
     // FAILURES
-
-    // Assertion `int_regs + sse_regs <= 2' failed !?!?!?
-    //it = dq5.begin();
-    // Idiomatic C++ iterator usage doesn't work yet. See list.d also
-    //for (int i=0; i < dq.size(); it++, i++)
-      //writeln(*it);
-
-    // 'no property popFront' here
-    //foreach(deq; dq3) {}
-
-    //auto second = new deque!(int)(4, 100);
-
     // Doesn't seem to be picking up all template decls
     //immutable int xx = 9;
     //immutable float yy = 8.1;
-    //auto dq5 = new deque!(xx, yy);
+    //auto dq6 = new deque!(xx, yy);
 
     // deque iterators need to work for this to work
-    // dq.insert(it, 2, 20);
+    // dq.insert(*it, 2, 20);
 }

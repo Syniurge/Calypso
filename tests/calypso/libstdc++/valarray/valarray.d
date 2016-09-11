@@ -1,7 +1,7 @@
 /** * std::valarray example.  
 * 
 * Build with: 
-* $ ldc2 -L-lstdc++ valarray.d
+* $ ldc2 valarray.d
 */
 
 modmap (C++) "<valarray>";

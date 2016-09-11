@@ -2,7 +2,7 @@
  * std::foreach example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ foreach.d
+ *   $ ldc2 foreach.d
  */
 
 modmap (C++) "<algorithm>";

@@ -2,7 +2,7 @@
  * std::stack example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ stack.d
+ *   $ ldc2 stack.d
  */
 
 modmap (C++) "<stack>";

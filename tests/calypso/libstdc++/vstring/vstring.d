@@ -2,7 +2,7 @@
  * std::vstring example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ vstring.d
+ *   $ ldc2 vstring.d
  */
 
 modmap (C++) "<vector>";

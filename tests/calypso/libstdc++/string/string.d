@@ -2,7 +2,7 @@
  * std::string example.
  *
  * Build with:
- *   $ ldc2 -L-lstdc++ string.d
+ *   $ ldc2 string.d
  */
 
 modmap (C++) "<string>";
