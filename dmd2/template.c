@@ -4871,7 +4871,7 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
                 else if (ea)
                 {
                     ReliesOnTident v(tparams, iStart, t);
-                    v.visit(ea);
+                    ea->accept(&v);
                     result = v.result;
                     if (result)
                         return;
@@ -4954,27 +4954,24 @@ Type *reliesOnTident(Type *t, TemplateParameters *tparams, size_t iStart)
 
         void visit(DotIdExp* e)
         {
-            visit(e->e1);
+            e->e1->accept(this);
         }
 
         void visit(DotTemplateInstanceExp* e)
         {
-            visit(e->e1);
+            e->e1->accept(this);
             if (!tparams || !e->ti->tiargs || result)
                 return;
             visitTempArgs(startType, e->ti->tiargs);
         }
 
+        void visit(TypeExp* e)
+        {
+            e->type->accept(this);
+        }
+
         void visit(Expression* e)
         {
-            switch(e->op)
-            {
-                case TOKidentifier: visit((IdentifierExp*)e); break;
-                case TOKdot: visit((DotIdExp*)e); break;
-                case TOKdotti: visit((DotTemplateInstanceExp*)e); break;
-                default:
-                    break;
-            }
         }
     };
 
