@@ -364,7 +364,8 @@ unsigned AggregateDeclaration::size(Loc loc)
 
         // Determine the instance size of base class first.
         if (ClassDeclaration *cd = isClassDeclaration())
-            cd->baseClass->size(loc);
+            if (cd->baseClass) // CALYPSO old DMD BUG
+                cd->baseClass->size(loc);
     }
 
     if (sizeok != SIZEOKdone && members)
