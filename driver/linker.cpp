@@ -154,7 +154,11 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
     // Don't push -l and -L switches using -Xlinker, but pass them indirectly
     // via GCC. This makes sure user-defined paths take precedence over
     // GCC's builtin LIBRARY_PATHs.
-    if (!p[0] || !(p[0] == '-' && (p[1] == 'l' || p[1] == 'L'))) {
+    // Options starting with -shared and -static are not handled by
+    // the linker and must be passed to the driver.
+    auto str = llvm::StringRef(p);
+    if (!(str.startswith("-l") || str.startswith("-L") ||
+          str.startswith("-shared") || str.startswith("-static"))) {
       args.push_back("-Xlinker");
     }
     args.push_back(p);
@@ -165,10 +169,15 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
   switch (global.params.targetTriple.getOS()) {
   case llvm::Triple::Linux:
     addSoname = true;
-    args.push_back("-lrt");
     if (!opts::disableLinkerStripDead) {
       args.push_back("-Wl,--gc-sections");
     }
+    if (global.params.targetTriple.getEnvironment() == llvm::Triple::Android) {
+        args.push_back("-ldl");
+        args.push_back("-lm");
+        break;
+    }
+    args.push_back("-lrt");
   // fallthrough
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:

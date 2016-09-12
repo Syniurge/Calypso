@@ -13,6 +13,7 @@
 #include "id.h"
 #include "import.h"
 #include "init.h"
+#include "nspace.h"
 #include "rmem.h"
 #include "template.h"
 #include "gen/cgforeign.h"
@@ -131,6 +132,18 @@ public:
   void visit(Dsymbol *sym) LLVM_OVERRIDE {
     IF_LOG Logger::println("Ignoring Dsymbol::codegen for %s",
                            sym->toPrettyChars());
+  }
+
+  //////////////////////////////////////////////////////////////////////////
+
+  void visit(Nspace *ns) LLVM_OVERRIDE {
+    IF_LOG Logger::println("Nspace::codegen for %s", ns->toPrettyChars());
+    LOG_SCOPE
+
+    if (!isError(ns) && ns->members) {
+      for (auto sym : *ns->members)
+        sym->accept(this);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////

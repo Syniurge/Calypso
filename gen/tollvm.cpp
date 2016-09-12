@@ -31,6 +31,7 @@
 #include "gen/runtime.h"
 #include "gen/structs.h"
 #include "gen/typeinf.h"
+#include "gen/uda.h"
 #include "ir/irtype.h"
 #include "ir/irtypeclass.h"
 #include "ir/irtypefunction.h"
@@ -246,6 +247,12 @@ LLValue *DtoDelegateEquals(TOK op, LLValue *lhs, LLValue *rhs) {
 LinkageWithCOMDAT DtoLinkage(Dsymbol *sym) {
   auto linkage = (DtoIsTemplateInstance(sym) ? templateLinkage
                                              : LLGlobalValue::ExternalLinkage);
+
+  // If @(ldc.attributes.weak) is applied, override the linkage to WeakAny
+  if (hasWeakUDA(sym)) {
+    linkage = LLGlobalValue::WeakAnyLinkage;
+  }
+
   return {linkage, supportsCOMDAT()};
 }
 
@@ -463,7 +470,11 @@ LLConstant *DtoConstString(const char *str) {
     gvar = new llvm::GlobalVariable(gIR->module, init->getType(), true,
                                     llvm::GlobalValue::PrivateLinkage, init,
                                     ".str");
+#if LDC_LLVM_VER >= 309
+    gvar->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+#else
     gvar->setUnnamedAddr(true);
+#endif
     gIR->stringLiteral1ByteCache[s] = gvar;
   }
   LLConstant *idxs[] = {DtoConstUint(0), DtoConstUint(0)};

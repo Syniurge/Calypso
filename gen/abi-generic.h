@@ -241,6 +241,10 @@ struct ExplicitByvalRewrite : ABIRewrite {
  * float type.
  */
 struct HFAToArray : ABIRewrite {
+  const int maxFloats = 4;
+
+  HFAToArray(const int max = 4) : maxFloats(max) {}
+
   LLValue *get(Type *dty, LLValue *v) override {
     Logger::println("rewriting array -> as HFA %s", dty->toChars());
     LLValue *lval = DtoRawAlloca(v->getType(), 0);
@@ -260,9 +264,63 @@ struct HFAToArray : ABIRewrite {
   LLType *type(Type *dty, LLType *) override {
     assert(dty->ty == Tstruct);
     LLType *floatArrayType = nullptr;
-    if (TargetABI::isHFA((TypeStruct *)dty, &floatArrayType))
+    if (TargetABI::isHFA((TypeStruct *)dty, &floatArrayType, maxFloats))
       return floatArrayType;
     llvm_unreachable("Type dty should be an HFA");
+  }
+};
+
+/**
+ * Rewrite a composite as array of i64.
+ */
+struct CompositeToArray64 : ABIRewrite {
+  LLValue *get(Type *dty, LLValue *v) override {
+    Logger::println("rewriting i64 array -> as %s", dty->toChars());
+    LLValue *lval = DtoRawAlloca(v->getType(), 0);
+    DtoStore(v, lval);
+
+    LLType *pTy = getPtrToType(DtoType(dty));
+    return DtoLoad(DtoBitCast(lval, pTy), "get-result");
+  }
+
+  LLValue *put(DValue *dv) override {
+    Type *dty = dv->getType();
+    Logger::println("rewriting %s -> as i64 array", dty->toChars());
+    LLType *t = type(dty, nullptr);
+    return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
+  }
+
+  LLType *type(Type *t, LLType *) override {
+    // An i64 array that will hold Type 't'
+    size_t sz = (t->size() + 7) / 8;
+    return LLArrayType::get(LLIntegerType::get(gIR->context(), 64), sz);
+  }
+};
+
+/**
+ * Rewrite a composite as array of i32.
+ */
+struct CompositeToArray32 : ABIRewrite {
+  LLValue *get(Type *dty, LLValue *v) override {
+    Logger::println("rewriting i32 array -> as %s", dty->toChars());
+    LLValue *lval = DtoRawAlloca(v->getType(), 0);
+    DtoStore(v, lval);
+
+    LLType *pTy = getPtrToType(DtoType(dty));
+    return DtoLoad(DtoBitCast(lval, pTy), "get-result");
+  }
+
+  LLValue *put(DValue *dv) override {
+    Type *dty = dv->getType();
+    Logger::println("rewriting %s -> as i32 array", dty->toChars());
+    LLType *t = type(dty, nullptr);
+    return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
+  }
+
+  LLType *type(Type *t, LLType *) override {
+    // An i32 array that will hold Type 't'
+    size_t sz = (t->size() + 3) / 4;
+    return LLArrayType::get(LLIntegerType::get(gIR->context(), 32), sz);
   }
 };
 
