@@ -63,7 +63,7 @@ void LangPlugin::enterModule(::Module *, llvm::Module *lm)
 
     auto Opts = new clang::CodeGenOptions;
     if (global.params.symdebug)
-        Opts->setDebugInfo(clang::CodeGenOptions::FullDebugInfo);
+        Opts->setDebugInfo(clang::codegenoptions::FullDebugInfo);
 
     CGM.reset(new clangCG::CodeGenModule(Context,
                             AST->getPreprocessor().getHeaderSearchInfo().getHeaderSearchOpts(),
@@ -164,7 +164,7 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
                 auto Priority = static_cast<uint32_t>(
                         cast<llvm::ConstantInt>(Stor->getOperand(0))->getSExtValue());
                 auto Fn = cast<llvm::Function>(Stor->getOperand(1));
-                appendToGlobalStors(*lm, Fn, Priority);
+                appendToGlobalStors(*lm, Fn, Priority, nullptr);
             }
         }
 
@@ -231,7 +231,7 @@ struct ResolvedFunc
         if (isIncompleteTagType(FD->getReturnType()))
             return result;
 
-        for (auto& Param: FD->params())
+        for (auto& Param: FD->parameters())
             if (isIncompleteTagType(Param->getType()))
                 return result;
 
@@ -557,7 +557,7 @@ static const clangCG::CGFunctionInfo &arrangeFunctionCall(
     if (MD && !MD->isStatic())
     {
         clangCG::RequiredArgs required =
-            clangCG::RequiredArgs::forPrototypePlus(FPT, Args.size());
+            clangCG::RequiredArgs::forPrototypePlus(FPT, Args.size(), FD);
 
         return CGM->getTypes().arrangeCXXMethodCall(Args, FPT, required);
     }

@@ -352,7 +352,7 @@ struct DCXXVptrAdjuster
 {
     clangCG::CodeGenModule &CGM;
     clangCG::CodeGenFunction &CGF;
-    llvm::IRBuilder<true> &Builder;
+    llvm::IRBuilder<> &Builder;
 
     ::ClassDeclaration *cd;
     DCXXVTableInfo& dcxxInfo;

@@ -18,7 +18,6 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/CodeGen/ModuleBuilder.h"
-#include "clang/Frontend/CodeGenOptions.h"
 #include "clang/lib/CodeGen/CodeGenModule.h"
 
 #define USE_CLANG_MODULES

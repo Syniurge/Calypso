@@ -231,7 +231,7 @@ const clang::TemplateArgumentList *getTemplateArgs(const clang::Decl *D)
 const clang::TemplateArgumentList *getTemplateArgs(const clang::TemplateSpecializationType *T)
 {
     auto& Context = calypso.getASTContext();
-    return clang::TemplateArgumentList::CreateCopy(Context, T->getArgs(), T->getNumArgs());
+    return clang::TemplateArgumentList::CreateCopy(Context, T->template_arguments());
 }
 
 const clang::TemplateArgumentList *getTemplateArgs(TemplateInstUnion U)
@@ -279,7 +279,7 @@ clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListI
         return nullptr;
 
     clang::TemplateArgumentList ArgList(clang::TemplateArgumentList::OnStack,
-                            Converted.data(), Converted.size());
+                            Converted);
     clang::MultiLevelTemplateArgumentList MultiList(ArgList);
 
     // Instantiate the declaration

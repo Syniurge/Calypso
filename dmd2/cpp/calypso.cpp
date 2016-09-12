@@ -999,7 +999,8 @@ void PCH::save()
     auto& PP = AST->getPreprocessor();
 
     std::error_code EC;
-    llvm::raw_fd_ostream OS(pchFilename, EC, llvm::sys::fs::F_None);
+    std::unique_ptr<llvm::raw_fd_ostream> OS(
+                new llvm::raw_fd_ostream(pchFilename, EC, llvm::sys::fs::F_None));
 
     auto& Sysroot = PP.getHeaderSearchInfo().getHeaderSearchOpts().Sysroot;
     auto Buffer = std::make_shared<clang::PCHBuffer>();
@@ -1014,7 +1015,7 @@ void PCH::save()
     std::vector<std::unique_ptr<clang::ASTConsumer>> Consumers;
     Consumers.push_back(std::unique_ptr<clang::ASTConsumer>(GenPCH));
     Consumers.push_back(Writer->CreatePCHContainerGenerator(
-        *static_cast<clang::CompilerInstance*>(nullptr), pchHeader, pchFilename, &OS, Buffer));
+        *static_cast<clang::CompilerInstance*>(nullptr), pchHeader, pchFilename, std::move(OS), Buffer));
 
     auto Mutiplex = llvm::make_unique<clang::MultiplexConsumer>(std::move(Consumers));
     Mutiplex->HandleTranslationUnit(AST->getASTContext());
