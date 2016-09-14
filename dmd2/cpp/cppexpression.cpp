@@ -313,6 +313,8 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         e = fromExpression(PE->getSubExpr());
     else if (auto CDA = dyn_cast<clang::CXXDefaultArgExpr>(E))
         e = fromExpression(CDA->getExpr());
+    else if (auto EWC = dyn_cast<clang::ExprWithCleanups>(E))
+        e = fromExpression(EWC->getSubExpr());
 
     else if (auto UO = dyn_cast<clang::UnaryOperator>(E))
         e = fromUnaExp(UO);
