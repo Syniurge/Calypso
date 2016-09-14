@@ -210,6 +210,10 @@ void LangPlugin::updateCGFInsertPoint()
 {
     auto BB = gIR->scope().begin;
     CGF()->Builder.SetInsertPoint(BB);
+
+    if (global.params.symdebug)
+        CGF()->Builder.SetCurrentDebugLocation(
+                    gIR->ir->getCurrentDebugLocation());
 }
 
 struct ResolvedFunc
