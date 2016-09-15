@@ -1777,11 +1777,18 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         clang::NamedDecl *D = nullptr;
 
         // Lookups can't find the implicit __va_list_tag record
-        if (id == Identifier::idPool("__va_list_tag") && packages->dim == 1)
+        if (packages->dim == 1)
         {
-            D = cast<clang::NamedDecl>(Context.getVaListTagDecl());
+            if (id == Identifier::idPool("__va_list_tag"))
+                D = cast<clang::NamedDecl>(Context.getVaListTagDecl());
+            else if (id == Identifier::idPool("__NSConstantString_tag"))
+                D = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
+                                                    // But this should be fixed if C++ import lookups get skipped (Calypso does A LOT of unnecessary name lookups
+                                                    // and this was to stick as close as possible to DMD, but they're very expensive to build and do and skipping them
+                                                    // would cut down multiple times compilation times)
         }
-        else
+
+        if (!D)
         {
             auto R = lookup(DC, id);
             if (R.empty())
@@ -1800,12 +1807,12 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
                 if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
                     D = Match;
             }
+        }
 
-            if (!D)
-            {
-                ::error(loc, "C++ modules have to be records (class/struct, template or not) or enums");
-                fatal();
-            }
+        if (!D)
+        {
+            ::error(loc, "C++ modules have to be records (class/struct, template or not) or enums");
+            fatal();
         }
 
         if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
