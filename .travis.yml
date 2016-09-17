@@ -45,7 +45,7 @@ before_install:
         tar -xvf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
       fi;
       llvm-$LLVM_VERSION/bin/llvm-config --version;
-      export LLVM_CONFIG="llvm-$LLVM_VERSION/bin/llvm-config";
+      export LLVM_CONFIG="$(pwd)/llvm-$LLVM_VERSION/bin/llvm-config";
     fi
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
@@ -61,8 +61,11 @@ install:
   - pip install --user lit
   - python -c "import lit; lit.main();" --version | head -n 1
 
+before_script:
+  - mkdir build
+  - cd build
 script:
-  - cmake -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS .
+  - cmake -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
   - make -j3
   # Outputs some environment info, plus makes sure we only run the test suite
   # if we could actually build the executable.
