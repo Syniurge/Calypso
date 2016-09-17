@@ -724,8 +724,12 @@ bool isMapped(const clang::Decl *D)
             auto Parent = MD->getParent();
             if (Parent->isUnion())
                 return false;
-            if (MD->isImplicit() && MD->isTrivial()/* && !isPolymorphic(Parent)*/)
-                return false;
+            if (MD->isTrivial()) {
+                if (isa<clang::CXXDestructorDecl>(MD))
+                    return false; // trivial dtors never get emitted by Clang
+                else if (MD->isImplicit())
+                    return false;
+            }
         }
 
         // Clang runtime functions making use of target-specific intrisics always have __target__("feature") attributes
