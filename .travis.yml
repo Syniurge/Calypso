@@ -7,10 +7,7 @@ addons:
   apt:
     sources:
     - llvm-toolchain-precise
-    - llvm-toolchain-precise-3.5
-    - llvm-toolchain-precise-3.6
-    - llvm-toolchain-precise-3.7
-    - llvm-toolchain-precise-3.8
+    - llvm-toolchain-precise-3.9
     - ubuntu-toolchain-r-test
     packages:
     - libconfig++8-dev
@@ -25,47 +22,31 @@ addons:
     - libcurl3:i386
     - libedit2
     - libedit-dev
-    - llvm-3.5
-    - llvm-3.5-dev
-    - llvm-3.6
-    - llvm-3.6-dev
-    - llvm-3.7
-    - llvm-3.7-dev
-    - llvm-3.8
-    - llvm-3.8-dev
     - llvm-3.9
     - llvm-3.9-dev
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
-  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew update; brew install llvm37; brew install libconfig; fi;
+  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew update; brew install llvm39; brew install libconfig; fi;
   - pip install --user lit
   - python -c "import lit; lit.main();" --version | head -n 1
 
 env:
-  - LLVM_CONFIG="llvm-config-3.7" OPTS="-DMULTILIB=ON"
-  - LLVM_CONFIG="llvm-config-3.6" OPTS="-DBUILD_SHARED_LIBS=ON"
-  - LLVM_CONFIG="llvm-config-3.5" OPTS="-DTEST_COVERAGE=ON"
-  - LLVM_CONFIG="llvm-config-3.8"
+  #- LLVM_CONFIG="llvm-config-3.7" OPTS="-DMULTILIB=ON"
+  #- LLVM_CONFIG="llvm-config-3.6" OPTS="-DBUILD_SHARED_LIBS=ON"
+  #- LLVM_CONFIG="llvm-config-3.5" OPTS="-DTEST_COVERAGE=ON"
+  #- LLVM_CONFIG="llvm-config-3.8"
   - LLVM_CONFIG="llvm-config-3.9"
   # OSX only (and the only ones for OSX):
-  - LLVM_CONFIG="llvm-config-3.7" TEST_CONFIG="Debug"
-  - LLVM_CONFIG="llvm-config-3.7" TEST_CONFIG="Release"
+  - LLVM_CONFIG="llvm-config-3.9" TEST_CONFIG="Debug"
+  - LLVM_CONFIG="llvm-config-3.9" TEST_CONFIG="Release"
 matrix:
-  allow_failures:
-    - env: LLVM_CONFIG="llvm-config-3.9"
+  #allow_failures:
+    #- env: LLVM_CONFIG="llvm-config-3.9"
   exclude:
     - os: linux
-      env: LLVM_CONFIG="llvm-config-3.7" TEST_CONFIG="Debug"
+      env: LLVM_CONFIG="llvm-config-3.9" TEST_CONFIG="Debug"
     - os: linux
-      env: LLVM_CONFIG="llvm-config-3.7" TEST_CONFIG="Release"
-    - os: osx
-      env: LLVM_CONFIG="llvm-config-3.7" OPTS="-DMULTILIB=ON"
-    - os: osx
-      env: LLVM_CONFIG="llvm-config-3.6" OPTS="-DBUILD_SHARED_LIBS=ON"
-    - os: osx
-      env: LLVM_CONFIG="llvm-config-3.5" OPTS="-DTEST_COVERAGE=ON"
-    - os: osx
-      env: LLVM_CONFIG="llvm-config-3.8"
+      env: LLVM_CONFIG="llvm-config-3.9" TEST_CONFIG="Release"
     - os: osx
       env: LLVM_CONFIG="llvm-config-3.9"
 script:
@@ -119,13 +100,6 @@ after_success:
 notifications:
   email:
     recipients:
-      - "digitalmars-d-ldc@puremagic.com"
+      - "syniurge@gmail.com"
     on_success: never
     on_failure: change
-  irc:
-    channels:
-      - "irc.freenode.org#ldc"
-    on_success: always
-    on_failure: always
-    use_notice: false
-    skip_join: true
