@@ -50,6 +50,14 @@ before_install:
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
   - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew update; brew install llvm39; brew install libconfig; fi;
+  -
+    if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
+      CMAKE_URL="http://www.cmake.org/files/v3.6/cmake-3.6.2-Linux-x86_64.tar.gz";
+      mkdir cmake-bin && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake-bin;
+      export PATH="$(pwd)/cmake-bin/bin:${PATH}";
+    else
+      if ! brew ls --version cmake &>/dev/null; then brew install cmake; fi
+    fi
   - pip install --user lit
   - python -c "import lit; lit.main();" --version | head -n 1
 
