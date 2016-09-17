@@ -162,6 +162,7 @@ void BuiltinTypes::build(clang::ASTContext &Context)
     map(Context.FloatTy, Type::tfloat32);
     map(Context.DoubleTy, Type::tfloat64);
     map(Context.LongDoubleTy, Type::tfloat80);
+    map(Context.HalfTy, Type::tfloat32); // FIXME: 16 bits float, map to std.numeric CustomFloat?
 
         //===- Language-specific types --------------------------------------------===//
     { // nullptr_t needs to be mangled differently from void*
@@ -294,7 +295,9 @@ bool isNonSupportedType(clang::QualType T)
     if (auto BT = T->getAs<clang::BuiltinType>())
     {
         clang::QualType Builtin(BT, 0);
-        if (Builtin == Context.Int128Ty || Builtin == Context.UnsignedInt128Ty)
+        if (Builtin == Context.Int128Ty
+            || Builtin == Context.UnsignedInt128Ty
+            || Builtin == Context.HalfTy)
             return true;
     }
 
