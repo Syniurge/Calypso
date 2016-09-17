@@ -774,8 +774,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto tf = FromType(*this, loc).fromTypeFunction(FPT, D);
     if (!tf)
     {
-        ::warning(loc, "Discarding %s, non-supported argument or return type (e.g int128_t)",
-                            D->getDeclName().getAsString().c_str());
+        if (opts::cppVerboseDiags)
+            ::warning(loc, "Discarding %s, non-supported argument or return type (e.g int128_t)",
+                                D->getDeclName().getAsString().c_str());
         return nullptr;
     }
     assert(tf->ty == Tfunction);
@@ -809,7 +810,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
                 }
 
                 if (volatileNumber == funcVolatileNumber)
-                    ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
+                    if (opts::cppVerboseDiags)
+                        ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
             }
     }
 
@@ -850,7 +852,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         idStr.insert(0, std::to_string(funcVolatileNumber));
         idStr.insert(0, "_vtl");
 
-        ::warning(loc, "volatile overload %s renamed to %s", baseIdent->string, idStr.c_str());
+        if (opts::cppVerboseDiags)
+            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->string, idStr.c_str());
         return Identifier::idPool(idStr.c_str());
     };
     
@@ -1080,7 +1083,8 @@ Identifier *DeclMapper::getIdentifierForTemplateNonTypeParm(const clang::NonType
         return fromIdentifier(Id);
     else
     {
-        ::warning(Loc(), "Generating identifier for anonymous C++ non-type template parameter");
+        if (opts::cppVerboseDiags)
+            ::warning(Loc(), "Generating identifier for anonymous C++ non-type template parameter");
 
         // This should only ever happen in template param decl mapping
         std::string str;

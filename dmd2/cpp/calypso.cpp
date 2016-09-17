@@ -159,7 +159,8 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                     opIdent = Id::opUnary;
                     break;
                 default:
-                    ::warning(Loc(), "Ignoring C++ unary operator %s", clang::getOperatorSpelling(OO));
+                    if (opts::cppVerboseDiags)
+                        ::warning(Loc(), "Ignoring C++ unary operator %s", clang::getOperatorSpelling(OO));
                     return nullptr;
             }
         }
@@ -217,7 +218,8 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                     opIdent = Id::opOpAssign;
                     break;
                 default:
-                    ::warning(Loc(), "Ignoring C++ binary operator %s", clang::getOperatorSpelling(OO));
+                    if (opts::cppVerboseDiags)
+                        ::warning(Loc(), "Ignoring C++ binary operator %s", clang::getOperatorSpelling(OO));
                     return nullptr;
             }
         }

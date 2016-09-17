@@ -7,6 +7,7 @@
 #include "cpp/cppimport.h"
 #include "cpp/cppmodule.h"
 #include "cpp/cpptemplate.h"
+#include "driver/cl_options.h"
 #include "id.h"
 #include "module.h"
 #include "template.h"
@@ -1435,8 +1436,9 @@ Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTy
 
     // NOTE: Most of the time the identifier does exist in the TemplateTypeParmDecl even if TemplateTypeParmType::getIdentifier() returns null
     // Parameter without identifier should only ever happen in template param decl mapping
-    ::warning(D ? fromLoc(D->getLocation()) : Loc(),
-                    "Generating identifier for anonymous C++ type template parameter");
+    if (opts::cppVerboseDiags)
+        ::warning(D ? fromLoc(D->getLocation()) : Loc(),
+                        "Generating identifier for anonymous C++ type template parameter");
 
     std::string str;
     llvm::raw_string_ostream OS(str);
@@ -1453,7 +1455,8 @@ Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::Templa
         return fromIdentifier(Id);
 
     // This should only ever happen in template param decl mapping
-    ::warning(fromLoc(D->getLocation()), "Generating identifier for anonymous C++ template template parameter");
+    if (opts::cppVerboseDiags)
+        ::warning(fromLoc(D->getLocation()), "Generating identifier for anonymous C++ template template parameter");
 
     std::string str;
     llvm::raw_string_ostream OS(str);
