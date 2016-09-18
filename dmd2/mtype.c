@@ -8094,7 +8094,10 @@ structalign_t TypeStruct::alignment()
 
 Expression *TypeStruct::defaultInit(Loc loc)
 {
-    return sym->defaultInit(loc); // CALYPSO
+    auto e = sym->defaultInit(loc); // CALYPSO
+    if (e->type)
+        e->type = this; // NOTE: the cpp:: version of TypeStruct::defaultInit creates a CallExp(TypeExp) that needs its .type set to null
+    return e;
 }
 
 /***************************************
@@ -8106,7 +8109,10 @@ Expression *TypeStruct::defaultInitLiteral(Loc loc)
 #if LOGDEFAULTINIT
     printf("TypeStruct::defaultInitLiteral() '%s'\n", toChars());
 #endif
-    return sym->defaultInitLiteral(loc); // CALYPSO
+    auto e = sym->defaultInitLiteral(loc); // CALYPSO
+    if (e->type)
+        e->type = this;
+    return e;
 }
 
 
@@ -8876,13 +8882,21 @@ Type *TypeClass::toHeadMutable()
 
 Expression *TypeClass::defaultInit(Loc loc)
 {
-    return sym->defaultInit(loc); // CALYPSO
+    auto e = sym->defaultInit(loc); // CALYPSO
+    if (e->type)
+        e->type = this; // NOTE: the cpp:: version of TypeClass::defaultInit creates a CallExp(TypeExp) that needs its .type set to null
+    return e;
 }
 
 Expression* TypeClass::defaultInitLiteral(Loc loc) // CALYPSO
 {
     if (!byRef()) // hmm?
-        return sym->defaultInitLiteral(loc);
+    {
+        auto e = sym->defaultInitLiteral(loc); // CALYPSO
+        if (e->type)
+            e->type = this;
+        return e;
+    }
     else
         return Type::defaultInitLiteral(loc);
 }
