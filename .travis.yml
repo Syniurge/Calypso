@@ -1,5 +1,6 @@
 language: cpp
 #sudo: false
+dist: trusty
 
 matrix:
   include:
@@ -32,8 +33,8 @@ addons:
     - g++-4.9-multilib
     - gcc-multilib
     - g++-multilib
-    - linux-libc-dev:i386
-    - libcurl3:i386
+    # - linux-libc-dev:i386
+    # - libcurl3:i386
     - libedit2
     - libedit-dev
 #before_install:  # LLVM 3.9.0 segfaults in formLCSSAForInstructions, so use nightly 3.9 builds instead
