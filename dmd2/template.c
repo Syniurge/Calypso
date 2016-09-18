@@ -1919,9 +1919,15 @@ Lmatch:
     // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
     if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
         goto Lnomatch;
-    { size_t argidx = ntargs; // CALYPSO FIXME: this is wrong if there are packs before [ntargs]
+
     for (size_t i = ntargs; i < dedargs->dim; i++)
     {
+        size_t argidx = i; // CALYPSO NOTE/WARNING: for some reason dedargs has Tuple(s) unlike tiargs (see the beginning of the function)
+            // See also: http://forum.dlang.org/post/CAC_JBqp5Lqqt0ADwnM5GfE+zO8oh6TyLpnDKDHT80S-UNtVUOw@mail.gmail.com
+            // When called from functionResolve the TemplateInstance.havetempdecl is set to true, and Tuple do not get expanded
+            // This isn't consistent with other TemplateInstance where Tuple get expanded during findBestMatch.
+            // IMHO there should be a single case, and that would make C++ multiple parameter pack support easier to support.
+
         TemplateParameter *tparam = (*parameters)[i];
         //printf("tparam[%d] = %s\n", i, tparam->ident->toChars());
         /* For T:T*, the dedargs is the T*, dedtypes is the T
@@ -2013,7 +2019,6 @@ Lmatch:
             else
                 (*dedargs)[i] = oded;
         }
-    }
     }
 
     // Partially instantiate function for constraint and fd->leastAsSpecialized()
