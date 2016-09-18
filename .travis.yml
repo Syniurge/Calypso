@@ -1,5 +1,5 @@
 language: cpp
-sudo: false
+#sudo: false
 
 matrix:
   include:
@@ -16,9 +16,9 @@ matrix:
   #- LLVM_CONFIG="llvm-config-3.6" OPTS="-DBUILD_SHARED_LIBS=ON"
   #- LLVM_CONFIG="llvm-config-3.5" OPTS="-DTEST_COVERAGE=ON"
 
-cache:
-  directories:
-    - llvm-3.9.0
+#cache:
+  #directories:
+    #- llvm-3.9.0
 addons:
   apt:
     sources:
@@ -36,17 +36,17 @@ addons:
     - libcurl3:i386
     - libedit2
     - libedit-dev
-before_install:
-  -
-    if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
-      if [ -z "$(ls -A llvm-$LLVM_VERSION)" ]; then
-        wget -O llvm-$LLVM_VERSION.tar.xz http://llvm.org/releases/$LLVM_VERSION/clang+llvm-$LLVM_VERSION-x86_64-linux-gnu-ubuntu-14.04.tar.xz;
-        mkdir llvm-$LLVM_VERSION;
-        tar -xvf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
-      fi;
-      llvm-$LLVM_VERSION/bin/llvm-config --version;
-      export LLVM_CONFIG="$(pwd)/llvm-$LLVM_VERSION/bin/llvm-config";
-    fi
+#before_install:  # LLVM 3.9.0 segfaults in formLCSSAForInstructions, so use nightly 3.9 builds instead
+  #-
+    #if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
+      #if [ -z "$(ls -A llvm-$LLVM_VERSION)" ]; then
+        #wget -O llvm-$LLVM_VERSION.tar.xz http://llvm.org/releases/$LLVM_VERSION/clang+llvm-$LLVM_VERSION-x86_64-linux-gnu-ubuntu-14.04.tar.xz;
+        #mkdir llvm-$LLVM_VERSION;
+        #tar -xvf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
+      #fi;
+      #llvm-$LLVM_VERSION/bin/llvm-config --version;
+      #export LLVM_CONFIG="llvm-$LLVM_VERSION/bin/llvm-config";
+    #fi
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
   - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew update; brew install llvm39; brew install libconfig; fi;
@@ -62,8 +62,15 @@ install:
   - python -c "import lit; lit.main();" --version | head -n 1
 
 before_script:
+  - curl http://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -;
+    echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.9 main" | sudo tee -a /etc/apt/sources.list;
+    sudo apt-get update -qq;
+    sudo apt-get purge llvm;
+    sudo apt-get install llvm-3.9 llvm-3.9-dev -y;
+    export LLVM_CONFIG="/usr/bin/llvm-config-3.9";
   - mkdir build
   - cd build
+
 script:
   - cmake -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
   - make -j3
