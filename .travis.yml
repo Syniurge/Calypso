@@ -9,7 +9,7 @@ matrix:
     - os: osx
       env: LLVM_CONFIG="llvm-config-3.9"
   allow_failures:
-    #- env: LLVM_VERSION=3.9
+    - os: osx
 
 #env:
   #- LLVM_CONFIG="llvm-config-3.7" OPTS="-DMULTILIB=ON"
