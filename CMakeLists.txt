@@ -492,8 +492,11 @@ ExternalProject_Add(clang
     SOURCE_DIR ${CLANG_SOURCE_DIR}
     BINARY_DIR ${CLANG_BINARY_DIR}
     STAMP_DIR ${CLANG_STAMP_DIR}
+	CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
+			# - with MSBuild only one project can be specified and the build command fails
+			# - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG}
-    BUILD_COMMAND ${CMAKE_BUILD_TOOL} ${CLANG_TARGETS}
+    BUILD_COMMAND ninja ${CLANG_TARGETS}
 	BUILD_BYPRODUCTS ${CLANG_LIBS}
     INSTALL_COMMAND ""
     STEP_TARGETS rtcopy
