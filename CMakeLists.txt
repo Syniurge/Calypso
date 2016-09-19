@@ -522,7 +522,7 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc DESTINATION ${CMAKE_
 # LDFLAGS should actually be in target property LINK_FLAGS, but this works, and gets around linking problems
 target_link_libraries(${LDC_LIB} ${CLANG_LIBS} ${LLVM_LIBRARIES} ${PTHREAD_LIBS} ${TERMINFO_LIBS} "${LLVM_LDFLAGS}")
 if(WIN32)
-    target_link_libraries(${LDC_LIB} imagehlp psapi)
+    target_link_libraries(${LDC_LIB} imagehlp psapi version) # CALYPSO: ClangDriver requires Version.lib
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     target_link_libraries(${LDC_LIB} dl)
 endif()
