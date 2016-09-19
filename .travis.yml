@@ -33,6 +33,7 @@ addons:
     - g++-4.9-multilib
     - gcc-multilib
     - g++-multilib
+    - ninja-build
     # - linux-libc-dev:i386
     # - libcurl3:i386
     - libedit2
