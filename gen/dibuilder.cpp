@@ -138,7 +138,7 @@ ldc::DIType ldc::DIBuilder::CreateBasicType(Type *type) {
     Encoding = DW_ATE_boolean;
     break;
   case Tchar:
-    if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
+    if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
       // VS debugger does not support DW_ATE_UTF for char
       Encoding = DW_ATE_unsigned_char;
       break;
@@ -148,7 +148,7 @@ ldc::DIType ldc::DIBuilder::CreateBasicType(Type *type) {
     Encoding = DW_ATE_UTF;
     break;
   case Tint8:
-    if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
+    if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
       // VS debugger does not support DW_ATE_signed for 8-bit
       Encoding = DW_ATE_signed_char;
       break;
@@ -160,7 +160,7 @@ ldc::DIType ldc::DIBuilder::CreateBasicType(Type *type) {
     Encoding = DW_ATE_signed;
     break;
   case Tuns8:
-    if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
+    if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
       // VS debugger does not support DW_ATE_unsigned for 8-bit
       Encoding = DW_ATE_unsigned_char;
       break;
