@@ -636,7 +636,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitSubProgram(FuncDeclaration *fd) {
       CreateFunctionType(static_cast<TypeFunction *>(fd->type));
 
   // FIXME: duplicates?
-  auto SP = DBuilder.createFunction(
+  return DBuilder.createFunction(
       CU,                            // context
       fd->toPrettyChars(),           // name
       mangleExact(fd),               // linkage name
@@ -653,12 +653,6 @@ ldc::DISubprogram ldc::DIBuilder::EmitSubProgram(FuncDeclaration *fd) {
       getIrFunc(fd)->func
 #endif
       );
-#if LDC_LLVM_VER >= 308
-  if (fd->fbody) {
-    getIrFunc(fd)->func->setSubprogram(SP);
-  }
-#endif
-  return SP;
 }
 
 ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
@@ -703,7 +697,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
 #endif
 
   // FIXME: duplicates?
-  auto SP = DBuilder.createFunction(
+  return DBuilder.createFunction(
       CU,            // context
       prettyname,    // name
       Fn->getName(), // linkage name
@@ -720,10 +714,6 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
       Fn
 #endif
       );
-#if LDC_LLVM_VER >= 308
-  Fn->setSubprogram(SP);
-#endif
-  return SP;
 }
 
 void ldc::DIBuilder::EmitFuncStart(FuncDeclaration *fd) {
@@ -835,7 +825,7 @@ void ldc::DIBuilder::EmitValue(llvm::Value *val, VarDeclaration *vd) {
 }
 
 void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
-                                       Type *type, bool isThisPtr, bool fromNested,
+                                       Type *type, bool isThisPtr,
 #if LDC_LLVM_VER >= 306
                                        llvm::ArrayRef<int64_t> addr
 #else
@@ -870,7 +860,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
 
 #if LDC_LLVM_VER < 308
   unsigned tag;
-  if (!fromNested && vd->isParameter()) {
+  if (vd->isParameter()) {
     tag = llvm::dwarf::DW_TAG_arg_variable;
   } else {
     tag = llvm::dwarf::DW_TAG_auto_variable;
@@ -914,7 +904,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
                                                Flags                // flags
                                                );
 #else
-  if (!fromNested && vd->isParameter()) {
+  if (vd->isParameter()) {
     FuncDeclaration *fd = vd->parent->isFuncDeclaration();
     assert(fd);
     size_t argNo = 0;
