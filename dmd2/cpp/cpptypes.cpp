@@ -563,13 +563,73 @@ template Objects *TypeMapper::FromType::fromTemplateArgument<false>(const clang:
 template Objects *TypeMapper::FromType::fromTemplateArgument<true>(const clang::TemplateArgument *Arg,
                                                                                 const clang::NamedDecl *Param);
 
+namespace {
+    // Sometimes e.g when mapping a TemplateSpecializationType template arguments might be unpacked
+    // A smarter iterator is needed to iterate properly
+    struct TemplateParameterIterator
+    {
+        clang::TemplateParameterList::const_iterator Param = nullptr,
+            ParamEnd = nullptr;
+        unsigned PackArgIdx = 0;
+        unsigned NumArgsInOnePack;
+
+        inline void adjustParam(clang::TemplateParameterList::const_iterator& P)
+        {
+            if (P == ParamEnd) {
+                P = nullptr;
+                return;
+            }
+            if (!NumArgsInOnePack)
+                while (P && isTemplateParameterPack(*P))
+                    adjustParam(++P);
+        }
+
+        TemplateParameterIterator(unsigned NumArgs, const clang::TemplateParameterList *ParamList)
+        {
+            if (!ParamList)
+                return;
+
+            unsigned NumParamPacks = 0;
+            for (auto P : *ParamList)
+                if (isTemplateParameterPack(P))
+                    NumParamPacks++;
+
+            NumArgsInOnePack = NumParamPacks ?
+                ((2 * NumParamPacks + NumArgs - ParamList->size() - 1) / NumParamPacks) : 0;
+
+            Param = ParamList->begin();
+            ParamEnd = ParamList->end();
+            adjustParam(Param);
+        }
+
+        TemplateParameterIterator& operator++() 
+        {
+            assert(Param);
+            if (isTemplateParameterPack(*Param)) {
+                PackArgIdx++;
+                if (PackArgIdx < NumArgsInOnePack)
+                    return *this;
+                PackArgIdx = 0;
+            }
+            ++Param;
+            adjustParam(Param);
+            return *this;
+        }
+
+        const clang::NamedDecl* operator*() {
+            return *Param;
+        }
+        operator bool() const { return Param != nullptr;  }
+    };
+}
+
 template<bool wantTuple>
   Objects* TypeMapper::FromType::fromTemplateArguments(const clang::TemplateArgument *First,
                                         const clang::TemplateArgument *End,
                                         const clang::TemplateParameterList *ParamList)
 {
     auto tiargs = new Objects;
-    auto Param = ParamList ? ParamList->begin() : nullptr;
+    TemplateParameterIterator Param(End - First, ParamList);
 
     for (auto Arg = First; Arg != End; Arg++)
     {
@@ -579,7 +639,7 @@ template<bool wantTuple>
         tiargs->append(arg);
 
         if (ParamList)
-            Param++;
+            ++Param;
     }
 
     return tiargs;
