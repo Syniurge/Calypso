@@ -101,6 +101,7 @@ public:
         Type *fromTypeRecord(const clang::RecordType *T);
         Type *fromTypeMemberPointer(const clang::MemberPointerType *T);
         Type *fromTypeElaborated(const clang::ElaboratedType *T);
+        Type *fromTypeUnaryTransform(const clang::UnaryTransformType *T);
         Type *fromTypeTemplateSpecialization(const clang::TemplateSpecializationType *T);
         Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T, const clang::TemplateTypeParmDecl *OrigDecl = nullptr);
         Type *fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType *T);

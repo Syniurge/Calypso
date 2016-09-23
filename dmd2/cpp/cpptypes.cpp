@@ -374,8 +374,6 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 	// MSVC-specific
 	if (auto AttrT = dyn_cast<clang::AttributedType>(T))
 		return fromType(AttrT->getEquivalentType());
-	else if (auto UTT = dyn_cast<clang::UnaryTransformType>(T)) // underlying integral type of an enum
-		return fromType(UTT->getUnderlyingType());
 
 #define TYPEMAP(Ty) \
     if (auto Ty##T = dyn_cast<clang::Ty##Type>(T)) \
@@ -398,6 +396,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     TYPEMAP(PackExpansion)
     TYPEMAP(Vector)
     TYPEMAP(Array)
+    TYPEMAP(UnaryTransform)
 #undef TYPEMAP
 
     // Pointer and reference types
@@ -481,6 +480,16 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
     }
 
     llvm::llvm_unreachable_internal("Unrecognized C++ array type");
+}
+
+// MSVC-specific(?) __underlying_type intrinsic returning the underlying integral type of an enum
+Type* TypeMapper::FromType::fromTypeUnaryTransform(const clang::UnaryTransformType* T)
+{
+    auto Underlying = T->getUnderlyingType();
+    if (!Underlying.isNull())
+        return fromType(Underlying);
+
+    return fromType(T->getBaseType()); // Underlying may be null if T is dependent
 }
 
 template<bool wantTuple>
