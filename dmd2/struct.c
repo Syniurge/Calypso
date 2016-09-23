@@ -1540,8 +1540,10 @@ UnionDeclaration::UnionDeclaration(Loc loc, Identifier *id)
 
 Dsymbol *UnionDeclaration::syntaxCopy(Dsymbol *s)
 {
-    assert(!s);
-    UnionDeclaration *ud = new UnionDeclaration(loc, ident);
+    assert(!s || s->isUnionDeclaration()); // FIXME temporary
+    UnionDeclaration *ud =  // CALYPSO
+        s ? (UnionDeclaration *)s
+        : new UnionDeclaration(loc, ident);
     return StructDeclaration::syntaxCopy(ud);
 }
 
