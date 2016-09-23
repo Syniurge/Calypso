@@ -37,6 +37,8 @@ public:
     Expression *fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier* NNS = nullptr,
                                     TypeQualifiedBuilderOpts tqualOpts = TQ_OverOpFullIdent);
+    template<typename T>
+    Expression *fromExpressionMemberExpr(Loc loc, const T* E, const clang::DeclarationName MemberName);
     Expression *fromExpressionNonTypeTemplateParm(Loc loc,
                                     const clang::NonTypeTemplateParmDecl* D);
 

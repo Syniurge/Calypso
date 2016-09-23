@@ -484,36 +484,13 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         else
             e = fromExpression(SNTTP->getReplacement());
     }
+    else if (auto MExpr = dyn_cast<clang::MemberExpr>(E))
+    {
+        return fromExpressionMemberExpr(loc, MExpr, MExpr->getMemberDecl()->getDeclName());
+    }
     else if (auto CDSM = dyn_cast<clang::CXXDependentScopeMemberExpr>(E))
     {
-        auto member = getIdentOrTempinst(loc, CDSM->getMember(), tymap);
-        auto e1 = fromExpression(CDSM->getBase());
-
-        if (!e1 || !member)
-            return nullptr;
-
-        if (CDSM->hasExplicitTemplateArgs())
-        {
-            assert(member->dyncast() == DYNCAST_IDENTIFIER);
-
-            auto tempinst = new TemplateInstance(loc,
-                            static_cast<Identifier*>(member));
-            tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
-                        CDSM->getTemplateArgs(), CDSM->getNumTemplateArgs(), tymap);
-
-            member = tempinst;
-        }
-
-        if (auto NNS = CDSM->getQualifier())
-        {
-            auto tqual = TypeMapper::FromType(tymap, loc).fromNestedNameSpecifier(NNS);
-            e1 = dotIdentOrInst(loc, e1, typeQualifiedRoot(tqual));
-
-            for (auto id: tqual->idents)
-                e1 = dotIdentOrInst(loc, e1, id);
-        }
-
-        e = dotIdentOrInst(loc, e1, member);
+        return fromExpressionMemberExpr(loc, CDSM, CDSM->getMember());
     }
     else if (auto DSDR = dyn_cast<clang::DependentScopeDeclRefExpr>(E))
     {
@@ -835,6 +812,41 @@ Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
 
     // TODO: Build a proper expression from the type (mostly for reflection and to mimic parse.c, since TypeExp seems to work too)
     return e;
+}
+
+template<typename T>
+ Expression *ExprMapper::fromExpressionMemberExpr(Loc loc, const T* E, const clang::DeclarationName MemberName)
+{
+    assert(E->getBase() && "Unhandled case");
+
+    auto member = getIdentOrTempinst(loc, MemberName, tymap);
+    auto e1 = fromExpression(E->getBase());
+
+    if (!e1 || !member)
+        return nullptr;
+
+    if (E->hasExplicitTemplateArgs())
+    {
+        assert(member->dyncast() == DYNCAST_IDENTIFIER);
+
+        auto tempinst = new TemplateInstance(loc,
+            static_cast<Identifier*>(member));
+        tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
+            E->getTemplateArgs(), E->getNumTemplateArgs(), tymap);
+
+        member = tempinst;
+    }
+
+    if (auto NNS = E->getQualifier())
+    {
+        auto tqual = TypeMapper::FromType(tymap, loc).fromNestedNameSpecifier(NNS);
+        e1 = dotIdentOrInst(loc, e1, typeQualifiedRoot(tqual));
+
+        for (auto id : tqual->idents)
+            e1 = dotIdentOrInst(loc, e1, id);
+    }
+
+    return dotIdentOrInst(loc, e1, member);
 }
 
 Expression* ExprMapper::fromExpressionNonTypeTemplateParm(Loc loc, const clang::NonTypeTemplateParmDecl* D)
