@@ -419,13 +419,17 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     tymap.substsyms = collectSymbols(dedtypes);
     tymap.desugar = true;
 
-    auto Temp = getPrimaryTemplate();
     auto InstArgs = (isForeignInstance(ti) ? getTemplateInstantiationArgs(Inst)
                                                             : getTemplateArgs(Inst))->asArray();
+    const clang::TemplateParameterList* ParamList;
+    if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
+        ParamList = PartialSpec->getTemplateParameters();
+    else
+        ParamList = getPrimaryTemplate()->getTemplateParameters();
 
     auto cpptdtypes = TypeMapper::FromType(tymap, loc).fromTemplateArguments<true>(
                                             InstArgs.begin(), InstArgs.end(),
-                                            Temp->getTemplateParameters());
+                                            ParamList);
 
     SpecValue spec(tymap);
     if (Inst.is<clang::NamedDecl*>())
