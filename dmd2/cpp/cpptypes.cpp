@@ -360,6 +360,10 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
         return fromTypeFunction(FT);
     else if (auto AT = dyn_cast<clang::AtomicType>(T))
         return fromType(AT->getValueType());
+    else if (isa<clang::AutoType>(T)) {
+        ::warning(loc, "clang::AutoType unhandled case (FIXME)");
+        return nullptr;
+    }
 
     // Purely cosmetic sugar types
     if (auto PT = dyn_cast<clang::ParenType>(T))
@@ -1790,13 +1794,20 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     if (T->isConst())
         stc |= STCconst;
 
-    auto rt = FromType(tm, loc)(T->getReturnType());
-    if (!rt)
-        return nullptr;
-    if (rt->ty == Treference)
-    {
-        stc |= STCref;
-        rt = rt->nextOf();
+    Type *rt;
+    if (isa<clang::AutoType>(T->getReturnType())) {
+        stc |= STCauto;
+        rt = nullptr;
+    } else {
+        rt = FromType(tm, loc)(T->getReturnType());
+        if (!rt)
+            return nullptr;
+
+        if (rt->ty == Treference)
+        {
+            stc |= STCref;
+            rt = rt->nextOf();
+        }
     }
 
     if (T->isNothrow(Context, false))
