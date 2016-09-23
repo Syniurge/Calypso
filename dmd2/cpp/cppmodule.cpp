@@ -719,6 +719,11 @@ bool isMapped(const clang::Decl *D)
         if (isa<clang::FunctionNoProtoType>(FD->getType()))
             return false; // functions without prototypes are afaik builtins, and since D needs a prototype they can't be mapped
 
+        // Clang/MSVC's __builtin_addressof(void&) doesn't have a valid type
+        // Do not map the builtin and eventually (TODO) handle it specifically
+        if (FD->getBuiltinID() == clang::Builtin::BI__builtin_addressof)
+            return false;
+
         if (auto MD = dyn_cast<clang::CXXMethodDecl>(D))
         {
             auto Parent = MD->getParent();
