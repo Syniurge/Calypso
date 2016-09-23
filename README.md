@@ -22,7 +22,7 @@ Although Calypso is currently soldered to LDC, separating the two and placing Ca
 Installation notes
 -------
 
-A Clang 3.8 fork makes its appearance as a submodule, it's therefore strongly recommended to build Calypso against LLVM 3.8.
+A Clang 3.9 fork makes its appearance as a submodule, it's therefore strongly recommended to build Calypso against LLVM 3.9 (also, the nightly 3.9 build, not the 3.9.0 release which contains a breaking bug).
 
 Please note that to build Calypso in ```Debug``` mode LLVM needs to be built in ```Debug``` mode as well.
 
