@@ -214,8 +214,8 @@ public:
     bool overloadInsert(Dsymbol *s);
     const char *kind();
     Type *getType();
-    Dsymbol *toAlias();
-    Dsymbol *toAlias2();
+    virtual Dsymbol *toAlias(); // CALYPSO
+    virtual Dsymbol *toAlias2(); // CALYPSO
 
     AliasDeclaration *isAliasDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }

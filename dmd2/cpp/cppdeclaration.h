@@ -120,11 +120,16 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::TypedefNameDecl *TND;
+    Scope* semScope = nullptr;
 
     AliasDeclaration(Loc loc, Identifier *ident, Type *type,
             const clang::TypedefNameDecl *TND);
     AliasDeclaration(const AliasDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void semantic(Scope *sc) override;
+    void doSemantic();
+    Dsymbol *toAlias() override;
+    Dsymbol *toAlias2() override;
 };
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);

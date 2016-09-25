@@ -140,6 +140,32 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
     return new cpp::AliasDeclaration(*this); // hmm hmm
 }
 
+// Resolve aliases lazily, the DMD way of evaluating everything leads to infinite recursion for some C++ templates
+// Ex.: typedef _Index_tuple<_Indexes, sizeof(_Indexes)> _Index_tuple<size_t... _Indexes>::__next;
+void AliasDeclaration::semantic(Scope *sc)
+{
+}
+
+void AliasDeclaration::doSemantic()
+{
+    if (!scope)
+        return;
+
+    ::AliasDeclaration::semantic(scope);
+}
+
+Dsymbol *AliasDeclaration::toAlias()
+{
+    doSemantic();
+    return ::AliasDeclaration::toAlias();
+}
+
+Dsymbol *AliasDeclaration::toAlias2()
+{
+    doSemantic();
+    return ::AliasDeclaration::toAlias2();
+}
+
 IMPLEMENT_syntaxCopy(VarDeclaration, VD)
 IMPLEMENT_syntaxCopy(FuncDeclaration, FD)
 IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
