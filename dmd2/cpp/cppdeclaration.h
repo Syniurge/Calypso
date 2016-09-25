@@ -208,7 +208,6 @@ public:
     DeclReferencer() : expmap(mapper)
     {
         mapper.addImplicitDecls = false;
-        mapper.cppPrefix = false;
     }
 
     void Traverse(Loc loc, Scope *sc, clang::Stmt *S);
@@ -221,7 +220,6 @@ public:
 };
 
 extern DeclReferencer declReferencer;
-Scope *globalScope(::Module *m);
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 bool isPolymorphic(const clang::RecordDecl *D);

@@ -64,9 +64,7 @@ public:
     TypeMapper(cpp::Module *mod = nullptr);  // mod can be null if no implicit import is needed
 
     bool addImplicitDecls = true;
-    Dsymbols *substsyms = nullptr; // only for TemplateInstance::correctTiargs (partial spec arg deduction)
-    bool desugar = false;
-    bool cppPrefix = true; // if false, the ".cpp" prefix won't be appended, disabled only for « C++ global scope search »
+    bool desugar = true;
 
     unsigned volatileNumber = 0; // number of volatile qualifiers found, needs to be reset when mapping functions
 
@@ -131,9 +129,6 @@ public:
                             const clang::TemplateArgument* ArgBegin = nullptr,
                             const clang::TemplateArgument* ArgEnd = nullptr,
                             TypeQualifiedBuilderOpts options = TQ_None);
-        Type *typeSubstOrQualifiedFor(clang::NamedDecl* D,
-                            const clang::TemplateArgument* ArgBegin = nullptr,
-                            const clang::TemplateArgument* ArgEnd = nullptr);
 
         template<typename _Type>
          Type *fromTypeOfExpr(const _Type *T);
@@ -174,8 +169,6 @@ protected:
     ::Import *BuildImplicitImport(Loc loc, const clang::Decl *D, Identifier *aliasid = nullptr);
     ::Import *BuildImplicitImport(Loc loc, const clang::Decl *D, const clang::Module *Mod, Identifier *aliasid = nullptr);
     Module::RootKey GetImplicitImportKeyForDecl(const clang::NamedDecl *D);
-
-    Type *trySubstitute(const clang::Decl *D);
 
     friend class cpp::TypeQualifiedBuilder;
 };

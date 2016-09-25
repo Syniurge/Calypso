@@ -22,8 +22,8 @@ public:
 
     Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 
-    ::Module *loadModule(Loc loc, Identifiers *packages, Identifier *id);
-    void load(Scope *sc) override; // HACK
+    ::Module *loadModule(Loc loc, Identifiers *packages, Identifier *id) override;
+    void load(Scope *sc) override;
 };
 
 struct Modmap : public ::Modmap
@@ -33,8 +33,20 @@ public:
 
     Modmap(Loc loc, StringExp *arg);
 
-    void importAll(Scope *sc);
-    void semantic(Scope *sc);
+    void importAll(Scope *sc) override;
+    void semantic(Scope *sc) override;
+};
+
+// Special import for lookups from C++ modules
+class GlobalImport : public ::Import
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    bool loaded = false;
+
+    GlobalImport(Loc loc);
+    void load(Scope *sc) override;
 };
 
 }

@@ -16,10 +16,10 @@ namespace cpp
 Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic)
     : ::Import(loc, packages, id, aliasId, isstatic)
 {
-    // add "_cpp" as leftmost package to avoid name clashes
+    // add "§cpp" as leftmost package to avoid name clashes
     if (!this->packages)
         this->packages = new Identifiers;
-    this->packages->shift(Identifier::idPool("_cpp"));  // any better idea ?
+    this->packages->shift(Identifier::idPool(u8"§cpp"));
 
     if (!aliasId)
         setSymIdent();
@@ -61,6 +61,21 @@ void Modmap::importAll(Scope *sc)
 
 void Modmap::semantic(Scope* sc)
 {
+}
+
+GlobalImport::GlobalImport(Loc loc)
+    : ::Import(loc, nullptr, Identifier::idPool(u8"§cpp"), nullptr, 0)
+{
+    this->pkg = cpp::Module::rootPackage;
+}
+
+void GlobalImport::load(Scope *sc)
+{
+    if (loaded)
+        return;
+
+    sc->scopesym->importScope(pkg, Prot(PROTprivate));
+    loaded = true;
 }
 
 }

@@ -922,10 +922,7 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
 
         if (LeftMostCheck(D))  // we'll need a fully qualified type
         {
-            if (from.tm.cppPrefix)
-                tqual = new TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to guarantee against collisions
-            else
-                tqual = nullptr;
+            tqual = new TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to guarantee against collisions
 
             // build a fake import
             if (auto im = tm.AddImplicitImportForDecl(from.loc, TopDecl, true))
@@ -934,8 +931,8 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
                     addIdent(tqual, im->aliasId);
                 else
                 {
-                    for (size_t i = from.tm.cppPrefix ? 0 : 1; i < im->packages->dim; i++)
-                        addIdent(tqual, (*im->packages)[i]);
+                    for (auto package: *im->packages)
+                        addIdent(tqual, package);
                     addIdent(tqual, im->id);
                 }
             }
@@ -1124,47 +1121,6 @@ TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
     return TypeQualifiedBuilder(*this, Root, D, ArgBegin, ArgEnd, options).get(D);
 }
 
-Type *TypeMapper::FromType::typeSubstOrQualifiedFor(clang::NamedDecl *D,
-                const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd)
-{
-    if (!ArgBegin)
-        if (auto subst = tm.trySubstitute(D)) // HACK for correctTiargs
-            return subst;
-
-    return typeQualifiedFor(D, ArgBegin, ArgEnd);
-}
-
-Type *TypeMapper::trySubstitute(const clang::Decl *D)
-{
-    if (!substsyms)
-        return nullptr;
-
-    for (auto s: *substsyms)
-    {
-#define SUBST(Kind, Sym) \
-        else if (s->is##Kind##Declaration())  \
-        { \
-            auto Known = static_cast<cpp::Kind##Declaration*>(s)->Sym; \
-            if (Known->getCanonicalDecl() != D->getCanonicalDecl()) \
-                continue; \
-            return new ::Type##Kind(static_cast<Kind##Declaration*>(s)); \
-        }
-
-        if (0) ;
-        SUBST(Struct, RD)
-        SUBST(Class, RD)
-        SUBST(Enum, ED)
-        else if (s->isTemplateDeclaration())
-            continue;
-        else
-            assert(false && "Unexpected symbol kind");
-
-#undef SUBST
-    }
-
-    return nullptr;
-}
-
 Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 {
     auto Typedef = T->getDecl();
@@ -1172,17 +1128,17 @@ Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
                 getDeclContextNamedOrTU(Typedef)->isTranslationUnit())  // temporary HACK to avoid importing "_" just because of typedefs (eg size_t)
         return fromType(Typedef->getUnderlyingType());
 
-    return typeSubstOrQualifiedFor(Typedef);
+    return typeQualifiedFor(Typedef);
 }
 
 Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 {
-    return typeSubstOrQualifiedFor(T->getDecl());
+    return typeQualifiedFor(T->getDecl());
 }
 
 Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
-    return typeSubstOrQualifiedFor(T->getDecl());
+    return typeQualifiedFor(T->getDecl());
 }
 
 Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
@@ -1470,22 +1426,14 @@ Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::Template
         setInst(T);
     else if (T->isSugared())
     {
-        auto RT = T->getAs<clang::RecordType>();
-
-        if (RT)
-        {
-            if (auto subst = tm.trySubstitute(RT->getDecl())) // HACK for correctTiargs
-                return subst;
-
-            auto RD = RT->getDecl();
-            if (tm.isInjectedClassName(RD))
+        if (auto RT = T->getAs<clang::RecordType>()) {
+            if (tm.isInjectedClassName(RT->getDecl()))
                 return fromInjectedClassName(loc);
-        }
 
-        // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible, i.e when
-        // the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to complete its instantiation.
-        if (RT)
+            // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible, i.e when
+            // the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to complete its instantiation.
             setInst(RT->getDecl());
+        }
     }
 
     return tqual;
@@ -1567,8 +1515,13 @@ unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
 const clang::TemplateTypeParmDecl *TypeMapper::FromType::getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T)
 {
     auto ParmDecl = T->getDecl();
-    if (!ParmDecl)
-        return nullptr; // may happen for partial template specs arguments (meant for the master template params)
+    if (!ParmDecl) {
+        auto Depth = T->getDepth();
+        if (Depth < tm.TempParamScope.size())
+            return cast<clang::TemplateTypeParmDecl>(tm.TempParamScope[Depth]->getParam(T->getIndex()));
+        else
+            return nullptr; // may happen for partial template specs arguments (meant for the master template params)
+    }
 
     auto ParmCtx = cast<clang::Decl>(ParmDecl->getDeclContext())->getCanonicalDecl();
 
@@ -1603,36 +1556,11 @@ Type* TypeMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypePa
 
 Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType* T)
 {
-    // NOTE: it's necessary to "revert" resolved symbol names of C++ template instantiations by Sema to the parameter name because D severes the link between the template instance scope and its members, and the only links that remain are the AliasDeclarations created by TemplateInstance::declareParameters
+    auto Replacement = T->getReplacementType();
+    if (!Replacement.isNull())
+        return fromType(Replacement);
 
-    // One exception is when the type managed to escape the template declaration, e.g with decltype(). In this fairly rare case T has to be desugared.
     auto OrigParm = getOriginalTempTypeParmDecl(T->getReplacedParameter());
-
-    if (!OrigParm)
-    {
-//         // If the substitued argument comes from decltype(some function template call), then the fragile link that makes perfect C++ template mapping possible (type sugar) is broken.
-//         // Clang has lost the template instance at this point, so first we get it back from the decltype expr.
-//         if (auto CE = llvm::dyn_cast_or_null<clang::CallExpr>(TypeOfExpr))
-//             if (auto Callee = CE->getDirectCallee())
-//                 if (Callee->isTemplateInstantiation())
-//                 {
-//                     // Secondly the substitued template argument is the one of the function template arg, but if the argument was deduced from the call args then type sugar is lost forever (either typedef, subst template arg, and maybe other kinds of sugar), this is where it gets complicated.
-//                     // The laziest and "should work in most cases" solution is to use DMD's own overloading and template argument deduction from the original decltype expression.
-//
-//                     ExprMapper em(tm);
-//
-//                     auto e = em.fromExpression(TypeOfExpr);
-//                     auto loc = fromLoc(TypeOfExpr->getExprLoc());
-//
-//                     return new TypeTypeof(loc, e);
-//
-//                     // NOTE: Sugar can't be preserved because Clang could have call arg with typedef types where the typedef decl isn't usable to get back the template arg sugar, e.g template<T> void Func(T *a); decltype(Func(someTypedef));
-//                     // Another possible solution would be to make a deduction listener that records the deduction actions to apply them on the call arg types, but it's much more complex.
-//                 }
-
-        return fromType(T->getReplacementType());
-    }
-
     return fromTypeTemplateTypeParm(T->getReplacedParameter(), OrigParm);
 }
 
@@ -1641,7 +1569,7 @@ Type* TypeMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClass
     // A simple identifier is preferrable when possible, as mapping template arguments requires switching to a different parameter scope
     return new TypeIdentifier(loc, getIdentifier(T->getDecl()));
 
-//     return typeSubstOrQualifiedFor(T->getDecl());
+//     return typeQualifiedFor(T->getDecl());
         // NOTE: this will return typeof(this) if we aren't in a nested class, but if we are the name of the record is (without template arguments)
 }
 

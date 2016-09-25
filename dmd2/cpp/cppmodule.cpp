@@ -54,7 +54,7 @@ Modules Module::amodules;
 
 void Module::init()
 {
-    rootPackage = new Package(Identifier::idPool("_cpp"));
+    rootPackage = new Package(Identifier::idPool(u8"§cpp"));
     rootPackage->symtab = new DsymbolTable;
 
     modules->insert(rootPackage);
@@ -121,6 +121,8 @@ void Module::addPreambule()
             ::Import *im = new ::Import(Loc(), packages, Identifier::idPool("core"), nullptr, true);
             members->shift(im);
         }
+        // the C++ special import for global namespace lookups
+        members->shift(new GlobalImport(Loc()));
         { // object
             ::Import *im = new ::Import(Loc(), nullptr, Id::object, nullptr, true);
             members->shift(im);

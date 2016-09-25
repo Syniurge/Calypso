@@ -54,100 +54,6 @@ TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
 
-// HACK-ish unfortunately.. but arg deduction isn't trivial. Can't think of a simpler way.
-// TODO: remove this, use cppdeclaration.cpp Referencer approach instead w/ the global scope
-struct CppSymCollector
-{
-    Dsymbols *substsyms;
-    CppSymCollector(Dsymbols *substsyms)
-        : substsyms(substsyms) {}
-
-    inline void addIfCPP(Dsymbol *s)
-    {
-        if (isCPP(s))
-            substsyms->push(s);
-
-        if (auto ti = s->parent->isTemplateInstance())
-            if (isCPP(ti))
-                collect(ti->tiargs);
-    }
-
-    void collect(Dsymbol *s)
-    {
-        addIfCPP(s);
-    }
-
-    void collect(Type *t)
-    {
-        switch (t->ty)
-        {
-            case Tstruct:
-                addIfCPP(static_cast<TypeStruct*>(t)->sym);
-                break;
-            case Tclass:
-                addIfCPP(static_cast<TypeClass*>(t)->sym);
-                break;
-            case Tenum:
-                addIfCPP(static_cast<TypeEnum*>(t)->sym);
-                break;
-            case Tarray:
-            case Tsarray:
-            case Tpointer:
-            case Treference:
-                collect(static_cast<TypeNext*>(t)->next);
-                break;
-            case Tfunction:
-            {
-                auto tf = static_cast<TypeFunction*>(t);
-                collect(tf->next);
-                for (auto p: *tf->parameters)
-                    collect(p->type);
-                break;
-            }
-            case Tident:
-            case Tinstance:
-            default:
-//                 ::warning(Loc(), "Collecting C++ symbols unhandled for type %s:\"%s\"",
-//                           t->kind(), t->toChars());
-                break;
-        }
-    }
-
-    void collect(Expression *e)
-    {
-        // TODO DotIdExp ...
-    }
-
-    void collect(Tuple *tup)
-    {
-        collect(&tup->objects);
-    }
-
-    void collect(Objects *tiargs)
-    {
-        for (auto o: *tiargs)
-        {
-            Type *ta = isType(o);
-            Expression *ea = isExpression(o);
-            Dsymbol *sa = isDsymbol(o);
-            Tuple *tupa = isTuple(o);
-
-            if (ta) collect(ta);
-            else if (ea) collect(ea);
-            else if (sa) collect(sa);
-            else { assert(tupa); collect(tupa); }
-        }
-    }
-};
-
-static Dsymbols *collectSymbols(Objects *tiargs)
-{
-    auto substsyms = new Dsymbols;
-    CppSymCollector(substsyms).collect(tiargs);
-
-    return substsyms;
-}
-
 static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
                                 TypeMapper& tymap, ExprMapper& expmap)
@@ -416,8 +322,6 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
 
     TypeMapper tymap;
     tymap.addImplicitDecls = false;
-    tymap.substsyms = collectSymbols(dedtypes);
-    tymap.desugar = true;
 
     auto InstArgs = (isForeignInstance(ti) ? getTemplateInstantiationArgs(Inst)
                                                             : getTemplateArgs(Inst))->asArray();
@@ -610,7 +514,6 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     TypeMapper tymap;
     ExprMapper expmap(tymap);
     tymap.addImplicitDecls = false;
-    tymap.cppPrefix = false;
 
     auto Temp = const_cast<clang::RedeclarableTemplateDecl*>
                                 (getDefinition(getPrimaryTemplate(), false));
@@ -772,7 +675,6 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
         TypeMapper tymap;
         ExprMapper expmap(tymap);
         tymap.addImplicitDecls = false;
-        tymap.cppPrefix = false;
 
         auto Args = getTemplateArgs(Inst)->asArray();
         auto Arg = Args.begin();
@@ -780,8 +682,6 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
 
         SpecValue spec(tymap);
         getIdentifierOrNull(Temp, &spec);
-
-        auto sc2 = globalScope(sc->instantiatingModule());
 
         for (size_t i = spec ? 1 : 0; i < tiargs->dim; Arg++, Param++)
         {
@@ -795,7 +695,7 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
             for (auto arg: *a) {
                 if (auto e = isExpression(arg)) {
                     assert(isExpression((*tiargs)[i]));
-                    (*tiargs)[i] = e->semantic(sc2);
+                    (*tiargs)[i] = e->semantic(sc);
                 }
                 i++;
             }
@@ -861,7 +761,6 @@ void TemplateInstance::correctTiargs()
 
         TypeMapper tymap;
         tymap.addImplicitDecls = false;
-        tymap.substsyms = collectSymbols(tiargs);
 
         primTiargs = tiargs;
         tiargs = TypeMapper::FromType(tymap, loc).fromTemplateArguments(Args.begin(), Args.end(),

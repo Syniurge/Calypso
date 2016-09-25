@@ -233,14 +233,6 @@ void DtorDeclaration::semantic(Scope *sc)
     ::DtorDeclaration::semantic(sc);
 }
 
-// Cheat and use the C++ "global scope", we can do it safely in specific cases
-Scope *globalScope(::Module *m)
-{
-    auto sc = Scope::createGlobal(m);
-    sc = sc->push(cpp::Module::rootPackage);
-    return sc;
-}
-
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 {
     this->loc = loc;
@@ -490,12 +482,11 @@ void FuncDeclaration::semantic3reference(::FuncDeclaration *fd, Scope *sc)
     const clang::FunctionDecl *Def;
     if (!FD->isInvalidDecl() && FD->hasBody(Def))
     {
-        auto globalSc = globalScope(sc->instantiatingModule());
-        declReferencer.Traverse(fd->loc, globalSc, Def->getBody());
+        declReferencer.Traverse(fd->loc, sc, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(FD))
             for (auto& Init: Ctor->inits())
-                declReferencer.Traverse(fd->loc, globalSc, Init->getInit());
+                declReferencer.Traverse(fd->loc, sc, Init->getInit());
     }
 
     fd->semanticRun = PASSsemantic3done;
