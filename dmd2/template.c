@@ -1072,6 +1072,12 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope *sc, TemplateDeclaration *td
     return MATCHnomatch;
 }
 
+// CALYPSO
+Dsymbols* TemplateDeclaration::copySyntaxTree(TemplateInstance *ti)
+{
+    return Dsymbol::arraySyntaxCopy(members);
+}
+
 static Expression *emptyArrayElement = NULL;
 
 class TypeDeduced : public Type
@@ -6287,7 +6293,7 @@ Lerror:
     size_t target_symbol_list_idx = target_symbol_list ? target_symbol_list->dim - 1 : 0;
 
     // Copy the syntax trees from the TemplateDeclaration
-    members = Dsymbol::arraySyntaxCopy(tempdecl->members);
+    members = tempdecl->copySyntaxTree(this); // CALYPSO
 
     // resolve TemplateThisParameter
     for (size_t i = 0; i < tempdecl->parameters->dim; i++)

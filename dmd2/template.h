@@ -104,6 +104,7 @@ public:
 
     virtual MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag); // CALYPSO
     virtual MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs); // CALYPSO
+    virtual Dsymbols* copySyntaxTree(TemplateInstance *ti); // CALYPSO
 
     MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs);
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);

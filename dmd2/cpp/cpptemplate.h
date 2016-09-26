@@ -39,6 +39,7 @@ public:
     void prepareBestMatch(::TemplateInstance *ti, Scope *sc, Expressions *fargs) override;
     MATCH matchWithInstance(Scope *sc, ::TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag) override;
     MATCH leastAsSpecialized(Scope *sc, ::TemplateDeclaration *td2, Expressions *fargs) override;
+    Dsymbols* copySyntaxTree(::TemplateInstance *ti) override;
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance( cpp::TemplateInstance* ti );

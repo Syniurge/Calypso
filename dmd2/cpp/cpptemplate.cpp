@@ -403,6 +403,29 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     return m;
 }
 
+Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
+{
+    assert(isForeignInstance(ti));
+
+    auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
+    auto InstRD = dyn_cast<clang::ClassTemplateSpecializationDecl>(
+                                    c_ti->Inst.get<clang::NamedDecl*>());
+
+    if (InstRD) {
+        DeclMapper m(static_cast<cpp::Module*>(scope->module));
+        m.addImplicitDecls = false;
+
+        auto inst = m.VisitInstancedClassTemplate(InstRD);
+        assert(inst);
+
+        auto a = new Dsymbols;
+        a->push(inst);
+        return a;
+    }
+
+    return ::TemplateDeclaration::copySyntaxTree(ti);
+}
+
 bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
 {
     return isCPP(ti) && static_cast<TemplateInstance*>(ti)->isForeignInst;

@@ -67,38 +67,6 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
-void StructDeclaration::semantic(Scope *sc)
-{
-    if (semanticRun >= PASSsemanticdone)
-        return;
-
-    auto CRD = dyn_cast<clang::CXXRecordDecl>(RD);
-    assert(CRD || !sc->parent->isTemplateInstance());
-
-    if (CRD && (CRD->getDescribedClassTemplate() ||
-                isa<clang::ClassTemplatePartialSpecializationDecl>(CRD)))
-    {
-        auto ti = sc->parent->isTemplateInstance();
-
-        assert(ti && isCPP(ti->inst));
-        auto c_ti = static_cast<cpp::TemplateInstance*>(ti->inst);
-        auto InstRD = cast<clang::ClassTemplateSpecializationDecl>(
-                            c_ti->Inst.get<clang::NamedDecl*>());
-
-        assert(isCPP(sc->module));
-        DeclMapper m(static_cast<cpp::Module*>(sc->module));
-        m.addImplicitDecls = false;
-
-        auto instsd = static_cast<cpp::StructDeclaration*>(
-                m.VisitInstancedClassTemplate(InstRD)->isStructDeclaration());
-        assert(instsd);
-
-        instsd->syntaxCopy(this);
-    }
-
-    ::StructDeclaration::semantic(sc);
-}
-
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -125,40 +93,17 @@ void StructDeclaration::finalizeSize(Scope* sc)
         zeroInit = 0;
 }
 
-void ClassDeclaration::semantic(Scope *sc)
-{
-    if (semanticRun >= PASSsemanticdone)
-        return;
-
-    // Basically a hook at the beginning of semantic(), to change RD from the template decl
-    // to the instantation decl if needed.
-    if (RD->getDescribedClassTemplate() ||
-            isa<clang::ClassTemplatePartialSpecializationDecl>(RD))
-    {
-        auto ti = sc->parent->isTemplateInstance();
-
-        assert(ti && isCPP(ti->inst));
-        auto c_ti = static_cast<cpp::TemplateInstance*>(ti->inst);
-        auto InstRD = cast<clang::ClassTemplateSpecializationDecl>(
-                    c_ti->Inst.get<clang::NamedDecl*>());
-
-        assert(isCPP(sc->module));
-        DeclMapper m(static_cast<cpp::Module*>(sc->module));
-        m.addImplicitDecls = false;
-
-        auto instcd = static_cast<cpp::ClassDeclaration*>(
-            m.VisitInstancedClassTemplate(InstRD, DeclMapper::ForcePolymorphic)->isClassDeclaration());
-        assert(instcd);
-
-        instcd->syntaxCopy(this);
-    }
-
-    ::ClassDeclaration::semantic(sc);
-
-    // Build a copy ctor alias after scope setting and semantic'ing the C++ copy ctor during which its type is adjusted
-    if (semanticRun >= PASSsemanticdone)
-        buildCpCtor(sc);
-}
+// void ClassDeclaration::semantic(Scope *sc)
+// {
+//     if (semanticRun >= PASSsemanticdone)
+//         return;
+//
+//     ::ClassDeclaration::semantic(sc);
+//
+//     // Build a copy ctor alias after scope setting and semantic'ing the C++ copy ctor during which its type is adjusted
+//     if (semanticRun >= PASSsemanticdone)
+//         buildCpCtor(sc);
+// }
 
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {

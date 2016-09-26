@@ -36,7 +36,6 @@ public:
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
     void buildLayout() override;
     void finalizeSize(Scope *sc) override;
     Expression *defaultInit(Loc loc) override;
@@ -58,7 +57,7 @@ public:
                      const clang::CXXRecordDecl *RD);
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
+//     void semantic(Scope *sc) override;
     void buildLayout() override;
     bool mayBeAnonymous() override;
     
