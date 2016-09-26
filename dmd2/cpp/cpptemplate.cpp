@@ -372,6 +372,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     }
 
     ::TemplateInstance::semanticTiargs(ti->loc, paramscope, dedtypes, 4);
+    paramscope->pop();
     return m;
 }
 
