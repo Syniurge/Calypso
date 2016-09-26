@@ -1862,47 +1862,48 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
     if (mod && Key == mod->rootKey)
         return nullptr; // do not import self
 
-    if (!fake && implicitImports[Key])
-        return nullptr; // already imported
-
-    Identifier *importAliasid = nullptr;
-    if (mod && isa<clang::TagDecl>(Key.first) &&
-            getDeclContextNamedOrTU(Key.first)->isTranslationUnit())
+    ::Import *im = implicitImports[Key].im;
+    if (!im)
     {
-        // Special check for C tags which may have the same name as functions
-        // When this does happens, rename the import
-        // NOTE: is this really specific to tags and functions?
-        auto TD = cast<clang::TagDecl>(Key.first);
-        auto TU = TD->getTranslationUnitDecl();
-
-        auto R = TU->lookup(TD->getDeclName());
-        for (auto Match: R)
+        Identifier *importAliasid = nullptr;
+        if (mod && isa<clang::TagDecl>(Key.first) &&
+                getDeclContextNamedOrTU(Key.first)->isTranslationUnit())
         {
-            if (Match->getCanonicalDecl() == Key.first)
-                continue;
-            if (GetImplicitImportKeyForDecl(Match) != mod->rootKey)
-                continue; // the matching decl is part of another module, no conflict
+            // Special check for C tags which may have the same name as functions
+            // When this does happens, rename the import
+            // NOTE: is this really specific to tags and functions?
+            auto TD = cast<clang::TagDecl>(Key.first);
+            auto TU = TD->getTranslationUnitDecl();
 
-            { auto importIdent = getIdentifier(TD);
-            llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty
-            s += llvm::StringRef(importIdent->string, importIdent->len);
-            importAliasid = Identifier::idPool(s.c_str()); }
+            auto R = TU->lookup(TD->getDeclName());
+            for (auto Match: R)
+            {
+                if (Match->getCanonicalDecl() == Key.first)
+                    continue;
+                if (GetImplicitImportKeyForDecl(Match) != mod->rootKey)
+                    continue; // the matching decl is part of another module, no conflict
 
-            assert(!Key.second);
-            break;
+                { auto importIdent = getIdentifier(TD);
+                llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty
+                s += llvm::StringRef(importIdent->string, importIdent->len);
+                importAliasid = Identifier::idPool(s.c_str()); }
+
+                assert(!Key.second);
+                break;
+            }
         }
+
+        if (Key.second)
+            im = BuildImplicitImport(loc, Key.first, Key.second, importAliasid);
+        else
+            im = BuildImplicitImport(loc, Key.first, importAliasid);
+
+        implicitImports[Key].im = im;
     }
 
-    ::Import *im;
-    if (Key.second)
-        im = BuildImplicitImport(loc, Key.first, Key.second, importAliasid);
-    else
-        im = BuildImplicitImport(loc, Key.first, importAliasid);
-
-    if (!fake)
-    {
-        implicitImports[Key] = im;
+    if (!fake && !implicitImports[Key].added) {
         mod->members->shift(im);
+        implicitImports[Key].added = true;
     }
 
     return im;
@@ -2246,6 +2247,16 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 TypeMapper::TypeMapper(cpp::Module* mod)
     : mod(mod)
 {
+}
+
+TypeMapper::~TypeMapper()
+{
+    for (auto impPair: implicitImports)
+        if (!impPair.second.added) {
+            auto im = impPair.second.im;
+            if (im->packages) delete im->packages;
+            delete im;
+        }
 }
 
 // NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.

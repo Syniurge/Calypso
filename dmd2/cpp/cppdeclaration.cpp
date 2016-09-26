@@ -383,8 +383,6 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
 Lcleanup:
     // Memory usage can skyrocket when using a large library
-    if (im->packages) delete im->packages;
-    delete im;
     delete e;
 
     return true;

@@ -62,6 +62,7 @@ class TypeMapper
 {
 public:
     TypeMapper(cpp::Module *mod = nullptr);  // mod can be null if no implicit import is needed
+    virtual ~TypeMapper();
 
     bool addImplicitDecls = true;
     bool desugar = true;
@@ -149,7 +150,12 @@ public:
 protected:
     cpp::Module *mod;
 
-    llvm::SmallDenseMap<Module::RootKey, Import*, 8> implicitImports;
+    struct ImplicitImport
+    {
+        ::Import *im = nullptr;
+        bool added = false;
+    };
+    llvm::SmallDenseMap<Module::RootKey, ImplicitImport, 4> implicitImports;
     llvm::DenseMap<const clang::NamedDecl*, Dsymbol*> declMap;  // fast lookup of mirror decls
 
     llvm::SmallVector<const clang::TemplateParameterList*, 4> TempParamScope;
