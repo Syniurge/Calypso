@@ -353,26 +353,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     for (unsigned i = 0; i < cpptdtypes->dim; i++)
         (*dedtypes)[i] = (*cpptdtypes)[i];
 
-    // Assuming that all symbols from the instantiating scope were collected and substitued, the remaining TypeQualified&co need
-    // to be semantic'd in the template parameter scope.
-    ScopeDsymbol *paramsym = new ScopeDsymbol();
-    paramsym->parent = scope->parent;
-    Scope *paramscope = scope->push(paramsym);
-    paramscope->tinst = ti;
-    paramscope->callsc = sc;
-    paramscope->stc = 0;
-
-    for (size_t i = 0; i < dedtypes->dim; i++)
-    {
-        TemplateParameter *tp = (*parameters)[i];
-        RootObject *o = (*dedtypes)[i];
-
-        if (!declareParameter(paramscope, tp, o))
-            assert(false);
-    }
-
-    ::TemplateInstance::semanticTiargs(ti->loc, paramscope, dedtypes, 4);
-    paramscope->pop();
+    ::TemplateInstance::semanticTiargs(ti->loc, scope, dedtypes, 4);
     return m;
 }
 
