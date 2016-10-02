@@ -50,6 +50,7 @@ TemplateDeclaration::TemplateDeclaration(Loc loc, Identifier* id,
 TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
     : TemplateDeclaration(o.loc, o.ident, o.parameters, o.members, o.TempOrSpec)
 {
+    this->constraint = new NullExp(loc);
 }
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
