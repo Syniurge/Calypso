@@ -82,10 +82,11 @@ Expression *ExprMapper::fixIntegerExp(IntegerExp *e, clang::QualType T)
             auto Val = ECD->getInitVal().getZExtValue();
 
             if (Val == e->getInteger())
-                return fromExpressionDeclRef(Loc(), ECD);
+                return fromExpressionDeclRef(e->loc, ECD);
         }
 
-        llvm_unreachable("Couldn't find the corresponding enum constant");
+        return new CastExp(e->loc, e, tymap.fromType(T, e->loc));
+        //llvm_unreachable("Couldn't find the corresponding enum constant");
     }
 
     auto BT = T->getAs<clang::BuiltinType>();
