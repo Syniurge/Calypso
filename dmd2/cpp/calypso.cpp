@@ -1125,28 +1125,47 @@ void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
     if (!getASTUnit())
         return;
 
-    // Insert -lcalypso-ldc before -ldruntime-ldc
-    auto it_druntime = std::find(args.begin(), args.end(), "-ldruntime-ldc");
-    auto it_druntime_debug = std::find(args.begin(), args.end(), "-ldruntime-ldc-debug");
+    std::string druntime_ldc = "-ldruntime-ldc",
+        druntime_ldc_debug = "-ldruntime-ldc-debug",
+        calypso_ldc = "-lcalypso-ldc",
+        calypso_ldc_debug = "-lcalypso-ldc-debug";
 
-    if (it_druntime != args.end())
-        args.insert(it_druntime, "-lcalypso-ldc");
-    else {
-        assert(it_druntime_debug != args.end());
-        args.insert(it_druntime_debug, "-lcalypso-ldc-debug");
+    if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
+        druntime_ldc = druntime_ldc.substr(2) + ".lib";
+        druntime_ldc_debug = druntime_ldc_debug.substr(2) + ".lib";
+        calypso_ldc = calypso_ldc.substr(2) + ".lib";
+        calypso_ldc_debug = calypso_ldc_debug.substr(2) + ".lib";
     }
 
-    // Insert -lstdc++ or -lc++
-    const char* cxxstdlib = (pch.cxxStdlibType ==
-                    clang::driver::ToolChain::CST_Libcxx) ? "-lc++" : "-lstdc++";
+    // Insert -lcalypso-ldc before -ldruntime-ldc
+    auto it_druntime = std::find(args.begin(), args.end(), druntime_ldc);
+    auto it_druntime_debug = std::find(args.begin(), args.end(), druntime_ldc_debug);
 
-    auto it_pthread = std::find(args.begin(), args.end(), "-lpthread");
-    auto it_m = std::find(args.begin(), args.end(), "-lm");
+    if (it_druntime != args.end())
+        args.insert(it_druntime, calypso_ldc);
+    else {
+        assert(it_druntime_debug != args.end());
+        args.insert(it_druntime_debug, calypso_ldc_debug);
+    }
 
-    if (it_pthread != args.end())
-        args.insert(it_pthread, cxxstdlib);
-    else if (it_m != args.end())
-        args.insert(it_m, cxxstdlib); // Solaris
+    if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
+        // Insert msvcprt.lib
+        auto it_kernel32 = std::find(args.begin(), args.end(), "kernel32.lib");
+        if (it_kernel32 != args.end())
+            args.insert(it_kernel32, "libcpmt.lib");
+    } else {
+        // Insert -lstdc++ or -lc++
+        const char* cxxstdlib = (pch.cxxStdlibType ==
+            clang::driver::ToolChain::CST_Libcxx) ? "-lc++" : "-lstdc++";
+
+        auto it_pthread = std::find(args.begin(), args.end(), "-lpthread");
+        auto it_m = std::find(args.begin(), args.end(), "-lm");
+
+        if (it_pthread != args.end())
+            args.insert(it_pthread, cxxstdlib);
+        else if (it_m != args.end())
+            args.insert(it_m, cxxstdlib); // Solaris
+    }
 }
 
 std::string GetExecutablePath(const char *Argv0) {

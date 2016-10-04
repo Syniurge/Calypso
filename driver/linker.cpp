@@ -581,6 +581,9 @@ static int linkObjToBinaryWin(bool sharedLib) {
   args.push_back("comdlg32.lib");
   args.push_back("advapi32.lib");
 
+  for (auto lp : global.langPlugins)
+      lp->adjustLinkerArgs(args); // CALYPSO
+
   Logger::println("Linking with: ");
   Stream logstr = Logger::cout();
   for (const auto &arg : args) {
