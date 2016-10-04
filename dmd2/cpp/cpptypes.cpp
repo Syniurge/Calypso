@@ -1792,7 +1792,8 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         stc |= STCconst;
 
     Type *rt;
-    if (isa<clang::AutoType>(T->getReturnType())) {
+    auto AutoTy = dyn_cast<clang::AutoType>(T->getReturnType());
+    if (AutoTy && !AutoTy->isSugared()) {
         stc |= STCauto;
         rt = nullptr;
     } else {
