@@ -725,13 +725,25 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
     irFty.funcType = resolved.Ty;
 }
 
+static void EmitFunctionDecl(clangCG::CodeGenModule& CGM, clang::FunctionDecl* Func)
+{
+    CGM.EmitTopLevelDecl(Func);
+
+    if (auto Dtor = dyn_cast<clang::CXXDestructorDecl>(Func))
+        if (CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft) {
+            // With the MSVC ABI only the "Base" destructor is getting emitted by EmitTopLevelDecl, others are emitted lazily
+            CGM.EmitGlobal(clang::GlobalDecl(Dtor, clang::Dtor_Complete));
+            //CGM->EmitGlobal(GlobalDecl(D, Dtor_Deleting));
+        }
+}
+
 void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 {
     auto FD = getFD(fdecl);
     const clang::FunctionDecl *Def;
 
     if (FD->hasBody(Def) && getIrFunc(fdecl)->func->isDeclaration())
-        CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+        EmitFunctionDecl(*CGM, const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
 }
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
@@ -845,11 +857,11 @@ static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
         return;
 
     auto Emit = [&] (clang::CXXMethodDecl *D) {
-        if (D && !D->isDeleted())
+        if (D && !D->isDeleted() && !isMapped(D))
         {
             auto R = ResolvedFunc::get(CGM, D); // mark it used
             if (R.Func->isDeclaration())
-                CGM.EmitTopLevelDecl(D); // mark it emittable
+                EmitFunctionDecl(CGM, D); // mark it emittable
         }
     };
 
