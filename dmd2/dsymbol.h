@@ -244,6 +244,7 @@ public:
     virtual void addComment(const utf8_t *comment);
 
     bool inNonRoot();
+    bool inNonCodegen(); // CALYPSO
 
     // Eliminate need for dynamic_cast
     virtual Package *isPackage() { return NULL; }

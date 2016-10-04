@@ -37,7 +37,7 @@ public:
     Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone) override;
     void addPreambule() override;
     const char *manglePrefix() override { return "_Cpp"; }
-    bool isCodegen() override { return true; }
+    bool isCodegen() override { return true; } // §cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted
 
     File* buildFilePath(const char* forcename, const char* path, const char* ext) override;
 };
