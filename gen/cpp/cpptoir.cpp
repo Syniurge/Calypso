@@ -246,6 +246,10 @@ struct ResolvedFunc
         if (MD && MD->getParent()->isAbstract())
             structorType = clangCG::StructorType::Base;
 
+        if (isa<const clang::CXXDestructorDecl>(FD) && CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft
+                && MD->size_overridden_methods() == 0)
+            structorType = clangCG::StructorType::Base; // MSVC doesn't always emit complete dtors
+
         if (MD)
         {
             if (isa<const clang::CXXConstructorDecl>(FD) || isa<const clang::CXXDestructorDecl>(FD))
