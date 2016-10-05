@@ -159,6 +159,12 @@ protected:
     llvm::DenseMap<const clang::NamedDecl*, Dsymbol*> declMap;  // fast lookup of mirror decls
 
     llvm::SmallVector<const clang::TemplateParameterList*, 4> TempParamScope;
+    struct TempParamListRAII {
+        TempParamListRAII(TypeMapper *tm, const clang::TemplateParameterList* ParamList);
+        ~TempParamListRAII();
+        TypeMapper *tm;
+    };
+
     void pushTempParamList(const clang::Decl *D);
     Identifier *getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
                                 const clang::TemplateTypeParmType *T = nullptr);

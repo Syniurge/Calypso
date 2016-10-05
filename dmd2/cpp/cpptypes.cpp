@@ -2260,6 +2260,18 @@ TypeMapper::~TypeMapper()
         }
 }
 
+TypeMapper::TempParamListRAII::TempParamListRAII(TypeMapper *tm, 
+                const clang::TemplateParameterList * ParamList)
+    : tm(tm)
+{
+    tm->TempParamScope.push_back(ParamList);
+}
+
+TypeMapper::TempParamListRAII::~TempParamListRAII()
+{
+    tm->TempParamScope.pop_back();
+}
+
 // NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.
 template <typename RedeclTempDecl>
  const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D, bool memberTemplate = true)
