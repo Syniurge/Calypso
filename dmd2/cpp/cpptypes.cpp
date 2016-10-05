@@ -2098,6 +2098,10 @@ void TypeMapper::pushTempParamList(const clang::Decl *D)
 {
     const clang::TemplateParameterList *TPL = nullptr;
 
+    if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
+        if (auto ClassTemp = RD->getDescribedClassTemplate())
+            D = ClassTemp;
+
     if (auto ClassTemp = dyn_cast<clang::ClassTemplateDecl>(D))
         TPL = getDefinition(ClassTemp)->getTemplateParameters();
     else if (auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D))
@@ -2112,20 +2116,18 @@ void TypeMapper::pushTempParamList(const clang::Decl *D)
         return;
     }
 
-    if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
-    {
-        if (!ClassSpec->isExplicitSpecialization())
-            pushTempParamList(getSpecializedDeclOrExplicit(ClassSpec));
-    }
-    else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
-    {
-        if (auto PrimTemp = Func->getPrimaryTemplate())
-            pushTempParamList(PrimTemp);
-    }
+    //if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
+    //{
+    //    if (!ClassSpec->isExplicitSpecialization())
+    //        pushTempParamList(getSpecializedDeclOrExplicit(ClassSpec));
+    //}
+    //else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
+    //{
+    //    if (auto PrimTemp = Func->getPrimaryTemplate())
+    //        pushTempParamList(PrimTemp);
+    //}
 }
 
-// NOTE: unlike Sema::getTemplateInstantiationArgs in D we need to take all the template parameters,
-// not just the ones needed to instantiate the template in C++
 void TypeMapper::rebuildScope(const clang::Decl *RightMost)
 {
     assert(CXXScope.empty() && TempParamScope.empty());
@@ -2283,12 +2285,12 @@ template <typename RedeclTempDecl>
             return I;
     }
 
-    // This is more heuristical than anything else.. I'm not sure yet why templates inside
-    // specializations (e.g std::allocator::rebind) do not get defined.
-    if (memberTemplate)
-        if (auto MemberTemp = const_cast<RedeclTempDecl*>(D)->getInstantiatedFromMemberTemplate())
-            if (auto MemberDef = getRTDDefinition(MemberTemp))
-                return MemberDef;
+    //// This is more heuristical than anything else.. I'm not sure yet why templates inside
+    //// specializations (e.g std::allocator::rebind) do not get defined.
+    //if (memberTemplate)
+    //    if (auto MemberTemp = const_cast<RedeclTempDecl*>(D)->getInstantiatedFromMemberTemplate())
+    //        if (auto MemberDef = getRTDDefinition(MemberTemp))
+    //            return MemberDef;
 
     return cast<RedeclTempDecl>(getCanonicalDecl(D));
 }
