@@ -104,6 +104,7 @@ public:
         Type *fromTypeTemplateSpecialization(const clang::TemplateSpecializationType *T);
         Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T, const clang::TemplateTypeParmDecl *OrigDecl = nullptr);
         Type *fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType *T);
+        Type *fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T);
         Type *fromTypeInjectedClassName(const clang::InjectedClassNameType *T);
         Type *fromTypeDependentName(const clang::DependentNameType *T);
         Type *fromTypeDependentTemplateSpecialization(const clang::DependentTemplateSpecializationType *T);

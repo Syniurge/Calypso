@@ -388,6 +388,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     TYPEMAP(TemplateSpecialization)
     TYPEMAP(TemplateTypeParm)
     TYPEMAP(SubstTemplateTypeParm)
+    TYPEMAP(SubstTemplateTypeParmPack)
     TYPEMAP(InjectedClassName)
     TYPEMAP(DependentName)
     TYPEMAP(DependentTemplateSpecialization)
@@ -1562,6 +1563,18 @@ Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemp
 
     auto OrigParm = getOriginalTempTypeParmDecl(T->getReplacedParameter());
     return fromTypeTemplateTypeParm(T->getReplacedParameter(), OrigParm);
+}
+
+Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T)
+{
+    auto Pack = T->getArgumentPack();
+    auto args = fromTemplateArgument<false>(&Pack);
+    if (args && args->dim){
+        if (args->dim > 1)
+            ::warning(loc, "FIXME: skipping template arguments from SubstTemplateTypeParmPackType");
+        return isType((*args)[0]);
+    }
+    return nullptr;
 }
 
 Type* TypeMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClassNameType* T) // e.g in template <...> class A { A &next; } next has an injected class name type
