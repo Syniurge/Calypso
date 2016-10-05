@@ -1808,7 +1808,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         }
     }
 
-    if (T->isNothrow(Context, false))
+    if (!clang::isUnresolvedExceptionSpec(T->getExceptionSpecType()) && T->isNothrow(Context, false))
         stc |= STCnothrow;
 
     LINK linkage = (FD && FD->isExternC()) ? LINKc : LINKcpp;

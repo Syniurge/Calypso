@@ -354,7 +354,7 @@ static void MarkFunctionForEmit(const clang::FunctionDecl *D)
     {
         auto D_ = const_cast<clang::FunctionDecl*>(D);
         
-        auto FPT = dyn_cast<clang::FunctionProtoType>(D_->getType());
+        auto FPT = D_->getType()->getAs<clang::FunctionProtoType>();
         if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
             S.ResolveExceptionSpec(D->getLocation(), FPT);
 
@@ -770,7 +770,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
     auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
-    MarkFunctionForEmit(D);
+    if (!D->getDescribedFunctionTemplate())
+        MarkFunctionForEmit(D);
+
     if (D->isInvalidDecl())
         return nullptr;
 
