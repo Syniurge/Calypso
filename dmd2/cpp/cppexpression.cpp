@@ -479,10 +479,11 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     }
     else if (auto SNTTP = dyn_cast<clang::SubstNonTypeTemplateParmExpr>(E))
     {
-        if (SNTTP->isValueDependent())
-            e = fromExpressionNonTypeTemplateParm(loc, SNTTP->getParameter());
-        else
-            e = fromExpression(SNTTP->getReplacement());
+        //if (SNTTP->isValueDependent())
+        //    e = fromExpressionNonTypeTemplateParm(loc, SNTTP->getParameter());
+        //else
+        assert(SNTTP->getReplacement());
+        e = fromExpression(SNTTP->getReplacement());
     }
     else if (auto MExpr = dyn_cast<clang::MemberExpr>(E))
     {
