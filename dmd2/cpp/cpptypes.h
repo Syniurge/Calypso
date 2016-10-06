@@ -55,7 +55,8 @@ enum TypeQualifiedBuilderOpts
 {
     TQ_None = 0,
     TQ_OverOpSkipSpecArg = 1 << 0, // e.g skip "-" in opBinary!"-"
-    TQ_OverOpFullIdent = 1 << 1 // prefer the non-templated function to the forwarding template
+    TQ_OverOpFullIdent = 1 << 1, // prefer the non-templated function to the forwarding template
+    TQ_PreferCachedSym = 1 << 2 // FIXME: temporary flag
 };
 
 class TypeMapper
@@ -157,7 +158,6 @@ protected:
         bool added = false;
     };
     llvm::SmallDenseMap<Module::RootKey, ImplicitImport, 4> implicitImports;
-    llvm::DenseMap<const clang::NamedDecl*, Dsymbol*> declMap;  // fast lookup of mirror decls
 
     llvm::SmallVector<const clang::TemplateParameterList*, 4> TempParamScope;
     struct TempParamListRAII {

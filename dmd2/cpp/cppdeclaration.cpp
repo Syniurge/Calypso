@@ -121,6 +121,12 @@ EnumDeclaration::EnumDeclaration(const EnumDeclaration &o)
 {
 }
 
+void EnumDeclaration::semantic(Scope *sc)
+{
+    ::EnumDeclaration::semantic(sc);
+    const_cast<clang::EnumDecl*>(ED)->dsym = this;
+}
+
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
                                 Type* type, const clang::TypedefNameDecl* TND)
     : ::AliasDeclaration(loc, ident, type)

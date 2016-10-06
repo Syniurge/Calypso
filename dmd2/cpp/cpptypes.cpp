@@ -1114,6 +1114,11 @@ TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
     if (tm.isInjectedScopeName(D))
         return new TypeIdentifier(fromLoc(D->getLocation()), getIdentifier(D));
 
+    if (!ArgBegin && (options & TQ_PreferCachedSym) && D->dsym) {
+        assert(D->dsym->getType());
+        return (TypeQualified*) D->dsym->getType(); // FIXME
+    }
+
     auto Root = tm.GetRootForTypeQualified(D);
     if (!Root)
         return nullptr; // FIXME struct {} Val;
@@ -1134,12 +1139,12 @@ Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 
 Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 {
-    return typeQualifiedFor(T->getDecl());
+    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
 }
 
 Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
-    return typeQualifiedFor(T->getDecl());
+    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
 }
 
 Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)

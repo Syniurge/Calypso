@@ -109,6 +109,7 @@ public:
             const clang::EnumDecl *ED);
     EnumDeclaration(const EnumDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void semantic(Scope *sc) override;
 };
 
 class AliasDeclaration : public ::AliasDeclaration

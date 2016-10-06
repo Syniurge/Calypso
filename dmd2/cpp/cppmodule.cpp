@@ -460,8 +460,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             auto cd = new ClassDeclaration(loc, id, baseclasses, CRD);
             a = cd;
         }
-
-        declMap[D] = a;
     }
 
     CXXScope.push(D);

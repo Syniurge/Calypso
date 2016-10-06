@@ -67,6 +67,13 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
+
+void StructDeclaration::semantic(Scope *sc)
+{
+    ::StructDeclaration::semantic(sc);
+    const_cast<clang::RecordDecl*>(RD)->dsym = this;
+}
+
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -93,17 +100,18 @@ void StructDeclaration::finalizeSize(Scope* sc)
         zeroInit = 0;
 }
 
-// void ClassDeclaration::semantic(Scope *sc)
-// {
+void ClassDeclaration::semantic(Scope *sc)
+{
 //     if (semanticRun >= PASSsemanticdone)
 //         return;
-//
-//     ::ClassDeclaration::semantic(sc);
-//
+
+    ::ClassDeclaration::semantic(sc);
+    const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
+
 //     // Build a copy ctor alias after scope setting and semantic'ing the C++ copy ctor during which its type is adjusted
 //     if (semanticRun >= PASSsemanticdone)
 //         buildCpCtor(sc);
-// }
+}
 
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {
