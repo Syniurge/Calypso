@@ -91,9 +91,9 @@ public:
     VarDeclaration *vd;
 
     EnumMember(Loc loc, Identifier *id, Expression *value, Type *type);
-    Dsymbol *syntaxCopy(Dsymbol *s);
+    virtual Dsymbol *syntaxCopy(Dsymbol *s);
     const char *kind();
-    void semantic(Scope *sc);
+    virtual void semantic(Scope *sc); // CALYPSO
     Expression *getVarExp(Loc loc, Scope *sc);
 
     EnumMember *isEnumMember() { return this; }

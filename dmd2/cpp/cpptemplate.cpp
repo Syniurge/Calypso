@@ -200,6 +200,14 @@ clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListI
                                 FuncTemp->getDeclContext(), MultiList));
 }
 
+
+void TemplateDeclaration::semantic(Scope *sc)
+{
+    ::TemplateDeclaration::semantic(sc);
+    if (isa<clang::TemplateDecl>(TempOrSpec) || isa<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
+        const_cast<clang::NamedDecl*>(TempOrSpec)->dsym = this;
+}
+
 // Hijack the end of findTempDecl to only check forward refs for the unique candidate selected by Sema,
 // which is done later in matchWithInstance.
 bool TemplateDeclaration::checkTempDeclFwdRefs(Scope* sc, Dsymbol* tempdecl, ::TemplateInstance* ti)

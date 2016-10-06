@@ -1371,7 +1371,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
             value = new CastExp(memberLoc, value, memtype); // SEMI-HACK (?) because the type returned by 1LU << ... will be ulong and we may need an int (see wctype.h)
         }
 
-        auto em = new EnumMember(memberLoc, ident, value, nullptr);
+        auto em = new EnumMember(memberLoc, ident, value, nullptr, ECD);
         e->members->push(em);
     }
 

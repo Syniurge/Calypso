@@ -127,6 +127,25 @@ void EnumDeclaration::semantic(Scope *sc)
     const_cast<clang::EnumDecl*>(ED)->dsym = this;
 }
 
+EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
+               const clang::EnumConstantDecl *ECD)
+    : ::EnumMember(loc, id, value, type), ECD(ECD)
+{
+}
+
+EnumMember::EnumMember(const EnumMember &o)
+    : EnumMember(o.loc, o.ident,
+                      o.value ? o.value->syntaxCopy() : nullptr,
+                      o.type ? o.type->syntaxCopy() : nullptr, o.ECD)
+{
+}
+
+void EnumMember::semantic(Scope *sc)
+{
+    ::EnumMember::semantic(sc);
+    const_cast<clang::EnumConstantDecl*>(ECD)->dsym = this;
+}
+
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
                                 Type* type, const clang::TypedefNameDecl* TND)
     : ::AliasDeclaration(loc, ident, type)
@@ -177,20 +196,24 @@ IMPLEMENT_syntaxCopy(FuncDeclaration, FD)
 IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
 IMPLEMENT_syntaxCopy(DtorDeclaration, CDD)
 IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
+IMPLEMENT_syntaxCopy(EnumMember, ECD)
 
 void FuncDeclaration::semantic(Scope *sc)
 {
     ::FuncDeclaration::semantic(sc);
+    const_cast<clang::FunctionDecl*>(FD)->dsym = this;
 }
 
 void CtorDeclaration::semantic(Scope *sc)
 {
     ::CtorDeclaration::semantic(sc);
+    const_cast<clang::CXXConstructorDecl*>(CCD)->dsym = this;
 }
 
 void DtorDeclaration::semantic(Scope *sc)
 {
     ::DtorDeclaration::semantic(sc);
+    const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
 }
 
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
@@ -227,9 +250,8 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
                 // This may get fixed by 3.7.
     }
 
-    if (Referenced.count(D->getCanonicalDecl()))
+    if (D->dsym)
         return true;
-    Referenced.insert(D->getCanonicalDecl());
 
     // Although we try to add all the needed imports during importAll(), sometimes we miss a module so ensure it gets loaded
     auto im = mapper.AddImplicitImportForDecl(loc, D, true);

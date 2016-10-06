@@ -111,6 +111,20 @@ public:
     void semantic(Scope *sc) override;
 };
 
+class EnumMember : public ::EnumMember
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    const clang::EnumConstantDecl *ECD;
+
+    EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
+               const clang::EnumConstantDecl *ECD);
+    EnumMember(const EnumMember&);
+    Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void semantic(Scope *sc) override;
+};
+
 class AliasDeclaration : public ::AliasDeclaration
 {
 public:
@@ -193,8 +207,6 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
     ExprMapper expmap;
     Loc loc;
     Scope *sc = nullptr;
-
-    llvm::DenseSet<const clang::Decl *> Referenced;
 
     bool Reference(const clang::NamedDecl *D);
     bool Reference(const clang::Type *T);

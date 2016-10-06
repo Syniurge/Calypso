@@ -496,10 +496,21 @@ EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type)
 
 Dsymbol *EnumMember::syntaxCopy(Dsymbol *s)
 {
-    assert(!s);
-    return new EnumMember(loc, ident,
-        value ? value->syntaxCopy() : NULL,
-        type ? type->syntaxCopy() : NULL);
+    EnumMember *em;
+    if (s) // CALYPSO
+    {
+        assert(s->isEnumMember());
+        em = (EnumMember*)s;
+        em->loc = loc;
+        em->ident = ident;
+        em->value = value ? value->syntaxCopy() : NULL;
+        em->type = type ? type->syntaxCopy() : NULL;
+    }
+    else
+        em = new EnumMember(loc, ident,
+                value ? value->syntaxCopy() : NULL,
+                type ? type->syntaxCopy() : NULL);
+    return em;
 }
 
 const char *EnumMember::kind()

@@ -90,7 +90,7 @@ public:
     TemplateDeclaration(Loc loc, Identifier *id, TemplateParameters *parameters,
         Expression *constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false);
     virtual Dsymbol *syntaxCopy(Dsymbol *);
-    void semantic(Scope *sc);
+    virtual void semantic(Scope *sc); // CALYPSO
     bool overloadInsert(Dsymbol *s);
     bool hasStaticCtorOrDtor();
     const char *kind();

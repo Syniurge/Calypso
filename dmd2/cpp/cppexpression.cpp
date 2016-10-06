@@ -799,6 +799,19 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
+    if (D->dsym) {
+        if (auto d = D->dsym->isDeclaration()) {
+            if (d->isFuncDeclaration() || d->isVarDeclaration())
+                return new VarExp(loc, d);
+            else if (auto td = d->isTemplateDeclaration())
+                return new TemplateExp(loc, td);
+            else if (auto t = d->getType())
+                return new TypeExp(loc, t);
+        } else if (auto em = D->dsym->isEnumMember())
+            return em->getVarExp(loc, em->scope);
+        // WARNING: implicit imports won't get added, should they be?
+    }
+
     if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
         return fromExpressionNonTypeTemplateParm(loc, NTTP);
 
@@ -811,7 +824,6 @@ Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
     for (auto id: tqual->idents)
         e = dotIdentOrInst(loc, e, id);
 
-    // TODO: Build a proper expression from the type (mostly for reflection and to mimic parse.c, since TypeExp seems to work too)
     return e;
 }
 
