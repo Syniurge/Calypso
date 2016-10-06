@@ -60,7 +60,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
 
-    static bool cppSemantic(::FuncDeclaration *fd, Scope *sc);
     static void semantic3reference(::FuncDeclaration *fd, Scope *sc);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
 };

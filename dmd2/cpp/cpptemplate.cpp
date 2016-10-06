@@ -390,16 +390,34 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     assert(isForeignInstance(ti));
 
     auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
-    auto InstRD = dyn_cast<clang::ClassTemplateSpecializationDecl>(
-                                    c_ti->Inst.get<clang::NamedDecl*>());
+
+    auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
+    auto InstRD = dyn_cast<clang::ClassTemplateSpecializationDecl>(Inst);
+    auto InstFD = dyn_cast<clang::FunctionDecl>(Inst);
+
+    DeclMapper m(static_cast<cpp::Module*>(scope->module));
+    m.addImplicitDecls = false;
+
+    Dsymbol* inst = nullptr;
 
     if (InstRD) {
-        DeclMapper m(static_cast<cpp::Module*>(scope->module));
-        m.addImplicitDecls = false;
-
-        auto inst = m.VisitInstancedClassTemplate(InstRD);
+        inst = m.VisitInstancedClassTemplate(InstRD);
         assert(inst);
+    } else if (InstFD) {
+        inst = m.VisitInstancedFunctionTemplate(InstFD);
 
+        if (!inst) {
+            auto members = ::TemplateDeclaration::copySyntaxTree(ti);
+            assert(members->dim && (*members)[0]->isFuncDeclaration());
+
+            auto fd = static_cast<::FuncDeclaration*>((*members)[0]);
+            fd->errors = ti->errors = true;
+
+            return members;
+        }
+    }
+
+    if (inst) {
         auto a = new Dsymbols;
         a->push(inst);
         return a;
