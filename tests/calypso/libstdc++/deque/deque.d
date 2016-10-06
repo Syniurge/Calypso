@@ -82,12 +82,11 @@ void main()
     writeln("dq3 size = ", dq3.size());
 
     dq.assign(10,5);
-    auto it = new deque!(int).iterator;
 
     auto second = new deque!int(4, 100);
 
-    *it = dq5.begin();
-    for (int i=0; i < dq.size(); it++, i++)
+    auto it = dq5.begin();
+    for (int i = 0; i < dq.size(); it++, i++)
       writeln(*it);
 
     import cpp.std.range : irange;
