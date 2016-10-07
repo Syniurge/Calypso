@@ -17,8 +17,6 @@ using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
 
-DeclReferencer declReferencer;
-
 VarDeclaration::VarDeclaration(Loc loc, Identifier *id,
                                const clang::ValueDecl *VD, Type *t, Initializer *init)
     : ::VarDeclaration(loc, t, id, init)
@@ -216,6 +214,9 @@ void DtorDeclaration::semantic(Scope *sc)
     const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
 }
 
+TypeMapper DeclReferencer::mapper;
+ExprMapper DeclReferencer::expmap(mapper);
+
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 {
     this->loc = loc;
@@ -225,8 +226,7 @@ void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 
 bool DeclReferencer::Reference(const clang::NamedDecl *D)
 {
-    if (D->isInvalidDecl())
-        return true;
+    assert(!D->isInvalidDecl() && "Missed an invalid caller, fix Clang");
 
     for (const clang::Decl *DI = D; !isa<clang::TranslationUnitDecl>(DI); DI = cast<clang::Decl>(DI->getDeclContext()))
         if (auto RD = dyn_cast<clang::CXXRecordDecl>(DI))
@@ -462,6 +462,7 @@ void FuncDeclaration::semantic3reference(::FuncDeclaration *fd, Scope *sc)
     const clang::FunctionDecl *Def;
     if (!FD->isInvalidDecl() && FD->hasBody(Def))
     {
+        DeclReferencer declReferencer(fd);
         declReferencer.Traverse(fd->loc, sc, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(FD))

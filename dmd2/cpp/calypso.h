@@ -43,7 +43,6 @@ class ClassDeclaration;
 class BuiltinTypes;
 class TemplateInstance;
 class TypeMapper;
-class DeclReferencer;
 
 namespace reclang { class DiagnosticPrinter; }
 using clang::ASTUnit;
@@ -231,7 +230,6 @@ public:
     llvm::DenseMap<const clang::Module::Header*, MacroMapEntryTy*> MacroMap;
 
     BuiltinTypes &builtinTypes;
-    DeclReferencer &declReferencer;
 
     ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
     std::map<llvm::Constant*, llvm::GlobalVariable*> type_infoWrappers; // FIXME put into module state with the CodeGenModule

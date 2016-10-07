@@ -203,8 +203,11 @@ public:
 // Run semantic() on referenced functions and record decls to instantiate templates and have them codegen'd
 class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
-    TypeMapper mapper;
-    ExprMapper expmap;
+    static TypeMapper mapper;
+    static ExprMapper expmap;
+
+    ::FuncDeclaration* visitedFunc;
+
     Loc loc;
     Scope *sc = nullptr;
 
@@ -214,7 +217,8 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:
-    DeclReferencer() : expmap(mapper)
+    DeclReferencer(::FuncDeclaration* visitedFunc)
+        : visitedFunc(visitedFunc)
     {
         mapper.addImplicitDecls = false;
     }
@@ -227,8 +231,6 @@ public:
     bool VisitDeclRefExpr(const clang::DeclRefExpr *E);
     bool VisitMemberExpr(const clang::MemberExpr *E);
 };
-
-extern DeclReferencer declReferencer;
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 bool isPolymorphic(const clang::RecordDecl *D);

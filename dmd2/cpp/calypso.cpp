@@ -1176,8 +1176,7 @@ std::string GetExecutablePath(const char *Argv0) {
 }
 
 LangPlugin::LangPlugin()
-    : builtinTypes(cpp::builtinTypes),
-      declReferencer(cpp::declReferencer)
+    : builtinTypes(cpp::builtinTypes)
 {
 }
 
