@@ -16,6 +16,13 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
+namespace clang {
+    namespace CodeGen {
+        llvm::GlobalVariable *getMSCompleteObjectLocator(CGCXXABI& CXXABI, const CXXRecordDecl *RD,
+            const VPtrInfo *Info);
+    }
+}
+
 namespace cpp
 {
 
@@ -34,6 +41,8 @@ struct DCXXVTableInfo // "DCXX" for D-C++ class "hybrid"
 {
     cpp::ClassDeclaration *mostDerivedCXXBase;
     const clang::CXXRecordDecl* MostDerivedBase;
+
+    // Only relevant for the Itanium ABI
     const clang::VTableLayout *VTLayout;
     llvm::ArrayType *VTArrayType;
 
@@ -42,45 +51,53 @@ struct DCXXVTableInfo // "DCXX" for D-C++ class "hybrid"
         auto result = new DCXXVTableInfo;
 
         auto& Context = calypso.getASTContext();
-        assert(!Context.getVTableContext()->isMicrosoft() &&
-                "Microsoft VTableContext not supported yet");
 
         auto cd2 = isDCXX(cd);
         if (!cd2)
             return result;  // Pure C++ or D class
 
         auto& CGM = *calypso.CGM;
-//         auto& CGVT = CGM.getVTables();
         auto& VTableContext =
             *static_cast<clang::ItaniumVTableContext *>(Context.getVTableContext());
 
         result->mostDerivedCXXBase = static_cast<cpp::ClassDeclaration *>(cd2);
         result->MostDerivedBase = result->mostDerivedCXXBase->RD;
 
-        result->VTLayout =
-            &VTableContext.getVTableLayout(result->MostDerivedBase);
-        result->VTArrayType =
-            llvm::ArrayType::get(CGM.Int8PtrTy,
-                                 result->VTLayout->getNumVTableComponents());
+        if (!Context.getVTableContext()->isMicrosoft()) {
+            result->VTLayout =
+                &VTableContext.getVTableLayout(result->MostDerivedBase);
+            result->VTArrayType =
+                llvm::ArrayType::get(CGM.Int8PtrTy,
+                    result->VTLayout->getNumVTableComponents());
+        }
 
         return result;
     }
 };
 
-static llvm::GlobalVariable *getDCXXVTable(::ClassDeclaration *cd,
-                                           DCXXVTableInfo *dcxxInfo = nullptr)
+static inline llvm::GlobalVariable *getDCXXVTable(::ClassDeclaration *cd,
+                                           DCXXVTableInfo *dcxxInfo = nullptr,
+                                           clang::CharUnits BaseOffset = clang::CharUnits::Zero(), // non-zero if Microsoft ABI
+                                           const clang::VTableLayout* VTLayout = nullptr)
 {
-    std::string initname("_D");
-    initname.append(mangle(cd));
-    initname.append("9__VtblCXXZ");
-
     assert(isDCXX(cd));
 
     if (!dcxxInfo)
         dcxxInfo = DCXXVTableInfo::get(cd);
 
+    auto VTArrayType = dcxxInfo->VTArrayType;
+    if (VTLayout)
+        VTArrayType = llvm::ArrayType::get(calypso.CGM->Int8PtrTy,
+                VTLayout->getNumVTableComponents());
+
+    std::string initname("_D");
+    initname.append(mangle(cd));
+    initname.append("9__VtblCXXZ");
+    if (!BaseOffset.isZero())
+        initname.append(std::to_string(BaseOffset.getQuantity()));
+
     auto dcxxVTable = getOrCreateGlobal(cd->loc,
-        gIR->module, dcxxInfo->VTArrayType, false,
+        gIR->module, VTArrayType, false,
         llvm::GlobalValue::ExternalLinkage, NULL, initname);
 
     return dcxxVTable;
@@ -221,14 +238,183 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     fthunk->importAll(callee->scope);
     fthunk->semantic(callee->scope);
     fthunk->protection = PROTprivate;  // HACK NOTE: setting the prot to private will bypass the invariant checks
-                    // added during semantic3 for some reason unknown to me
     fthunk->semantic2(callee->scope);
     fthunk->semantic3(callee->scope);
-    fprintf(stderr, "%s", fthunk->fbody->toChars());
+    //fprintf(stderr, "%s", fthunk->fbody->toChars());
     Declaration_codegen(fthunk);
 
     return fthunk;
 }
+
+template<class BuilderTy> struct VTableBuilder {};
+template<> struct VTableBuilder<clang::ItaniumVTableBuilder> {
+    typedef clang::ItaniumVTableContext VTableContextTy;
+
+    clang::ItaniumVTableBuilder B;
+    const clang::CXXRecordDecl *MostDerivedClass;
+
+    VTableBuilder(clang::VTableContextBase *VTables,
+        const clang::CXXRecordDecl *MostDerivedClass,
+        const clang::VPtrInfo* = nullptr)
+        : B(*static_cast<clang::ItaniumVTableContext *>(VTables),
+            MostDerivedClass, clang::CharUnits::Zero(),
+            /*MostDerivedClassIsVirtual=*/false, MostDerivedClass),
+          MostDerivedClass(MostDerivedClass) {}
+
+    inline clang::CharUnits ComputeThisAdjustment(
+        const clang::CXXMethodDecl* MD)
+    {
+        auto& Context = MD->getASTContext();
+
+        clang::BaseSubobject OverriddenBaseSubobject(MD->getParent(),
+            clang::ComputeBaseOffset(Context, MD->getParent(), MostDerivedClass).NonVirtualOffset);
+        clang::BaseSubobject OverriderBaseSubobject(MostDerivedClass, clang::CharUnits::Zero());
+
+        clang::BaseOffset ThisOffset = B.ComputeThisAdjustmentBaseOffset(OverriddenBaseSubobject,
+            OverriderBaseSubobject);
+        return ThisOffset.NonVirtualOffset;
+    }
+
+    inline clang::ReturnAdjustment ComputeReturnAdjustment(
+        clang::BaseOffset Offset) {
+        return B.ComputeReturnAdjustment(Offset);
+    }
+};
+template<> struct VTableBuilder<clang::VFTableBuilder> {
+    typedef clang::MicrosoftVTableContext VTableContextTy;
+
+    clang::VFTableBuilder B;
+
+    VTableBuilder(clang::VTableContextBase *VTables,
+        const clang::CXXRecordDecl *MostDerivedClass,
+        const clang::VPtrInfo* Which)
+        : B(*static_cast<clang::MicrosoftVTableContext *>(VTables),
+            MostDerivedClass, Which) {}
+
+    inline clang::CharUnits ComputeThisAdjustment(
+        const clang::CXXMethodDecl* MD) {
+        auto& Context = MD->getASTContext();
+
+        clang::BaseSubobject OverriddenBaseSubobject(MD->getParent(),
+            clang::ComputeBaseOffset(Context, MD->getParent(), B.MostDerivedClass).NonVirtualOffset);
+        //clang::BaseSubobject OverriderBaseSubobject(MostDerivedClass, clang::CharUnits::Zero());
+
+        clang::FinalOverriders::OverriderInfo FinalOverrider =
+            B.Overriders.getOverrider(MD, OverriddenBaseSubobject.getBaseOffset());
+        return B.ComputeThisOffset(FinalOverrider);
+    }
+
+    inline clang::ReturnAdjustment ComputeReturnAdjustment(
+        clang::BaseOffset Offset) {
+        return clang::ReturnAdjustment(); // FIXME
+    }
+};
+
+template <class BuilderTy>
+struct DCXXVTableAdjuster
+{
+    ::ClassDeclaration *cd;
+    DCXXVTableInfo& dcxxInfo;
+    clangCG::CodeGenModule& CGM;
+    clang::ASTContext& Context;
+
+    DCXXVTableAdjuster(::ClassDeclaration *cd, DCXXVTableInfo& dcxxInfo, 
+            clangCG::CodeGenModule& CGM, clang::ASTContext& Context)
+        : cd(cd), dcxxInfo(dcxxInfo), CGM(CGM), Context(Context) {}
+
+    llvm::Constant* adjustVTableInitializer(const clang::VTableLayout *VTLayout,
+                llvm::Constant* RTTI, clang::VPtrInfo *Info = nullptr)
+    {
+        auto& CGVT = CGM.getVTables();
+
+        VTableBuilder<BuilderTy> Builder(Context.getVTableContext(), 
+                    dcxxInfo.MostDerivedBase, Info);
+
+        auto OldVTableInit = CGVT.CreateVTableInitializer(
+            dcxxInfo.MostDerivedBase, VTLayout->vtable_component_begin(),
+            VTLayout->getNumVTableComponents(), VTLayout->vtable_thunk_begin(),
+            VTLayout->getNumVTableThunks(), RTTI);
+
+        // Copy the operands into a new array
+        // NOTE: replaceUsesOfWithOnConstant isn't suitable because it might replace
+        // the C++ class vtable by the DCXX one.
+        std::vector<llvm::Constant*> Inits(OldVTableInit->getNumOperands());
+        for (unsigned i = 0; i < OldVTableInit->getNumOperands(); i++)
+            Inits[i] = llvm::cast<llvm::Constant>(OldVTableInit->getOperand(i));
+
+        // search for virtual C++ methods overriden by the D class
+        for (auto s : cd->vtbl)
+        {
+            auto md = s->isFuncDeclaration();
+            if (!md)
+                continue;
+
+            cpp::FuncDeclaration *cxxmd = nullptr;
+            if (auto overmd = findOverriddenMethod(md, dcxxInfo.mostDerivedCXXBase))
+            {
+                assert(isCPP(overmd));
+                cxxmd = static_cast<cpp::FuncDeclaration*>(overmd);
+            }
+
+            if (!cxxmd)
+                continue;   // md isn't overriding a C++ method
+
+            auto MD = llvm::cast<clang::CXXMethodDecl>(
+                getFD(cxxmd)->getCanonicalDecl());
+
+            // Replace calls to MD with calls to md properly adjusted by thunks
+            auto Components = VTLayout->vtable_component_begin();
+            for (unsigned I = 0; I != VTLayout->getNumVTableComponents(); ++I)
+            {
+                auto& Component = Components[I];
+                const clang::CXXMethodDecl *CompMD;;
+
+                switch (Component.getKind())
+                {
+                case clang::VTableComponent::CK_FunctionPointer:
+                    CompMD = Component.getFunctionDecl()->getCanonicalDecl();
+                    break;
+                case clang::VTableComponent::CK_CompleteDtorPointer:
+                    CompMD = Component.getDestructorDecl()->getCanonicalDecl();
+                    break;
+                default:
+                    CompMD = nullptr;
+                }
+
+                if (!CompMD || CompMD != MD)
+                    continue;
+
+                clang::ThunkInfo NewThunk;
+                NewThunk.This.NonVirtual = -2 * Target::ptrsize;
+                NewThunk.Return.NonVirtual = 2 * Target::ptrsize;
+
+                if (MD->getParent()->getCanonicalDecl() != dcxxInfo.MostDerivedBase->getCanonicalDecl())
+                {
+                    // NOTE: we can't rely on existing thunks, because methods that aren't overridden by the most derived C++ class
+                    // won't have the proper thunk offsets (sometimes no thunk at all).
+
+                    // This adjustment.
+                    auto ThisOffset = Builder.ComputeThisAdjustment(MD);
+                    NewThunk.This.NonVirtual += ThisOffset.getQuantity();
+
+                    // Return adjustment.
+                    clang::BaseOffset ReturnAdjustmentOffset;
+                    ReturnAdjustmentOffset = ComputeReturnAdjustmentBaseOffset(Context, md, MD);
+                    NewThunk.Return.NonVirtual += Builder.ComputeReturnAdjustment(ReturnAdjustmentOffset).NonVirtual;
+
+//                 NewThunk.This.Virtual.Itanium.VCallOffsetOffset = ; TODO
+                }
+
+                auto thunkFd = getDCXXThunk(md, NewThunk);
+                auto thunkLLFunc = getIrFunc(thunkFd)->func;
+                Inits[I] = llvm::ConstantExpr::getBitCast(thunkLLFunc, CGM.Int8PtrTy);
+            }
+        }
+
+        return llvm::ConstantArray::get(
+            cast<llvm::ArrayType>(OldVTableInit->getType()), Inits);
+    }
+};
 
 // Emit the modified vtbl for the most derived C++ class
 void LangPlugin::emitAdditionalClassSymbols(::ClassDeclaration *cd)
@@ -240,114 +426,45 @@ void LangPlugin::emitAdditionalClassSymbols(::ClassDeclaration *cd)
         return;
     auto dcxxInfo = DCXXVTableInfo::get(cd);
 
-    auto VTLayout = dcxxInfo->VTLayout;
-
     auto& Context = getASTContext();
-    auto& CGVT = CGM->getVTables();
+    auto VTContext = Context.getVTableContext();
     
-    clang::ItaniumVTableBuilder Builder(*static_cast<clang::ItaniumVTableContext *>(Context.getVTableContext()),
-                    dcxxInfo->MostDerivedBase, clang::CharUnits::Zero(),
-                    /*MostDerivedClassIsVirtual=*/false, dcxxInfo->MostDerivedBase);
+    if (!VTContext->isMicrosoft()) {
+        auto RTTI = CGM->GetAddrOfRTTIDescriptor(
+            Context.getTagDeclType(dcxxInfo->MostDerivedBase));
 
-    auto RTTI = CGM->GetAddrOfRTTIDescriptor(
-        Context.getTagDeclType(dcxxInfo->MostDerivedBase));
+        DCXXVTableAdjuster<clang::ItaniumVTableBuilder> VTAdjuster(cd, *dcxxInfo, *CGM, Context);
+        auto VTableInit = VTAdjuster.adjustVTableInitializer(dcxxInfo->VTLayout, RTTI);
+        
+        auto vtableZ = getDCXXVTable(cd, dcxxInfo);
+        vtableZ->setInitializer(VTableInit);
+        vtableZ->setLinkage(DtoLinkage(cd).first);
+    } else {
+        clang::MicrosoftVTableContext &VFTContext = CGM->getMicrosoftVTableContext();
+        const clang::VPtrInfoVector &VFPtrs = VFTContext.getVFPtrOffsets(dcxxInfo->MostDerivedBase);
 
-    auto OldVTableInit = CGVT.CreateVTableInitializer(
-      dcxxInfo->MostDerivedBase, VTLayout->vtable_component_begin(),
-      VTLayout->getNumVTableComponents(), VTLayout->vtable_thunk_begin(),
-      VTLayout->getNumVTableThunks(), RTTI);
+        for (clang::VPtrInfo *Info : VFPtrs) {
+            const clang::VTableLayout &VTLayout =
+                VFTContext.getVFTableLayout(dcxxInfo->MostDerivedBase, Info->FullOffsetInMDC);
 
-    // Copy the operands into a new array
-    // NOTE: replaceUsesOfWithOnConstant isn't suitable because it might replace
-    // the C++ class vtable by the DCXX one.
-    std::vector<llvm::Constant*> Inits(OldVTableInit->getNumOperands());
-    for (unsigned i = 0; i < OldVTableInit->getNumOperands(); i++)
-        Inits[i] = llvm::cast<llvm::Constant>(OldVTableInit->getOperand(i));
+            llvm::Constant *RTTI = nullptr;
+            if (any_of(VTLayout.vtable_components(),
+                [](const clang::VTableComponent &VTC) { return VTC.isRTTIKind(); }))
+                RTTI = clangCG::getMSCompleteObjectLocator(CGM->getCXXABI(),
+                                dcxxInfo->MostDerivedBase, Info);
 
-    // search for virtual C++ methods overriden by the D class
-    for (auto s: cd->vtbl)
-    {
-        auto md = s->isFuncDeclaration();
-        if (!md)
-            continue;
+            DCXXVTableAdjuster<clang::VFTableBuilder> VTAdjuster(cd, *dcxxInfo, *CGM, Context);
+            auto Init = VTAdjuster.adjustVTableInitializer(&VTLayout, RTTI, Info);
 
-        cpp::FuncDeclaration *cxxmd = nullptr;
-        if (auto overmd = findOverriddenMethod(md, dcxxInfo->mostDerivedCXXBase))
-        {
-            assert(isCPP(overmd));
-            cxxmd = static_cast<cpp::FuncDeclaration*>(overmd);
-        }
-
-        if (!cxxmd)
-            continue;   // md isn't overriding a C++ method
-
-        auto MD = llvm::cast<clang::CXXMethodDecl>(
-            getFD(cxxmd)->getCanonicalDecl());
-
-        // Replace calls to MD with calls to md properly adjusted by thunks
-        auto Components = VTLayout->vtable_component_begin();
-        for (unsigned I = 0; I != VTLayout->getNumVTableComponents(); ++I)
-        {
-            auto& Component = Components[I];
-            const clang::CXXMethodDecl *CompMD;;
-
-            switch (Component.getKind())
-            {
-                case clang::VTableComponent::CK_FunctionPointer:
-                    CompMD = Component.getFunctionDecl()->getCanonicalDecl();
-                    break;
-                case clang::VTableComponent::CK_CompleteDtorPointer:
-                    CompMD = Component.getDestructorDecl()->getCanonicalDecl();
-                    break;
-                default:
-                    CompMD = nullptr;
-            }
-
-            if (!CompMD || CompMD != MD)
-                continue;
-
-            clang::ThunkInfo NewThunk;
-            NewThunk.This.NonVirtual = -2 * Target::ptrsize;
-            NewThunk.Return.NonVirtual = 2 * Target::ptrsize;
-
-            if (MD->getParent()->getCanonicalDecl() != dcxxInfo->MostDerivedBase->getCanonicalDecl())
-            {
-                // NOTE: we can't rely on existing thunks, because methods that aren't overridden by the most derived C++ class
-                // won't have the proper thunk offsets (sometimes no thunk at all).
-
-                // This adjustment.
-                clang::BaseSubobject OverriddenBaseSubobject(MD->getParent(),
-                                    clang::ComputeBaseOffset(Context, MD->getParent(), dcxxInfo->MostDerivedBase).NonVirtualOffset);
-                clang::BaseSubobject OverriderBaseSubobject(dcxxInfo->MostDerivedBase, clang::CharUnits::Zero());
-
-                clang::BaseOffset ThisOffset = Builder.ComputeThisAdjustmentBaseOffset(OverriddenBaseSubobject,
-                                                                    OverriderBaseSubobject);
-                NewThunk.This.NonVirtual += ThisOffset.NonVirtualOffset.getQuantity();
-
-                // Return adjustment.
-                clang::BaseOffset ReturnAdjustmentOffset;
-                ReturnAdjustmentOffset = ComputeReturnAdjustmentBaseOffset(Context, md, MD);
-                NewThunk.Return.NonVirtual += Builder.ComputeReturnAdjustment(ReturnAdjustmentOffset).NonVirtual;
-
-//                 NewThunk.This.Virtual.Itanium.VCallOffsetOffset = ; TODO
-            }
-
-            auto thunkFd = getDCXXThunk(md, NewThunk);
-            auto thunkLLFunc = getIrFunc(thunkFd)->func;
-            Inits[I] = llvm::ConstantExpr::getBitCast(thunkLLFunc, CGM->Int8PtrTy);
+            auto vtableZ = getDCXXVTable(cd, dcxxInfo, Info->FullOffsetInMDC, &VTLayout);
+            vtableZ->setInitializer(Init);
+            vtableZ->setLinkage(DtoLinkage(cd).first);
         }
     }
-
-    auto VTableInit = llvm::ConstantArray::get(dcxxInfo->VTArrayType, Inits);
-
-    auto linkage = DtoLinkage(cd);
-    auto vtableZ = getDCXXVTable(cd, dcxxInfo);
-    vtableZ->setInitializer(VTableInit);
-    vtableZ->setLinkage(linkage.first);
 }
 
 // A few changes to CGClass.cpp here and there
-// Couldn't find a way to trim down redundancies with Clang
+// TODO: Now that Clang is a submodule, trim down redundant code
 struct DCXXVptrAdjuster
 {
     clangCG::CodeGenModule &CGM;
@@ -418,15 +535,32 @@ struct DCXXVptrAdjuster
             return;
 
         // And now the CALYPSO trick
-        auto DCXXVTable = getDCXXVTable(cd);
-        auto ConstGEP = llvm::cast<llvm::ConstantExpr>(VTableAddressPoint);
+        clang::CharUnits DCXXOffsetSuffix;
+        const clang::VTableLayout* VTLayout = nullptr;
 
-        auto Op1Val = llvm::cast<llvm::ConstantInt>(ConstGEP->getOperand(1))->getZExtValue();
-        auto Op2Val = llvm::cast<llvm::ConstantInt>(ConstGEP->getOperand(2))->getZExtValue();
+        if (getContext().getVTableContext()->isMicrosoft()) {
+            DCXXOffsetSuffix = Base.getBaseOffset();
+            VTLayout = &CGM.getMicrosoftVTableContext().getVFTableLayout(
+                            dcxxInfo.MostDerivedBase, DCXXOffsetSuffix);
+        }
 
-        auto DCXXVTableAddressPoint =
-                Builder.CreateConstInBoundsGEP2_64(DCXXVTable,
-                                               Op1Val, Op2Val);
+        auto DCXXVTable = getDCXXVTable(cd, nullptr, DCXXOffsetSuffix, VTLayout);
+        llvm::Value* DCXXVTableAddressPoint;
+
+        if (!getContext().getVTableContext()->isMicrosoft()) {
+            auto ConstGEP = llvm::cast<llvm::ConstantExpr>(VTableAddressPoint);
+
+            auto Op1Val = llvm::cast<llvm::ConstantInt>(ConstGEP->getOperand(1))->getZExtValue();
+            auto Op2Val = llvm::cast<llvm::ConstantInt>(ConstGEP->getOperand(2))->getZExtValue();
+
+            DCXXVTableAddressPoint =
+                Builder.CreateConstInBoundsGEP2_64(DCXXVTable, Op1Val, Op2Val);
+        } else {
+            if (getContext().getLangOpts().RTTIData)
+                DCXXVTableAddressPoint = Builder.CreateConstInBoundsGEP2_64(DCXXVTable, 0, 1);
+            else
+                DCXXVTableAddressPoint = DCXXVTable;
+        }
 
         // Compute where to store the address point.
         llvm::Value *VirtualOffset = nullptr;
