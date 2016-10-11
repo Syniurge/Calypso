@@ -418,7 +418,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
             t = new TypePointer(pt);
         else
             t = new TypeReference(pt, isa<clang::RValueReferenceType>(Reference));
-        return t->merge();
+        return t;
     }
 
     llvm::llvm_unreachable_internal("Unrecognized C++ type");
