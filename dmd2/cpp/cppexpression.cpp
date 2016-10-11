@@ -799,17 +799,16 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
-    if (D->dsym) {
-        if (auto d = D->dsym->isDeclaration()) {
+    if (auto sym = D->dsym) {
+        if (auto d = sym->isDeclaration()) {
             if (d->isFuncDeclaration() || d->isVarDeclaration())
                 return new VarExp(loc, d);
-            else if (auto td = d->isTemplateDeclaration())
-                return new TemplateExp(loc, td);
             else if (auto t = d->getType())
                 return new TypeExp(loc, t);
-        } else if (auto em = D->dsym->isEnumMember())
+        } else if (auto td = sym->isTemplateDeclaration())
+                return new TemplateExp(loc, td);
+        else if (auto em = sym->isEnumMember())
             return em->getVarExp(loc, em->scope);
-        // WARNING: implicit imports won't get added, should they be?
     }
 
     if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
