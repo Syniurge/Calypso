@@ -6187,11 +6187,11 @@ Lerror:
     TemplateInstance *errinst = NULL;
     if (!inst)
     {
-        TemplateInstance* foreignInst = tempdecl->foreignInstance(this, sc);  // CALYPSO
-        if (!inst) // an existing instance may have been found during foreignInstance if tempdecl is a partial specialization
+        if (TemplateInstance* foreignInst = tempdecl->foreignInstance(this, sc))  // CALYPSO
+        {
             inst = foreignInst;
-        if (inst == this)
-            return; // nothing else to do, foreignInstance already called semantic
+            foreignInst->semantic(sc);
+        }
     }
 
     if (!inst)
