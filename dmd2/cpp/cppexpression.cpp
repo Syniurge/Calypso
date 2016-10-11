@@ -998,18 +998,23 @@ clang::Expr* ExprMapper::toExpression(Expression* e)
                 return new (Context) clang::CXXBoolLiteralExpr(value != 0,
                                                                Context.BoolTy, Loc);
 
-            unsigned IntSize = Context.getTargetInfo().getIntWidth();
+            clang::APValue Value;
+            toAPValue(Value, e);
+
+            auto IntType = tymap.toType(e->loc, e->type, nullptr);
             return clang::IntegerLiteral::Create(Context,
-                                            llvm::APInt(IntSize, value),
-                                            Context.IntTy, Loc);
+                                            Value.getInt(),
+                                            IntType, Loc);
         }
         case TOKfloat64:
         {
-            auto exp = static_cast<RealExp *>(e);
-            llvm::APFloat Val((double) exp->value);
+            clang::APValue Value;
+            toAPValue(Value, e);
+
+            auto FloatType = tymap.toType(e->loc, e->type, nullptr);
             return clang::FloatingLiteral::Create(Context,
-                                            Val, true,
-                                            Context.FloatTy, Loc);
+                                            Value.getFloat(), true,
+                                            FloatType, Loc);
         }
         default:
             llvm::llvm_unreachable_internal("Unhandled D -> Clang expression conversion");
