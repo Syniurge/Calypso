@@ -300,49 +300,47 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         }
     }
 
-    // TODO: clean everything up, make the flow "non-cpp" vs "cpp non-foreignInst" vs "cpp foreignInst" less insane!
+    MATCH m = MATCHexact;
+    TemplateInstUnion Inst = hasExistingClangInst(ti);
 
-    auto m = ::TemplateDeclaration::matchWithInstance(sc, ti, dedtypes, fargs, flag);
+    assert(Inst || !isForeignInstance(ti));
+
+    if (!Inst)
+    {
+        if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
+            m = functionTemplateMatch(ti, fargs, Inst);
+        else {
+            Inst = getClangInst(sc, ti, ti->tiargs);
+            if (!Inst)
+                m = MATCHnomatch;
+        }
+    }
 
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    // Although the match result is ok, the types deducted by DMD may have been stripped of C++-specific info and end up wrong.
-    // That's why we fix dedtypes by taking Inst's template instantiation args.
+    auto cpptdtypes = tdtypesFromInst(Inst, isForeignInstance(ti));
+    assert(cpptdtypes->dim == dedtypes->dim);
+    dedtypes->data = cpptdtypes->data;
 
-    auto Inst = hasExistingClangInst(ti);
-    if (!Inst)
-    {
-        int minNumExplicitArgs = 0;
-        for (auto param: *parameters)
-        {
-            minNumExplicitArgs++;
-            if (param->hasDefaultArg())
-                break;
-        }
-        auto tdtypes = TemplateInstance::arraySyntaxCopy(ti->tiargs);
-        for (int i = (int)ti->tiargs->dim; i < minNumExplicitArgs; i++)
-            tdtypes->push(objectSyntaxCopy((*dedtypes)[i])); // template arguments deduced from fargs or from the opCast type need to be pushed, and yes that means relying on DMD's template deduction..
+    return m;
+}
 
-        Inst = getClangInst(sc, ti, tdtypes);
-
-        delete tdtypes;
-    }
-
+Objects* TemplateDeclaration::tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance)
+{
     TypeMapper tymap;
     tymap.addImplicitDecls = false;
 
-    auto InstArgs = (isForeignInstance(ti) ? getTemplateInstantiationArgs(Inst)
-                                                            : getTemplateArgs(Inst))->asArray();
+    auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
+                                                            : getTemplateArgs(Inst);
+
     const clang::TemplateParameterList* ParamList;
     if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
         ParamList = PartialSpec->getTemplateParameters();
     else
         ParamList = getPrimaryTemplate()->getTemplateParameters();
 
-    auto cpptdtypes = TypeMapper::FromType(tymap, loc).fromTemplateArguments<true>(
-                                            InstArgs.begin(), InstArgs.end(),
-                                            ParamList);
+    auto cpptdtypes = tymap.fromTemplateArguments<true>(loc, InstArgs, ParamList);
 
     SpecValue spec(tymap);
     if (Inst.is<clang::NamedDecl*>())
@@ -350,20 +348,16 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (spec)
         cpptdtypes->shift(spec.toTemplateArg(loc));
 
-    if (isVariadic() && cpptdtypes->dim == dedtypes->dim - 1)
+    if (isVariadic() && cpptdtypes->dim == parameters->dim - 1)
         cpptdtypes->push(new Tuple);
-    if (cpptdtypes->dim == dedtypes->dim + 1) { // might happen for explicit spec where the pack has zero argument. This feels like a hack, needs cleanup.
+    if (cpptdtypes->dim == parameters->dim + 1) { // might happen for explicit spec where the pack has zero argument. This feels like a hack, needs cleanup.
         auto tup = isTuple(cpptdtypes->data[0]);
         assert(tup && tup->objects.dim == 0);
         cpptdtypes->dim--;
     }
-    assert(cpptdtypes->dim == dedtypes->dim);
 
-    for (unsigned i = 0; i < cpptdtypes->dim; i++)
-        (*dedtypes)[i] = (*cpptdtypes)[i];
-
-    ::TemplateInstance::semanticTiargs(ti->loc, scope, dedtypes, 4);
-    return m;
+    ::TemplateInstance::semanticTiargs(loc, scope, cpptdtypes, 4 /*wantTuple*/);
+    return cpptdtypes;
 }
 
 // In some cases DMD's leastAsSpecialized isn't enough, for ex. to disambiguate "this(_Tp)(vector!(vector!_Tp))" over "this(_Tp)(vector!_Tp)"
@@ -432,6 +426,82 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     }
 
     return ::TemplateDeclaration::copySyntaxTree(ti);
+}
+
+MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Expressions *fargs,
+                                                 TemplateInstUnion& Inst)
+{
+    auto& Context = calypso.getASTContext();
+    auto& S = calypso.getSema();
+
+    clang::SourceLocation Loc;
+    clang::sema::TemplateDeductionInfo DedInfo(Loc);
+
+    TypeMapper tymap;
+    ExprMapper expmap(tymap);
+    tymap.addImplicitDecls = false;
+
+    auto FunctionTemplate = cast<clang::FunctionTemplateDecl>(TempOrSpec); // probably going to fail epxlicit spec
+
+    clang::TemplateArgumentListInfo ExplicitTemplateArgs;
+    if (ti->tiargs)
+        fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
+                                     FunctionTemplate, tymap, expmap);
+
+    llvm::SmallVector<clang::Expr*, 4> Args;
+    if (fargs)
+        for (auto farg: *fargs) {
+            // toType won't take dynamic arrays, but anticipate implicit conversions
+            auto argty = farg->type;
+            if (argty->ty == Tarray)
+                argty = argty->nextOf()->pointerTo();
+
+            auto ArgTy = tymap.toType(ti->loc, argty, /*sc=*/ nullptr);
+            auto DummyExpr = new (Context) clang::OpaqueValueExpr(Loc, ArgTy,
+                                                                farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
+            Args.push_back(DummyExpr);
+        }
+
+    clang::FunctionDecl *Specialization;
+
+    if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+                    &ExplicitTemplateArgs, Args, Specialization, DedInfo))
+        return MATCHnomatch;
+
+    Inst = Specialization;
+    return MATCHexact;
+}
+
+MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc, ::FuncDeclaration *&fd,
+                                                       Type *tthis, Expressions *fargs)
+{
+    TypeMapper tymap;
+    tymap.addImplicitDecls = false;
+
+    TemplateInstUnion Inst;
+
+    if (functionTemplateMatch(ti, fargs, Inst) != MATCHexact)
+        return MATCHnomatch;
+
+    MATCH match = MATCHexact;
+    MATCH matchTiargs = MATCHexact;
+
+    auto dedtypes = tdtypesFromInst(Inst, false);
+    ti->tdtypes.dim = dedtypes->dim;
+    ti->tdtypes.data = dedtypes->data;
+    ti->tiargs = &ti->tdtypes;
+
+    // HACK
+    auto FuncInst = cast<clang::FunctionDecl>(Inst.get<clang::NamedDecl*>());
+    auto FPT = FuncInst->getType()->castAs<clang::FunctionProtoType>();
+
+    auto oldtf = (TypeFunction *) fd->type;
+    fd->type = TypeMapper::FromType(tymap, ti->loc).fromTypeFunction(FPT, FuncInst);
+    auto partial = doHeaderInstantiation(ti, sc, fd, tthis, fargs);
+    fd->type = oldtf;
+    fd = partial;
+
+    return (MATCH)(match | (matchTiargs<<4));
 }
 
 bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
@@ -548,7 +618,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     tymap.addImplicitDecls = false;
 
     auto Temp = const_cast<clang::RedeclarableTemplateDecl*>
-                                (getDefinition(getPrimaryTemplate(), false));
+                                (getDefinition(getPrimaryTemplate() /*,false*/)); // TODO: remove lookIntoMemberTemplate dead code
 
     if (!tdtypes)
         tdtypes = &ti->tdtypes;
@@ -562,28 +632,26 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
             isa<clang::TypeAliasTemplateDecl>(Temp))
     {
         auto Ty = S.CheckTemplateIdType(Name, Temp->getLocation(), Args); // NOTE: this also substitutes the argument types
-                                            // to TemplateTypeParmType, which is needed for partial specializations to work.
+        if (!Ty.isNull()) {                                                 // to TemplateTypeParmType, which is needed for partial specializations to work.
+            if (auto TST = Ty->getAs<clang::TemplateSpecializationType>())
+                if (TST->isTypeAlias())
+                    return TST;
 
-        if (auto TST = Ty->getAs<clang::TemplateSpecializationType>())
-            if (TST->isTypeAlias())
-                return TST;
-
-        auto RT = Ty->getAs<clang::RecordType>();
-        auto CTSD = cast<clang::ClassTemplateSpecializationDecl>(RT->getDecl());
-        return CTSD;
+            auto RT = Ty->getAs<clang::RecordType>();
+            auto CTSD = cast<clang::ClassTemplateSpecializationDecl>(RT->getDecl());
+            return CTSD;
+        }
     }
     else if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(Temp))
     {
         assert(FuncTemp->getTemplatedDecl()->isDefined() ||
                 FuncTemp->getInstantiatedFromMemberTemplate());
 
-        auto FuncInst = instantiateFunctionDeclaration(Args, FuncTemp);
-        assert(FuncInst);
-
-        // Then the definition
-        S.InstantiateFunctionDefinition(Temp->getLocation(), FuncInst, true);
-
-        return FuncInst;
+        if (auto FuncInst = instantiateFunctionDeclaration(Args, FuncTemp))
+        {
+            S.InstantiateFunctionDefinition(Temp->getLocation(), FuncInst, true);
+            return FuncInst;
+        }
     }
     else
         assert(false);

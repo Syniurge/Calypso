@@ -27,7 +27,7 @@ class TemplateDeclaration : public ::TemplateDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::NamedDecl *TempOrSpec;  // NOTE: we consider the primary template an explicit specialization as well
+    const clang::NamedDecl *TempOrSpec;
 
     TemplateDeclaration(Loc loc, Identifier *id, TemplateParameters *parameters,
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
@@ -41,6 +41,11 @@ public:
     MATCH matchWithInstance(Scope *sc, ::TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag) override;
     MATCH leastAsSpecialized(Scope *sc, ::TemplateDeclaration *td2, Expressions *fargs) override;
     Dsymbols* copySyntaxTree(::TemplateInstance *ti) override;
+    MATCH deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc, ::FuncDeclaration *&fd, Type *tthis, Expressions *fargs) override;
+
+    MATCH functionTemplateMatch(::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
+
+    Objects* tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance = false);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance( cpp::TemplateInstance* ti );

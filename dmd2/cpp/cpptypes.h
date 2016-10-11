@@ -75,7 +75,8 @@ public:
 
     // Clang -> DMD
     Type *fromType(const clang::QualType T, Loc loc);
-    Objects *fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
+    template<bool wantTuple = false>
+     Objects *fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                 const clang::TemplateParameterList *ParamList = nullptr);
 
     class FromType // type-specific state

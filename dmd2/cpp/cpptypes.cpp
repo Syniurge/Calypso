@@ -651,13 +651,19 @@ template
                                         const clang::TemplateArgument *End,
                                         const clang::TemplateParameterList *ParamList);
 
-Objects *TypeMapper::fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
+template<bool wantTuple>
+  Objects *TypeMapper::fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                                            const clang::TemplateParameterList *ParamList)
 {
     auto Array = List->asArray();
     auto First = Array.begin(), End = Array.end();
-    return FromType(*this, loc).fromTemplateArguments(First, End, ParamList);
+    return FromType(*this, loc).fromTemplateArguments<wantTuple>(First, End, ParamList);
 }
+
+template Objects* TypeMapper::fromTemplateArguments<false>(Loc loc, const clang::TemplateArgumentList *List,
+                                           const clang::TemplateParameterList *ParamList);
+template Objects* TypeMapper::fromTemplateArguments<true>(Loc loc, const clang::TemplateArgumentList *List,
+                                           const clang::TemplateParameterList *ParamList);
 
 class ScopeChecker // determines if a C++ decl is "scopingly" equivalent to another's
 {
@@ -799,7 +805,7 @@ public:
     void addIdent(TypeQualified *&tqual,
                   Identifier *ident);
     void addInst(TypeQualified *&tqual,
-                  TemplateInstance *tempinst);
+                  ::TemplateInstance *tempinst);
 
     void pushInst(TypeQualified *&tqual,
                 RootObject *o,
@@ -830,7 +836,7 @@ void TypeQualifiedBuilder::add(TypeQualified *&tqual, RootObject *o)
     if (o->dyncast() == DYNCAST_IDENTIFIER)
         addIdent(tqual, static_cast<Identifier*>(o));
     else
-        addInst(tqual, static_cast<TemplateInstance*>(o));
+        addInst(tqual, static_cast<::TemplateInstance*>(o));
 }
 
 void TypeQualifiedBuilder::addIdent(TypeQualified *&tqual,
@@ -843,7 +849,7 @@ void TypeQualifiedBuilder::addIdent(TypeQualified *&tqual,
 }
 
 void TypeQualifiedBuilder::addInst(TypeQualified *&tqual,
-                                   TemplateInstance *tempinst)
+                                   ::TemplateInstance *tempinst)
 {
     if (!tqual)
         tqual = new TypeInstance(from.loc, tempinst);
@@ -862,24 +868,18 @@ void TypeQualifiedBuilder::pushInst(TypeQualified *&tqual,
     auto tiargs = from.fromTemplateArguments(ArgBegin, ArgEnd,
             Temp->getTemplateParameters());
 
-    cpp::TemplateInstance *tempinst;
+    ::TemplateInstance *tempinst;
     if (o->dyncast() == DYNCAST_IDENTIFIER)
     {
         auto ident = static_cast<Identifier*>(o);
-        tempinst = new cpp::TemplateInstance(loc, ident);
+        tempinst = new ::TemplateInstance(loc, ident);
         tempinst->tiargs = tiargs;
     }
     else // templated overloaded operator
     {
-        tempinst = static_cast<cpp::TemplateInstance*>(o);
+        tempinst = static_cast<::TemplateInstance*>(o);
         tempinst->tiargs->append(tiargs);
     }
-
-    // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible,
-    // i.e when the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to
-    // complete its instantiation and determine whether it is non-polymorphic or not.
-    if (Spec && !from.isDependent)
-        tempinst->Inst = Spec;
 
     addInst(tqual, tempinst);
 }
@@ -899,7 +899,7 @@ RootObject *TypeQualifiedBuilder::getIdentOrTempinst(const clang::Decl *D)
     if (spec && !(options & TQ_OverOpSkipSpecArg))
     {
         auto loc = fromLoc(D->getLocation());
-        auto tempinst = new cpp::TemplateInstance(loc, ident);
+        auto tempinst = new ::TemplateInstance(loc, ident);
         tempinst->tiargs = new Objects;
         tempinst->tiargs->push(spec.toTemplateArg(from.loc));
         return tempinst;
@@ -1392,7 +1392,7 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
 
     if (ArgBegin)
     {
-        auto ti = new cpp::TemplateInstance(loc, tempIdent);
+        auto ti = new ::TemplateInstance(loc, tempIdent);
         ti->tiargs = fromTemplateArguments(ArgBegin, ArgEnd,
                                         Name.getAsTemplateDecl()->getTemplateParameters());
 
@@ -1410,35 +1410,13 @@ Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::Template
     if (!tqual)
         return nullptr; // discard types leading to recursive template expansion
 
-    auto setInst = [&] (TemplateInstUnion Inst) {
-        if (isDependent)
-            return;
-
-        auto o = tqual->idents.empty() ? typeQualifiedRoot(tqual) : tqual->idents.back();
-
-        // NOTE: o may be an identifier if this is an « injected scope name »
-        if (o && o->dyncast() == DYNCAST_DSYMBOL)
-        {
-            auto s = static_cast<Dsymbol*>(o);
-            assert(s->isTemplateInstance() && isCPP(s));
-
-            auto ti = static_cast<cpp::TemplateInstance*>(s);
-
-            ti->Inst = Inst;
-        }
-    };
-
     if (T->isTypeAlias())
-        setInst(T);
+        ;
     else if (T->isSugared())
     {
         if (auto RT = T->getAs<clang::RecordType>()) {
             if (tm.isInjectedClassName(RT->getDecl()))
                 return fromInjectedClassName(loc);
-
-            // NOTE: To reduce DMD -> Clang translations to a minimum we don't instantiate ourselves whenever possible, i.e when
-            // the template instance is already declared or defined in the PCH. If it's only declared, we tell Sema to complete its instantiation.
-            setInst(RT->getDecl());
         }
     }
 

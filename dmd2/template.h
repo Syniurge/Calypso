@@ -106,7 +106,7 @@ public:
     virtual MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs); // CALYPSO
     virtual Dsymbols* copySyntaxTree(TemplateInstance *ti); // CALYPSO
 
-    MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs);
+    virtual MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs); // CALYPSO
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);
     FuncDeclaration *doHeaderInstantiation(TemplateInstance *ti, Scope *sc, FuncDeclaration *fd, Type *tthis, Expressions *fargs);
     TemplateInstance *findExistingInstance(TemplateInstance *tithis, Expressions *fargs);
