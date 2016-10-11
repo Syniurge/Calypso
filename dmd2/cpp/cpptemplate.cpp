@@ -366,10 +366,10 @@ Objects* TemplateDeclaration::tdtypesFromInst(TemplateInstUnion Inst, bool forFo
 MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* td2, Expressions* fargs)
 {
     auto Prim = getPrimaryTemplate();
+    assert(isa<clang::FunctionTemplateDecl>(Prim));
 
-    auto m = ::TemplateDeclaration::leastAsSpecialized(sc, td2, fargs);
-    if (m == MATCHnomatch || !isCPP(td2) || !isa<clang::FunctionTemplateDecl>(Prim))
-        return m;
+    if (!isCPP(td2))
+        return ::TemplateDeclaration::leastAsSpecialized(sc, td2, fargs);
 
     auto& Sema = calypso.getSema();
 
@@ -381,10 +381,10 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     auto Better1 = clang::isAtLeastAsSpecializedAs(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
                                 isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
                                 fargs->dim, TDF_IgnoreQualifiers);
-    if (!Better1)
-        m = MATCHnomatch;
+    if (Better1)
+        return MATCHexact;
 
-    return m;
+    return MATCHnomatch;
 }
 
 Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
