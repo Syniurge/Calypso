@@ -894,7 +894,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             // then if the destination type depends on the the template parameters the decl name won't be found by the lookup inside the parent,
             // we need to take the primary template name. Ex.: operator Vec<float, 3>(); instantiated from template<_Tp, int n> operator Vec<_Tp, n>();
 
-        auto R = D->getDeclContext()->lookup(Name);
+        auto R = getDeclContextNonLinkSpec(D)->lookup(Name);
         std::function<bool(const clang::NamedDecl*)> pred;
         SpecValue spec2(*this);
         if (isa<clang::TagDecl>(D->getDeclContext()))
