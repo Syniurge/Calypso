@@ -2243,13 +2243,16 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 
 /***** *****/
 
-TypeMapper::TypeMapper(cpp::Module* mod)
-    : mod(mod)
+TypeMapper::TypeMapper(cpp::Module* mod, bool isGlobal)
+    : mod(mod), isGlobal(isGlobal)
 {
 }
 
 TypeMapper::~TypeMapper()
 {
+    if (isGlobal)
+        return; // IrDsymbol::list may get destroyed before this dtor call, and ~IrDsymbol would then cause a segfault
+
     for (auto impPair: implicitImports)
         if (!impPair.second.added) {
             auto im = impPair.second.im;

@@ -62,7 +62,7 @@ enum TypeQualifiedBuilderOpts
 class TypeMapper
 {
 public:
-    TypeMapper(cpp::Module *mod = nullptr);  // mod can be null if no implicit import is needed
+    TypeMapper(cpp::Module *mod = nullptr, bool isGlobal = false);  // mod can be null if no implicit import is needed
     virtual ~TypeMapper();
 
     bool addImplicitDecls = true;
@@ -152,6 +152,7 @@ public:
 
 protected:
     cpp::Module *mod;
+    bool isGlobal;
 
     struct ImplicitImport
     {

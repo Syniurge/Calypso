@@ -214,7 +214,7 @@ void DtorDeclaration::semantic(Scope *sc)
     const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
 }
 
-TypeMapper DeclReferencer::mapper;
+TypeMapper DeclReferencer::mapper(nullptr, true);
 ExprMapper DeclReferencer::expmap(mapper);
 
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
