@@ -317,6 +317,9 @@ TypeTuple *toArgTypes(Type *t)
                 return;
             }
 
+            if (sym->langPlugin()) // CALYPSO FIXME?
+                goto Lmemory;
+
             //printf("TypeStruct::toArgTypes() %s\n", t->toChars());
             if (cd || (sd && !sd->isPOD()) || sym->fields.dim == 0)
             {
