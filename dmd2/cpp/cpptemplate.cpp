@@ -566,8 +566,10 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         for (size_t i = 0; i < tithis->tdtypes.dim; i++)
             ti->tdtypes[i] = objectSyntaxCopy(tithis->tdtypes[i]);
 
-        ti->semantictiargsdone = false; // redo semanticTiargs because most TypeXXX::syntaxCopy throw away decos
-        ti->semanticTiargs(sc);
+        ti->semantictiargsdone = true;
+        // redo semanticTiargs because most TypeXXX::syntaxCopy throw away decos
+        // flags set to 4 since there might be Tuple from deduceFunctionTemplateMatch (which may be a DMD inconsistency?)
+        ::TemplateInstance::semanticTiargs(ti->loc, sc, ti->tiargs, 4); 
     }
 
     if (!ti->Inst)
@@ -762,7 +764,7 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
 {
     auto result = ::TemplateInstance::semanticTiargs(sc);
 
-    if (result && Inst && !isForeignInst)
+    if (result && Inst && !isForeignInst) // WARNING FIXME: never true anymore, can the situation described in the below comment still happen?
     {
         // We query the evaluated arguments by Sema and possibly fix the tiargs semantic'd by DMD since there might be slight differences.
         // See for example Qt's is_unsigned<Qt::KeyboardModifiers>, the value will be different because of T(0) < T(-1) which doesn't lead to the expected result in DMD.
