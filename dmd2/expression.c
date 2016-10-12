@@ -6503,7 +6503,7 @@ Expression *IsExp::semantic(Scope *sc)
         }
         else /* == */
         {
-            if (targ->equals(tspec))
+            if (targ->equivs(tspec)) // CALYPSO (ugly)
                 goto Lyes;
             else
                 goto Lno;
