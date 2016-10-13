@@ -2275,7 +2275,7 @@ TypeMapper::TempParamListRAII::~TempParamListRAII()
 
 // NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.
 template <typename RedeclTempDecl>
- const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D, bool memberTemplate = true)
+ const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D)
 {
     for (auto RI: D->redecls()) // find the definition if any
     {
@@ -2284,35 +2284,17 @@ template <typename RedeclTempDecl>
             return I;
     }
 
-    //// This is more heuristical than anything else.. I'm not sure yet why templates inside
-    //// specializations (e.g std::allocator::rebind) do not get defined.
-    //if (memberTemplate)
-    //    if (auto MemberTemp = const_cast<RedeclTempDecl*>(D)->getInstantiatedFromMemberTemplate())
-    //        if (auto MemberDef = getRTDDefinition(MemberTemp))
-    //            return MemberDef;
-
     return cast<RedeclTempDecl>(getCanonicalDecl(D));
 }
 
-const clang::ClassTemplateDecl *getDefinition(const clang::ClassTemplateDecl *D)
-{
-    return getRTDDefinition(D);
-}
-
-const clang::FunctionTemplateDecl *getDefinition(const clang::FunctionTemplateDecl *D)
-{
-    return getRTDDefinition(D);
-}
-
-const clang::RedeclarableTemplateDecl* getDefinition(const clang::RedeclarableTemplateDecl* D,
-                                                     bool lookIntoMemberTemplate)
+const clang::RedeclarableTemplateDecl* getDefinition(const clang::RedeclarableTemplateDecl* D)
 {
     if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
-        return getRTDDefinition(CTD, lookIntoMemberTemplate);
+        return getRTDDefinition(CTD);
     else if (auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D))
-        return getRTDDefinition(FTD, lookIntoMemberTemplate);
+        return getRTDDefinition(FTD);
     else if (auto VTD = dyn_cast<clang::VarTemplateDecl>(D))
-        return getRTDDefinition(VTD, lookIntoMemberTemplate);
+        return getRTDDefinition(VTD);
     return D;
 }
 
@@ -2324,7 +2306,15 @@ const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTe
     if (auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D))
         if (auto MemberInst = const_cast<clang::ClassTemplatePartialSpecializationDecl*>(Partial)->getInstantiatedFromMember()) // not the same method name..
             if (auto MemberDef = getDefinition(MemberInst))
-                return MemberDef;
+                return MemberDef; // Ulterior WARNING: is this still relevant? member instantations should always be preferred
+
+    return D;
+}
+
+const clang::VarTemplateSpecializationDecl *getDefinition(const clang::VarTemplateSpecializationDecl * D)
+{
+    if (auto Definition = D->getDefinition())
+        return cast<clang::VarTemplateSpecializationDecl>(Definition);
 
     return D;
 }

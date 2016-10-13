@@ -221,6 +221,13 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
                 return nullptr;
     }
 
+    if (!(flags & MapTemplatePatterns))
+    {
+        if (auto Var = dyn_cast<clang::VarDecl>(D))
+            if (Var->getDescribedVarTemplate())
+                return nullptr;
+    }
+
     Dsymbols *s = nullptr;
 
 #define DECL(BASE) \
@@ -235,6 +242,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     if (0) ;
     DECL(TypedefName)
     DECL(ClassTemplateSpecialization)
+    DECL(VarTemplateSpecialization)
     DECLWF(Record)
     DECLWF(Function)
     DECL(RedeclarableTemplate)
@@ -1008,10 +1016,6 @@ bool isTemplateParameterPack(const clang::NamedDecl *Param)
 
 Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTemplateDecl *D)
 {
-    if (!isa<clang::ClassTemplateDecl>(D) && !isa<clang::TypeAliasTemplateDecl>(D)
-         && !isa<clang::FunctionTemplateDecl>(D))
-        return nullptr; // temporary
-
     SpecValue spec(*this);
 
     auto loc = fromLoc(D->getLocation());
@@ -1022,12 +1026,9 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
     auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D);
+    auto VTD = dyn_cast<clang::VarTemplateDecl>(D);
 
-    auto Def = D;
-    if (CTD)
-        Def = getDefinition(CTD);
-    else if (FTD)
-        Def = getDefinition(FTD);
+    auto Def = getDefinition(D);
 
     auto tpl = initTempParams(loc, spec);
     auto TPL = Def->getTemplateParameters();
@@ -1045,7 +1046,8 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
             tpl->push(tp);
         }
 
-        auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()));
+        auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
+                    MapTemplatePatterns);
 
         if (!s)
             return nullptr;
@@ -1081,6 +1083,19 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     {
         for (auto Spec: FTD->specializations())
             if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                a->append(sp);
+    }
+    else if (VTD)
+    {
+        llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
+        const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
+
+        for (auto Spec: VTD->specializations())
+            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                a->append(sp);
+
+        for (auto PartialSpec: PS)
+            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
                 a->append(sp);
     }
 
@@ -1239,9 +1254,9 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
     assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
 
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
-    pushTempParamList(D);
 
-    auto a = VisitRecordDecl(D, flags | MapExplicitSpecs | MapTemplateInstantiations);
+    std::unique_ptr<Dsymbols> a(
+        VisitRecordDecl(D, flags | MapExplicitSpecs | MapTemplateInstantiations));
     assert(a->dim);
     return (*a)[0];
 }
@@ -1249,10 +1264,9 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 ::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
 {
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
-    pushTempParamList(D);
 
-    if (auto a = VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations))
-    {
+    std::unique_ptr<Dsymbols> a(VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations));
+    if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
         return static_cast<::FuncDeclaration*>((*a)[0]);
     }
@@ -1260,27 +1274,54 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
     return nullptr;
 }
 
-// Explicit specializations only
-Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D)
-{   TemplateDeclaration *a;
+::VarDeclaration * DeclMapper::VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl * D)
+{
+    rebuildScope(cast<clang::Decl>(D->getDeclContext()));
 
+    std::unique_ptr<Dsymbols> a(VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations));
+    if (a.get()) {
+        assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
+        return static_cast<::VarDeclaration*>((*a)[0]);
+    }
+
+    return nullptr;
+}
+
+template<typename SpecTy>
+inline Dsymbols* VisitSpecDecl(DeclMapper& declmap, const SpecTy* D) { assert(false); return nullptr; }
+
+template<>
+inline Dsymbols* VisitSpecDecl<clang::ClassTemplateSpecializationDecl>(
+        DeclMapper& declmap, const clang::ClassTemplateSpecializationDecl* D) {
+    return declmap.VisitRecordDecl(D);
+}
+template<>
+inline Dsymbols* VisitSpecDecl<clang::VarTemplateSpecializationDecl>(
+    DeclMapper& declmap, const clang::VarTemplateSpecializationDecl* D) {
+    return declmap.VisitValueDecl(D);
+}
+
+// Partial and explicit specializations only
+template<typename PartialTy, typename SpecTy>
+Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
+{
     D = getDefinition(D);
 
     if (!D->isExplicitSpecialization())
         return nullptr;
 
-    auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D);
-        // NOTE: D's partial specializations != C++'s partial specializations
-        // The mapping provides a "close" but not exact approximation of equivalent template specs in D (for reflection),
-        // but TemplateDeclaration::findBestMatch is skipped since the choice is done by Clang anyway.
+    auto Partial = dyn_cast<PartialTy>(D);
+    // NOTE: D's partial specializations != C++'s partial specializations
+    // The mapping provides a "close" but not exact approximation of equivalent template specs in D (for reflection),
+    // but TemplateDeclaration::findBestMatch is skipped since the choice is done by Clang anyway.
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
 
     auto tpl = new TemplateParameters;
 
-    auto CT = getDefinition(D->getSpecializedTemplate());
-    auto TPL = CT->getTemplateParameters();
+    auto Prim = getDefinition(D->getSpecializedTemplate());
+    auto TPL = Prim->getTemplateParameters();
     auto AI = D->getTemplateArgs().asArray().begin();
 
     if (Partial) {
@@ -1319,15 +1360,25 @@ Dsymbols *DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTem
     if (!Partial)
         TempParamScope.pop_back(); // the depth of template parameters does not consider explicit specs to be in the TempParamScope
 
-    auto decldefs = new Dsymbols;
-    auto ad = VisitRecordDecl(D);
-    decldefs->append(ad);
+    auto decldefs = VisitSpecDecl(*this, D);
+    if (!decldefs)
+        return nullptr;
 
     if (Partial)
         TempParamScope.pop_back();
 
-    a = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+    auto a = new TemplateDeclaration(loc, id, tpl, decldefs, D);
     return oneSymbol(a);
+}
+
+Dsymbols* DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D)
+{
+    return VisitTemplateSpecializationDecl<clang::ClassTemplatePartialSpecializationDecl>(D);
+}
+
+Dsymbols* DeclMapper::VisitVarTemplateSpecializationDecl(const clang::VarTemplateSpecializationDecl * D)
+{
+    return VisitTemplateSpecializationDecl<clang::VarTemplatePartialSpecializationDecl>(D);
 }
 
 Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
@@ -1535,6 +1586,7 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     if (!Tag && !Func && !isa<clang::VarDecl>(D) &&
             !isa<clang::TypedefNameDecl>(D) &&
             !isa<clang::FunctionTemplateDecl>(D) &&
+            !isa<clang::VarTemplateDecl>(D) &&
             !isa<clang::TypeAliasTemplateDecl>(D))
         return false;
 

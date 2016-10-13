@@ -123,6 +123,16 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
     }
 }
 
+const clang::TemplateParameterList *getPartialTemplateSpecParameters(const clang::Decl *D)
+{
+    if (auto PartialCTS = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D))
+        return PartialCTS->getTemplateParameters();
+    else if (auto PartialVTS = dyn_cast<clang::VarTemplatePartialSpecializationDecl>(D))
+        return PartialVTS->getTemplateParameters();
+
+    return nullptr;
+}
+
 const clang::TemplateArgumentList *getTemplateArgs(const clang::Decl *D)
 {
     if (auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
@@ -390,22 +400,18 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
 Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 {
     assert(isForeignInstance(ti));
-
     auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
-
-    auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
-    auto InstRD = dyn_cast<clang::ClassTemplateSpecializationDecl>(Inst);
-    auto InstFD = dyn_cast<clang::FunctionDecl>(Inst);
 
     DeclMapper m(static_cast<cpp::Module*>(scope->module));
     m.addImplicitDecls = false;
 
+    auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
     Dsymbol* inst = nullptr;
 
-    if (InstRD) {
+    if (auto InstRD = dyn_cast<clang::ClassTemplateSpecializationDecl>(Inst)) {
         inst = m.VisitInstancedClassTemplate(InstRD);
         assert(inst);
-    } else if (InstFD) {
+    } else if (auto InstFD = dyn_cast<clang::FunctionDecl>(Inst)) {
         inst = m.VisitInstancedFunctionTemplate(InstFD);
 
         if (!inst) {
@@ -417,6 +423,9 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 
             return members;
         }
+    } else if (auto InstVD = dyn_cast<clang::VarTemplateSpecializationDecl>(Inst)) {
+        inst = m.VisitInstancedVarTemplate(InstVD);
+        assert(inst);
     }
 
     if (inst) {
@@ -516,6 +525,9 @@ clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* Temp
 
     if (auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(TempOrSpec))
         return CTSD->getSpecializedTemplate();
+
+    if (auto VTSD = dyn_cast<clang::VarTemplateSpecializationDecl>(TempOrSpec))
+        return VTSD->getSpecializedTemplate();
 
     if (auto FD = dyn_cast<clang::FunctionDecl>(TempOrSpec))
         return FD->getPrimaryTemplate();
@@ -654,6 +666,16 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
             return FuncInst;
         }
     }
+    else if (auto VarTemp = dyn_cast<clang::VarTemplateDecl>(Temp))
+    {
+        auto Result = S.CheckVarTemplateId(VarTemp, clang::SourceLocation(), Temp->getLocation(), Args);
+        if (Result.isUsable())
+        {
+            auto VarInst = cast<clang::VarDecl>(Result.get());
+            S.InstantiateVariableDefinition(Temp->getLocation(), VarInst);
+            return VarInst;
+        }
+    }
     else
         assert(false);
 
@@ -665,16 +687,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     const clang::Decl* RealTemp;
 
     if (auto SpecDecl = Inst.dyn_cast<clang::NamedDecl*>())
-    {
-        auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(SpecDecl);
-        auto FuncSpec = dyn_cast<clang::FunctionDecl>(SpecDecl);
-
-        const clang::Decl *Spec = ClassSpec;
-        if (FuncSpec)
-            Spec = FuncSpec;
-
-        RealTemp = getSpecializedDeclOrExplicit(Spec);
-    }
+        RealTemp = getSpecializedDeclOrExplicit(SpecDecl);
     else
     {
         auto TST = Inst.get<const clang::TemplateSpecializationType*>();
@@ -843,29 +856,22 @@ bool TemplateInstance::completeInst()
 
 void TemplateInstance::correctTiargs()
 {
-    auto CTSD = dyn_cast_or_null<clang::ClassTemplateSpecializationDecl>(
-                    Inst.dyn_cast<clang::NamedDecl*>());
-
-    if (!CTSD)
-        return;
+    auto InstND = Inst.dyn_cast<clang::NamedDecl*>();
 
     assert(isCPP(tempdecl));
     auto TempOrSpec = static_cast<cpp::TemplateDeclaration*>(tempdecl)->TempOrSpec;
 
     // Correction is only needed for instances from partial specs
-    if (auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
+    if (auto PartialTempParams = getPartialTemplateSpecParameters(TempOrSpec))
     {
-        auto Args = CTSD->getTemplateInstantiationArgs().asArray();
-            // NOTE: The issue with getTemplateInstantiationArgs() is that the arguments are already substitued.
-            // Since the deduced arguments are contained in one form or another in the original args,
-            // the trick is to reference C++ symbols inside the original args and tell TypeMapper to use them.
+        auto Args = getTemplateInstantiationArgs(InstND)->asArray();
 
         TypeMapper tymap;
         tymap.addImplicitDecls = false;
 
         primTiargs = tiargs;
         tiargs = TypeMapper::FromType(tymap, loc).fromTemplateArguments(Args.begin(), Args.end(),
-                        Partial->getTemplateParameters());
+                        PartialTempParams);
         semantictiargsdone = false;
     }
 }

@@ -177,14 +177,19 @@ public:
     Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
     Dsymbols *VisitRedeclarableTemplateDecl(const clang::RedeclarableTemplateDecl* D);
     Dsymbols *VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D);
+    Dsymbols *VisitVarTemplateSpecializationDecl(const clang::VarTemplateSpecializationDecl *D);
     Dsymbols *VisitEnumDecl(const clang::EnumDecl *D);
 
     Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D, unsigned int flags = 0); // entry point when mapping instances during semantic()
     ::FuncDeclaration *VisitInstancedFunctionTemplate(const clang::FunctionDecl *D);
+    ::VarDeclaration *VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl *D);
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                                                     const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
     Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
+
+    template<typename PartialTy, typename SpecTy>
+    Dsymbols *VisitTemplateSpecializationDecl(const SpecTy* D);
 
     enum
     {
@@ -193,7 +198,8 @@ public:
         MapTemplateInstantiations = 1 << 2,
         MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
         NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
-        MapAnonRecord = 1 << 5
+        MapAnonRecord = 1 << 5,
+        MapTemplatePatterns = 1 << 6, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
     };
 
 
