@@ -76,6 +76,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *) override;
     Identifier *getIdent() override;
     bool semanticTiargs(Scope *sc) override;
+    void declareParameters(Scope *sc) override {}
     size_t correspondingParamIdx(size_t argi) override;
     TemplateParameter* correspondingParam(size_t argi) override;
 

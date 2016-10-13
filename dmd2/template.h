@@ -373,7 +373,7 @@ public:
     bool needsTypeInference(Scope *sc, int flag = 0);
     bool hasNestedArgs(Objects *tiargs, bool isstatic);
     Dsymbols *appendToModuleMember();
-    void declareParameters(Scope *sc);
+    virtual void declareParameters(Scope *sc); // CALYPSO
     Identifier *genIdent(Objects *args);
     void expandMembers(Scope *sc);
     void tryExpandMembers(Scope *sc);
