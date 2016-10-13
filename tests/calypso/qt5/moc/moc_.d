@@ -9,8 +9,8 @@ module moc.moc_;
 modmap (C++) "<QtCore>";
 modmap (C++) "<private/qmetaobject_p.h>";
 
-import
-    std.traits : isCallable, hasUDA;
+import cpp.core;
+import std.traits : isCallable, hasUDA;
 
 import (C++)
     QArrayData,
