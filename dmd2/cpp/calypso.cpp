@@ -235,7 +235,6 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
                                        const clang::CXXConversionDecl *D)
 {
     auto& Context = calypso.getASTContext();
-    auto MangleCtx = calypso.pch.MangleCtx;
 
     TypeMapper mapper;
     mapper.addImplicitDecls = false;
@@ -253,11 +252,13 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
         if (TypeQuals & clang::Qualifiers::Restrict) fullName += "restrict_";
         fullName += t->kind();
     }
-    else // use the mangled name, rare occurrence and not a big deal if unreadable (only ever matters for virtual conversion operators)
+    else // generate a name, rare occurrence anyway and only ever matters for virtual conversion operators
     {
+        // FIXME: *might* collide
         llvm::raw_string_ostream OS(fullName);
-        MangleCtx->mangleTypeName(T, OS);
-        OS.flush();
+        fullName += T.getAsString();
+        fullName.erase(std::remove_if(fullName.begin(), fullName.end(),
+            [](char c) { return !isalnum(c); }), fullName.end());
     }
 
     return Identifier::idPool(fullName.c_str());
