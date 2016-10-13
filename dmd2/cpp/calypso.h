@@ -234,6 +234,9 @@ public:
     ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
     std::map<llvm::Constant*, llvm::GlobalVariable*> type_infoWrappers; // FIXME put into module state with the CodeGenModule
 
+    Identifier* id_cpp_member_ptr;
+    Identifier* id_cpp_member_funcptr;
+
     std::string executablePath; // from argv[0] to locate Clang builtin headers
 
     struct GenModSet : public llvm::StringSet<> // already compiled modules

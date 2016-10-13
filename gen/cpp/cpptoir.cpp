@@ -308,7 +308,7 @@ llvm::FunctionType *LangPlugin::toFunctionType(::FuncDeclaration *fdecl)
 
 llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but if we don't do this LLVM type comparisons will fail
 {
-    if (sd->ident == Identifier::idPool("__cpp_member_funcptr"))
+    if (sd->ident == id_cpp_member_ptr || sd->ident == id_cpp_member_funcptr)
     {
         auto Ty = TypeMapper().toType(Loc(), sd->getType(), nullptr);
 
@@ -639,7 +639,12 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                      ArgTy, /*NeedsCopy*/ false);
         }
         else
+        {
+            if (isa<clang::MemberPointerType>(ArgTy) &&
+                    !getASTContext().getTargetInfo().getCXXABI().isMicrosoft()) // special case for Itanium data member pointers.. not ideal, but had to compromise
+                argval = DtoCast(loc, argval, Type::tptrdiff_t);
             Args.add(clangCG::RValue::get(argval->getRVal()), ArgTy);
+        }
     }
 
     clangCG::Address Addr(retvar,

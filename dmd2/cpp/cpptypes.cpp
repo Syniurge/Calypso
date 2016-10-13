@@ -1147,29 +1147,35 @@ Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
     return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
 }
 
+// Rarely used feature of C++, see [expr.mptr.oper]
+// In the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
 Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
 {
-    // Rarely used feature of C++, see [expr.mptr.oper]
-    if (T->isMemberDataPointer())
-        return Type::tptrdiff_t;
-    else
-    {
-        auto FPT = cast<clang::FunctionProtoType>(
-                        withoutNonAliasSugar(T->getPointeeType()).getTypePtr());
-        auto ft = FromType(tm, loc).fromTypeFunction(FPT);
-        auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
+    auto& Context = calypso.getASTContext();
+    auto isMicrosoft = Context.getTargetInfo().getCXXABI().isMicrosoft();
 
-        // in the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
-        // NOTE: making those types' semantics dependent on the C++ ABI was a conscious choice
-        auto ti = new ::TemplateInstance(loc, Identifier::idPool("__cpp_member_funcptr"));
-        ti->tiargs = new Objects;
-        ti->tiargs->push(ft); // we need to remember the function type and the parent class, in case we have to send the type back to Clang
-        ti->tiargs->push(tc);
+    auto mt = fromType(T->getPointeeType());
+    auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
 
-        auto t = new TypeIdentifier(loc, Identifier::idPool("object"));
-        t->addInst(ti);
-        return t;
+    auto tempident = T->isMemberDataPointer() ? calypso.id_cpp_member_ptr 
+                        : calypso.id_cpp_member_funcptr;
+    auto ti = new ::TemplateInstance(loc, tempident);
+    ti->tiargs = new Objects;
+    ti->tiargs->push(mt); // we need to remember the member type and the parent class, in case we have to send the type back to Clang
+    ti->tiargs->push(tc);
+    if (T->isMemberDataPointer() && isMicrosoft) {
+        // In the Microsoft ABI the number of fields of a member pointer type depends on the record type
+        unsigned NumSlots = 3;
+        if (!T->isDependentType())
+            NumSlots = Context.getTypeInfo(T).Width / 32;
+        ti->tiargs->push(new IntegerExp(loc, NumSlots, Type::tuns32));
     }
+
+    auto t = new TypeIdentifier(loc, Id::empty);
+    t->addIdent(Identifier::idPool("cpp"));
+    t->addIdent(Identifier::idPool("core"));
+    t->addInst(ti);
+    return t;
 }
 
 Type *TypeMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
@@ -2173,26 +2179,25 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
     switch (t->ty)
     {
         case Tstruct:
-        {
-            // Special treatment of __cpp_member_funcptr!(T, Cls)
-            auto sd = static_cast<TypeStruct*>(t)->sym;
-            if (sd->ident == Identifier::idPool("__cpp_member_funcptr"))
-            {
-                auto ti = sd->toParent()->isTemplateInstance();
-                assert(ti);
-                auto ft = isType((*ti->tiargs)[0]);
-                auto tagg = isType((*ti->tiargs)[1]);
-                assert(ft && ft->ty == Tfunction &&
-                        tagg && (tagg->ty == Tstruct || tagg->ty == Tclass) && isCPP(getAggregateSym(tagg)));
-
-                auto FT = toType(loc, ft, sc);
-                auto ClassParent = toType(loc, tagg, sc);
-
-                return Context.getMemberPointerType(FT, ClassParent.getTypePtr());
-            }
-        }
         case Tclass:
         {
+            // Special treatment of __cpp_member_(func)ptr!(T, Cls)
+            auto ad = getAggregateSym(t);
+            if (ad->ident == calypso.id_cpp_member_ptr ||
+                    ad->ident == calypso.id_cpp_member_funcptr)
+            {
+                auto ti = ad->toParent()->isTemplateInstance();
+                assert(ti && ti->tiargs->dim >= 2);
+                auto memberty = isType((*ti->tiargs)[0]);
+                auto tagg = isType((*ti->tiargs)[1]);
+                assert(tagg && (tagg->ty == Tstruct || tagg->ty == Tclass) && isCPP(getAggregateSym(tagg)));
+
+                auto MemberTy = toType(loc, memberty, sc);
+                auto ClassParent = toType(loc, tagg, sc);
+
+                return Context.getMemberPointerType(MemberTy, ClassParent.getTypePtr());
+            }
+
             return Context.getRecordType(getRecordDecl(t));
         }
         case Tenum:

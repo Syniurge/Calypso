@@ -83,7 +83,7 @@ void LangPlugin::toEndCatch(IRState *irs, ::Catch *cj)
 
     updateCGFInsertPoint();
 
-    // Call __cxa_end_catch, fall out through the catch cleanups.
+    // Call __cxa_end_catch, fall through the catch cleanups.
     c_cj->ir->CatchScope->ForceCleanup();
     delete c_cj->ir->CatchScope;
 }
@@ -98,9 +98,15 @@ llvm::Constant *LangPlugin::toCatchScopeType(IRState *irs, Type *t)
 
     if (!wrapper)
     {
-        if (!type_info_ptr)
-            type_info_ptr = ::ClassDeclaration::exception->parent->search(
+        if (!type_info_ptr) {
+			Identifiers packages;
+			packages.push(Identifier::idPool("cpp"));
+			auto dst = Package::resolve(&packages, nullptr, nullptr);
+			auto cpp_core_module = dst->lookup(Identifier::idPool("core"))->isModule();
+			
+            type_info_ptr = cpp_core_module->search(
                         loc, Identifier::idPool("__cpp_type_info_ptr"))->isClassDeclaration();
+		}
 
         assert(type_info_ptr);
 

@@ -1202,6 +1202,9 @@ void LangPlugin::init(const char *Argv0)
 
         TargetFeatures.insert(Feature);
     }
+
+    id_cpp_member_ptr = Identifier::idPool("__cpp_member_ptr");
+    id_cpp_member_funcptr = Identifier::idPool("__cpp_member_funcptr");
 }
 
 clang::ASTContext& LangPlugin::getASTContext()

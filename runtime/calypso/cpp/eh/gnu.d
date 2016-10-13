@@ -11,6 +11,8 @@ modmap (C++) "unwind-cxx.h";
 import ldc.eh.common;
 import ldc.eh.libunwind;
 
+import cpp.core;
+
 import (C++) __cxxabiv1._;
 import (C++) __cxxabiv1.__cxa_exception;
 import (C++) _Unwind_Exception : _cpp__Unwind_Exception = _Unwind_Exception;

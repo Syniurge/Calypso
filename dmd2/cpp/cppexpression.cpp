@@ -283,7 +283,8 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
     if (Kind == clang::CK_NullToPointer)
         return new NullExp(loc);
     else if (Kind == clang::CK_NullToMemberPointer)
-        return new IntegerExp(loc, 0, Type::tptrdiff_t);
+        return new CallExp(loc, 
+            new TypeExp(loc, tymap.fromType(E->getType(), loc))); // default __cpp_member_(func)ptr value
 
     auto SubExpr = E->getSubExpr();
     auto CastDestTy = E->getType();
