@@ -467,9 +467,6 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
 
     else if (auto DR = dyn_cast<clang::DeclRefExpr>(E))
     {
-        Ty = DR->getType();
-        t = tymap.fromType(Ty, loc);
-
         e = fromExpressionDeclRef(loc, const_cast<clang::ValueDecl*>(DR->getDecl()),
                         DR->getQualifier());
     }
