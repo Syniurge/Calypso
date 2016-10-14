@@ -104,10 +104,8 @@ static const char *getDOperatorSpelling(const clang::OverloadedOperatorKind OO)
 }
 
 static Identifier *fullOperatorMapIdent(Identifier *baseIdent,
-                                       const clang::FunctionDecl *FD)
+                                       clang::OverloadedOperatorKind OO)
 {
-    auto OO = FD->getOverloadedOperator();
-
     std::string fullName(baseIdent->string, baseIdent->len);
     fullName += "_";
     fullName += getOperatorName(OO);
@@ -121,15 +119,18 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
     if (FD)
         OO = FD->getOverloadedOperator();
 
-    Identifier *opIdent;
+    Identifier *opIdent = nullptr;
     bool wrapInTemp = false;
 
     auto MD = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(FD);
     bool isNonMember = !MD || MD->isStatic();
 
-    auto NumParams = FD->getNumParams();
-    if (!isNonMember)
-        NumParams++;
+    unsigned NumParams = 0;
+    if (FD) {
+        NumParams = FD->getNumParams();
+        if (!isNonMember)
+            NumParams++;
+    }
 
     if (OO == clang::OO_Call)
         opIdent = Id::call;
@@ -137,8 +138,8 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
         opIdent = Id::index;
     else
     {
-        bool isUnary = NumParams == 1;
-        bool isBinary = NumParams == 2;
+        bool isUnary = NumParams != 2;
+        bool isBinary = NumParams != 1;
 
         wrapInTemp = true; // except for opAssign and opCmp
 
@@ -159,12 +160,14 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                     opIdent = Id::opUnary;
                     break;
                 default:
-                    if (opts::cppVerboseDiags)
-                        ::warning(Loc(), "Ignoring C++ unary operator %s", clang::getOperatorSpelling(OO));
-                    return nullptr;
+                    if (FD) {
+                        if (opts::cppVerboseDiags)
+                            ::warning(Loc(), "Ignoring C++ unary operator %s", clang::getOperatorSpelling(OO));
+                        return nullptr;
+                    }
             }
         }
-        else if (isBinary)
+        if (isBinary)
         {
             switch (OO)
             {
@@ -197,7 +200,7 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                 case clang::OO_LessEqual:
                 case clang::OO_Greater:
                 case clang::OO_GreaterEqual:
-                    opIdent = fullOperatorMapIdent(Id::cmp, FD);
+                    opIdent = fullOperatorMapIdent(Id::cmp, OO);
                     wrapInTemp = false;
                     break;
                 case clang::OO_Equal:
@@ -218,14 +221,18 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                     opIdent = Id::opOpAssign;
                     break;
                 default:
-                    if (opts::cppVerboseDiags)
-                        ::warning(Loc(), "Ignoring C++ binary operator %s", clang::getOperatorSpelling(OO));
-                    return nullptr;
+                    if (FD) {
+                        if (opts::cppVerboseDiags)
+                            ::warning(Loc(), "Ignoring C++ binary operator %s", clang::getOperatorSpelling(OO));
+                        return nullptr;
+                    }
             }
         }
-        else
-            return nullptr; // operator new or delete (TODO linking)
+        // operator new or delete (TODO linking)
     }
+
+    if (!opIdent)
+        return nullptr;
 
     op = wrapInTemp ? getDOperatorSpelling(OO) : nullptr;
     return opIdent;
@@ -401,7 +408,8 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
 
     auto FD = dyn_cast<clang::FunctionDecl>(D);
     if (spec.op && FD)
-        ident = fullOperatorMapIdent(ident, FD);
+        ident = fullOperatorMapIdent(ident,
+                            FD->getOverloadedOperator());
     else if (spec.t)
         ident = fullConversionMapIdent(ident,
                     cast<clang::CXXConversionDecl>(D));
