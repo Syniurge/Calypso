@@ -1212,8 +1212,12 @@ void LangPlugin::init(const char *Argv0)
         TargetFeatures.insert(Feature);
     }
 
+    id_isCpp = Identifier::idPool("isCpp");
+    id_getCppVirtualIndex = Identifier::idPool("getCppVirtualIndex");
+    id_getBaseOffset = Identifier::idPool("getBaseOffset");
+    id_getMemberPointerExtraSlots = Identifier::idPool("getMemberPointerExtraSlots");
+
     id_cpp_member_ptr = Identifier::idPool("__cpp_member_ptr");
-    id_cpp_member_funcptr = Identifier::idPool("__cpp_member_funcptr");
 }
 
 clang::ASTContext& LangPlugin::getASTContext()

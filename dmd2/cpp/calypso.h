@@ -163,6 +163,8 @@ public:
     ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
     ::FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) override;
 
+    Expression *semanticTraits(TraitsExp *e, Scope *sc) override;
+
     Expression *interpret(FuncDeclaration *fd, InterState *istate, Expressions *arguments,
                                   Expression *thisarg) override;
     bool canInterpret(FuncDeclaration *fd) override;
@@ -234,8 +236,12 @@ public:
     ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
     std::map<llvm::Constant*, llvm::GlobalVariable*> type_infoWrappers; // FIXME put into module state with the CodeGenModule
 
+    Identifier* id_isCpp;
+    Identifier* id_getCppVirtualIndex;
+    Identifier* id_getBaseOffset;
+    Identifier* id_getMemberPointerExtraSlots;
+
     Identifier* id_cpp_member_ptr;
-    Identifier* id_cpp_member_funcptr;
 
     std::string executablePath; // from argv[0] to locate Clang builtin headers
 
@@ -265,9 +271,6 @@ public:
     clang::SourceManager &getSourceManager();
 
     std::string getCacheFilename(const char *suffix = nullptr);
-
-    // FIXME quick&dirty traits addition
-    Expression *semanticTraits(TraitsExp *e, Scope *sc);
     
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly

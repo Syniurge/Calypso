@@ -1152,24 +1152,14 @@ Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
 {
     auto& Context = calypso.getASTContext();
-    auto isMicrosoft = Context.getTargetInfo().getCXXABI().isMicrosoft();
 
     auto mt = fromType(T->getPointeeType());
     auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
 
-    auto tempident = T->isMemberDataPointer() ? calypso.id_cpp_member_ptr 
-                        : calypso.id_cpp_member_funcptr;
-    auto ti = new ::TemplateInstance(loc, tempident);
+    auto ti = new ::TemplateInstance(loc, calypso.id_cpp_member_ptr);
     ti->tiargs = new Objects;
     ti->tiargs->push(mt); // we need to remember the member type and the parent class, in case we have to send the type back to Clang
     ti->tiargs->push(tc);
-    if (T->isMemberDataPointer() && isMicrosoft) {
-        // In the Microsoft ABI the number of fields of a member pointer type depends on the record type
-        unsigned NumSlots = 3;
-        if (!T->isDependentType())
-            NumSlots = Context.getTypeInfo(T).Width / 32;
-        ti->tiargs->push(new IntegerExp(loc, NumSlots, Type::tuns32));
-    }
 
     auto t = new TypeIdentifier(loc, Id::empty);
     t->addIdent(Identifier::idPool("cpp"));
@@ -2181,10 +2171,9 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
         case Tstruct:
         case Tclass:
         {
-            // Special treatment of __cpp_member_(func)ptr!(T, Cls)
+            // Special treatment of __cpp_member_ptr!(T, Cls)
             auto ad = getAggregateSym(t);
-            if (ad->ident == calypso.id_cpp_member_ptr ||
-                    ad->ident == calypso.id_cpp_member_funcptr)
+            if (ad->ident == calypso.id_cpp_member_ptr)
             {
                 auto ti = ad->toParent()->isTemplateInstance();
                 assert(ti && ti->tiargs->dim >= 2);

@@ -308,12 +308,23 @@ llvm::FunctionType *LangPlugin::toFunctionType(::FuncDeclaration *fdecl)
 
 llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but if we don't do this LLVM type comparisons will fail
 {
-    if (sd->ident == id_cpp_member_ptr || sd->ident == id_cpp_member_funcptr)
+    if (sd->ident == id_cpp_member_ptr)
     {
         auto Ty = TypeMapper().toType(Loc(), sd->getType(), nullptr);
 
-        if (auto MPT = Ty->getAs<clang::MemberPointerType>())
-            return CGM->getCXXABI().ConvertMemberPointerType(MPT);
+        if (auto MPT = Ty->getAs<clang::MemberPointerType>()) {
+            auto T = CGM->getCXXABI().ConvertMemberPointerType(MPT);
+
+            // Itanium ABI data member pointers, and MSVC ABI member pointers for POD records aren't StructType, 
+            // but respectively ptrdiff_t for the earlier, and the type of the first field for the latter
+            // But IrTypeStruct expects a StructType. The less complicated but imperfect solution is to return a
+            // StructType here, and when passing a member pointer to Clang's CodeGen extract the first field.
+            if (!isa<llvm::StructType>(T)) {
+                llvm::SmallVector<llvm::Type*, 1> Elems = { T };
+                T = llvm::StructType::get(gIR->context(), Elems);
+            }
+            return T;
+        }
     }
 
     return nullptr;
@@ -628,7 +639,19 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         auto argty = fnarg->type;
         auto ArgTy = TypeMapper().toType(loc, argty,
                                         fd->scope, fnarg->storageClass);
-        if ((argty->ty == Tstruct || isClassValue(argty)) && !(fnarg->storageClass & STCref))
+
+        auto ad = getAggregateSym(argval->getType());
+
+        if (isa<clang::MemberPointerType>(ArgTy) && ad->fields.dim == 1)
+        {
+            // Special case for "single field" member pointers.. not ideal, but had to compromise
+            llvm::Value* val = argval->getRVal();
+            val = DtoIndexAggregate(argval->getRVal(), ad, ad->fields[0]);
+            val = DtoLoad(val, "extractmptrfield");
+
+            Args.add(clangCG::RValue::get(val), ArgTy);
+        }
+        else if ((argty->ty == Tstruct || isClassValue(argty)) && !(fnarg->storageClass & STCref))
         {
 //             llvm::Value *tmp = CGF()->CreateMemTemp(type);
 //             CGF()->EmitAggregateCopy(tmp, L.getAddress(), type, /*IsVolatile*/false,
@@ -639,12 +662,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                      ArgTy, /*NeedsCopy*/ false);
         }
         else
-        {
-            if (isa<clang::MemberPointerType>(ArgTy) &&
-                    !getASTContext().getTargetInfo().getCXXABI().isMicrosoft()) // special case for Itanium data member pointers.. not ideal, but had to compromise
-                argval = DtoCast(loc, argval, Type::tptrdiff_t);
             Args.add(clangCG::RValue::get(argval->getRVal()), ArgTy);
-        }
     }
 
     clangCG::Address Addr(retvar,

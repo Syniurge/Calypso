@@ -50,7 +50,7 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
           // what about default_fields
   else
     for (auto lp: global.langPlugins)
-      if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // CALYPSO wonderful HACK for __cpp_member_funcptr
+      if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // CALYPSO wonderful HACK for __cpp_member_ptr
         t->type = Ty;
 
   auto StructTy = llvm::cast<LLStructType>(t->type);

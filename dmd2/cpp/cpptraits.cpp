@@ -7,6 +7,8 @@
 #include "template.h"
 
 #include "clang/AST/VTableBuilder.h"
+#include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 
 namespace cpp
 {
@@ -17,6 +19,10 @@ using llvm::dyn_cast;
 
 Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
 {
+    if (e->ident != id_isCpp && e->ident != id_getCppVirtualIndex && 
+        e->ident != id_getBaseOffset && e->ident != id_getMemberPointerExtraSlots)
+        return nullptr;
+
     if (!pch.AST)
     {
         e->error("C++ traits without any C++ module");
@@ -24,9 +30,11 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
     }
 
     auto& Context = getASTContext();
+    auto& S = getSema();
+    auto& Diags = getDiagnostics();
     size_t dim = e->args ? e->args->dim : 0;
 
-    if (e->ident == Identifier::idPool("isCpp"))
+    if (e->ident == id_isCpp)
     {
         if (dim != 1)
             goto Ldimerror;
@@ -41,7 +49,7 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
         e->error("symbol expected instead of '%s'", o->toChars());
         goto Lfalse;
     }
-    else if (e->ident == Identifier::idPool("getCppVirtualIndex"))
+    else if (e->ident == id_getCppVirtualIndex)
     {
         if (dim != 1)
             goto Ldimerror;
@@ -77,7 +85,7 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
 
         return new IntegerExp(e->loc, VTableOffset, Type::tptrdiff_t);
     }
-    else if (e->ident == Identifier::idPool("getBaseOffset"))
+    else if (e->ident == id_getBaseOffset)
     {
         if (dim != 2)
             goto Ldimerror;
@@ -91,6 +99,47 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
             return new IntegerExp(e->loc, -1, Type::tptrdiff_t);
 
         return new IntegerExp(e->loc, offset, Type::tptrdiff_t);
+    }
+    else if (e->ident == id_getMemberPointerExtraSlots)
+    {
+        if (dim != 1)
+            goto Ldimerror;
+        RootObject *o = (*e->args)[0];
+        Type *t = getType(o)->toBasetype();
+
+        Expressions *exps = new Expressions;
+        
+        // In the Microsoft ABI the number of fields of a member pointer type depends on the record type
+        if (Context.getTargetInfo().getCXXABI().isMicrosoft()) {
+            auto RD = cast<clang::CXXRecordDecl>(getRecordDecl(t));
+            auto Class = Context.getRecordType(RD).getTypePtr();
+            auto MPT = Context.getMemberPointerType(Context.VoidPtrTy, Class);
+            assert(!MPT->isDependentType());
+
+            if (!S.RequireCompleteType(RD->getLocation(), MPT, clang::diag::err_incomplete_type)) {
+                auto Inheritance = MPT->castAs<clang::MemberPointerType>()
+                        ->getMostRecentCXXRecordDecl()->getMSInheritanceModel();
+                exps->push(new IntegerExp(e->loc,
+                    clang::MSInheritanceAttr::hasNVOffsetField(true, Inheritance) ? 1 : 0, Type::tbool));
+                exps->push(new IntegerExp(e->loc,
+                    clang::MSInheritanceAttr::hasVBPtrOffsetField(Inheritance) ? 1 : 0, Type::tbool));
+                exps->push(new IntegerExp(e->loc,
+                    clang::MSInheritanceAttr::hasVBTableOffsetField(Inheritance) ? 1 : 0, Type::tbool));
+            } else
+                Diags.Reset();
+        }
+
+        if (!exps->dim)
+            for (unsigned i = 0; i < 3; i++)
+                exps->push(new IntegerExp(e->loc, 0, Type::tbool));
+
+        // FIXME: No idea why the following code:
+        //   enum extraSlots = [ __traits(getMemberPointerExtraSlots, Cls) ];
+        // results in "Error: cannot resolve type for tuple(true, true, true)"
+        // So returning an ArrayLiteralExp instead of a TupleExp for now..
+
+        Expression* ex = new ArrayLiteralExp(e->loc, exps);
+        return ex->semantic(sc);
     }
     assert(0);
 

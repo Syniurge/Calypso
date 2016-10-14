@@ -284,7 +284,7 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
         return new NullExp(loc);
     else if (Kind == clang::CK_NullToMemberPointer)
         return new CallExp(loc, 
-            new TypeExp(loc, tymap.fromType(E->getType(), loc))); // default __cpp_member_(func)ptr value
+            new TypeExp(loc, tymap.fromType(E->getType(), loc))); // default __cpp_member_ptr value
 
     auto SubExpr = E->getSubExpr();
     auto CastDestTy = E->getType();

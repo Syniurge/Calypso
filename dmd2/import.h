@@ -125,6 +125,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    virtual Expression *semanticTraits(TraitsExp *e, Scope *sc) = 0;
+
+    // ===== - - - - - ===== //
+
     virtual Expression *interpret(FuncDeclaration *fd, InterState *istate, Expressions *arguments,
                                   Expression *thisarg) = 0;
     virtual bool canInterpret(FuncDeclaration *fd) = 0;

@@ -1238,14 +1238,12 @@ Expression *semanticTraits(TraitsExp *e, Scope *sc)
     {
         return pointerBitmap(e);
     }
-    else if (e->ident == Identifier::idPool("getBaseOffset") ||
-            e->ident == Identifier::idPool("getCppVirtualIndex") ||
-            e->ident == Identifier::idPool("isCpp")) // CALYPSO TODO move to cpp/
-    {
-        return cpp::calypso.semanticTraits(e, sc);
-    }
     else
     {
+        for (auto lp : global.langPlugins) // CALYPSO
+            if (auto result = lp->semanticTraits(e, sc))
+                return result;
+
         if (const char *sub = (const char *)speller(e->ident->toChars(), &trait_search_fp, NULL, idchars))
             e->error("unrecognized trait '%s', did you mean '%s'?", e->ident->toChars(), sub);
         else
