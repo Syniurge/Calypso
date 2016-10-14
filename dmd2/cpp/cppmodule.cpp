@@ -513,13 +513,18 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         }
     }
 
-    if (CRD && D->isInvalidDecl())
+    if (CRD)
     {
-        // Despite being invalid themselves methods of invalid records are not always marked invalid for some reason.
-        // We need to mark everyone invalid, because if we don't emitting debug info for them will trigger an assert.
-        for (auto MD: CRD->methods())
-            if (!MD->isStatic())
-                MD->setInvalidDecl();
+        if (D->isInvalidDecl())
+        {
+            // Despite being invalid themselves methods of invalid records are not always marked invalid for some reason.
+            // We need to mark everyone invalid, because if we don't emitting debug info for them will trigger an assert.
+            for (auto MD : CRD->methods())
+                if (!MD->isStatic())
+                    MD->setInvalidDecl();
+        }
+        else
+            S.MarkVTableUsed(D->getLocation(), const_cast<clang::CXXRecordDecl*>(CRD));
     }
 
     // Add specific decls: fields, vars, tags, templates, typedefs
