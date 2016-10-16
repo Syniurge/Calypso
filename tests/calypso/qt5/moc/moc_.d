@@ -17,6 +17,7 @@ import (C++)
     Qt.ConnectionType;
 
 public import
+	cpp.memberptr,
     moc.types;
 
 public import (C++)
@@ -53,50 +54,6 @@ template isMethod(alias F)
 }
 
 public alias symalias(alias S) = S;
-
-///////////////////////////////////////////////////////////////////////////////
-
-// Library implementation of C++ member function pointers
-// version(Itanium)
-
-template MostDerivedCppClass(T)
-    if (is(T == class))
-{
-    import std.traits : BaseTypeTuple;
-
-    static if (__traits(isCpp, T))
-        alias MostDerivedCppClass = T;
-    else {
-        static assert(BaseTypeTuple!T.length, T.stringof ~ " is not a C++ class or D class inheriting from C++");
-        alias MostDerivedCppClass = MostDerivedCppClass!(BaseTypeTuple!T[0]);
-    }
-}
-
-template CppMemberFuncPtr(T, alias f)
-    if (is(typeof(f) == function))
-{
-    alias CppMemberFuncPtr = __cpp_member_funcptr!(typeof(f), MostDerivedCppClass!T);
-}
-
-template MFP(T, alias f)
-    if (is(typeof(f) == function))
-{
-    alias mfpTy = CppMemberFuncPtr!(T, f);
-    alias T2 = MostDerivedCppClass!(__traits(parent, f));
-
-    static if (__traits(getBaseOffset, T, T2) != -1)
-        enum ThisAdj = __traits(getBaseOffset, T, T2);
-    else
-    {
-        enum ThisAdj = -__traits(getBaseOffset, T2, T);
-        static assert(ThisAdj != 1, T.stringof ~ " not castable to " ~ MostDerivedCppClass!(__traits(parent, f)).stringof);
-    }
-
-    static if (__traits(getCppVirtualIndex, f) != -1)
-        enum MFP = mfpTy(1 + __traits(getCppVirtualIndex, f), -ThisAdj);
-    else
-        enum MFP = mfpTy(cast(ptrdiff_t) &f, -ThisAdj);
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -863,7 +820,7 @@ public:
 //                             result ~= ") const;\n";
 //                         else
 //                             result ~= ");\n";
-                        auto cppmfp = format("CppMemberFuncPtr!(%s, %s.%s)",
+                        auto cppmfp = format("cpp_member_ptr!(%s, %s.%s)",
                                     __traits(identifier, C), __traits(identifier, C), __traits(identifier, f));
                         result ~= format("            if (*cast(%s*)(func) == MFP!(%s, %s.%s)) {\n",
                                 cppmfp, __traits(identifier, C), __traits(identifier, C), __traits(identifier, f)); // FIXME won't work with overloads
@@ -1340,7 +1297,7 @@ QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 
                     ConnectionType type = ConnectionType.AutoConnection)
     if ( is(typeof(signal) == function) && is(typeof(slot) == function) )
 {
-    import std.traits;
+    import std.traits, cpp.traits;
 
     static if ( is(T1 == class) || is(T1 == struct) ) {
         static assert ( is(MostDerivedCppClass!T1) );
