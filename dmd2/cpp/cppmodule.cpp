@@ -60,39 +60,22 @@ void Module::init()
     modules->insert(rootPackage);
 }
 
-static void combine(char *&objfn, Identifier *id)
-{
-    auto prevobjfn = objfn;
-
-    auto objlen = strlen(objfn);
-    auto idlen = id->len;
-    objfn = (char *)mem.xmalloc(objlen + 1 + idlen + 1);
-    memcpy(objfn, prevobjfn, objlen);
-    objfn[objlen] = '-';
-    objlen++;
-    memcpy(objfn + objlen, id->string, idlen + 1);
-
-    mem.xfree(prevobjfn);
-}
-
 Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
     : ::Module(nullptr, ident, 0, 0)
 {
     srcfile = new File(filename);
 
-    // Let's not create directories for the time being
-    const char *objPrefix = "__cpp";
-    char *objfn = strdup(objPrefix);
-
-    // e.g __cpp_package_package_module.o
+    // e.g __cpp_package_package_module
+    llvm::SmallString<24> objFilename("__cpp-");
     for (size_t i = 1; i < packages->dim; i++)
     {
         Identifier *pid = (*packages)[i];
-        combine(objfn, pid);
+        objFilename += pid->string;
+        objFilename += "-";
     }
-    combine(objfn, ident);
+    objFilename += ident->string;
 
-    arg = objfn;
+    arg = strdup(objFilename.c_str());
 }
 
 Dsymbol *Module::search(Loc loc, Identifier *ident, int flags)

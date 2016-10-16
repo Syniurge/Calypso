@@ -356,6 +356,11 @@ void writeModule(llvm::Module *m, std::string filename) {
 #define ERRORINFO_STRING(errinfo) errinfo.c_str()
 #endif
 
+  // CALYPSO (UGLY)
+  LLPath utf8path(filename);
+  llvm::sys::path::native(utf8path); // convert UTF-8 chars such as § to UTF-16 on Windows
+  filename = utf8path.str();
+
   // write LLVM bitcode
   if (global.params.output_bc) {
     LLPath bcpath(filename);

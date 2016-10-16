@@ -423,7 +423,7 @@ int executeMsvcToolAndWait(const std::string &tool,
     commandLine.append(windows::quoteArg(args[i]));
   }
 
-  const bool useResponseFile = (!args.empty() && commandLine.size() > 2000);
+  const bool useResponseFile = (!args.empty()/* && commandLine.size() > 2000*/); // CALYPSO HACK FIXME should writeFileWithEncoding be replaced since it can't take UTF-16 input?
   llvm::SmallString<128> responseFilePath;
   if (useResponseFile) {
     const size_t firstArgIndex = commandLineLengthAfterTool + 1;
@@ -434,7 +434,8 @@ int executeMsvcToolAndWait(const std::string &tool,
                                            responseFilePath) ||
         llvm::sys::writeFileWithEncoding(
             responseFilePath,
-            content)) // keep encoding (LLVM assumes UTF-8 input)
+            content,
+            llvm::sys::WEM_UTF16)) // CALYPSO uses § as a replacement character to prevent C++ names from colliding with D names, the response file needs to be encoded in UTF-16 for MSVC tools
     {
       error(Loc(), "cannot write temporary response file for %s", tool.c_str());
       return -1;
