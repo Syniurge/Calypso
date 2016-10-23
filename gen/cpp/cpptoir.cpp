@@ -875,7 +875,7 @@ static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
         return;
 
     auto Emit = [&] (clang::CXXMethodDecl *D) {
-        if (D && !D->isDeleted() && !isMapped(D))
+        if (D && !D->isInvalidDecl() && !D->isDeleted() && !isMapped(D))
         {
             auto R = ResolvedFunc::get(CGM, D); // mark it used
             if (R.Func->isDeclaration())
