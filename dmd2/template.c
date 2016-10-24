@@ -6844,10 +6844,37 @@ bool TemplateInstance::updateTempDecl(Scope *sc, Dsymbol *s)
 
 TemplateDeclaration* TemplateInstance::firstTempDecl()
 {
-    OverloadSet *tovers = tempdecl->isOverloadSet();
-    auto first = tovers ? tovers->a[0] : tempdecl;
-    assert(first->isTemplateDeclaration());
-    return (TemplateDeclaration*) first;
+    if (tempdecl->isTemplateDeclaration())
+        return (TemplateDeclaration*) tempdecl;
+
+    struct FindFirstTempDecl
+    {
+        TemplateDeclaration *td = nullptr;
+
+        static int fp(void *param, Dsymbol *s)
+        {
+            auto& td = static_cast<FindFirstTempDecl*>(param)->td;
+            td = s->isTemplateDeclaration();
+            return td ? 1 : 0;
+        }
+    };
+
+    FindFirstTempDecl p;
+
+    if (OverloadSet *tovers = tempdecl->isOverloadSet())
+    {
+        for (auto& over: tovers->a)
+        {
+            overloadApply(over, &p, &FindFirstTempDecl::fp);
+            if (p.td)
+                break;
+        }
+    }
+    else
+        overloadApply(tempdecl, &p, &FindFirstTempDecl::fp);
+
+    assert(p.td->isTemplateDeclaration());
+    return (TemplateDeclaration*) p.td;
 }
 
 /**********************************
