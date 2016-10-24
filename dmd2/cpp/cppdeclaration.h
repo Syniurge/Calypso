@@ -59,6 +59,7 @@ public:
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
+    bool preferNonTemplateOverloads() override { return false; }
 
     static void semantic3reference(::FuncDeclaration *fd, Scope *sc);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
@@ -78,6 +79,7 @@ public:
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
+    bool preferNonTemplateOverloads() override { return false; }
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -95,6 +97,7 @@ public:
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
+    bool preferNonTemplateOverloads() override { return false; }
 };
 
 class EnumDeclaration : public ::EnumDeclaration

@@ -678,6 +678,9 @@ public:
 
     virtual FuncDeclaration *toAliasFunc() { return this; }
 
+    // CALYPSO
+    virtual bool preferNonTemplateOverloads() { return true; }
+
 #if IN_LLVM
     std::string intrinsicName;
     uint32_t priority;
