@@ -5912,6 +5912,7 @@ void TypeFunction::purityLevel()
  * Determine match level.
  * Input:
  *      flag    1       performing a partial ordering match
+ *                2       disable @implicit ctor calls // CALYPSO
  * Returns:
  *      MATCHxxxx
  */
@@ -6021,7 +6022,7 @@ MATCH TypeFunction::callMatch(Type *tthis, Expressions *args, int flag)
         else
         {
             //printf("%s of type %s implicitConvTo %s\n", arg->toChars(), targ->toChars(), tprm->toChars());
-            if (flag)
+            if (flag & 1)
             {
                 // for partial ordering, value is an irrelevant mockup, just look at the type
                 m = targ->implicitConvTo(tprm);
@@ -6031,7 +6032,7 @@ MATCH TypeFunction::callMatch(Type *tthis, Expressions *args, int flag)
             //printf("match %d\n", m);
 
             // CALYPSO explicit @implicit ctor
-            if (m == MATCHnomatch)
+            if (m == MATCHnomatch && !(flag & 2))
             {
                 auto toad = getAggregateSym(tprm);
                 if (toad && toad->hasImplicitCtor(arg))

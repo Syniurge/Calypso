@@ -3484,6 +3484,7 @@ struct FuncCandidateWalker
  *      flags           1: do not issue error message on no match, just return NULL
  *                      2: overloadResolve only
  *                      4: do not issue error message on multiple matches, return NULL // CALYPSO
+ *                      8: disable @implicit ctors // CALYPSO
  */
 
 FuncDeclaration *resolveFuncCall(Loc loc, Scope *sc, Dsymbol *s,
@@ -3519,7 +3520,7 @@ FuncDeclaration *resolveFuncCall(Loc loc, Scope *sc, Dsymbol *s,
     memset(&m, 0, sizeof(m));
     m.last = MATCHnomatch;
 
-    functionResolve(&m, s, loc, sc, tiargs, tthis, fargs);
+    functionResolve(&m, s, loc, sc, tiargs, tthis, fargs, flags);
 
     if (m.last > MATCHnomatch && m.lastf)
     {

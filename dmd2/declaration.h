@@ -108,7 +108,7 @@ struct Match
     FuncDeclaration *anyf;      // pick a func, any func, to use for error recovery
 };
 
-void functionResolve(Match *m, Dsymbol *fd, Loc loc, Scope *sc, Objects *tiargs, Type *tthis, Expressions *fargs);
+void functionResolve(Match *m, Dsymbol *fd, Loc loc, Scope *sc, Objects *tiargs, Type *tthis, Expressions *fargs, /* CALYPSO */ int flags = 0);
 int overloadApply(Dsymbol *fstart, void *param, int (*fp)(void *, Dsymbol *));
 
 void ObjectNotFound(Identifier *id);

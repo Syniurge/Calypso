@@ -2204,10 +2204,11 @@ bool TemplateDeclaration::isOverloadable()
  *      tiargs          initial list of template arguments
  *      tthis           if !NULL, the 'this' pointer argument
  *      fargs           arguments to function
+ *      flags           resolveFuncCall flags // CALYPSO
  */
 
 void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
-        Objects *tiargs, Type *tthis, Expressions *fargs)
+        Objects *tiargs, Type *tthis, Expressions *fargs, int flags)
 {
 #if 0
     printf("functionResolve() dstart = %s\n", dstart->toChars());
@@ -2249,6 +2250,8 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
     TemplateInstance *ti_best;
     MATCH ta_last;
     Type *tthis_best;
+
+    int callMatchFlags; // CALYPSO
 
     static int fp(void *param, Dsymbol *s)
     {
@@ -2311,7 +2314,7 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
             else
                 return 0;   // MATCHnomatch
         }
-        MATCH mfa = tf->callMatch(tthis_fd, fargs);
+        MATCH mfa = tf->callMatch(tthis_fd, fargs, callMatchFlags);
         //printf("test1: mfa = %d\n", mfa);
         if (mfa > MATCHnomatch)
         {
@@ -2476,7 +2479,7 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
             Type *tthis_fd = fd->needThis() && !fd->isCtorDeclaration() ? tthis : NULL;
 
             TypeFunction *tf = (TypeFunction *)fd->type;
-            MATCH mfa = tf->callMatch(tthis_fd, fargs);
+            MATCH mfa = tf->callMatch(tthis_fd, fargs, callMatchFlags);
             if (mfa < m->last)
                 return 0;
 
@@ -2573,8 +2576,8 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
                 assert(tf1->ty == Tfunction);
                 TypeFunction *tf2 = (TypeFunction *)m->lastf->type;
                 assert(tf2->ty == Tfunction);
-                MATCH c1 = tf1->callMatch(tthis_fd,   fargs);
-                MATCH c2 = tf2->callMatch(tthis_best, fargs);
+                MATCH c1 = tf1->callMatch(tthis_fd,   fargs, callMatchFlags);
+                MATCH c2 = tf2->callMatch(tthis_best, fargs, callMatchFlags);
                 //printf("2: c1 = %d, c2 = %d\n", c1, c2);
                 if (c1 == c2 && !td_best) // CALYPSO renew preference for non-template functions over template functions here
                     c2 = MATCHexact;
@@ -2633,6 +2636,8 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
     p.ta_last    = m->last != MATCHnomatch ? MATCHexact : MATCHnomatch;
     p.tthis_best = NULL;
 
+    p.callMatchFlags = (flags & 8) ? 2 : 0;
+
     TemplateDeclaration *td = dstart->isTemplateDeclaration();
     if (td && td->funcroot)
         dstart = td->funcroot;
@@ -2681,7 +2686,7 @@ void functionResolve(Match *m, Dsymbol *dstart, Loc loc, Scope *sc,
         if (tf->ty == Terror)
             goto Lerror;
         assert(tf->ty == Tfunction);
-        if (!tf->callMatch(p.tthis_best, fargs))
+        if (!tf->callMatch(p.tthis_best, fargs, p.callMatchFlags))
             goto Lnomatch;
 
         if (FuncLiteralDeclaration *fld = m->lastf->isFuncLiteralDeclaration())
