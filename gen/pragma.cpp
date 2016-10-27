@@ -433,6 +433,8 @@ void DtoCheckPragma(PragmaDeclaration *decl, Dsymbol *s, Pragma llvm_internal,
 
       if (valid_params) {
         TemplateValueParameter *p0 = params[0]->isTemplateValueParameter();
+        if (!p0->valType->deco)
+            p0->valType = p0->valType->semantic(p0->loc, td->scope); // CALYPSO
         valid_params = valid_params && p0 && p0->valType == Type::tstring;
       }
 
