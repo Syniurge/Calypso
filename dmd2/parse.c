@@ -2975,6 +2975,16 @@ Dsymbols *Parser::parseImport()
                 if (token.value == TOKassign)
                 {
                     nextToken();
+
+                    // If we are using an external plugin like C++, then the 'function' TOK needs to be passed
+                    // through to the plugin for processing. Std::function in <functional> relies on this.
+                    // Must also use an alias or D's function keyword will collide and we won't be able to use
+                    // the external 'function' from the plugged in language
+                    if (token.value == TOKfunction && treeId != -1)
+                    {
+                            name = new Identifier("function", TOKidentifier);
+                            token.value = TOKidentifier;
+                    }
                     if (token.value != TOKidentifier)
                     {
                         error("identifier expected following %s=", alias->toChars());
