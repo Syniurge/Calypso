@@ -1357,7 +1357,14 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
     switch (Name.getKind())
     {
         case clang::TemplateName::Template:
-            return typeQualifiedFor(Name.getAsTemplateDecl(), ArgBegin, ArgEnd);
+        {
+            auto Temp = Name.getAsTemplateDecl();
+            if (auto TempParm = dyn_cast<clang::TemplateTemplateParmDecl>(Temp))
+                tempIdent = tm.getIdentifierForTemplateTemplateParm(TempParm);
+            else
+                return typeQualifiedFor(Temp, ArgBegin, ArgEnd);
+            break;
+        }
 
         case clang::TemplateName::QualifiedTemplate:
         {

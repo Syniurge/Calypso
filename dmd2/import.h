@@ -122,6 +122,12 @@ public:
 
     virtual FuncDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc) = 0;
     virtual FuncDeclaration *buildOpAssign(StructDeclaration *sd, Scope *sc) = 0;
+    virtual FuncDeclaration *searchOpEqualsForXopEquals(StructDeclaration *sd, Scope *sc) = 0;
+
+    // ===== - - - - - ===== //
+
+    virtual bool isSymbolReferenced(Dsymbol *s) { return true; }
+    virtual void markSymbolReferenced(Dsymbol *s) = 0;
 
     // ===== - - - - - ===== //
 

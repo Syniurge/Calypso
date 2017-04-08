@@ -789,6 +789,19 @@ Module *Dsymbol::getAccessModule()
     return NULL;
 }
 
+/**********************************
+ * CALYPSO
+ */
+
+Module *Dsymbol::getInstantiatingModule()
+{
+    //printf("Dsymbol::getAccessModule()\n");
+    if (TemplateInstance *ti = isInstantiated())
+        return ti->minst;
+
+    return getModule();
+}
+
 /*************************************
  */
 

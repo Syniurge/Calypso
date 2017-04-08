@@ -661,10 +661,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
                 FuncTemp->getInstantiatedFromMemberTemplate());
 
         if (auto FuncInst = instantiateFunctionDeclaration(Args, FuncTemp))
-        {
-            S.InstantiateFunctionDefinition(Temp->getLocation(), FuncInst, true);
             return FuncInst;
-        }
     }
     else if (auto VarTemp = dyn_cast<clang::VarTemplateDecl>(Temp))
     {
@@ -672,7 +669,6 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
         if (Result.isUsable())
         {
             auto VarInst = cast<clang::VarDecl>(Result.get());
-            S.InstantiateVariableDefinition(Temp->getLocation(), VarInst);
             return VarInst;
         }
     }

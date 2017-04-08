@@ -111,7 +111,7 @@ public:
     AggregateDeclaration(Loc loc, Identifier *id);
     void setScope(Scope *sc);
     void semantic2(Scope *sc);
-    void semantic3(Scope *sc);
+    virtual void semantic3(Scope *sc); // CALYPSO
     virtual bool mayBeAnonymous(); // CALYPSO
     unsigned size(Loc loc);
     virtual void finalizeSize(Scope *sc) = 0;
@@ -314,7 +314,7 @@ public:
     virtual int vtblOffset();
     const char *kind();
 
-    void addLocalClass(ClassDeclarations *);
+    virtual void addLocalClass(ClassDeclarations *); // CALYPSO
 
     // CALYPSO
     virtual bool byRef() { return true; }
@@ -357,5 +357,6 @@ public:
 StructDeclaration *isStructDeclarationOrNull(Dsymbol* s);
 ClassDeclaration *isClassDeclarationOrNull(Dsymbol *s);
 AggregateDeclaration *toAggregateBase(Dsymbol *s);
+void markAggregateReferenced(AggregateDeclaration* ad);
 
 #endif /* DMD_AGGREGATE_H */

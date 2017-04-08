@@ -474,7 +474,12 @@ FuncDeclaration *buildXopEquals(StructDeclaration *sd, Scope *sc)
         return NULL;        // bitwise comparison would work
 
     //printf("StructDeclaration::buildXopEquals() %s\n", sd->toChars());
-    if (Dsymbol *eq = search_function(sd, Id::eq))
+    if (auto lp = sd->langPlugin())
+    {
+        if (auto fd = lp->searchOpEqualsForXopEquals(sd, sc))
+            return fd;
+    }
+    else if (Dsymbol *eq = search_function(sd, Id::eq))
     {
         if (FuncDeclaration *fd = eq->isFuncDeclaration())
         {

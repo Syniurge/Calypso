@@ -870,6 +870,10 @@ LafterSizeok:
         deferred->semantic3(sc);
     }
 
+    // CALYPSO
+    if (!langPlugin())
+        markAggregateReferenced(this);
+
 #if 0
     if (type->ty == Tclass && ((TypeClass *)type)->sym != this)
     {

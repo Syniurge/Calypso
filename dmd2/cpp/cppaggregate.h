@@ -31,12 +31,14 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::RecordDecl *RD;
+    bool isUsed = false;
     bool layoutQueried = false;
 
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
+    void semantic3(Scope *sc) override;
     void buildLayout() override;
     void finalizeSize(Scope *sc) override;
     Expression *defaultInit(Loc loc) override;
@@ -52,6 +54,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::CXXRecordDecl *RD;
+    bool isUsed = false;
     bool layoutQueried = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
@@ -59,8 +62,11 @@ public:
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
+    void semantic3(Scope *sc) override;
     void buildLayout() override;
     bool mayBeAnonymous() override;
+
+    void addLocalClass(ClassDeclarations *) override;
     
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     void interfaceSemantic(Scope *sc) override;

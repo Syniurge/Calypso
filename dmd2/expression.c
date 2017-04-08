@@ -1369,6 +1369,14 @@ Expression *callCpCtor(Scope *sc, Expression *e)
     return e;
 }
 
+// CALYPSO
+void markCalleeReferenced(CallExp* e)
+{
+    if (e->f)
+        if (auto lp = e->f->langPlugin())
+            lp->markSymbolReferenced(e->f);
+}
+
 /****************************************
  * Now that we know the exact type of the function we're calling,
  * the arguments[] need to be adjusted:
@@ -1470,6 +1478,8 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
                 arg = inlineCopy(arg, sc);
                 // __FILE__, __LINE__, __MODULE__, __FUNCTION__, and __PRETTY_FUNCTION__
                 arg = arg->resolveLoc(loc, sc);
+                if (arg->op == TOKcall && sc->isD()) // CALYPSO (semantic isn't called on default arguments)
+                    markCalleeReferenced(static_cast<CallExp*>(arg));
                 arguments->push(arg);
                 nargs++;
             }
@@ -5212,6 +5222,18 @@ Lagain:
         goto Lerr;
     }
 
+    // CALYPSO
+    {
+        auto ad = getAggregateSym(tb);
+        if (sc->isD() && ad)
+            if (auto lp = ad->langPlugin())
+            {
+                lp->markSymbolReferenced(ad);
+                if (member)
+                    lp->markSymbolReferenced(member);
+            }
+    }
+
     //printf("NewExp: '%s'\n", toChars());
     //printf("NewExp:type '%s'\n", type->toChars());
     semanticTypeInfo(sc, type);
@@ -5395,6 +5417,11 @@ Expression *VarExp::semantic(Scope *sc)
         // Bugzilla 12025: If the variable is not actually used in runtime code,
         // the purity violation error is redundant.
         //checkPurity(sc, vd);
+
+        // CALYPSO
+        if (sc->isD())
+            if (auto lp = vd->langPlugin())
+                lp->markSymbolReferenced(vd);
     }
     else if (FuncDeclaration *fd = var->isFuncDeclaration())
     {
@@ -5403,6 +5430,11 @@ Expression *VarExp::semantic(Scope *sc)
         // Maybe here should be moved in CallExp, or AddrExp for functions.
         if (fd->checkNestedReference(sc, loc))
             return new ErrorExp();
+
+        // CALYPSO
+        if (sc->isD())
+            if (auto lp = fd->langPlugin())
+                lp->markSymbolReferenced(fd);
     }
     else if (OverDeclaration *od = var->isOverDeclaration())
     {
@@ -6069,6 +6101,11 @@ Expression *DeclarationExp::semantic(Scope *sc)
         // will be illegal.
         declaration->semantic(sc);
         s->parent = sc->parent;
+
+        // CALYPSO
+        if (auto ad = getAggregateSym(v->type))
+            if (sc->isD() && ad->langPlugin())
+                ad->langPlugin()->markSymbolReferenced(ad);
     }
 
     //printf("inserting '%s' %p into sc = %p\n", s->toChars(), s, sc);
@@ -7688,6 +7725,11 @@ Expression *DotVarExp::semantic(Scope *sc)
 
         type = fd->type;
         assert(type);
+
+        // CALYPSO
+        if (sc->isD())
+            if (auto lp = fd->langPlugin())
+                lp->markSymbolReferenced(fd);
     }
     else if (OverDeclaration *od = var->isOverDeclaration())
     {
@@ -7738,6 +7780,12 @@ Expression *DotVarExp::semantic(Scope *sc)
             Expression *e = new VarExp(loc, v);
             e = new CommaExp(loc, e1, e);
             e = e->semantic(sc);
+
+            // CALYPSO
+            if (sc->isD())
+                if (auto lp = v->langPlugin())
+                    lp->markSymbolReferenced(v);
+
             return e;
         }
     }
@@ -9113,6 +9161,10 @@ Lagain:
         t1 = f->type;
     }
     assert(t1->ty == Tfunction);
+
+    // CALYPSO
+    if (sc->isD())
+        markCalleeReferenced(this);
 
     Expression *argprefix;
     if (!arguments)

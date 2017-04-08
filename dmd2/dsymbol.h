@@ -187,6 +187,7 @@ public:
     void checkDeprecated(Loc loc, Scope *sc);
     Module *getModule();
     Module *getAccessModule();
+    Module *getInstantiatingModule(); // CALYPSO
     Dsymbol *pastMixin();
     Dsymbol *toParent();
     Dsymbol *toParent2();

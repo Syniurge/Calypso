@@ -20,6 +20,7 @@
 #include "init.h"
 #include "declaration.h"
 #include "module.h"
+#include "import.h"
 #include "id.h"
 #include "statement.h"
 #include "target.h"
@@ -209,6 +210,10 @@ void AggregateDeclaration::semantic2(Scope *sc)
         return;
     }
 
+    // CALYPSO
+    if (semanticRun <= PASSsemantic2)
+        semanticRun = PASSsemantic2; // NOTE: newer versions of DMD do set semanticRun for aggregates like they do for other symbols
+
     Scope *sc2 = sc->push(this);
     sc2->stc &= STCsafe | STCtrusted | STCsystem;
     sc2->parent = this;
@@ -227,6 +232,10 @@ void AggregateDeclaration::semantic2(Scope *sc)
     }
 
     sc2->pop();
+
+    // CALYPSO
+    if (semanticRun <= PASSsemantic2done)
+        semanticRun = PASSsemantic2done;
 }
 
 void AggregateDeclaration::semantic3(Scope *sc)
@@ -242,6 +251,10 @@ void AggregateDeclaration::semantic3(Scope *sc)
         sd->semanticTypeInfoMembers();
         return;
     }
+
+    // CALYPSO
+    if (semanticRun <= PASSsemantic3)
+        semanticRun = PASSsemantic3; // NOTE: newer versions of DMD do set semanticRun for aggregates like they do for other symbols
 
     Scope *sc2 = sc->push(this);
     sc2->stc &= STCsafe | STCtrusted | STCsystem;
@@ -300,6 +313,10 @@ void AggregateDeclaration::semantic3(Scope *sc)
 
     if (sd)
         sd->semanticTypeInfoMembers();
+
+    // CALYPSO
+    if (semanticRun <= PASSsemantic3done)
+        semanticRun = PASSsemantic3done;
 }
 
 void StructDeclaration::semanticTypeInfoMembers()
@@ -1073,6 +1090,10 @@ LafterSizeok:
         deferred->semantic3(sc);
     }
 
+    // CALYPSO
+    if (!langPlugin())
+        markAggregateReferenced(this);
+
 #if 0
     if (type->ty == Tstruct && ((TypeStruct *)type)->sym != this)
     {
@@ -1559,4 +1580,44 @@ StructDeclaration *isStructDeclarationOrNull(Dsymbol *s)
         return NULL;
 
     return s->isStructDeclaration();
+}
+
+void markAggregateReferenced(AggregateDeclaration* ad)
+{
+    if (auto cd = ad->isClassDeclaration())
+        for (auto& baseClass: *cd->baseclasses)
+            if (auto blp = baseClass->base->langPlugin())
+                blp->markSymbolReferenced(baseClass->base);
+
+    if (auto lp = ad->langPlugin())
+    {
+        if (ad->defaultCtor)
+            lp->markSymbolReferenced(ad->defaultCtor);
+        if (ad->dtor)
+            lp->markSymbolReferenced(ad->dtor);
+    }
+
+    std::function<void(Type* t)> visitAggSyms = [&] (Type* t) {
+        switch (t->ty) {
+            case Taarray:
+                visitAggSyms(static_cast<TypeAArray*>(t)->index);
+            case Tarray:
+            case Tsarray:
+                visitAggSyms(t->nextOf());
+                break;
+            case Tvector:
+                visitAggSyms(static_cast<TypeVector*>(t)->basetype);
+                break;
+            default:
+            {
+                auto aggSym = getAggregateSym(t);
+                if (aggSym && aggSym->langPlugin())
+                    aggSym->langPlugin()->markSymbolReferenced(aggSym);
+                break;
+            }
+        }
+    };
+
+    for (auto vd: ad->fields)
+        visitAggSyms(vd->type);
 }

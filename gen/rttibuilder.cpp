@@ -9,6 +9,7 @@
 
 #include "gen/rttibuilder.h"
 #include "aggregate.h"
+#include "import.h"
 #include "mtype.h"
 #include "gen/arrays.h"
 #include "gen/functions.h"
@@ -131,7 +132,17 @@ void RTTIBuilder::push_size_as_vp(uint64_t s) {
 }
 
 void RTTIBuilder::push_funcptr(FuncDeclaration *fd, Type *castto) {
-  if (fd) {
+    // CALYPSO SEMI-HACK
+    bool isReferenced = true;
+    if (fd) {
+        if (fd->langPlugin() && !fd->langPlugin()->isSymbolReferenced(fd))
+            isReferenced = false;
+        else if (auto ad = fd->toParent()->isAggregateDeclaration()) // xeq, xcmp, ...
+            if (ad->langPlugin() && !ad->langPlugin()->isSymbolReferenced(ad))
+                isReferenced = false;
+    }
+
+  if (fd && isReferenced) { // CALYPSO
     DtoResolveFunction(fd);
     LLConstant *F = getIrFunc(fd)->func;
     if (castto) {

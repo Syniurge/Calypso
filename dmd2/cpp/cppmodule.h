@@ -12,6 +12,8 @@
 #include "module.h"
 #include "cpp/calypso.h"
 
+#include <unordered_set>
+
 namespace clang
 {
 class Decl;
@@ -27,6 +29,11 @@ public:
     typedef std::pair<const clang::Decl *, const clang::Module *> RootKey;
     RootKey rootKey;
 
+    // List of C++ symbols emitted in the existing object file
+    // If a C++ symbol not in this list was referenced, the module needs to be re-gen'd
+    std::unordered_set<std::string> emittedSymbols;
+    bool needGen = false;
+
     static Package *rootPackage;    // package to store all C++ packages/modules, avoids name clashes (e.g std)
     static Modules amodules;            // array of all modules
     static void init();
@@ -40,6 +47,9 @@ public:
     bool isCodegen() override { return true; } // §cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted
 
     File* buildFilePath(const char* forcename, const char* path, const char* ext) override;
+
+    void loadEmittedSymbolList();
+    void saveEmittedSymbolList();
 };
 
 bool isTemplateParameterPack(const clang::NamedDecl *Param);

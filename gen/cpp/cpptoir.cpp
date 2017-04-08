@@ -51,13 +51,18 @@ using llvm::isa;
 
 namespace clangCG = clang::CodeGen;
 
-void LangPlugin::enterModule(::Module *, llvm::Module *lm)
+void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
 {
     auto AST = getASTUnit();
     if (!AST)
         return;
 
     pch.save(); // save the numerous instantiations done by DMD back into the PCH
+
+    if (isCPP(m)) {
+        auto c_m = static_cast<cpp::Module*>(m);
+        c_m->saveEmittedSymbolList();
+    }
 
     auto& Context = getASTContext();
 
@@ -278,7 +283,8 @@ struct ResolvedFunc
         // If this is a always inlined function, emit it in any module calling or referencing it
         if (result.Func->isDeclaration() && FD->hasBody(Def) &&
                 FPT->getExceptionSpecType() != clang::EST_Unevaluated)
-            if (FD->hasAttr<clang::AlwaysInlineAttr>())
+            if (FD->hasAttr<clang::AlwaysInlineAttr>() && 
+                    FD->dsym && calypso.isSymbolReferenced(FD->dsym))
                 CGM.EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def));
 
         return result;
@@ -757,10 +763,13 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
 
 void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 {
+    if (!getIsUsed(fdecl))
+        return;
+
     auto FD = getFD(fdecl);
     const clang::FunctionDecl *Def;
 
-    if (FD->hasBody(Def) && getIrFunc(fdecl)->func->isDeclaration())
+    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
 }
 
@@ -896,26 +905,68 @@ static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
                                             k ? clang::Qualifiers::Const : 0));
 }
 
-void LangPlugin::toDefineStruct(::StructDeclaration* sd)
+void LangPlugin::toDefineStruct(::StructDeclaration* decl)
 {
-    auto& S = getSema();
-
-    if (sd->isUnionDeclaration())
+    auto c_sd = static_cast<cpp::StructDeclaration*>(decl);
+    if (c_sd->RD->isInvalidDecl() || decl->isUnionDeclaration())
         return;
 
-    auto c_sd = static_cast<cpp::StructDeclaration*>(sd);
-    if (auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD))
-        EmitUnmappedRecordMethods(*CGM, S,
-                                const_cast<clang::CXXRecordDecl *>(RD));
+    if (c_sd->isUsed) {
+        auto& S = getSema();
+        if (auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD))
+            EmitUnmappedRecordMethods(*CGM, S,
+                const_cast<clang::CXXRecordDecl *>(RD));
+    }
+
+    // Define the __initZ symbol.
+    IrAggr *ir = getIrAggr(decl);
+    llvm::GlobalVariable *initZ = ir->getInitSymbol();
+    initZ->setInitializer(ir->getDefaultInit());
+    setLinkage(decl, initZ);
+
+    // emit typeinfo
+    DtoTypeInfoOf(decl->type);
+
+    if (c_sd->isUsed) {
+        // Emit __xopEquals/__xopCmp/__xtoHash.
+        if (decl->xeq && decl->xeq != decl->xerreq) {
+          Declaration_codegen(decl->xeq);
+        }
+        if (decl->xcmp && decl->xcmp != decl->xerrcmp) {
+          Declaration_codegen(decl->xcmp);
+        }
+        if (decl->xhash) {
+          Declaration_codegen(decl->xhash);
+        }
+    }
 }
 
-void LangPlugin::toDefineClass(::ClassDeclaration* cd)
+void LangPlugin::toDefineClass(::ClassDeclaration* decl)
 {
-    auto& S = getSema();
+    auto c_cd = static_cast<cpp::ClassDeclaration*>(decl);
+    if (c_cd->RD->isInvalidDecl())
+        return;
 
-    auto c_cd = static_cast<cpp::ClassDeclaration*>(cd);
-    EmitUnmappedRecordMethods(*CGM, S,
-                              const_cast<clang::CXXRecordDecl *>(c_cd->RD));
+    if (c_cd->isUsed) {
+        auto& S = getSema();
+        EmitUnmappedRecordMethods(*CGM, S,
+            const_cast<clang::CXXRecordDecl *>(c_cd->RD));
+    }
+
+    IrAggr *ir = getIrAggr(decl);
+    const auto lwc = DtoLinkage(decl);
+
+    llvm::GlobalVariable *initZ = ir->getInitSymbol();
+    initZ->setInitializer(ir->getDefaultInit());
+    setLinkage(lwc, initZ);
+
+//     llvm::GlobalVariable *vtbl = ir->getVtblSymbol();
+//     vtbl->setInitializer(ir->getVtblInit());
+//     setLinkage(lwc, vtbl);
+
+    llvm::GlobalVariable *classZ = ir->getClassInfoSymbol();
+    classZ->setInitializer(ir->getClassInfoInit());
+    setLinkage(lwc, classZ);
 }
 
 }

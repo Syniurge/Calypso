@@ -589,7 +589,8 @@ static LLConstant *build_class_dtor(ClassDeclaration *cd) {
   FuncDeclaration *dtor = cd->dtor;
 
   // if no destructor emit a null
-  if (!dtor) {
+  if (!dtor ||
+      (dtor->langPlugin() && !dtor->langPlugin()->isSymbolReferenced(dtor))) { // CALYPSO
     return getNullPtr(getVoidPtrType());
   }
 
@@ -759,7 +760,8 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   // defaultConstructor
   VarDeclaration *defConstructorVar = cinfo->fields.data[10];
   CtorDeclaration *defConstructor = cd->defaultCtor;
-  if (defConstructor && (defConstructor->storage_class & STCdisable)) {
+  if (defConstructor && ((defConstructor->storage_class & STCdisable) ||
+      (defConstructor->langPlugin() && !defConstructor->langPlugin()->isSymbolReferenced(defConstructor)))) {
     defConstructor = nullptr;
   }
   b.push_funcptr(defConstructor, defConstructorVar->type);

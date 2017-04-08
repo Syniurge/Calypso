@@ -583,3 +583,14 @@ Dsymbol *Scope::search_correct(Identifier *ident)
 
     return (Dsymbol *)speller(ident->toChars(), &scope_search_fp, this, idchars);
 }
+
+// CALYPSO
+bool Scope::isD()
+{
+    if (func && func->langPlugin())
+        return false;
+    if (minst && minst->langPlugin())
+        return false;
+
+    return true;
+}

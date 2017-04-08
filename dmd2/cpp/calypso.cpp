@@ -402,7 +402,7 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
                                   TypeMapper &mapper)
 {
     SpecValue spec(mapper);
-    auto ident = getIdentifier(D, &spec);
+    auto ident = getIdentifierOrNull(D, &spec);
     if (!ident)
         return nullptr;
 
@@ -1070,7 +1070,9 @@ void LangPlugin::GenModSet::parse()
 void LangPlugin::GenModSet::add(::Module *m)
 {
     auto& objName = m->objfile->name->str;
-    assert(parsed && !count(objName));
+    assert(parsed);
+    if (count(objName))
+        return;
 
     auto genFilename = calypso.getCacheFilename(".gen");
     auto fgenList = fopen(genFilename.c_str(), "a");
@@ -1089,11 +1091,12 @@ void LangPlugin::GenModSet::add(::Module *m)
 bool LangPlugin::needsCodegen(::Module *m)
 {
     assert(isCPP(m));
+    auto c_m = static_cast<cpp::Module*>(m);
 
     genModSet.parse();
 
     auto& objName = m->objfile->name->str;
-    return !genModSet.count(objName);
+    return c_m->needGen || !genModSet.count(objName);
 }
 
 #undef MAX_FILENAME_SIZE

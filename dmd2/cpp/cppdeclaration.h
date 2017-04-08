@@ -36,6 +36,7 @@ public:
     CALYPSO_LANGPLUGIN
     
     const clang::ValueDecl *VD;
+    bool isUsed = false;
 
     VarDeclaration(Loc loc, Identifier *id,
                    const clang::ValueDecl *VD, Type *t, Initializer *init = nullptr);
@@ -50,6 +51,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::FunctionDecl *FD;
+    bool isUsed = false;
 
     FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
                     Type* type, const clang::FunctionDecl *FD);
@@ -61,7 +63,7 @@ public:
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 
-    static void semantic3reference(::FuncDeclaration *fd, Scope *sc);
+    static void doSemantic3(::FuncDeclaration *fd, Scope *sc);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
 };
 
@@ -71,6 +73,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::CXXConstructorDecl *CCD;
+    bool isUsed = false;
 
     CtorDeclaration(Loc loc, StorageClass storage_class,
                     Type* type, const clang::CXXConstructorDecl *CCD);
@@ -88,6 +91,7 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::CXXDestructorDecl *CDD;
+    bool isUsed = false;
 
     DtorDeclaration(Loc loc, StorageClass storage_class,
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
@@ -243,6 +247,16 @@ public:
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 bool isPolymorphic(const clang::RecordDecl *D);
+
+inline bool& getIsUsed(::FuncDeclaration* fd)
+{
+    if (fd->isCtorDeclaration())
+        return static_cast<cpp::CtorDeclaration*>(fd)->isUsed;
+    else if (fd->isDtorDeclaration())
+        return static_cast<cpp::DtorDeclaration*>(fd)->isUsed;
+    else
+        return static_cast<cpp::FuncDeclaration*>(fd)->isUsed;
+}
 
 }
 

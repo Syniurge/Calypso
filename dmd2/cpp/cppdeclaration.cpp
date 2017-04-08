@@ -1,6 +1,7 @@
 // Contributed by Elie Morisse, same license DMD uses
 
 #include "cpp/calypso.h"
+#include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppexpression.h"
 #include "cpp/cpptemplate.h"
@@ -9,6 +10,7 @@
 #include "scope.h"
 
 #include "clang/AST/Decl.h"
+#include "clang/Sema/Sema.h"
 
 namespace cpp
 {
@@ -16,6 +18,32 @@ namespace cpp
 using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
+
+void MarkModuleForGenIfNeeded(Dsymbol *s)
+{
+    assert(isCPP(s));
+    mangle(s);
+
+    const clang::Decl* D;
+    if (auto fd = s->isFuncDeclaration())
+        D = getFD(fd);
+    else if (auto vd = s->isVarDeclaration())
+        D = static_cast<cpp::VarDeclaration*>(vd)->VD;
+    else
+        llvm_unreachable("Unhandled symbl");
+
+    auto& MangledName = calypso.MangledDeclNames[getCanonicalDecl(D)];
+    auto minst = s->getInstantiatingModule();
+    assert(minst && !MangledName.empty());
+
+    if (isCPP(minst)) {
+        auto c_minst = static_cast<cpp::Module*>(minst);
+        if (!c_minst->emittedSymbols.count(MangledName)) {
+            c_minst->needGen = true;
+            c_minst->emittedSymbols.insert(MangledName);
+        }
+    }
+}
 
 VarDeclaration::VarDeclaration(Loc loc, Identifier *id,
                                const clang::ValueDecl *VD, Type *t, Initializer *init)
@@ -35,6 +63,26 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
 bool VarDeclaration::overlap(::VarDeclaration* v2)
 {
     return false; // HACK
+}
+
+void MarkVarReferenced(::VarDeclaration* vd)
+{
+    auto c_vd = static_cast<cpp::VarDeclaration*>(vd);
+    if (c_vd->isUsed)
+        return;
+    c_vd->isUsed = true;
+
+    auto Var = dyn_cast<clang::VarDecl>(
+                    const_cast<clang::ValueDecl*>(c_vd->VD));
+    if (!Var)
+        return;
+
+    auto& S = calypso.getSema();
+
+    if (Var->getTemplateSpecializationKind() == clang::TSK_ImplicitInstantiation)
+        S.InstantiateVariableDefinition(Var->getLocation(), Var);
+
+    MarkModuleForGenIfNeeded(vd);
 }
 
 FuncDeclaration::FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
@@ -231,7 +279,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     for (const clang::Decl *DI = D; !isa<clang::TranslationUnitDecl>(DI); DI = cast<clang::Decl>(DI->getDeclContext()))
         if (auto RD = dyn_cast<clang::CXXRecordDecl>(DI))
             if (RD->isLocalClass())
-                return true; // are local records emitted when emitting a function? if no this is a FIXME
+                return true; // are local records emitted when emitting a function?
 
     if (auto VD = dyn_cast<clang::VarDecl>(D))
         if (!VD->isFileVarDecl())
@@ -250,8 +298,10 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
                 // This may get fixed by 3.7.
     }
 
-    if (D->dsym)
+    if (D->dsym) {
+        calypso.markSymbolReferenced(D->dsym);
         return true;
+    }
 
     // Although we try to add all the needed imports during importAll(), sometimes we miss a module so ensure it gets loaded
     auto im = mapper.AddImplicitImportForDecl(loc, D, true);
@@ -267,7 +317,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     if (Func && Func->getPrimaryTemplate())
-        D = cast<clang::NamedDecl>(getCanonicalDecl(getSpecializedDeclOrExplicit(Func)));
+        D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
 
     // HACK FIXME
     if (Func && Func->isOutOfLine() &&
@@ -282,22 +332,23 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     }
 
     auto e = expmap.fromExpressionDeclRef(loc, const_cast<clang::NamedDecl*>(D),
-                                            nullptr, TQ_OverOpSkipSpecArg);
+                                            nullptr, TQ_OverOpFullIdent);
     e = e->semantic(sc);
 
-    if (Func && Func->getPrimaryTemplate())
-    {
-        assert(e->op == TOKvar || e->op == TOKtemplate || e->op == TOKimport);
-        Dsymbol *s;
-        if (e->op == TOKvar)
-            s = static_cast<SymbolExp*>(e)->var;
-        else if (e->op == TOKtemplate)
-            s = static_cast<TemplateExp*>(e)->td;
-        else
-            s = static_cast<ScopeExp*>(e)->sds;
+    Dsymbol *s;
+    if (e->op == TOKvar)
+        s = static_cast<SymbolExp*>(e)->var;
+    else if (e->op == TOKtemplate)
+        s = static_cast<TemplateExp*>(e)->td;
+    else if (e->op == TOKtype)
+        s = static_cast<TypeExp*>(e)->type->toDsymbol(nullptr);
+    else {
+        assert(e->op == TOKimport);
+        s = static_cast<ScopeExp*>(e)->sds;
+    }
 
-        // if it's a non-template function there's nothing to do, it will be semantic'd along with its declcontext
-        // if it's a template spec we must instantiate the right overload
+    if (s->isFuncDeclaration() || s->isTemplateDeclaration())
+    {
         struct DEquals
         {
             const clang::Decl* D;
@@ -305,17 +356,17 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
             static int fp(void *param, Dsymbol *s)
             {
-                if (!isCPP(s))
-                    return 0;
-                auto fd = s->isFuncDeclaration();
-                auto td = static_cast<cpp::TemplateDeclaration*>(
-                                            s->isTemplateDeclaration());
                 DEquals *p = (DEquals *)param;
 
-                decltype(D) s_D = fd ? getFD(fd) : td->TempOrSpec;
+                if (!isCPP(s))
+                    return 0;
 
-                if (p->D == getCanonicalDecl(s_D))
-                {
+                auto fd = s->isFuncDeclaration();
+                auto c_td = static_cast<cpp::TemplateDeclaration*>(
+                    s->isTemplateDeclaration());
+                const clang::Decl* s_D = fd ? getFD(fd) : c_td->TempOrSpec;
+
+                if (p->D == getCanonicalDecl(s_D)) {
                     p->s = s;
                     return 1;
                 }
@@ -324,16 +375,21 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             }
         };
         DEquals p;
-        p.D = D;
+        p.D = getCanonicalDecl(D);
         overloadApply(s, &p, &DEquals::fp);
-        assert(p.s && p.s->isTemplateDeclaration());
+        s = p.s;
+        assert(s);
+    }
 
-        auto td = static_cast<cpp::TemplateDeclaration*>(p.s->isTemplateDeclaration());
-        if (td->semanticRun == PASSinit)
-        {
+    if (Func && Func->getPrimaryTemplate())
+    {
+        // if it's a template spec we must instantiate the right overload
+        assert(s->isTemplateDeclaration());
+
+        auto td = static_cast<cpp::TemplateDeclaration*>(s);
+        if (td->semanticRun == PASSinit) {
             assert(td->scope);
             td->semantic(td->scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
-            assert(td->semanticRun > PASSinit);
         }
 
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
@@ -361,7 +417,20 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
         td->makeForeignInstance(tempinst);
         tempinst->semantic(sc);
+
+        s = tempinst->toAlias();
     }
+    else
+    {
+        if (s->isAggregateDeclaration()) { // restricting to aggregates to better grasp if there's more types of symbols that need this
+            if (s->semanticRun < PASSsemantic2)
+                s->semantic2(sc);
+            if (s->semanticRun < PASSsemantic3)
+                s->semantic3(sc);
+        }
+    }
+
+    calypso.markSymbolReferenced(s);
 
 Lcleanup:
     // Memory usage can skyrocket when using a large library
@@ -448,44 +517,108 @@ bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
     return VisitDeclRef(E->getMemberDecl());
 }
 
-void FuncDeclaration::semantic3reference(::FuncDeclaration *fd, Scope *sc)
+void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
+{
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.getDiagnostics();
+
+    auto D = const_cast<clang::FunctionDecl*>(getFD(fd));
+    assert(!D->getDeclContext()->isDependentContext());
+
+    auto FPT = D->getType()->getAs<clang::FunctionProtoType>();
+    if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
+        S.ResolveExceptionSpec(D->getLocation(), FPT);
+
+    S.MarkFunctionReferenced(D->getLocation(), D);
+    if (Diags.hasErrorOccurred())
+        Diags.Reset();
+    S.PerformPendingInstantiations();
+
+    // MarkFunctionReferenced won't instantiate some implicitly instantiable functions
+    // Not fully understanding why, but here's a second attempt
+    if (!D->hasBody() && D->isImplicitlyInstantiable())
+        S.InstantiateFunctionDefinition(D->getLocation(), D);
+
+    const clang::FunctionDecl *Def;
+    if (!D->isInvalidDecl() && D->hasBody(Def))
+    {
+        Scope *sc2 = sc->push();
+        sc2->func = fd;
+//         sc2->parent = fd;
+        sc2->callSuper = 0;
+        sc2->sbreak = NULL;
+        sc2->scontinue = NULL;
+        sc2->sw = NULL;
+        sc2->stc &= ~(STCauto | STCscope | STCstatic | STCabstract |
+                        STCdeprecated | STCoverride |
+                        STC_TYPECTOR | STCfinal | STCtls | STCgshared | STCref | STCreturn |
+                        STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
+        sc2->protection = Prot(PROTpublic);
+        sc2->explicitProtection = 0;
+        sc2->structalign = STRUCTALIGN_DEFAULT;
+        sc2->flags = sc->flags & ~SCOPEcontract;
+        sc2->flags &= ~SCOPEcompile;
+        sc2->tf = NULL;
+        sc2->os = NULL;
+        sc2->noctor = 0;
+        sc2->userAttribDecl = NULL;
+        sc2->fieldinit = NULL;
+        sc2->fieldinit_dim = 0;
+
+        DeclReferencer declReferencer(fd);
+        declReferencer.Traverse(fd->loc, sc2, Def->getBody());
+
+        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(D))
+            for (auto& Init: Ctor->inits())
+                declReferencer.Traverse(fd->loc, sc2, Init->getInit());
+    }
+
+    MarkModuleForGenIfNeeded(fd);
+}
+
+void MarkFunctionReferenced(::FuncDeclaration* fd)
+{
+    bool& isUsed = getIsUsed(fd);
+
+    if (isUsed)
+        return;
+    isUsed = true;
+
+    // Member *structor calls do not appear in the AST, hence DeclReferencer won't mark them
+    // referenced and we have to do it here
+    if (fd->isCtorDeclaration() || fd->isDtorDeclaration())
+        fd->langPlugin()->markSymbolReferenced(fd->parent);
+
+    if (fd->semanticRun >= PASSsemantic3done)
+        InstantiateAndTraverseFunctionBody(fd, fd->scope);
+}
+
+void FuncDeclaration::doSemantic3(::FuncDeclaration *fd, Scope *sc)
 {
     if (fd->semanticRun >= PASSsemantic3)
         return;
     fd->semanticRun = PASSsemantic3;
     fd->semantic3Errors = false;
 
-    auto FD = getFD(fd);
-    if (!FD)
-        return;
-
-    const clang::FunctionDecl *Def;
-    if (!FD->isInvalidDecl() && FD->hasBody(Def))
-    {
-        DeclReferencer declReferencer(fd);
-        declReferencer.Traverse(fd->loc, sc, Def->getBody());
-
-        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(FD))
-            for (auto& Init: Ctor->inits())
-                declReferencer.Traverse(fd->loc, sc, Init->getInit());
-    }
+    if (getIsUsed(fd))
+        InstantiateAndTraverseFunctionBody(fd, sc);
 
     fd->semanticRun = PASSsemantic3done;
 }
 
 void FuncDeclaration::semantic3(Scope *sc)
 {
-    semantic3reference(this, sc);
+    doSemantic3(this, sc);
 }
 
 void CtorDeclaration::semantic3(Scope *sc)
 {
-    cpp::FuncDeclaration::semantic3reference(this, sc);
+    cpp::FuncDeclaration::doSemantic3(this, sc);
 }
 
 void DtorDeclaration::semantic3(Scope *sc)
 {
-    cpp::FuncDeclaration::semantic3reference(this, sc);
+    cpp::FuncDeclaration::doSemantic3(this, sc);
 }
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f)
@@ -517,6 +650,31 @@ const clang::Decl *getCanonicalDecl(const clang::Decl *D)
     }
 
     return D;
+}
+
+void MarkAggregateReferenced(::AggregateDeclaration* ad);
+
+bool LangPlugin::isSymbolReferenced(Dsymbol *s)
+{
+    if (s->isStructDeclaration())
+        return static_cast<cpp::StructDeclaration*>(s)->isUsed;
+    else if (s->isClassDeclaration())
+        return static_cast<cpp::ClassDeclaration*>(s)->isUsed;
+    else if (auto fd = s->isFuncDeclaration())
+        return getIsUsed(fd);
+    else if (s->isVarDeclaration())
+        return static_cast<cpp::VarDeclaration*>(s)->isUsed;
+    return true; // FIXME
+}
+
+void LangPlugin::markSymbolReferenced(Dsymbol *s)
+{
+    if (auto fd = s->isFuncDeclaration())
+        MarkFunctionReferenced(fd);
+    else if (auto vd = s->isVarDeclaration())
+        MarkVarReferenced(vd);
+    else if (auto ad = s->isAggregateDeclaration())
+        MarkAggregateReferenced(ad);
 }
 
 }

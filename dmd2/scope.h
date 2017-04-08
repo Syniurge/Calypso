@@ -157,6 +157,9 @@ struct Scope
     ClassDeclaration *getClassScope();
     AggregateDeclaration *getStructClassScope();
     void setNoFree();
+
+    // CALYPSO
+    bool isD();
 };
 
 #endif /* DMD_SCOPE_H */

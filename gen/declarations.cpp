@@ -214,6 +214,9 @@ public:
       m->accept(this);
     }
 
+    if (decl->langPlugin())  // CALYPSO
+        return;
+
     // Define the __initZ symbol.
     IrAggr *ir = getIrAggr(decl);
     llvm::GlobalVariable *initZ = ir->getInitSymbol();
@@ -263,6 +266,9 @@ public:
         m->accept(this);
       }
 
+      if (decl->langPlugin())  // CALYPSO
+        return;
+
       IrAggr *ir = getIrAggr(decl);
       const auto lwc = DtoLinkage(decl);
 
@@ -270,12 +276,9 @@ public:
       initZ->setInitializer(ir->getDefaultInit());
       setLinkage(lwc, initZ);
 
-      if (!decl->langPlugin()) // CALYPSO HACK FIXME
-      {
       llvm::GlobalVariable *vtbl = ir->getVtblSymbol();
       vtbl->setInitializer(ir->getVtblInit());
       setLinkage(lwc, vtbl);
-      }
 
       llvm::GlobalVariable *classZ = ir->getClassInfoSymbol();
       classZ->setInitializer(ir->getClassInfoInit());

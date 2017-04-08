@@ -27,6 +27,21 @@ using llvm::dyn_cast;
 
 template<typename AggTy> void buildAggLayout(AggTy *ad);
 
+void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
+{
+    auto D = dyn_cast<clang::CXXRecordDecl>(
+                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
+    if (!D)
+        return;
+
+    if (D->hasDefinition()) {
+        auto& S = calypso.getSema();
+        S.MarkVTableUsed(D->getLocation(), D);
+
+        markAggregateReferenced(ad);
+    }
+}
+
 StructDeclaration::StructDeclaration(Loc loc, Identifier* id,
                                      const clang::RecordDecl* RD)
     : ::StructDeclaration(loc, id)
@@ -74,6 +89,13 @@ void StructDeclaration::semantic(Scope *sc)
     const_cast<clang::RecordDecl*>(RD)->dsym = this;
 }
 
+void StructDeclaration::semantic3(Scope *sc)
+{
+    if (isUsed)
+        MarkAggregateReferencedImpl(this);
+    ::StructDeclaration::semantic3(sc);
+}
+
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -113,6 +135,13 @@ void ClassDeclaration::semantic(Scope *sc)
 //         buildCpCtor(sc);
 }
 
+void ClassDeclaration::semantic3(Scope *sc)
+{
+    if (isUsed)
+        MarkAggregateReferencedImpl(this);
+    ::ClassDeclaration::semantic3(sc);
+}
+
 void ClassDeclaration::buildCpCtor(Scope *sc)
 {
 //     auto& S = calypso.getSema();
@@ -141,6 +170,12 @@ void ClassDeclaration::buildCpCtor(Scope *sc)
 bool ClassDeclaration::mayBeAnonymous()
 {
     return true;
+}
+
+void ClassDeclaration::addLocalClass(ClassDeclarations *aclasses)
+{
+    if (isUsed)
+        ::ClassDeclaration::addLocalClass(aclasses);
 }
 
 template <typename AggTy>
@@ -318,6 +353,32 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     return nullptr; // do not build an opAssign if none was mapped
 }
 
+::FuncDeclaration *LangPlugin::searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc)
+{
+    if (Dsymbol *eq = search_function(sd, Id::eq))
+    {
+        if (::FuncDeclaration *fd = eq->isFuncDeclaration())
+        {
+            TypeFunction *tfeqptr;
+            {
+                Scope scx;
+
+                /* extern(C++) const bool opEquals(scope ref const S s);
+                */
+                Parameters *parameters = new Parameters;
+                parameters->push(new Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL));
+                tfeqptr = new TypeFunction(parameters, Type::tbool, 0, LINKcpp);
+                tfeqptr->mod = MODconst;
+                tfeqptr = (TypeFunction *)tfeqptr->semantic(Loc(), &scx);
+            }
+            fd = fd->overloadExactMatch(tfeqptr);
+            if (fd)
+                return fd;
+        }
+    }
+    return nullptr;
+}
+
 template <typename AggTy>
  void buildAggLayout(AggTy *ad)
 {
@@ -456,6 +517,25 @@ const clang::RecordDecl *getRecordDecl(::Type *t)
         }
     }
     return nullptr;
+}
+
+static bool& getIsUsed(::AggregateDeclaration* ad)
+{
+    if (ad->isClassDeclaration())
+        return static_cast<cpp::ClassDeclaration*>(ad)->isUsed;
+    else
+        return static_cast<cpp::StructDeclaration*>(ad)->isUsed;
+}
+
+void MarkAggregateReferenced(::AggregateDeclaration* ad)
+{
+    auto& isUsed = getIsUsed(ad);
+    if (isUsed)
+        return;
+    isUsed = true;
+
+    if (ad->semanticRun >= PASSsemanticdone)
+        MarkAggregateReferencedImpl(ad);
 }
 
 }

@@ -26,6 +26,7 @@
 #include <string>
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/Support/raw_ostream.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
@@ -76,6 +77,8 @@ Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
     objFilename += ident->string;
 
     arg = strdup(objFilename.c_str());
+
+    loadEmittedSymbolList();
 }
 
 Dsymbol *Module::search(Loc loc, Identifier *ident, int flags)
@@ -131,6 +134,52 @@ File *Module::buildFilePath(const char *, const char *path, const char *ext)
 
     // always append the extension! otherwise hard to make output switches consistent
     return new File(FileName::forceExt(argobj, ext));
+}
+
+inline char *strtok_rs(char *str, const char *delim, char **saveptr)
+{
+#if defined(_MSC_VER)
+  return strtok_s(str, delim, saveptr);
+#else
+  return strtok_r(str, delim, saveptr);
+#endif
+}
+
+void Module::loadEmittedSymbolList()
+{
+    auto symlistfile = buildFilePath(nullptr, global.params.objdir, "slist");
+    if (symlistfile->read()) {
+        delete symlistfile;
+        return;
+    }
+
+    char* stateptr;
+    for (auto line = strtok_rs((char*) symlistfile->buffer, "\n", &stateptr); line;
+                line = strtok_rs(nullptr, "\n", &stateptr))
+        emittedSymbols.insert(std::string(line));
+
+    delete symlistfile;
+}
+
+void Module::saveEmittedSymbolList()
+{
+    if (emittedSymbols.empty())
+        return;
+
+    std::string buf;
+    llvm::raw_string_ostream os(buf);
+
+    for (auto& symname: emittedSymbols)
+        os << symname << "\n";
+    os.flush();
+    buf.pop_back();
+
+    auto symlistfile = buildFilePath(nullptr, global.params.objdir, "slist");
+    symlistfile->setbuffer(const_cast<void*>((const void*) buf.data()), buf.size());
+    if (symlistfile->write())
+        ::error(Loc(), "Writing the symbol list file failed");
+    symlistfile->setbuffer(nullptr, 0);
+    delete symlistfile;
 }
 
 /************************************/
@@ -336,34 +385,6 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
     return decldefs;
 }
 
-static void MarkFunctionForEmit(const clang::FunctionDecl *D)
-{
-    auto& S = calypso.getSema();
-    auto& Diags = calypso.getDiagnostics();
-
-    if (!D->getDeclContext()->isDependentContext())
-    {
-        auto D_ = const_cast<clang::FunctionDecl*>(D);
-        
-        auto FPT = D_->getType()->getAs<clang::FunctionProtoType>();
-        if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
-            S.ResolveExceptionSpec(D->getLocation(), FPT);
-
-        S.MarkFunctionReferenced(D->getLocation(), D_);
-        if (Diags.hasErrorOccurred())
-        {
-//             assert(D->isInvalidDecl());
-            Diags.Reset();
-        }
-        S.PerformPendingInstantiations();
-
-        // MarkFunctionReferenced won't instantiate some implicitly instantiable functions
-        // Not fully understanding why, but here's a second attempt
-        if (!D->hasBody() && D->isImplicitlyInstantiable())
-            S.InstantiateFunctionDefinition(D->getLocation(), D_);
-    }
-}
-
 // For simplicity's sake (or confusion's) let's call records with either virtual functions or bases polymorphic
 bool isPolymorphic(const clang::RecordDecl *D)
 {
@@ -461,53 +482,46 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!isDefined)
         goto Ldeclaration;
 
-    if (CRD && !D->isUnion())
+    if (CRD)
     {
-//         if (isStruct && !CRD->hasDefaultConstructor())
-//         {
-//             // Disable the default ctor if it's also disabled on the C++ side
-//             auto tf = new TypeFunction(new Parameters, nullptr, 0, LINKd, STCdisable);
-//             auto disabledCtor = new CtorDeclaration(loc, STCdisable, tf, nullptr);
-//             members->push(disabledCtor);
-//         }
-
-        if (!CRD->isDependentType())
+        if (!D->isUnion() && !CRD->isDependentType())
         {
-            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
+            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);;
 
             auto MarkEmit = [&] (clang::FunctionDecl *FD) {
-                if (FD) MarkFunctionForEmit(FD);
+                if (!FD)
+                    return;
+
+                auto FPT = FD->getType()->getAs<clang::FunctionProtoType>();
+                if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
+                    S.ResolveExceptionSpec(D->getLocation(), FPT);
+
+                S.MarkFunctionReferenced(D->getLocation(), FD);
             };
 
             // Clang declares and defines implicit ctors/assignment operators lazily,
-            // but they need to be emitted all in the record module.
-            // Mark them for emit here since they won't be visited.
+            // but before D's semantic passes we at least need to declare them
             MarkEmit(S.LookupDefaultConstructor(_CRD));
             for (int i = 0; i < 2; i++)
-                MarkEmit(S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
-            
+                S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0);
+
             MarkEmit(S.LookupDestructor(_CRD));
 
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)
                     for (int k = 0; k < 2; k++)
-                        MarkEmit(S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, j ? true : false,
-                                                  k ? clang::Qualifiers::Const : 0));
+                        S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, j ? true : false,
+                                                k ? clang::Qualifiers::Const : 0);
         }
-    }
 
-    if (CRD)
-    {
-        if (D->isInvalidDecl())
-        {
-            // Despite being invalid themselves methods of invalid records are not always marked invalid for some reason.
-            // We need to mark everyone invalid, because if we don't emitting debug info for them will trigger an assert.
-            for (auto MD : CRD->methods())
-                if (!MD->isStatic())
-                    MD->setInvalidDecl();
-        }
-        else
-            S.MarkVTableUsed(D->getLocation(), const_cast<clang::CXXRecordDecl*>(CRD));
+//         if (D->isInvalidDecl())
+//         {
+//             // Despite being invalid themselves methods of invalid records are not always marked invalid for some reason.
+//             // We need to mark everyone invalid, because if we don't emitting debug info for them will trigger an assert.
+//             for (auto MD : CRD->methods())
+//                 if (!MD->isStatic())
+//                     MD->setInvalidDecl();
+//         }
     }
 
     // Add specific decls: fields, vars, tags, templates, typedefs
@@ -604,107 +618,6 @@ TemplateParameters *initTempParams(Loc loc, SpecValue &spec)
     return tpl;
 }
 
-namespace {
-class FunctionReferencer : public clang::RecursiveASTVisitor<FunctionReferencer>
-{
-    DeclMapper &mapper;
-    clang::Sema &S;
-    clang::SourceLocation SLoc;
-
-    Loc loc;
-    llvm::DenseSet<const clang::FunctionDecl *> Referenced;
-
-    bool Reference(const clang::FunctionDecl *Callee);
-    bool ReferenceRecord(const clang::RecordType *RT);
-public:
-    FunctionReferencer(DeclMapper &mapper,
-                        clang::Sema &S, clang::SourceLocation SLoc)
-        : mapper(mapper), S(S), SLoc(SLoc), loc(fromLoc(SLoc)) {}
-    bool VisitCallExpr(const clang::CallExpr *E);
-    bool VisitCXXConstructExpr(const clang::CXXConstructExpr *E);
-    bool VisitCXXNewExpr(const clang::CXXNewExpr *E);
-    bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E);
-};
-
-bool FunctionReferencer::Reference(const clang::FunctionDecl *D)
-{
-    auto Callee = const_cast<clang::FunctionDecl*>(D);
-    if (!Callee || Callee->isDeleted() ||
-            Callee->getBuiltinID() || Referenced.count(Callee->getCanonicalDecl()))
-        return true;
-    if (Callee->isInvalidDecl())
-        return false;
-    Referenced.insert(Callee->getCanonicalDecl());
-
-    MarkFunctionForEmit(Callee);
-
-    if (Callee->isInvalidDecl())
-        return false;
-
-    mapper.AddImplicitImportForDecl(loc, Callee);
-
-    const clang::FunctionDecl *Def;
-    if (!Callee->hasBody(Def))
-        return true;
-
-    TraverseStmt(Def->getBody());
-    return true;
-}
-
-bool FunctionReferencer::ReferenceRecord(const clang::RecordType *RT)
-{
-    auto RD = cast<clang::CXXRecordDecl>(RT->getDecl());
-    if (!RD->hasDefinition())
-        return true;
-
-    mapper.AddImplicitImportForDecl(loc, RD);
-
-    if (!RD->isDependentType())
-    {
-        if (isPolymorphic(RD))
-        {
-            auto Ctor = S.LookupDefaultConstructor(
-                            const_cast<clang::CXXRecordDecl *>(RD));
-            Reference(Ctor);
-        }
-        Reference(RD->getDestructor());
-    }
-    return true;
-}
-
-bool FunctionReferencer::VisitCallExpr(const clang::CallExpr *E)
-{
-    return Reference(E->getDirectCallee());
-}
-
-bool FunctionReferencer::VisitCXXConstructExpr(const clang::CXXConstructExpr *E)
-{
-    auto ConstructedType = E->getType();
-    if (!ConstructedType.isNull()) {
-        if (const clang::RecordType *RT = ConstructedType->getAs<clang::RecordType>())
-            ReferenceRecord(RT);
-    }
-
-    return Reference(E->getConstructor());
-}
-
-bool FunctionReferencer::VisitCXXNewExpr(const clang::CXXNewExpr *E)
-{
-    return Reference(E->getOperatorNew());
-}
-
-bool FunctionReferencer::VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E)
-{
-    auto DestroyedType = E->getDestroyedType();
-    if (!DestroyedType.isNull()) {
-        if (const clang::RecordType *RT = DestroyedType->getAs<clang::RecordType>())
-            ReferenceRecord(RT);
-    }
-
-    return Reference(E->getOperatorDelete());
-}
-}
-
 bool isMapped(const clang::Decl *D)
 {
     if (auto FD = dyn_cast<clang::FunctionDecl>(D))
@@ -764,15 +677,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
     auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
-    if (!D->getDescribedFunctionTemplate())
-        MarkFunctionForEmit(D);
-
     if (D->isInvalidDecl())
         return nullptr;
-
-    const clang::FunctionDecl *Def;
-    if (D->hasBody(Def))
-        FunctionReferencer(*this, S, clang::SourceLocation()).TraverseStmt(Def->getBody());
 
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
