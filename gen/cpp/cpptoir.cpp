@@ -221,6 +221,22 @@ void LangPlugin::updateCGFInsertPoint()
                     gIR->ir->getCurrentDebugLocation());
 }
 
+clangCG::StructorType getStructorType(clangCG::CodeGenModule &CGM, const clang::FunctionDecl *FD)
+{
+    clangCG::StructorType structorType = clangCG::StructorType::Complete;
+    auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
+
+    // Most of the time we only need the complete ***structor, but for abstract classes there simply isn't one
+    if (MD && MD->getParent()->isAbstract())
+        structorType = clangCG::StructorType::Base;
+
+    if (isa<const clang::CXXDestructorDecl>(FD) && CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft
+            && MD->getParent()->getNumVBases() == 0)
+        structorType = clangCG::StructorType::Base; // MSVC doesn't always emit complete dtors (aka "vbase destructor")
+
+    return structorType;
+}
+
 struct ResolvedFunc
 {
     llvm::Function *Func = nullptr;
@@ -245,15 +261,7 @@ struct ResolvedFunc
                 return result;
 
         auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
-
-        clangCG::StructorType structorType = clangCG::StructorType::Complete;
-        // Most of the time we only need the complete ***structor, but for abstract classes there simply isn't one
-        if (MD && MD->getParent()->isAbstract())
-            structorType = clangCG::StructorType::Base;
-
-        if (isa<const clang::CXXDestructorDecl>(FD) && CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft
-                && MD->getParent()->getNumVBases() == 0)
-            structorType = clangCG::StructorType::Base; // MSVC doesn't always emit complete dtors (aka "vbase destructor")
+        clangCG::StructorType structorType = getStructorType(CGM, FD);
 
         // FIXME(!): in -O1+, Clang may emit internal aliases instead of dtors if a dtor matches its base class' dtor
         //  (both Itanium and MSVC)
@@ -767,10 +775,20 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
         return;
 
     auto FD = getFD(fdecl);
+    auto structorType = getStructorType(*CGM, FD);
     const clang::FunctionDecl *Def;
 
-    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration())
-        CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration()) {
+        auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def);
+        auto Dtor = dyn_cast<clang::CXXDestructorDecl>(Def);
+
+        if (Ctor)
+            CGM->EmitGlobal(clang::GlobalDecl(Ctor, clangCG::toCXXCtorType(structorType)));
+        else if (Dtor)
+            CGM->EmitGlobal(clang::GlobalDecl(Dtor, clangCG::toCXXDtorType(structorType)));
+        else
+            CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+    }
 }
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
@@ -884,11 +902,26 @@ static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
         return;
 
     auto Emit = [&] (clang::CXXMethodDecl *D) {
-        if (D && !D->isInvalidDecl() && !D->isDeleted() && !isMapped(D))
+        if (!D || D->isInvalidDecl() || D->isDeleted())
+            return;
+          
+        if (!isMapped(D))
         {
             auto R = ResolvedFunc::get(CGM, D); // mark it used
             if (R.Func->isDeclaration())
                 CGM.EmitTopLevelDecl(D); // mark it emittable
+        }
+
+        // For MSVC 
+        if (CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft) {
+            if (auto Dtor = dyn_cast<const clang::CXXDestructorDecl>(D)) {
+                auto structorType = Dtor->getParent()->getNumVBases() == 0 ?
+                    clangCG::StructorType::Complete : clangCG::StructorType::Base;
+                auto FInfo = &CGM.getTypes().arrangeCXXStructorDeclaration(Dtor, structorType);
+                CGM.getAddrOfCXXStructor(Dtor, structorType, FInfo,
+                    CGM.getTypes().GetFunctionType(*FInfo), true);
+                CGM.EmitGlobal(clang::GlobalDecl(Dtor, clangCG::toCXXDtorType(structorType)));
+            }
         }
     };
 
