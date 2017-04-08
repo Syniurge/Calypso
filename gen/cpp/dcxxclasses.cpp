@@ -301,7 +301,7 @@ template<> struct VTableBuilder<clang::VFTableBuilder> {
 
         clang::FinalOverriders::OverriderInfo FinalOverrider =
             B.Overriders.getOverrider(MD, OverriddenBaseSubobject.getBaseOffset());
-        return B.ComputeThisOffset(FinalOverrider);
+        return -B.ComputeThisOffset(FinalOverrider);
     }
 
     inline clang::ReturnAdjustment ComputeReturnAdjustment(
