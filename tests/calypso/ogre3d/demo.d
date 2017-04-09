@@ -2,8 +2,11 @@
  * Ogre3D D demo based on the Lighting sample and the wiki tutorial framework.
  *
  * Build with:
- *   $ clang++ -I/usr/local/include/OGRE -I/usr/local/include/OGRE/Overlay -I/usr/include/OIS -c BaseApplication.cpp -o BaseApplication.cpp.o
- *   $ ldc2 -wi -v -cpp-args -I/usr/local/include/OGRE -cpp-args -I/usr/local/include/OGRE/Overlay -cpp-args -I/usr/include/OIS -LBaseApplication.cpp.o -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-lstdc++ demo.d
+ *   (Linux)   $ clang++ -I/usr/local/include/OGRE -I/usr/local/include/OGRE/Overlay -I/usr/include/OIS -c BaseApplication.cpp -o BaseApplication.cpp.o
+ *             $ ldc2 -wi -v -cpp-args -I/usr/local/include/OGRE -cpp-args -I/usr/local/include/OGRE/Overlay -cpp-args -I/usr/include/OIS -LBaseApplication.cpp.o -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-lstdc++ demo.d
+ 
+ *   (Windows) $ cl.exe /c /MD /EHsc /I Z:\boost /I Z:\OGRE-SDK\include\OGRE /I Z:\OGRE-SDK\include\OGRE\Overlay /I Z:\OGRE-SDK\include\OIS /FoBaseApplication.cpp.o BaseApplication.cpp
+ *             $ ldc2.exe -wi -v -cpp-args -DBOOST_USE_WINDOWS_H -cpp-args -D_MT -cpp-args -D_DLL -cpp-args -fms-extensions -cpp-args -fdelayed-template-parsing -cpp-args -fms-compatibility -cpp-args -fms-compatibility-version=19 -cpp-args -IZ:\boost -cpp-args -IZ:\OGRE-SDK\include -cpp-args  -IZ:\OGRE-SDK\include\OGRE -cpp-args -IZ:\OGRE-SDK\include\OGRE\Overlay -cpp-args -IZ:\OGRE-SDK\include\OIS -LBaseApplication.cpp.o -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
  */
 
 modmap (C++) "OGRE/Ogre.h";
@@ -43,10 +46,17 @@ public:
     {
         super();
 
-        if (exists("/usr/local/share/OGRE/plugins.cfg"))
-            m_ResourcePath = "/usr/local/share/OGRE/";
-        else
-            m_ResourcePath = "/usr/share/OGRE/";
+        version(Windows) {} else {
+            if (exists("/usr/local/share/OGRE/plugins.cfg"))
+                m_ResourcePath = "/usr/local/share/OGRE/";
+            else
+                m_ResourcePath = "/usr/share/OGRE/";
+        }
+        
+        version(Windows) {
+            m_ResourcePath = "./";
+        }
+        
         assert(exists(to!string(m_ResourcePath.c_str)));
     }
 
