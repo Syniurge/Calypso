@@ -1161,10 +1161,11 @@ void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
     }
 
     if (global.params.targetTriple.isWindowsMSVCEnvironment()) {
-        // Insert msvcprt.lib
-        auto it_kernel32 = std::find(args.begin(), args.end(), "kernel32.lib");
-        if (it_kernel32 != args.end())
-            args.insert(it_kernel32, "libcpmt.lib");
+        // auto it_kernel32 = std::find(args.begin(), args.end(), "kernel32.lib");
+        // NOTE: the choice of the MSVC CRT library (LIBCPMT.LIB, MSVCPRT.LIB, etc.) should be left either to the linker
+        // (if linking against 3rd-party C++ libraries, link.exe picks up the runtime library expected by that library)
+        // or to the user.
+        // The right -D flags must also be manually passed: -cpp-args -D_DEBUG, -DMD(d), -DMT(d)
     } else {
         // Insert -lstdc++ or -lc++
         const char* cxxstdlib = (pch.cxxStdlibType ==
