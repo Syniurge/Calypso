@@ -17,7 +17,7 @@ import (C++)
     Qt.ConnectionType;
 
 public import
-	cpp.memberptr,
+    cpp.memberptr,
     moc.types;
 
 public import (C++)
@@ -72,7 +72,9 @@ mixin template signal(string name, T)
 
 mixin template Q_OBJECT()
 {
-// private:
+private:
+    import cpp.traits : MostDerivedCppClass;
+
 public:
     struct ClassDef
     {
@@ -822,7 +824,7 @@ public:
 //                             result ~= ");\n";
                         auto cppmfp = format("cpp_member_ptr!(%s, %s.%s)",
                                     __traits(identifier, C), __traits(identifier, C), __traits(identifier, f));
-                        result ~= format("            if (*cast(%s*)(func) == MFP!(%s, %s.%s)) {\n",
+                        result ~= format("            if (*cast(%s*)(func) == MFP!(MostDerivedCppClass!%s, %s.%s)) {\n",
                                 cppmfp, __traits(identifier, C), __traits(identifier, C), __traits(identifier, f)); // FIXME won't work with overloads
                         result ~= format("                *result = %d;\n", signalindex++);
                         result ~= "            }\n        }\n";
@@ -1250,7 +1252,7 @@ public:
 
     static immutable QMetaObject staticMetaObject;
     shared static this() { // DMD BUG #11268 can't do this in the initializer
-        staticMetaObject.d = typeof(QMetaObject.d)(
+        staticMetaObject.d = typeof(staticMetaObject.d)(
             &super.staticMetaObject, &qt_meta_stringdata.data[0], // NOTE: this is the commonplace version, should be replaced by getStaticMetaObject() later
             qt_meta_data.ptr,  &qt_static_metacall, null, null);
     }
@@ -1319,8 +1321,8 @@ QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 
 //     writeln("MFP!(", _T1.stringof, ", ", __traits(identifier, signal), ") = ", MFP!(_T1, signal));
 //     writeln("MFP!(", _T2.stringof, ", ", __traits(identifier, slot), ") = ", MFP!(_T2, slot));
 
-    alias Func1 = typeof(MFP!(_T1, signal));
-    alias Func2 = typeof(MFP!(_T2, slot));
+    alias Func1 = typeof(MFP!(MostDerivedCppClass!_T1, signal, true));
+    alias Func2 = typeof(MFP!(MostDerivedCppClass!_T2, slot, true));
 
     alias SignalType = FunctionPointer!Func1;
     alias SlotType = FunctionPointer!Func2;
@@ -1340,8 +1342,8 @@ QMetaObject.Connection connect2(alias signal, alias slot, T1, T2)(T1 sender, T2 
     if (type == ConnectionType.QueuedConnection || type == ConnectionType.BlockingQueuedConnection)
         types = ConnectionTypes!(SignalType.Arguments).types();
 
-    auto _signal = MFP!(_T1, signal);
-    auto _slot = MFP!(_T2, slot);
+    auto _signal = MFP!(MostDerivedCppClass!_T1, signal);
+    auto _slot = MFP!(MostDerivedCppClass!_T2, slot);
 
     import moc.cpputils : cppNew;
     auto _slotBase = cast(QSlotObjectBase*) cppNew!(QSlotObject!(Func2, List_Left!(SignalType.Arguments, SlotType.ArgumentCount).Value,
