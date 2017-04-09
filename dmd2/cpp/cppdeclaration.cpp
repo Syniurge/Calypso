@@ -516,13 +516,9 @@ bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
     return VisitDeclRef(E->getMemberDecl());
 }
 
-void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
+void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
 {
-    auto& S = calypso.getSema();
     auto& Diags = calypso.getDiagnostics();
-
-    auto D = const_cast<clang::FunctionDecl*>(getFD(fd));
-    assert(!D->getDeclContext()->isDependentContext());
 
     auto FPT = D->getType()->getAs<clang::FunctionProtoType>();
     if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
@@ -537,6 +533,16 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
     // Not fully understanding why, but here's a second attempt
     if (!D->hasBody() && D->isImplicitlyInstantiable())
         S.InstantiateFunctionDefinition(D->getLocation(), D);
+}
+
+void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
+{
+    auto& S = calypso.getSema();
+
+    auto D = const_cast<clang::FunctionDecl*>(getFD(fd));
+    assert(!D->getDeclContext()->isDependentContext());
+
+    InstantiateFunctionDefinition(S, D);
 
     const clang::FunctionDecl *Def;
     if (!D->isInvalidDecl() && D->hasBody(Def))

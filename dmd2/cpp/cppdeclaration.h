@@ -247,6 +247,7 @@ public:
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 bool isPolymorphic(const clang::RecordDecl *D);
+void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
 
 inline bool& getIsUsed(::FuncDeclaration* fd)
 {

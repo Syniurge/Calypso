@@ -491,12 +491,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             auto MarkEmit = [&] (clang::FunctionDecl *FD) {
                 if (!FD)
                     return;
-
-                auto FPT = FD->getType()->getAs<clang::FunctionProtoType>();
-                if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
-                    S.ResolveExceptionSpec(D->getLocation(), FPT);
-
-                S.MarkFunctionReferenced(D->getLocation(), FD);
+                InstantiateFunctionDefinition(S, FD);
             };
 
             // Clang declares and defines implicit ctors/assignment operators lazily,
