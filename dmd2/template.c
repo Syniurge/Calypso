@@ -6390,7 +6390,7 @@ Lerror:
     if (global.errors != errorsave)
         goto Laftersemantic;
 
-    if (sc->func && !tinst)
+    if ((sc->func || langPlugin()) && !tinst) // CALYPSO HACK FIXME: sc->func gets reset if too deep during DeclReferencer and some times that resulted in functions not getting semantic3'd.. is this the correct fix?
     {
         /* If a template is instantiated inside function, the whole instantiation
          * should be done at that position. But, immediate running semantic3 of
