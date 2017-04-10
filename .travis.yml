@@ -5,7 +5,6 @@ dist: trusty
 matrix:
   include:
     - os: linux
-      d: ldc
       env: LLVM_VERSION=3.9.0
     - os: osx
       env: LLVM_CONFIG="llvm-config-3.9"
@@ -62,6 +61,7 @@ install:
     fi
   - pip install --user lit
   - python -c "import lit; lit.main();" --version | head -n 1
+  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then gdb --version; fi
 
 before_script:
   - curl http://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -;
@@ -81,39 +81,19 @@ script:
   - bin/ldc2 -version || exit 1
   # Build Phobos & druntime unittest modules.
   -
-    if [ "${TEST_CONFIG}" = "Debug" ]; then
-      MAKEOPTS=-j2 ctest --verbose -R "build-phobos2-ldc-unittest-debug";
-      MAKEOPTS=-j3 ctest --verbose -R "build-druntime-ldc-unittest-debug";
-    elif [ "${TEST_CONFIG}" = "Release" ]; then
-      MAKEOPTS=-j2 ctest --verbose -R "build-phobos2-ldc-unittest" -E "-debug";
-      MAKEOPTS=-j3 ctest --verbose -R "build-druntime-ldc-unittest" -E "-debug";
+    if [ "${OPTS}" = "-DMULTILIB=ON" ]; then
+      make -j2 phobos2-ldc-unittest-debug phobos2-ldc-unittest phobos2-ldc-unittest-debug-32 phobos2-ldc-unittest-32;
+      make -j3 druntime-ldc-unittest-debug druntime-ldc-unittest druntime-ldc-unittest-debug-32 druntime-ldc-unittest-32;
     else
-      MAKEOPTS=-j2 ctest --verbose -R "build-phobos2-ldc-unittest";
-      MAKEOPTS=-j3 ctest --verbose -R "build-druntime-ldc-unittest";
+      make -j2 phobos2-ldc-unittest-debug phobos2-ldc-unittest;
+      make -j3 druntime-ldc-unittest-debug druntime-ldc-unittest;
     fi
   # Run dmd-testsuite.
-  -
-    if [ "${TEST_CONFIG}" = "Debug" ]; then
-      CC="" MAKEOPTS=-j4 ctest --verbose -R "dmd-testsuite-debug";
-    elif [ "${TEST_CONFIG}" = "Release" ]; then
-      CC="" MAKEOPTS=-j4 ctest --verbose -R "dmd-testsuite" -E "-debug";
-    else
-      CC="" MAKEOPTS=-j4 ctest --verbose -R "dmd-testsuite";
-    fi
+  - CC="" DMD_TESTSUITE_MAKE_ARGS=-j3 ctest --verbose -R "dmd-testsuite"
   # Run LLVM IR testsuite.
-  - ctest --output-on-failure -R "llvm-ir-testsuite"
+  - ctest --output-on-failure -V -R "lit-tests"
   # Link and run Phobos & druntime unittest runners.
-  -
-    if [ "${TEST_CONFIG}" = "Debug" ]; then
-      MAKEOPTS=-j3 ctest --verbose -R "-test-runner-debug";
-      ctest -j4 --output-on-failure -R "-debug" -E "testsuite";
-    elif [ "${TEST_CONFIG}" = "Release" ]; then
-      MAKEOPTS=-j3 ctest --verbose -R "-test-runner" -E "-debug";
-      ctest -j4 --output-on-failure -E "(-debug|testsuite)";
-    else
-      MAKEOPTS=-j3 ctest --verbose -R "-test-runner";
-      ctest -j4 --output-on-failure -E "testsuite";
-    fi
+  - ctest -j3 --output-on-failure -E "dmd-testsuite|lit-tests"
 
 after_success:
   -
@@ -127,3 +107,5 @@ notifications:
       - "syniurge@gmail.com"
     on_success: never
     on_failure: change
+    use_notice: false
+    skip_join: true
