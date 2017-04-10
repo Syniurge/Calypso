@@ -775,20 +775,10 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
         return;
 
     auto FD = getFD(fdecl);
-    auto structorType = getStructorType(*CGM, FD);
     const clang::FunctionDecl *Def;
 
-    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration()) {
-        auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def);
-        auto Dtor = dyn_cast<clang::CXXDestructorDecl>(Def);
-
-        if (Ctor)
-            CGM->EmitGlobal(clang::GlobalDecl(Ctor, clangCG::toCXXCtorType(structorType)));
-        else if (Dtor)
-            CGM->EmitGlobal(clang::GlobalDecl(Dtor, clangCG::toCXXDtorType(structorType)));
-        else
-            CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
-    }
+    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration())
+        CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
 }
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
