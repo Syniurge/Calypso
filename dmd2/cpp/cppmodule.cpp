@@ -1579,6 +1579,15 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     if (Tag && (Tag->getIdentifier() || Tag->getTypedefNameForAnonDecl()))
         return false; // anonymous tags are added as well
 
+    if (auto TD = dyn_cast<clang::TypedefNameDecl>(D))
+    {
+	if (auto *TT = TD->getTypeSourceInfo()->getType()->getAs<clang::TagType>())
+	    if (auto Tag = TT->getAsTagDecl())
+		if (auto RD = dyn_cast<clang::CXXRecordDecl>(Tag))
+		    if (!RD->hasDefinition() && RD->isPOD())
+			return false;  // opaque struct
+    }
+
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     if (Func && Func->getDescribedFunctionTemplate())
         return false; // the function template will get mapped instead
