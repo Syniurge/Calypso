@@ -96,11 +96,11 @@ extern (C++) FuncDeclaration hasIdentityOpAssign(AggregateDeclaration ad, Scope*
         sc.minst = null;
 
         a[0] = er;
-        auto f = resolveFuncCall(ad.loc, sc, assign, null, ad.type, &a, 1);
+        auto f = resolveFuncCall(ad.loc, sc, assign, null, ad.type, &a, 1|8); // CALYPSO
         if (!f)
         {
             a[0] = el;
-            f = resolveFuncCall(ad.loc, sc, assign, null, ad.type, &a, 1);
+            f = resolveFuncCall(ad.loc, sc, assign, null, ad.type, &a, 1|8); // CALYPSO
         }
 
         sc = sc.pop();
@@ -183,6 +183,9 @@ Lneed:
  */
 extern (C++) FuncDeclaration buildOpAssign(StructDeclaration sd, Scope* sc)
 {
+    if (auto lp = sd.langPlugin()) // CALYPSO
+        return lp.buildOpAssign(sd, sc);
+
     if (FuncDeclaration f = hasIdentityOpAssign(sd, sc))
     {
         sd.hasIdentityAssign = true;
@@ -399,7 +402,7 @@ extern (C++) FuncDeclaration hasIdentityOpEquals(AggregateDeclaration ad, Scope*
             {
                 a[0] = (j == 0 ? er : el);
                 a[0].type = tthis;
-                f = resolveFuncCall(ad.loc, sc, eq, null, tthis, &a, 1);
+                f = resolveFuncCall(ad.loc, sc, eq, null, tthis, &a, 1|8); // CALYPSO
                 if (f)
                     break;
             }
@@ -450,6 +453,9 @@ extern (C++) FuncDeclaration buildXopEquals(StructDeclaration sd, Scope* sc)
         return null; // bitwise comparison would work
 
     //printf("StructDeclaration::buildXopEquals() %s\n", sd.toChars());
+    if (auto lp = sd.langPlugin()) // CALYPSO
+        if (auto fd = lp.searchOpEqualsForXopEquals(sd, sc))
+            return fd;
     if (Dsymbol eq = search_function(sd, Id.eq))
     {
         if (FuncDeclaration fd = eq.isFuncDeclaration())
@@ -717,7 +723,7 @@ extern (C++) FuncDeclaration buildXtoHash(StructDeclaration sd, Scope* sc)
      * hash value will also contain the result of parent class's toHash().
      */
     const(char)* code =
-        "size_t h = 0;" ~
+        "object.size_t h = 0;" ~ // CALYPSO qualify size_t
         "foreach (i, T; typeof(p.tupleof))" ~
         "    h += typeid(T).getHash(cast(const void*)&p.tupleof[i]);" ~
         "return h;";
@@ -907,6 +913,9 @@ extern (C++) FuncDeclaration buildPostBlit(StructDeclaration sd, Scope* sc)
 extern (C++) FuncDeclaration buildDtor(AggregateDeclaration ad, Scope* sc)
 {
     //printf("AggregateDeclaration::buildDtor() %s\n", ad.toChars());
+    if (auto lp = ad.langPlugin()) // CALYPSO
+        return lp.buildDtor(ad, sc);
+
     StorageClass stc = STCsafe | STCnothrow | STCpure | STCnogc;
     Loc declLoc = ad.dtors.dim ? ad.dtors[0].loc : ad.loc;
     Loc loc = Loc(); // internal code should have no loc to prevent coverage

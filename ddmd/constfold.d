@@ -1148,7 +1148,7 @@ extern (C++) UnionExp Cast(Loc loc, Type type, Type to, Expression e1)
         StructDeclaration sd = tb.toDsymbol(null).isStructDeclaration();
         assert(sd);
         auto elements = new Expressions();
-        for (size_t i = 0; i < sd.fields.dim; i++)
+        for (size_t i = 0; i < sd.fields.dim - sd.isNested(); i++) // CALYPSO DMD BUG: missing -isNested() to stay consistent with other SLE creation
         {
             VarDeclaration v = sd.fields[i];
             UnionExp zero;

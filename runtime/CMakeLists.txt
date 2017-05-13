@@ -46,6 +46,7 @@ get_directory_property(PROJECT_PARENT_DIR DIRECTORY ${PROJECT_SOURCE_DIR} PARENT
 set(RUNTIME_DIR ${PROJECT_SOURCE_DIR}/druntime CACHE PATH "druntime root directory")
 set(PHOBOS2_DIR ${PROJECT_SOURCE_DIR}/phobos CACHE PATH "Phobos root directory")
 set(PROFILERT_DIR ${PROJECT_SOURCE_DIR}/profile-rt CACHE PATH "profile-rt root directory")
+set(CALYPSORT_DIR ${PROJECT_SOURCE_DIR}/calypso CACHE PATH "calypso-rt root directory")
 
 #
 # Gather source files.
@@ -185,6 +186,9 @@ if(PHOBOS2_DIR)
 else()
     set(CONFIG_NAME ${LDC_EXE})
 endif()
+
+# CALYPSO
+file(GLOB_RECURSE CALYPSORT_D ${CALYPSORT_DIR}/*.d)
 
 # should only be necessary if run independently from ldc cmake project
 if(NOT LDC_EXE)
@@ -388,6 +392,21 @@ macro(compile_phobos2 d_flags lib_suffix path_suffix outlist_o outlist_bc)
     endforeach()
 endmacro()
 
+# CALYPSO
+macro(compile_calypsort d_flags lib_suffix path_suffix outlist_o outlist_bc calypsort_cppdir)
+    get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
+    foreach(f ${CALYPSORT_D})
+         dc(
+            ${f}
+            "${d_flags};-I${CALYPSORT_DIR};-cpp-cachedir=${calypsort_cppdir}"
+            ${CALYPSORT_DIR}
+            "${target_suffix}"
+            ${outlist_o}
+            ${outlist_bc}
+        )
+    endforeach()
+endmacro()
+
 # Sets the common properties for all library targets.
 function(set_common_library_properties target)
     set_target_properties(${target} PROPERTIES
@@ -469,6 +488,37 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
 
         list(APPEND ${outlist_targets} "phobos2-ldc${target_suffix}")
     endif()
+
+    # CALYPSO
+    set(calypsort_o "")
+    set(calypsort_bc "")
+    set(calypsort_cppdir "${CMAKE_CURRENT_BINARY_DIR}/calypso-ldc${lib_suffix}-cpp")
+    file(MAKE_DIRECTORY ${calypsort_cppdir})
+    compile_calypsort("${d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc ${calypsort_cppdir})
+
+    set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
+    add_custom_command(
+        OUTPUT "${cpp_monolith_o}"
+        COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir=${calypsort_cppdir} -Dcpp_monolith_o=${cpp_monolith_o}
+                -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+                -DMSVC=${MSVC} -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+        DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+    )
+
+    add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} ${cpp_monolith_o})
+    set_target_properties(
+        calypso-ldc${target_suffix} PROPERTIES
+        OUTPUT_NAME                 calypso-ldc${lib_suffix}
+        VERSION                     ${DMDFE_VERSION}
+        SOVERSION                   ${DMDFE_PATCH_VERSION}
+        LINKER_LANGUAGE             C
+        ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+        LIBRARY_OUTPUT_DIRECTORY    ${output_path}
+        RUNTIME_OUTPUT_DIRECTORY    ${output_path}
+        COMPILE_FLAGS               "${c_flags}"
+        LINK_FLAGS                  "${ld_flags}"
+    )
+    list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
 
     if(BUILD_BC_LIBS)
         find_program(LLVM_AR_EXE llvm-ar
@@ -594,6 +644,9 @@ if(PHOBOS2_DIR)
     install(DIRECTORY ${PHOBOS2_DIR}/etc DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.d")
 endif()
 install(FILES ${GCCBUILTINS} DESTINATION ${INCLUDE_INSTALL_DIR}/ldc)
+if(CALYPSORT_DIR)
+    install(DIRECTORY ${CALYPSORT_DIR}/cpp DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.d" PATTERN "*.h")
+endif()
 
 foreach(libname ${LIBS_TO_INSTALL})
     if(APPLE)

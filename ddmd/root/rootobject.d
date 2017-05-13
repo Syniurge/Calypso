@@ -20,6 +20,8 @@ extern (C++) class RootObject
     {
     }
 
+    void _key(); // CALYPSO
+
     bool equals(RootObject o)
     {
         return o is this;

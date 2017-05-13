@@ -8,6 +8,7 @@
 
 module ddmd.objc;
 
+import ddmd.aggregate;
 import ddmd.arraytypes;
 import ddmd.cond;
 import ddmd.dclass;
@@ -197,9 +198,9 @@ extern (C++) void objc_FuncDeclaration_semantic_setSelector(FuncDeclaration fd, 
     }
 }
 
-extern (C++) bool objc_isUdaSelector(StructDeclaration sd)
+extern (C++) bool objc_isUdaSelector(AggregateDeclaration sd) // CALYPSO
 {
-    if (sd.ident != Id.udaSelector || !sd.parent)
+    if (!sd.isStructDeclaration() || sd.ident != Id.udaSelector || !sd.parent)
         return false;
     Module _module = sd.parent.isModule();
     return _module && _module.isCoreModule(Id.attribute);

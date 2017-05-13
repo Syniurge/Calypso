@@ -84,6 +84,7 @@ class Expression;
 class DeleteDeclaration;
 class OverloadSet;
 struct AA;
+class LangPlugin;
 
 struct Ungag
 {
@@ -112,8 +113,8 @@ struct Prot
     PROTKIND kind;
     Package *pkg;
 
-    Prot();
-    Prot(PROTKIND kind);
+    Prot() { this->kind = PROTundefined; pkg = nullptr; } // CALYPSO
+    Prot(PROTKIND kind) { this->kind = kind; pkg = nullptr; }
 
     bool isMoreRestrictiveThan(const Prot other) const;
     bool operator==(const Prot& other) const;
@@ -172,7 +173,7 @@ public:
     const utf8_t *prettystring;
     bool errors;                // this symbol failed to pass semantic()
     PASS semanticRun;
-    char *depmsg;               // customized deprecation message
+    DeprecatedDeclaration *depdecl; // customized deprecation message
     UserAttributeDeclaration *userAttribDecl;   // user defined attributes
     UnitTestDeclaration *ddocUnittest; // !=NULL means there's a ddoc unittest associated with this symbol (only use this with ddoc)
 
@@ -183,8 +184,9 @@ public:
     IrDsymbol *ir;
 #endif
 
-    Dsymbol();
-    Dsymbol(Identifier *);
+//     Dsymbol(); // CALYPSO
+//     Dsymbol(Identifier *);
+    virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     static Dsymbol *create(Identifier *);
     const char *toChars();
     virtual char *toPrettyCharsHelper(); // helper to print fully qualified (template) arguments
@@ -199,6 +201,7 @@ public:
     void checkDeprecated(Loc loc, Scope *sc);
     Module *getModule();
     Module *getAccessModule();
+    Module *getInstantiatingModule(); // CALYPSO
     Dsymbol *pastMixin();
     Dsymbol *toParent();
     Dsymbol *toParent2();
@@ -213,7 +216,7 @@ public:
 
     virtual Identifier *getIdent();
     virtual const char *toPrettyChars(bool QualifyTypes = false);
-    virtual const char *kind();
+    virtual const char *kind() const;
     virtual Dsymbol *toAlias();                 // resolve real symbol
     virtual Dsymbol *toAlias2();
     virtual int apply(Dsymbol_apply_ft_t fp, void *param);
@@ -254,6 +257,7 @@ public:
     virtual void addComment(const utf8_t *comment);
 
     bool inNonRoot();
+    bool inNonCodegen(); // CALYPSO
 
     // Eliminate need for dynamic_cast
     virtual Package *isPackage() { return NULL; }
@@ -299,6 +303,9 @@ public:
     virtual AnonDeclaration *isAnonDeclaration() { return NULL; }
     virtual OverloadSet *isOverloadSet() { return NULL; }
     virtual void accept(Visitor *v) { v->visit(this); }
+
+    // CALYPSO
+    virtual LangPlugin *langPlugin() { return NULL; }
 };
 
 // Dsymbol that generates a scope
@@ -316,16 +323,17 @@ private:
     BitArray accessiblePackages, privateAccessiblePackages;
 
 public:
-    ScopeDsymbol();
-    ScopeDsymbol(Identifier *id);
+//     ScopeDsymbol();
+//     ScopeDsymbol(Identifier *id);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *s);
     Dsymbol *search(Loc loc, Identifier *ident, int flags = SearchLocalsOnly);
     OverloadSet *mergeOverloadSet(Identifier *ident, OverloadSet *os, Dsymbol *s);
     void importScope(Dsymbol *s, Prot protection);
-    virtual bool isPackageAccessible(Package p, Prot protection, int flags = 0);
+    virtual bool isPackageAccessible(Package* p, Prot protection, int flags = 0); // CALYPSO DMD BUG: missing * in Package*
     bool isforwardRef();
     static void multiplyDefined(Loc loc, Dsymbol *s1, Dsymbol *s2);
-    const char *kind();
+    const char *kind() const;
     FuncDeclaration *findGetMembers();
     virtual Dsymbol *symtabInsert(Dsymbol *s);
     bool hasStaticCtorOrDtor();
@@ -380,7 +388,7 @@ public:
     OverloadSet(Identifier *ident, OverloadSet *os = NULL);
     void push(Dsymbol *s);
     OverloadSet *isOverloadSet() { return this; }
-    const char *kind();
+    const char *kind() const;
     void accept(Visitor *v) { v->visit(this); }
 };
 

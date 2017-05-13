@@ -20,6 +20,7 @@ import ddmd.dmodule;
 import ddmd.dscope;
 import ddmd.dsymbol;
 import ddmd.dtemplate;
+import ddmd.expression;
 import ddmd.errors;
 import ddmd.func;
 import ddmd.globals;
@@ -40,7 +41,7 @@ struct BaseClass
     Type type;          // (before semantic processing)
     Prot protection;    // protection for the base interface
 
-    ClassDeclaration sym;
+    AggregateDeclaration sym; // CALYPSO
     uint offset;        // 'this' pointer offset
 
     // for interfaces: Array of FuncDeclaration's making up the vtbl[]
@@ -71,14 +72,18 @@ struct BaseClass
     {
         bool result = false;
 
+        ClassDeclaration cb = sym.isClassDeclaration(); // CALYPSO
+        if (!cb)
+            return false;
+
         //printf("BaseClass.fillVtbl(this='%s', cd='%s')\n", sym.toChars(), cd.toChars());
         if (vtbl)
-            vtbl.setDim(sym.vtbl.dim);
+            vtbl.setDim(cb.vtbl.dim);
 
         // first entry is ClassInfo reference
-        for (size_t j = sym.vtblOffset(); j < sym.vtbl.dim; j++)
+        for (size_t j = cb.vtblOffset(); j < cb.vtbl.dim; j++)
         {
-            FuncDeclaration ifd = sym.vtbl[j].isFuncDeclaration();
+            FuncDeclaration ifd = cb.vtbl[j].isFuncDeclaration();
             FuncDeclaration fd;
             TypeFunction tf;
 
@@ -125,13 +130,16 @@ struct BaseClass
         //printf("+copyBaseInterfaces(), %s\n", sym.toChars());
         //    if (baseInterfaces_dim)
         //      return;
-        auto bc = cast(BaseClass*)mem.xcalloc(sym.interfaces.length, BaseClass.sizeof);
-        baseInterfaces = bc[0 .. sym.interfaces.length];
+        ClassDeclaration cb = sym.isClassDeclaration(); // CALYPSO
+        if (!cb)
+            return;
+        auto bc = cast(BaseClass*)mem.xcalloc(cb.interfaces.length, BaseClass.sizeof);
+        baseInterfaces = bc[0 .. cb.interfaces.length];
         //printf("%s.copyBaseInterfaces()\n", sym.toChars());
         for (size_t i = 0; i < baseInterfaces.length; i++)
         {
             BaseClass* b = &baseInterfaces[i];
-            BaseClass* b2 = sym.interfaces[i];
+            BaseClass* b2 = cb.interfaces[i];
 
             assert(b2.vtbl.dim == 0); // should not be filled yet
             memcpy(b, b2, BaseClass.sizeof);
@@ -159,6 +167,7 @@ struct ClassFlags
         isAbstract = 0x40,
         isCPPclass = 0x80,
         hasDtor = 0x100,
+        byVal = 0x200,  // CALYPSO
     }
 
     alias isCOMclass = Enum.isCOMclass;
@@ -187,7 +196,7 @@ public:
         ClassDeclaration cpp_type_info_ptr;   // Object.__cpp_type_info_ptr
     }
 
-    ClassDeclaration baseClass; // NULL only if this is Object
+    AggregateDeclaration baseClass; // NULL only if this is Object // CALYPSO
     FuncDeclaration staticCtor;
     FuncDeclaration staticDtor;
     Dsymbols vtbl;              // Array of FuncDeclaration's making up the vtbl[]
@@ -438,7 +447,7 @@ public:
                 ident = Identifier.generateId(id);
             }
         }
-        assert(parent && !isAnonymous());
+        assert(parent && (!isAnonymous() || mayBeAnonymous())); // CALYPSO
 
         if (this.errors)
             type = Type.terror;
@@ -551,27 +560,28 @@ public:
             {
                 BaseClass* b = (*baseclasses)[0];
                 Type tb = b.type.toBasetype();
-                TypeClass tc = (tb.ty == Tclass) ? cast(TypeClass)tb : null;
-                if (!tc)
+                auto sym = getAggregateSym(tb); // CALYPSO
+                auto bcd = cast(ClassDeclaration) sym;
+                if (!sym || (sym.isStructDeclaration() && !allowInheritFromStruct()))
                 {
                     if (b.type != Type.terror)
                         error("base type must be class or interface, not %s", b.type.toChars());
                     baseclasses.remove(0);
                     goto L7;
                 }
-                if (tc.sym.isDeprecated())
+                if (sym.isDeprecated())
                 {
                     if (!isDeprecated())
                     {
                         // Deriving from deprecated class makes this one deprecated too
                         isdeprecated = true;
-                        tc.checkDeprecated(loc, sc);
+                        tb.checkDeprecated(loc, sc);
                     }
                 }
-                if (tc.sym.isInterfaceDeclaration())
+                if (sym.isInterfaceDeclaration())
                     goto L7;
 
-                for (ClassDeclaration cdb = tc.sym; cdb; cdb = cdb.baseClass)
+                for (AggregateDeclaration cdb = sym; cdb; cdb = toAggregateBase(cdb))
                 {
                     if (cdb == this)
                     {
@@ -583,19 +593,19 @@ public:
 
                 /* Bugzilla 11034: Essentially, class inheritance hierarchy
                  * and instance size of each classes are orthogonal information.
-                 * Therefore, even if tc.sym.sizeof == SIZEOKnone,
+                 * Therefore, even if sym.sizeof == SIZEOKnone,
                  * we need to set baseClass field for class covariance check.
                  */
-                baseClass = tc.sym;
+                baseClass = sym;
                 b.sym = baseClass;
 
-                if (tc.sym._scope && tc.sym.baseok < BASEOKdone)
-                    resolveBase(tc.sym.semantic(null)); // Try to resolve forward reference
-                if (tc.sym.baseok < BASEOKdone)
+                if (sym._scope && (!bcd || bcd.baseok < BASEOKdone)) // CALYPSO NOTE: is it necessary to do it for a Struct base? this is how it was done in pre-DDMD Calypso, so for now
+                    resolveBase(sym.semantic(null)); // Try to resolve forward reference
+                if (bcd && bcd.baseok < BASEOKdone)
                 {
                     //printf("\ttry later, forward reference of base class %s\n", tc.sym.toChars());
-                    if (tc.sym._scope)
-                        tc.sym._scope._module.addDeferredSemantic(tc.sym);
+                    if (sym._scope)
+                        sym._scope._module.addDeferredSemantic(sym);
                     baseok = BASEOKnone;
                 }
             L7:
@@ -607,8 +617,10 @@ public:
             {
                 BaseClass* b = (*baseclasses)[i];
                 Type tb = b.type.toBasetype();
-                TypeClass tc = (tb.ty == Tclass) ? cast(TypeClass)tb : null;
-                if (!tc || !tc.sym.isInterfaceDeclaration())
+                auto sym = getAggregateSym(tb); // CALYPSO
+                if (tb.ty == Tstruct && !allowInheritFromStruct())
+                    sym = null;
+                if (!sym || (!allowMultipleInheritance() && !sym.isInterfaceDeclaration()))
                 {
                     if (b.type != Type.terror)
                         error("base type must be interface, not %s", b.type.toChars());
@@ -620,32 +632,33 @@ public:
                 for (size_t j = (baseClass ? 1 : 0); j < i; j++)
                 {
                     BaseClass* b2 = (*baseclasses)[j];
-                    if (b2.sym == tc.sym)
+                    if (b2.sym == sym)
                     {
                         error("inherits from duplicate interface %s", b2.sym.toChars());
                         baseclasses.remove(i);
                         continue;
                     }
                 }
-                if (tc.sym.isDeprecated())
+                if (sym.isDeprecated())
                 {
                     if (!isDeprecated())
                     {
                         // Deriving from deprecated class makes this one deprecated too
                         isdeprecated = true;
-                        tc.checkDeprecated(loc, sc);
+                        tb.checkDeprecated(loc, sc);
                     }
                 }
 
-                b.sym = tc.sym;
+                b.sym = sym;
 
-                if (tc.sym._scope && tc.sym.baseok < BASEOKdone)
-                    resolveBase(tc.sym.semantic(null)); // Try to resolve forward reference
-                if (tc.sym.baseok < BASEOKdone)
+                auto bcd = cast(ClassDeclaration) sym; // CALYPSO
+                if (sym._scope && (!bcd || bcd.baseok < BASEOKdone))
+                    resolveBase(sym.semantic(null)); // Try to resolve forward reference
+                if (bcd && bcd.baseok < BASEOKdone)
                 {
-                    //printf("\ttry later, forward reference of base %s\n", tc.sym.toChars());
-                    if (tc.sym._scope)
-                        tc.sym._scope._module.addDeferredSemantic(tc.sym);
+                    //printf("\ttry later, forward reference of base %s\n", sym.toChars());
+                    if (sym._scope)
+                        sym._scope._module.addDeferredSemantic(sym);
                     baseok = BASEOKnone;
                 }
                 i++;
@@ -662,7 +675,7 @@ public:
             baseok = BASEOKdone;
 
             // If no base class, and this is not an Object, use Object as base class
-            if (!baseClass && ident != Id.Object && !cpp)
+            if (!baseClass && ident != Id.Object && !cpp && !langPlugin()) // CALYPSO conundrum FIXME
             {
                 if (!object)
                 {
@@ -687,13 +700,16 @@ public:
                 if (baseClass.storage_class & STCfinal)
                     error("cannot inherit from final class %s", baseClass.toChars());
 
+                if (auto bcd = cast(ClassDeclaration)baseClass) // CALYPSO
+                {
                 // Inherit properties from base class
-                if (baseClass.isCOMclass())
+                if (bcd.isCOMclass())
                     com = true;
-                if (baseClass.isCPPclass())
+                if (bcd.isCPPclass())
                     cpp = true;
-                if (baseClass.isscope)
+                if (bcd.isscope)
                     isscope = true;
+                }
                 enclosing = baseClass.enclosing;
                 storage_class |= baseClass.storage_class & STC_TYPECTOR;
             }
@@ -701,11 +717,15 @@ public:
             interfaces = baseclasses.tdata()[(baseClass ? 1 : 0) .. baseclasses.dim];
             foreach (b; interfaces)
             {
+                auto bcd = cast(ClassDeclaration)b.sym; // CALYPSO
+                if (!bcd)
+                    continue;
+
                 // If this is an interface, and it derives from a COM interface,
                 // then this is a COM interface too.
-                if (b.sym.isCOMinterface())
+                if (bcd.isCOMinterface())
                     com = true;
-                if (cpp && !b.sym.isCPPinterface())
+                if (cpp && !bcd.isCPPinterface())
                 {
                     .error(loc, "C++ class '%s' cannot implement D interface '%s'",
                         toPrettyChars(), b.sym.toPrettyChars());
@@ -769,15 +789,13 @@ public:
         {
             BaseClass* b = (*baseclasses)[i];
             Type tb = b.type.toBasetype();
-            assert(tb.ty == Tclass);
-            TypeClass tc = cast(TypeClass)tb;
-            if (tc.sym.semanticRun < PASSsemanticdone)
+            if (b.sym.semanticRun < PASSsemanticdone) // CALYPSO
             {
                 // Forward referencee of one or more bases, try again later
                 _scope = scx ? scx : sc.copy();
                 _scope.setNoFree();
-                if (tc.sym._scope)
-                    tc.sym._scope._module.addDeferredSemantic(tc.sym);
+                if (b.sym._scope)
+                    b.sym._scope._module.addDeferredSemantic(b.sym);
                 _scope._module.addDeferredSemantic(this);
                 //printf("\tL%d semantic('%s') failed due to forward references\n", __LINE__, toChars());
                 return;
@@ -788,27 +806,7 @@ public:
         {
             baseok = BASEOKsemanticdone;
 
-            // initialize vtbl
-            if (baseClass)
-            {
-                if (cpp && baseClass.vtbl.dim == 0)
-                {
-                    error("C++ base class %s needs at least one virtual function", baseClass.toChars());
-                }
-
-                // Copy vtbl[] from base class
-                vtbl.setDim(baseClass.vtbl.dim);
-                memcpy(vtbl.tdata(), baseClass.vtbl.tdata(), (void*).sizeof * vtbl.dim);
-
-                vthis = baseClass.vthis;
-            }
-            else
-            {
-                // No base class, so this is the root of the class hierarchy
-                vtbl.setDim(0);
-                if (vtblOffset())
-                    vtbl.push(this); // leave room for classinfo as first member
-            }
+            initVtbl(); // CALYPSO
 
             /* If this is a nested class, add the hidden 'this'
              * member which is a pointer to the enclosing scope.
@@ -883,6 +881,7 @@ public:
         }
 
         finalizeSize();
+        finalizeVtbl(); // CALYPSO
 
         if (sizeok == SIZEOKfwd)
         {
@@ -992,7 +991,7 @@ public:
 
         if (FuncDeclaration f = hasIdentityOpAssign(this, sc2))
         {
-            if (!(f.storage_class & STCdisable))
+            if (byRef() && !(f.storage_class & STCdisable)) // CALYPSO
                 error(f.loc, "identity assignment operator overload is illegal");
         }
 
@@ -1027,6 +1026,10 @@ public:
             deferred.semantic3(sc);
         }
 
+        // CALYPSO
+        if (!langPlugin())
+            markAggregateReferenced(this);
+
         version (none)
         {
             if (type.ty == Tclass && (cast(TypeClass)type).sym != this)
@@ -1039,52 +1042,7 @@ public:
         //printf("-ClassDeclaration.semantic(%s), type = %p, sizeok = %d, this = %p\n", toChars(), type, sizeok, this);
     }
 
-    /*********************************************
-     * Determine if 'this' is a base class of cd.
-     * This is used to detect circular inheritance only.
-     */
-    final bool isBaseOf2(ClassDeclaration cd)
-    {
-        if (!cd)
-            return false;
-        //printf("ClassDeclaration.isBaseOf2(this = '%s', cd = '%s')\n", toChars(), cd.toChars());
-        for (size_t i = 0; i < cd.baseclasses.dim; i++)
-        {
-            BaseClass* b = (*cd.baseclasses)[i];
-            if (b.sym == this || isBaseOf2(b.sym))
-                return true;
-        }
-        return false;
-    }
-
     enum OFFSET_RUNTIME = 0x76543210;
-
-    /*******************************************
-     * Determine if 'this' is a base class of cd.
-     */
-    bool isBaseOf(ClassDeclaration cd, int* poffset)
-    {
-        //printf("ClassDeclaration.isBaseOf(this = '%s', cd = '%s')\n", toChars(), cd.toChars());
-        if (poffset)
-            *poffset = 0;
-        while (cd)
-        {
-            /* cd.baseClass might not be set if cd is forward referenced.
-             */
-            if (!cd.baseClass && cd._scope && !cd.isInterfaceDeclaration())
-            {
-                cd.semantic(null);
-                if (!cd.baseClass && cd._scope)
-                    cd.error("base class is forward referenced by %s", toChars());
-            }
-
-            if (this == cd.baseClass)
-                return true;
-
-            cd = cd.baseClass;
-        }
-        return false;
-    }
 
     /*********************************************
      * Determine if 'this' has complete base class information.
@@ -1178,11 +1136,8 @@ public:
         return null;
     }
 
-    final override void finalizeSize()
+    void buildLayout() // CALYPSO
     {
-        if (sizeok != SIZEOKnone)
-            return;
-
         // Set the offsets of the fields and determine the size of the class
         if (baseClass)
         {
@@ -1190,6 +1145,8 @@ public:
 
             alignsize = baseClass.alignsize;
             structsize = baseClass.structsize;
+            if (baseClass.langPlugin())  // if we're inheriting from a class written in a foreign language, add the D header // CALYPSO
+                structsize += Target.ptrsize*2; // allow room for __vptr and __monitor
             if (cpp && global.params.isWindows)
                 structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
         }
@@ -1229,12 +1186,13 @@ public:
 
             foreach (BaseClass* b; cd.interfaces)
             {
+                auto cb = cast(ClassDeclaration)b.sym; // CALYPSO
                 if (!b.sym.alignsize)
                     b.sym.alignsize = Target.ptrsize;
                 alignmember(b.sym.alignsize, b.sym.alignsize, &offset);
                 assert(bi < vtblInterfaces.dim);
                 BaseClass* bv = (*vtblInterfaces)[bi];
-                if (b.sym.interfaces.length == 0)
+                if (cb.interfaces.length == 0)
                 {
                     //printf("\tvtblInterfaces[%d] b=%p b.sym = %s, offset = %d\n", bi, bv, bv.sym.toChars(), offset);
                     bv.offset = offset;
@@ -1247,7 +1205,7 @@ public:
                         //printf("\tvtblInterfaces[%d] b=%p   sym = %s, offset = %d\n", bi, b2, b2.sym.toChars(), b2.offset);
                     }
                 }
-                membersPlace(b.sym, offset);
+                membersPlace(cb, offset);
                 //printf(" %s size = %d\n", b.sym.toChars(), b.sym.structsize);
                 offset += b.sym.structsize;
                 if (alignsize < b.sym.alignsize)
@@ -1269,7 +1227,14 @@ public:
         {
             s.setFieldOffset(this, &offset, false);
         }
+    }
 
+    override final void finalizeSize()
+    {
+        if (sizeok != SIZEOKnone)
+            return;
+
+        buildLayout(); // CALYPSO
         if (sizeok == SIZEOKfwd)
             return;
 
@@ -1415,7 +1380,7 @@ public:
         }
 
         searchVtbl(vtbl);
-        for (auto cd = this; cd; cd = cd.baseClass)
+        for (auto cd = this; cd; cd = isClassDeclarationOrNull(cd.baseClass))
         {
             searchVtbl(cd.vtblFinal);
         }
@@ -1426,7 +1391,7 @@ public:
         return fdmatch;
     }
 
-    final void interfaceSemantic(Scope* sc)
+    void interfaceSemantic(Scope* sc) // CALYPSO
     {
         vtblInterfaces = new BaseClasses();
         vtblInterfaces.reserve(interfaces.length);
@@ -1505,6 +1470,78 @@ public:
     override final void addLocalClass(ClassDeclarations* aclasses)
     {
         aclasses.push(this);
+    }
+
+    /****************************************
+     */ // CALYPSO
+    override bool byRef() const
+    {
+        return true;
+    }
+
+    bool allowMultipleInheritance()
+    {
+        return false;
+    }
+
+    bool allowInheritFromStruct()
+    {
+        return false;
+    }
+
+    override Expression defaultInit(Loc loc)
+    {
+        static if (LOGDEFAULTINIT)
+        {
+            printf("TypeClass::defaultInit() '%s'\n", toChars());
+        }
+        if (byRef())
+            return new NullExp(loc, type);
+
+        Declaration d = new SymbolDeclaration(this.loc, this);
+        d.type = type;
+        return new VarExp(this.loc, d);
+    }
+
+    void initVtbl()
+    {
+        if (auto bcd = isClassDeclarationOrNull(baseClass))
+        {
+            if (cpp && bcd.vtbl.dim == 0)
+            {
+                error("C++ base class %s needs at least one virtual function", baseClass.toChars());
+            }
+
+            // Copy vtbl[] from base class
+            vtbl.setDim(bcd.vtbl.dim);
+            memcpy(vtbl.tdata(), bcd.vtbl.tdata(), (void*).sizeof * vtbl.dim);
+
+            vthis = baseClass.vthis;
+        }
+        else
+        {
+            // No base class, so this is the root of the class hierarchy
+            vtbl.setDim(0);
+            if (vtblOffset())
+                vtbl.push(this); // leave room for classinfo as first member
+        }
+    }
+
+    void finalizeVtbl()
+    {
+    }
+
+    final AggregateDeclaration foreignBase()
+    {
+        AggregateDeclaration b = this;
+        while (b)
+        {
+            if (b.langPlugin())
+                return b;
+
+            b = toAggregateBase(b);
+        }
+        return null;
     }
 
     // Back end
@@ -1731,9 +1768,11 @@ public:
             {
                 // If this is an interface, and it derives from a COM interface,
                 // then this is a COM interface too.
-                if (b.sym.isCOMinterface())
+                auto ib = cast(InterfaceDeclaration)b.sym; // CALYPSO
+                assert(ib);
+                if (ib.isCOMinterface())
                     com = true;
-                if (b.sym.isCPPinterface())
+                if (ib.isCPPinterface())
                     cpp = true;
             }
 
@@ -1778,6 +1817,8 @@ public:
             // Cat together the vtbl[]'s from base interfaces
             foreach (i, b; interfaces)
             {
+                auto ib = cast(InterfaceDeclaration)b.sym; // CALYPSO
+
                 // Skip if b has already appeared
                 for (size_t k = 0; k < i; k++)
                 {
@@ -1786,19 +1827,19 @@ public:
                 }
 
                 // Copy vtbl[] from base class
-                if (b.sym.vtblOffset())
+                if (ib.vtblOffset())
                 {
-                    size_t d = b.sym.vtbl.dim;
+                    size_t d = ib.vtbl.dim;
                     if (d > 1)
                     {
                         vtbl.reserve(d - 1);
                         for (size_t j = 1; j < d; j++)
-                            vtbl.push(b.sym.vtbl[j]);
+                            vtbl.push(ib.vtbl[j]);
                     }
                 }
                 else
                 {
-                    vtbl.append(&b.sym.vtbl);
+                    vtbl.append(&ib.vtbl);
                 }
 
             Lcontinue:
@@ -1902,7 +1943,8 @@ public:
             if (isBaseOf(b, poffset))
                 return true;
         }
-        if (cd.baseClass && isBaseOf(cd.baseClass, poffset))
+        ClassDeclaration cb = isClassDeclarationOrNull(cd.baseClass); // CALYPSO
+        if (cb && isBaseOf(cb, poffset))
             return true;
 
         if (poffset)
@@ -1976,4 +2018,17 @@ public:
     {
         v.visit(this);
     }
+}
+
+// CALYPSO
+extern (C++) ClassDeclaration isClassDeclarationOrNull(Dsymbol s)
+{
+    return s ? s.isClassDeclaration() : null;
+}
+
+extern (C++) AggregateDeclaration toAggregateBase(Dsymbol s)
+{
+    assert(s);
+    ClassDeclaration cd = s.isClassDeclaration();
+    return cd ? cd.baseClass : null;
 }

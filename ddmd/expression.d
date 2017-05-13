@@ -102,6 +102,9 @@ void emplaceExp(T : UnionExp)(T* p, Expression e)
 extern (C++) Expression getRightThis(Loc loc, Scope* sc, AggregateDeclaration ad, Expression e1, Declaration var, int flag = 0)
 {
     //printf("\ngetRightThis(e1 = %s, ad = %s, var = %s)\n", e1->toChars(), ad->toChars(), var->toChars());
+    if (ad && ad.langPlugin()) // CALYPSO
+        if (auto result = ad.langPlugin().getRightThis(loc, sc, ad, e1, var, flag))
+            return result;
 L1:
     Type t = e1.type.toBasetype();
     //printf("e1->type = %s, var->type = %s\n", e1->type->toChars(), var->type->toChars());
@@ -1321,7 +1324,7 @@ extern (C++) bool checkDefCtor(Loc loc, Type t)
 extern (C++) Expression callCpCtor(Scope* sc, Expression e)
 {
     Type tv = e.type.baseElemOf();
-    if (tv.ty == Tstruct)
+    if (tv.ty == Tstruct) // CALYPSO FIXME TODO: class values
     {
         StructDeclaration sd = (cast(TypeStruct)tv).sym;
         if (sd.postblit)
@@ -1456,6 +1459,8 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 arg = inlineCopy(arg, sc);
                 // __FILE__, __LINE__, __MODULE__, __FUNCTION__, and __PRETTY_FUNCTION__
                 arg = arg.resolveLoc(loc, sc);
+                if (arg.op == TOKcall && sc.isD()) // CALYPSO (semantic isn't called on default arguments)
+                    markCalleeReferenced(cast(CallExp)arg);
                 arguments.push(arg);
                 nargs++;
             }
@@ -1621,8 +1626,17 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 if (!tprm.equals(arg.type))
                 {
                     //printf("arg->type = %s, p->type = %s\n", arg->type->toChars(), p->type->toChars());
+                    if (arg.implicitConvTo(tprm) == MATCHnomatch) // CALYPSO
+                    {
+                        AggregateDeclaration toad = getAggregateSym(tprm);
+                        if (toad && toad.hasImplicitCtor(arg))
+                        {
+                            arg = new CallExp(arg.loc, new TypeExp(arg.loc, toad.getType()), arg);
+                            arg = arg.semantic(sc);
+                        }
+                    }
                     arg = arg.implicitCastTo(sc, tprm);
-                    arg = arg.optimize(WANTvalue, (p.storageClass & (STCref | STCout)) != 0);
+                    arg = arg.optimize(WANTvalue, (p.storageClass & (STCref | STCout)) != 0 && !(p.storageClass & STCscope)); // CALYPSO
                 }
             }
             if (p.storageClass & STCref)
@@ -1633,7 +1647,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                     // suppress deprecation message for auto ref parameter
                     // temporary workaround for Bugzilla 14283
                 }
-                else
+                else if (!(p.storageClass & STCscope)) // CALYPSO
                     arg = arg.toLvalue(sc, arg);
             }
             else if (p.storageClass & STCout)
@@ -1694,7 +1708,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                     }
                 }
             }
-            arg = arg.optimize(WANTvalue, (p.storageClass & (STCref | STCout)) != 0);
+            arg = arg.optimize(WANTvalue, (p.storageClass & (STCref | STCout)) != 0 && !(p.storageClass & STCscope)); // CALYPSO
         }
         else
         {
@@ -4145,13 +4159,13 @@ public:
                 cd = s.isClassDeclaration();
                 if (cd)
                 {
-                    cd = cd.baseClass;
-                    if (!cd)
+                    AggregateDeclaration base = cd.baseClass; // CALYPSO
+                    if (base is null)
                     {
                         error("class %s has no 'super'", s.toChars());
                         goto Lerr;
                     }
-                    type = cd.type;
+                    type = base.type;
                     return this;
                 }
             }
@@ -5155,7 +5169,7 @@ enum stageToCBuffer         = 0x20; // toCBuffer is running
 extern (C++) final class StructLiteralExp : Expression
 {
 public:
-    StructDeclaration sd;   // which aggregate this is for
+    AggregateDeclaration sd;   // which aggregate this is for // CALYPSO
     Expressions* elements;  // parallels sd.fields[] with null entries for fields to skip
     Type stype;             // final type of result (can be different from sd's type)
 
@@ -5191,7 +5205,7 @@ public:
     // (with infinite recursion) of this expression.
     int stageflags;
 
-    extern (D) this(Loc loc, StructDeclaration sd, Expressions* elements, Type stype = null)
+    extern (D) this(Loc loc, AggregateDeclaration sd, Expressions* elements, Type stype = null) // CALYPSO
     {
         super(loc, TOKstructliteral, __traits(classInstanceSize, StructLiteralExp));
         this.sd = sd;
@@ -5203,7 +5217,7 @@ public:
         //printf("StructLiteralExp::StructLiteralExp(%s)\n", toChars());
     }
 
-    static StructLiteralExp create(Loc loc, StructDeclaration sd, void* elements, Type stype = null)
+    static StructLiteralExp create(Loc loc, AggregateDeclaration sd, void* elements, Type stype = null) // CALYPSO
     {
         return new StructLiteralExp(loc, sd, cast(Expressions*)elements, stype);
     }
@@ -5378,6 +5392,27 @@ public:
             return e;
         }
         return this;
+    }
+
+    // CALYPSO
+    final VarDeclaration correspondingField(size_t elemIdx)
+    {
+        size_t i = 0;
+        VarDeclaration impl(AggregateDeclaration ad)
+        {
+            auto cd = ad.isClassDeclaration();
+            if (cd && cd.baseclasses)
+                foreach (ref b; *cd.baseclasses)
+                    if (auto field = impl(b.sym))
+                        return field;
+
+            auto nextI = i + ad.fields.dim - ad.isNested();
+            if (i <= elemIdx && elemIdx < nextI)
+                return ad.fields[elemIdx - i];
+            i = nextI;
+            return null;
+        }
+        return impl(sd);
     }
 
     override void accept(Visitor v)
@@ -5982,6 +6017,9 @@ public:
                     return new ErrorExp();
                 }
             }
+
+            if (!cd.byRef()) // CALYPSO
+                type = type.pointerTo();
         }
         else if (tb.ty == Tstruct)
         {
@@ -6030,7 +6068,7 @@ public:
                 }
             }
 
-            if (sd.ctor && nargs)
+            if ((sd.ctor && nargs) || (sd.langPlugin() && sd.defaultCtor && !nargs)) // CALYPSO HACK FIXME
             {
                 FuncDeclaration f = resolveFuncCall(loc, sc, sd.ctor, null, tb, arguments, 0);
                 if (!f || f.errors)
@@ -6125,6 +6163,16 @@ public:
             error("new can only create structs, dynamic arrays or class objects, not %s's", type.toChars());
             return new ErrorExp();
         }
+
+        // CALYPSO
+        auto ad = getAggregateSym(tb);
+        if (sc.isD() && ad)
+            if (auto lp = ad.langPlugin())
+            {
+                lp.markSymbolReferenced(ad);
+                if (member)
+                    lp.markSymbolReferenced(member);
+            }
 
         //printf("NewExp: '%s'\n", toChars());
         //printf("NewExp:type '%s'\n", type->toChars());
@@ -6340,6 +6388,12 @@ public:
             if (!fd.functionSemantic())
                 return new ErrorExp();
         }
+        else if (var._scope && var.sem == SemanticStart)
+        {
+            // CALYPSO DMD BUG: Ogre.d { alias String = cpp.std.string; String BLANKSTRING; } main.d { static import Ogre; class Foo { void Bar(ref Ogre.String S = Ogre.BLANKSTRING) {} } } was resulting in an error 5 lines below because String isn't in sc
+            var.semantic(var._scope);
+            type = var.type;
+        }
 
         if (!type)
             type = var.type;
@@ -6360,6 +6414,11 @@ public:
             // Bugzilla 12025: If the variable is not actually used in runtime code,
             // the purity violation error is redundant.
             //checkPurity(sc, vd);
+
+            // CALYPSO
+            if (sc.isD())
+                if (auto lp = vd.langPlugin())
+                    lp.markSymbolReferenced(vd);
         }
         else if (auto fd = var.isFuncDeclaration())
         {
@@ -6368,6 +6427,11 @@ public:
             // Maybe here should be moved in CallExp, or AddrExp for functions.
             if (fd.checkNestedReference(sc, loc))
                 return new ErrorExp();
+
+            // CALYPSO
+            if (sc.isD())
+                if (auto lp = fd.langPlugin())
+                    lp.markSymbolReferenced(fd);
         }
         else if (auto od = var.isOverDeclaration())
         {
@@ -6812,7 +6876,7 @@ public:
             tfy.isproperty = tfx.isproperty;
             tfy.isref = tfx.isref;
             tfy.iswild = tfx.iswild;
-            tfy.deco = tfy.merge().deco;
+            tfy.copyDeco(); // CALYPSO
             tfx = tfy;
         }
         Type tx;
@@ -6820,7 +6884,7 @@ public:
         {
             // Allow conversion from implicit function pointer to delegate
             tx = new TypeDelegate(tfx);
-            tx.deco = tx.merge().deco;
+            tx.copyDeco(); // CALYPSO
         }
         else
         {
@@ -6941,6 +7005,11 @@ public:
             // will be illegal.
             declaration.semantic(sc);
             s.parent = sc.parent;
+
+            // CALYPSO
+            if (auto ad = getAggregateSym(v.type))
+                if (sc.isD() && ad.langPlugin())
+                    ad.langPlugin().markSymbolReferenced(ad);
         }
         //printf("inserting '%s' %p into sc = %p\n", s->toChars(), s, sc);
         // Insert into both local scope and function scope.
@@ -7420,11 +7489,12 @@ public:
                 tiargs[0] = targ;
                 /* Declare trailing parameters
                  */
+                size_t argi = 1; // CALYPSO
                 for (size_t i = 1; i < parameters.dim; i++)
                 {
                     TemplateParameter tp = (*parameters)[i];
                     Declaration s = null;
-                    m = tp.matchArg(loc, sc, &tiargs, i, parameters, &dedtypes, &s);
+                    m = tp.matchArg(loc, sc, &tiargs, i, &argi, parameters, &dedtypes, &s);
                     if (m <= MATCHnomatch)
                         goto Lno;
                     s.semantic(sc);
@@ -8708,6 +8778,11 @@ public:
             }
             type = fd.type;
             assert(type);
+
+            // CALYPSO
+            if (sc.isD())
+                if (auto lp = fd.langPlugin())
+                    lp.markSymbolReferenced(fd);
         }
         else if (OverDeclaration od = var.isOverDeclaration())
         {
@@ -8752,6 +8827,10 @@ public:
                 Expression e = new VarExp(loc, v);
                 e = new CommaExp(loc, e1, e);
                 e = e.semantic(sc);
+                // CALYPSO
+                if (sc.isD())
+                    if (auto lp = v.langPlugin())
+                        lp.markSymbolReferenced(v);
                 return e;
             }
         }
@@ -9432,16 +9511,16 @@ public:
         // Check for call operator overload
         if (t1)
         {
-            if (t1.ty == Tstruct)
+            AggregateDeclaration sd = getAggregateSym(t1);
+            if (sd && !sd.byRef()) // CALYPSO
             {
-                StructDeclaration sd = (cast(TypeStruct)t1).sym;
                 sd.size(loc); // Resolve forward references to construct object
                 if (sd.sizeok != SIZEOKdone)
                     return new ErrorExp();
                 // First look for constructor
                 if (e1.op == TOKtype && sd.ctor)
                 {
-                    if (!sd.noDefaultCtor && !(arguments && arguments.dim))
+                    if (!sd.noDefaultCtor && !(arguments && arguments.dim) && !sd.langPlugin()) // CALYPSO HACK
                         goto Lx;
                     auto sle = new StructLiteralExp(loc, sd, null, e1.type);
                     if (!sd.fill(loc, sle.elements, true))
@@ -9475,6 +9554,8 @@ public:
                     e = e.semantic(sc);
                     return e;
                 }
+                else if (e1.op == TOKtype && sd.langPlugin()) // CALYPSO HACK
+                    goto Lx;
                 // No constructor, look for overload of opCall
                 if (search_function(sd, Id.call))
                     goto L1;
@@ -9510,6 +9591,7 @@ public:
             else if (e1.op == TOKtype && t1.isscalar())
             {
                 Expression e;
+                t1 = e1.type; // CALYPSO workaround for DMD BUG, in enumA fail = enumA() rhs has an int type
                 if (!arguments || arguments.dim == 0)
                 {
                     e = t1.defaultInitLiteral(loc);
@@ -9596,7 +9678,7 @@ public:
                 /* Cast 'this' to the type of the interface, and replace f with the interface's equivalent
                  */
                 auto b = f.interfaceVirtual;
-                auto ad2 = b.sym;
+                auto ad2 = cast(ClassDeclaration) b.sym; // CALYPSO
                 ue.e1 = ue.e1.castTo(sc, ad2.type.addMod(ue.e1.type.mod));
                 ue.e1 = ue.e1.semantic(sc);
                 ue1 = ue.e1;
@@ -9985,6 +10067,10 @@ public:
         }
         assert(t1.ty == Tfunction);
 
+        // CALYPSO
+        if (sc.isD())
+            markCalleeReferenced(this);
+
         Expression argprefix;
         if (!arguments)
             arguments = new Expressions();
@@ -10053,10 +10139,9 @@ public:
                 return this;
         }
         Type tv = type.baseElemOf();
-        if (tv.ty == Tstruct)
+        if (isAggregateValue(tv)) // CALYPSO
         {
-            TypeStruct ts = cast(TypeStruct)tv;
-            StructDeclaration sd = ts.sym;
+            AggregateDeclaration sd = getAggregateSym(tv);
             if (sd.dtor)
             {
                 /* Type needs destruction, so declare a tmp
@@ -12391,16 +12476,16 @@ public:
             // If this is an initialization of a reference,
             // do nothing
         }
-        else if (t1.ty == Tstruct)
+        else if (isAggregateValue(t1)) // CALYPSO
         {
             Expression e1x = e1;
             Expression e2x = e2;
-            StructDeclaration sd = (cast(TypeStruct)t1).sym;
+            AggregateDeclaration sd = getAggregateSym(t1);
 
             if (op == TOKconstruct)
             {
                 Type t2 = e2x.type.toBasetype();
-                if (t2.ty == Tstruct && sd == (cast(TypeStruct)t2).sym)
+                if (sd == getAggregateSym(t2)) // CALYPSO
                 {
                     // Bugzilla 15661: Look for the form from last of comma chain.
                     auto e2y = e2x;
@@ -12419,12 +12504,16 @@ public:
                          *    __ctmp.ctor(arguments...)
                          */
 
+                        AssignExp ae = null;
+                        if (!sd.langPlugin()) // CALYPSO HACK: the bit copy isn't needed and making things harder for us
+                        {
+
                         /* Before calling the constructor, initialize
                          * variable with a bit copy of the default
                          * initializer
                          */
-                        AssignExp ae = this;
-                        if (sd.zeroInit == 1 && !sd.isNested())
+                        ae = this;
+                        if ((cast(StructDeclaration)sd).zeroInit == 1 && !sd.isNested())
                         {
                             // Bugzilla 14606: Always use BlitExp for the special expression: (struct = 0)
                             ae = new BlitExp(ae.loc, ae.e1, new IntegerExp(loc, 0, Type.tint32));
@@ -12435,6 +12524,8 @@ public:
                             ae.e2 = sd.isNested() ? t1.defaultInitLiteral(loc) : t1.defaultInit(loc);
                         }
                         ae.type = e1x.type;
+
+                        }
 
                         /* Replace __ctmp being constructed with e1.
                          * We need to copy constructor call expression,
@@ -12448,12 +12539,12 @@ public:
                         Expression e0;
                         extractLast(e2x, &e0);
 
-                        auto e = combine(ae, cx);
+                        Expression e = ae ? combine(ae, cx) : cx; // CALYPSO
                         e = combine(e0, e);
                         e = e.semantic(sc);
                         return e;
                     }
-                    if (sd.postblit)
+                    if (sd.isStructDeclaration() && (cast(StructDeclaration)sd).postblit) // CALYPSO (not pretty)
                     {
                         /* We have a copy constructor for this
                          */
@@ -12487,7 +12578,7 @@ public:
                             Expression e = e1x.copy();
                             e.type = e.type.mutableOf();
                             e = new BlitExp(loc, e, e2x);
-                            e = new DotVarExp(loc, e, sd.postblit, false);
+                            e = new DotVarExp(loc, e, (cast(StructDeclaration)sd).postblit, false); // CALYPSO
                             e = new CallExp(loc, e);
                             return e.semantic(sc);
                         }
@@ -12554,6 +12645,7 @@ public:
             }
             else if (op == TOKassign)
             {
+                e2 = e2x = e2x.addDtorHook(sc); // CALYPSO
                 if (e1x.op == TOKindex && (cast(IndexExp)e1x).e1.type.toBasetype().ty == Taarray)
                 {
                     /*
@@ -15434,4 +15526,34 @@ public:
     {
         v.visit(this);
     }
+}
+
+/***********************************************************
+ */  // CALYPSO
+extern (C++) class TaggedExp : UnaExp
+{
+public:
+    extern (D) this(Loc loc, TOK op, int size, Expression e1)
+    {
+        super(loc, op, size, e1);
+    }
+
+    final override Expression semantic(Scope *sc)
+    {
+        return this;
+    }
+
+    override void accept(Visitor v)
+    {
+        v.visit(this);
+    }
+}
+
+
+// CALYPSO
+void markCalleeReferenced(CallExp e)
+{
+    if (e.f)
+        if (auto lp = e.f.langPlugin())
+            lp.markSymbolReferenced(e.f);
 }

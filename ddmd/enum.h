@@ -49,14 +49,15 @@ public:
     bool added;
     int inuse;
 
-    EnumDeclaration(Loc loc, Identifier *id, Type *memtype);
+//     EnumDeclaration(Loc loc, Identifier *id, Type *memtype);
+    virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     Dsymbol *syntaxCopy(Dsymbol *s);
     void addMember(Scope *sc, ScopeDsymbol *sds);
     void setScope(Scope *sc);
     void semantic(Scope *sc);
     bool oneMember(Dsymbol **ps, Identifier *ident);
     Type *getType();
-    const char *kind();
+    const char *kind() const;
     Dsymbol *search(Loc, Identifier *ident, int flags = SearchLocalsOnly);
     bool isDeprecated();                // is Dsymbol deprecated?
     Prot prot();
@@ -89,9 +90,10 @@ public:
 
     EnumDeclaration *ed;
 
-    EnumMember(Loc loc, Identifier *id, Expression *value, Type *origType);
+//     EnumMember(Loc loc, Identifier *id, Expression *value, Type *origType);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *s);
-    const char *kind();
+    const char *kind() const;
     void semantic(Scope *sc);
     Expression *getVarExp(Loc loc, Scope *sc);
 

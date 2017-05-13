@@ -54,10 +54,10 @@
 #include <alloca.h>
 #endif
 
-static llvm::cl::opt<bool, true>
+llvm::cl::opt<bool, true>
     preservePaths("op", llvm::cl::desc("Preserve source path for output files"),
                   llvm::cl::ZeroOrMore,
-                  llvm::cl::location(global.params.preservePaths));
+                  llvm::cl::location(global.params.preservePaths)); // CALYPSO made non-static
 
 static llvm::cl::opt<bool, true>
     fqnNames("oq",

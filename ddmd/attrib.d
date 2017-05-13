@@ -678,7 +678,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class AnonDeclaration : AttribDeclaration
+extern (C++) class AnonDeclaration : AttribDeclaration // CALYPSO (made non final)
 {
 public:
     bool isunion;

@@ -31,7 +31,7 @@ typedef long long longlong;
 typedef unsigned long long ulonglong;
 #endif
 
-typedef unsigned char utf8_t;
+typedef /*unsigned*/ char utf8_t; // CALYPSO
 
 struct Port
 {

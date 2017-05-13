@@ -122,6 +122,7 @@ enum STCvolatile            = (1L << 43);   // destined for volatile in the back
 enum STCreturn              = (1L << 44);   // 'return ref' for function parameters
 enum STCautoref             = (1L << 45);   // Mark for the already deduced 'auto ref' parameter
 enum STCinference           = (1L << 46);   // do attribute inference
+enum STCimplicit           = (1L << 47);   // enable implicit constructor calls for function arguments | CALYPSO: does this really warrant a new stc bit?
 
 enum STC_TYPECTOR = (STCconst | STCimmutable | STCshared | STCwild);
 enum STC_FUNCATTR = (STCref | STCnothrow | STCnogc | STCpure | STCproperty | STCsafe | STCtrusted | STCsystem);
@@ -492,7 +493,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class AliasDeclaration : Declaration
+extern (C++) class AliasDeclaration : Declaration // CALYPSO (made non final)
 {
 public:
     Dsymbol aliassym;
@@ -1073,6 +1074,7 @@ public:
         //    sem = SemanticIn;
         if (sem >= SemanticDone)
             return;
+//         sem = SemanticIn; // CALYPSO necessary to avoid recursive evaluation of VarExp if there's a this->edtor
         Scope* scx = null;
         if (_scope)
         {
@@ -2012,7 +2014,7 @@ public:
         return (storage_class & STCctfe) != 0; // || !isDataseg();
     }
 
-    final bool isOverlappedWith(VarDeclaration v)
+    bool isOverlappedWith(VarDeclaration v) // CALYPSO
     {
         return (  offset < v.offset + v.type.size() &&
                 v.offset <   offset +   type.size());
@@ -2091,7 +2093,7 @@ public:
         // Destructors for classes
         if (storage_class & (STCauto | STCscope))
         {
-            for (ClassDeclaration cd = type.isClassHandle(); cd; cd = cd.baseClass)
+            for (ClassDeclaration cd = type.isClassHandle(); cd; cd = isClassDeclarationOrNull(cd.baseClass)) // CALYPSO
             {
                 /* We can do better if there's a way with onstack
                  * classes to determine if there's no way the monitor
@@ -2297,9 +2299,9 @@ public:
 extern (C++) final class SymbolDeclaration : Declaration
 {
 public:
-    StructDeclaration dsym;
+    AggregateDeclaration dsym; // CALYPSO
 
-    extern (D) this(Loc loc, StructDeclaration dsym)
+    extern (D) this(Loc loc, AggregateDeclaration dsym) // CALYPSO
     {
         super(dsym.ident);
         this.loc = loc;

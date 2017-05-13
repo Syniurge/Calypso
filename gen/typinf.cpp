@@ -124,7 +124,7 @@ TypeInfoDeclaration *getOrCreateTypeInfoDeclaration(Type *torig, Scope *sc) {
       if (sc)                  // if in semantic() pass
       {
         // Find module that will go all the way to an object file
-        Module *m = sc->module->importedFrom;
+        Module *m = sc->module->isCodegen() ? sc->module : sc->module->importedFrom; // CALYPSO semi-HACK (and not strictly necessary but makes D modules importing C++ modules smaller)
         m->members->push(t->vtinfo);
 
         semanticTypeInfo(sc, t);
@@ -161,7 +161,7 @@ static bool builtinTypeInfo(Type *t) {
     if (t->isTypeBasic() || t->ty == Tclass)
         return !t->mod;
 #else
-  if (t->isTypeBasic()) {
+  if (t->isTypeBasic() && !t->langPlugin()) { // CALYPSO
     return !t->mod;
   }
 #endif

@@ -86,7 +86,7 @@ LLGlobalVariable *IrAggr::getClassInfoSymbol() {
   if (classdecl && !aggrdecl->isInterfaceDeclaration()) {
     // Gather information
     LLType *type = DtoType(aggrdecl->type);
-    LLType *bodyType = llvm::cast<LLPointerType>(type)->getElementType();
+    LLType *bodyType = classdecl->byRef() ? llvm::cast<LLPointerType>(type)->getElementType() : type; // CALYPSO
     bool hasDestructor = (classdecl->dtor != nullptr);
     bool hasCustomDelete = (classdecl->aggDelete != nullptr);
 // Construct the fields
@@ -257,7 +257,9 @@ LLConstant *IrAggr::getClassInfoInit() {
 
 llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
                                                size_t interfaces_index) {
-  auto it = interfaceVtblMap.find({b->sym, interfaces_index});
+  assert(b->sym->isClassDeclaration()); // CALYPSO
+  auto cb = static_cast<ClassDeclaration*>(b->sym);
+  auto it = interfaceVtblMap.find({cb, interfaces_index});
   if (it != interfaceVtblMap.end()) {
     return it->second;
   }
@@ -278,7 +280,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
 
   const auto voidPtrTy = getVoidPtrType();
 
-  if (!b->sym->isCPPinterface()) { // skip interface info for CPP interfaces
+  if (!cb->isCPPinterface()) { // skip interface info for CPP interfaces
     // index into the interfaces array
     llvm::Constant *idxs[2] = {DtoConstSize_t(0),
                                DtoConstSize_t(interfaces_index)};
@@ -301,7 +303,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
 
   // add virtual function pointers
   size_t n = vtbl_array.dim;
-  for (size_t i = b->sym->vtblOffset(); i < n; i++) {
+  for (size_t i = cb->vtblOffset(); i < n; i++) {
     Dsymbol *dsym = static_cast<Dsymbol *>(vtbl_array.data[i]);
     if (dsym == nullptr) {
       // FIXME
@@ -457,7 +459,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
   setLinkage(lwc, GV);
 
   // insert into the vtbl map
-  interfaceVtblMap.insert({{b->sym, interfaces_index}, GV});
+  interfaceVtblMap.insert({{cb, interfaces_index}, GV});
 
   return GV;
 }
@@ -523,7 +525,8 @@ LLConstant *IrAggr::getClassInfoInterfaces() {
     if (cd->isInterfaceDeclaration()) {
       vtb = DtoConstSlice(DtoConstSize_t(0), getNullValue(voidptrptr_type));
     } else {
-      auto itv = interfaceVtblMap.find({it->sym, i});
+      assert(it->sym->isClassDeclaration()); // CALYPSO
+      auto itv = interfaceVtblMap.find({static_cast<ClassDeclaration*>(it->sym), i});
       assert(itv != interfaceVtblMap.end() && "interface vtbl not found");
       vtb = itv->second;
       vtb = DtoBitCast(vtb, voidptrptr_type);

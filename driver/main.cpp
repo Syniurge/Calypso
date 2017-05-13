@@ -20,6 +20,8 @@
 #include "scope.h"
 #include "ddmd/target.h"
 #include "driver/cache.h"
+#include "cpp/calypso.h"
+#include "cpp/cppmodule.h"
 #include "driver/cl_options.h"
 #include "driver/codegenerator.h"
 #include "driver/configfile.h"
@@ -926,6 +928,9 @@ int cppmain(int argc, char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
 #endif
 
+  cpp::calypso.Argv0 = argv[0];
+  langPlugins.push_back(&cpp::calypso);
+
   exe_path::initialize(argv[0]);
 
   global._init();
@@ -1044,13 +1049,22 @@ void codegenModules(Modules &modules) {
       if (global.params.verbose)
         fprintf(global.stdmsg, "code      %s\n", m->toChars());
 
+      auto lp = m->langPlugin();
+      if (lp && !singleObj && !lp->needsCodegen(m)) { // CALYPSO UGLY?
+          global.params.objfiles->push(m->objfile->name->str);
+          continue;
+      }
+
+      m->deleteObjFile(); // CALYPSO
       cg.emit(m);
 
       if (global.errors)
         fatal();
     }
   }
+}
 
+void finalizeCodegen() { // CALYPSO
   cache::pruneCache();
 
   freeRuntime();

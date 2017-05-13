@@ -9,10 +9,12 @@
 
 #include "declaration.h"
 #include "id.h"
+#include "import.h"
 #include "mtype.h"
 #include "target.h"
 #include "pragma.h"
 #include "gen/abi.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/dvalue.h"
 #include "gen/funcgenstate.h"
@@ -803,6 +805,10 @@ DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
 
   // get func value if any
   DFuncValue *dfnval = fnval->isFunc();
+
+  if (dfnval)
+    if (auto lp = dfnval->func->langPlugin())
+        return lp->codegen()->toCallFunction(loc, resulttype, fnval, arguments, sretPointer); // CALYPSO
 
   // get function type info
   IrFuncTy &irFty = DtoIrTypeFunction(fnval);

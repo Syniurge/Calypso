@@ -26,7 +26,7 @@ import ddmd.visitor;
 
 /***********************************************************
  */
-extern (C++) final class EnumDeclaration : ScopeDsymbol
+extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
 {
 public:
     /* The separate, and distinct, cases are:
@@ -340,7 +340,7 @@ public:
      * Input:
      *      id      Id::max or Id::min
      */
-    Expression getMaxMinValue(Loc loc, Identifier id)
+    final Expression getMaxMinValue(Loc loc, Identifier id) // CALYPSO
     {
         //printf("EnumDeclaration::getMaxValue()\n");
         bool first = true;
@@ -421,7 +421,7 @@ public:
         return *pval;
     }
 
-    Expression getDefaultValue(Loc loc)
+    final Expression getDefaultValue(Loc loc) // CALYPSO
     {
         //printf("EnumDeclaration::getDefaultValue() %p %s\n", this, toChars());
         if (defaultval)
@@ -451,7 +451,7 @@ public:
         return defaultval;
     }
 
-    Type getMemtype(Loc loc)
+    final Type getMemtype(Loc loc) // CALYPSO
     {
         if (loc.linnum == 0)
             loc = this.loc;
@@ -496,7 +496,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class EnumMember : VarDeclaration
+extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
 {
 public:
     /* Can take the following forms:
@@ -504,7 +504,7 @@ public:
      *  2. id = value
      *  3. type id = value
      */
-    @property ref value() { return (cast(ExpInitializer)_init).exp; }
+    final @property ref value() { return (cast(ExpInitializer)_init).exp; }
 
     // A cast() is injected to 'value' after semantic(),
     // but 'origValue' will preserve the original value,
@@ -743,7 +743,7 @@ public:
         semanticRun = PASSsemanticdone;
     }
 
-    Expression getVarExp(Loc loc, Scope* sc)
+    final Expression getVarExp(Loc loc, Scope* sc) // CALYPSO
     {
         semantic(sc);
         if (errors)

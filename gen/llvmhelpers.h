@@ -138,7 +138,7 @@ bool hasUnalignedFields(Type *t);
 ///
 /// 'src' is a pointer to the start of the memory of an 'ad' instance.
 LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
-                           VarDeclaration *vd);
+                           VarDeclaration *vd, Type *srcType = nullptr); // CALYPSO
 
 /// Returns the index of a given member variable in the resulting LLVM type of
 /// an aggregate.

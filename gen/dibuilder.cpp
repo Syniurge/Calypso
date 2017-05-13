@@ -292,6 +292,9 @@ ldc::DIType ldc::DIBuilder::CreatePointerType(Type *type) {
   return DBuilder.createPointerType(CreateTypeDescription(nt, false),
                                     getTypeAllocSize(T) * 8, // size (bits)
                                     getABITypeAlign(T) * 8,  // align (bits)
+#if LDC_LLVM_VER >= 500
+                                    llvm::None,              // DWARFAddressSpace
+#endif
                                     type->toChars()          // name
                                     );
 }

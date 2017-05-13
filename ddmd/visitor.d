@@ -1318,6 +1318,11 @@ public:
         visit(cast(Expression)e);
     }
 
+    void visit(TaggedExp e) // CALYPSO
+    {
+        visit(cast(UnaExp)e);
+    }
+
     void visit(TemplateParameter)
     {
         assert(0);

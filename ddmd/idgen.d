@@ -371,6 +371,8 @@ Msgtable[] msgtable =
     // Compiler recognized UDA's
     { "udaSelector", "selector" },
 
+    { "implicit" }, // CALYPSO @implicit
+
     // IN_LLVM: LDC-specific pragmas.
     { "LDC_intrinsic" },
     { "LDC_no_typeinfo" },

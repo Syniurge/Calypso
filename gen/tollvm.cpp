@@ -12,10 +12,12 @@
 #include "declaration.h"
 #include "dsymbol.h"
 #include "id.h"
+#include "import.h"
 #include "init.h"
 #include "module.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/complex.h"
 #include "gen/dvalue.h"
@@ -38,7 +40,7 @@
 bool DtoIsInMemoryOnly(Type *type) {
   Type *typ = type->toBasetype();
   TY t = typ->ty;
-  return (t == Tstruct || t == Tsarray);
+  return (t == Tstruct || isClassValue(typ) || t == Tsarray); // CALYPSO
 }
 
 RET retStyle(TypeFunction *tf) {
@@ -47,6 +49,9 @@ RET retStyle(TypeFunction *tf) {
 }
 
 bool DtoIsReturnInArg(CallExp *ce) {
+  if (ce->f && ce->f->langPlugin()) // CALYPSO
+    return ce->f->langPlugin()->codegen()->toIsReturnInArg(ce);
+
   TypeFunction *tf = static_cast<TypeFunction *>(ce->e1->type->toBasetype());
   if (tf->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f))) {
     return retStyle(tf) == RETstack;

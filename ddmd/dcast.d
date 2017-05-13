@@ -1196,7 +1196,7 @@ extern (C++) MATCH implicitConvTo(Expression e, Type t)
                     assert(!cd.isInterfaceDeclaration());
                     struct ClassCheck
                     {
-                        extern (C++) static bool convertible(Loc loc, ClassDeclaration cd, MOD mod)
+                        extern (C++) static bool convertible(Loc loc, AggregateDeclaration cd, MOD mod) // CALYPSO
                         {
                             for (size_t i = 0; i < cd.fields.dim; i++)
                             {
@@ -1223,7 +1223,10 @@ extern (C++) MATCH implicitConvTo(Expression e, Type t)
                                 else if (!v.type.isZeroInit(loc))
                                     return false;
                             }
-                            return cd.baseClass ? convertible(loc, cd.baseClass, mod) : true;
+                            if (!cd.isClassDeclaration) // CALYPSO
+                                return true;
+                            auto baseClass = (cast(ClassDeclaration) cd).baseClass;
+                            return baseClass ? convertible(loc, baseClass, mod) : true;
                         }
                     }
 
@@ -1291,6 +1294,11 @@ extern (C++) MATCH implicitConvTo(Expression e, Type t)
             // Enhancement 10724
             if (tb.ty == Tpointer && e.e1.op == TOKstring)
                 e.e1.accept(this);
+        }
+
+        override void visit(TaggedExp e) // CALYPSO
+        {
+            e.e1.accept(this);
         }
     }
 
@@ -1383,8 +1391,8 @@ extern (C++) Expression castTo(Expression e, Scope* sc, Type t)
             const(bool) tob_isFR = (tob.ty == Tarray || tob.ty == Tdelegate);
             const(bool) t1b_isFR = (t1b.ty == Tarray || t1b.ty == Tdelegate);
             // Reference types
-            const(bool) tob_isR = (tob_isFR || tob.ty == Tpointer || tob.ty == Taarray || tob.ty == Tclass);
-            const(bool) t1b_isR = (t1b_isFR || t1b.ty == Tpointer || t1b.ty == Taarray || t1b.ty == Tclass);
+            const(bool) tob_isR = (tob_isFR || tob.ty == Tpointer || tob.ty == Taarray || (tob.ty == Tclass && !isClassValue(tob))); // CALYPSO
+            const(bool) t1b_isR = (t1b_isFR || t1b.ty == Tpointer || t1b.ty == Taarray || (t1b.ty == Tclass && !isClassValue(t1b)));
             // Arithmetic types (== valueable basic types)
             const(bool) tob_isA = (tob.isintegral() || tob.isfloating());
             const(bool) t1b_isA = (t1b.isintegral() || t1b.isfloating());
@@ -2832,8 +2840,8 @@ Lagain:
                 TypeClass tc2 = cast(TypeClass)t2;
                 /* Pick 'tightest' type
                  */
-                ClassDeclaration cd1 = tc1.sym.baseClass;
-                ClassDeclaration cd2 = tc2.sym.baseClass;
+                AggregateDeclaration cd1 = tc1.sym.baseClass; // CALYPSO
+                AggregateDeclaration cd2 = tc2.sym.baseClass;
                 if (cd1 && cd2)
                 {
                     t1 = cd1.type.castMod(t1.mod);

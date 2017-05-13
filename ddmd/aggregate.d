@@ -24,6 +24,7 @@ import ddmd.globals;
 import ddmd.id;
 import ddmd.identifier;
 import ddmd.mtype;
+import ddmd.target;
 import ddmd.tokens;
 import ddmd.visitor;
 
@@ -61,6 +62,7 @@ public:
     Prot protection;
     uint structsize;        // size of struct
     uint alignsize;         // size of struct for alignment purposes
+    structalign_t alignment;    // alignment applied outside of the struct/class value // CALYPSO
     VarDeclarations fields; // VarDeclaration fields
     Sizeok sizeok;          // set when structsize contains valid data
     Dsymbol deferred;       // any deferred semantic2() or semantic3() symbol
@@ -127,6 +129,9 @@ public:
             return;
         }
 
+        if (semanticRun <= PASSsemantic2) // CALYPSO
+            semanticRun = PASSsemantic2;
+
         Scope* sc2 = sc.push(this);
         sc2.stc &= STCsafe | STCtrusted | STCsystem;
         sc2.parent = this;
@@ -145,6 +150,9 @@ public:
         }
 
         sc2.pop();
+
+        if (semanticRun <= PASSsemantic2done) // CALYPSO
+            semanticRun = PASSsemantic2done;
     }
 
     override final void semantic3(Scope* sc)
@@ -160,6 +168,9 @@ public:
             sd.semanticTypeInfoMembers();
             return;
         }
+
+        if (semanticRun <= PASSsemantic3) // CALYPSO
+            semanticRun = PASSsemantic3;
 
         Scope* sc2 = sc.push(this);
         sc2.stc &= STCsafe | STCtrusted | STCsystem;
@@ -206,6 +217,9 @@ public:
         }
         if (sd)
             sd.semanticTypeInfoMembers();
+
+        if (semanticRun <= PASSsemantic3done) // CALYPSO
+            semanticRun = PASSsemantic3done; // NOTE: newer versions of DMD do set PASSsemantic3done for aggregates
     }
 
     abstract void finalizeSize();
@@ -221,7 +235,8 @@ public:
 
             // Determine the instance size of base class first.
             if (ClassDeclaration cd = isClassDeclaration())
-                cd.baseClass.size(loc);
+                if (cd.baseClass !is null) // CALYPSO strange old DMD BUG
+                    cd.baseClass.size(loc);
         }
 
         if (sizeok != SIZEOKdone && members)
@@ -358,6 +373,96 @@ public:
     }
 
     /***************************************
+     * Fit elements[] to the corresponding type of field[].
+     * Input:
+     *      loc
+     *      sc
+     *      elements    The explicit arguments that given to construct object.
+     *      stype       The constructed object type.
+     * Returns false if any errors occur.
+     * Otherwise, returns true and elements[] are rewritten for the output.
+     */
+    final bool fit(Loc loc, Scope* sc, Expressions* elements, Type stype) // CALYPSO moved from dstruct.d
+    {
+        if (!elements)
+            return true;
+
+        size_t nfields = fields.dim - isNested();
+        size_t offset = 0;
+        for (size_t i = 0; i < elements.dim; i++)
+        {
+            Expression e = (*elements)[i];
+            if (!e)
+                continue;
+
+            e = resolveProperties(sc, e);
+            if (i >= nfields)
+            {
+                if (i == fields.dim - 1 && isNested() && e.op == TOKnull)
+                {
+                    // CTFE sometimes creates null as hidden pointer; we'll allow this.
+                    continue;
+                }
+                .error(loc, "more initializers than fields (%d) of %s", nfields, toChars());
+                return false;
+            }
+            VarDeclaration v = fields[i];
+            if (v.offset < offset)
+            {
+                .error(loc, "overlapping initialization for %s", v.toChars());
+                return false;
+            }
+            offset = cast(uint)(v.offset + v.type.size());
+
+            Type t = v.type;
+            if (stype)
+                t = t.addMod(stype.mod);
+            Type origType = t;
+            Type tb = t.toBasetype();
+
+            /* Look for case of initializing a static array with a too-short
+             * string literal, such as:
+             *  char[5] foo = "abc";
+             * Allow this by doing an explicit cast, which will lengthen the string
+             * literal.
+             */
+            if (e.op == TOKstring && tb.ty == Tsarray)
+            {
+                StringExp se = cast(StringExp)e;
+                Type typeb = se.type.toBasetype();
+                TY tynto = tb.nextOf().ty;
+                if (!se.committed &&
+                    (typeb.ty == Tarray || typeb.ty == Tsarray) &&
+                    (tynto == Tchar || tynto == Twchar || tynto == Tdchar) &&
+                    se.numberOfCodeUnits(tynto) < (cast(TypeSArray)tb).dim.toInteger())
+                {
+                    e = se.castTo(sc, t);
+                    goto L1;
+                }
+            }
+
+            while (!e.implicitConvTo(t) && tb.ty == Tsarray)
+            {
+                /* Static array initialization, as in:
+                 *  T[3][5] = e;
+                 */
+                t = tb.nextOf();
+                tb = t.toBasetype();
+            }
+            if (!e.implicitConvTo(t))
+                t = origType; // restore type for better diagnostic
+
+            e = e.implicitCastTo(sc, t);
+        L1:
+            if (e.op == TOKerror)
+                return false;
+
+            (*elements)[i] = doCopyOrMove(sc, e);
+        }
+        return true;
+    }
+
+    /***************************************
      * Fill out remainder of elements[] with default initializers for fields[].
      * Params:
      *      loc         = location
@@ -372,130 +477,142 @@ public:
         //printf("AggregateDeclaration::fill() %s\n", toChars());
         assert(sizeok == SIZEOKdone);
         assert(elements);
-        size_t nfields = fields.dim - isNested();
+        size_t nelems = literalElemDim(); // CALYPSO fill() was generalized for class values (TODO: C++ multiple inheritance support)
         bool errors = false;
 
         size_t dim = elements.dim;
-        elements.setDim(nfields);
-        foreach (size_t i; dim .. nfields)
+        elements.setDim(nelems);
+        foreach (size_t i; dim .. nelems)
             (*elements)[i] = null;
 
-        // Fill in missing any elements with default initializers
-        foreach (i; 0 .. nfields)
+        size_t elemoff;
+        void fillAgg(AggregateDeclaration ad)
         {
-            if ((*elements)[i])
-                continue;
+            size_t nfields = fields.dim - isNested();
 
-            auto vd = fields[i];
-            auto vx = vd;
-            if (vd._init && vd._init.isVoidInitializer())
-                vx = null;
+            if (auto base = toAggregateBase(ad))
+                fillAgg(base);
 
-            // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
-            size_t fieldi = i;
-            foreach (j; 0 .. nfields)
+            // Fill in missing any elements with default initializers
+            foreach (i; 0 .. nfields)
             {
-                if (i == j)
-                    continue;
-                auto v2 = fields[j];
-                if (!vd.isOverlappedWith(v2))
+                if ((*elements)[elemoff + i])
                     continue;
 
-                if ((*elements)[j])
-                {
+                auto vd = fields[i];
+                auto vx = vd;
+                if (vd._init && vd._init.isVoidInitializer())
                     vx = null;
-                    break;
-                }
-                if (v2._init && v2._init.isVoidInitializer())
-                    continue;
 
-                version (all)
+                // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
+                size_t fieldi = i;
+                foreach (j; 0 .. nfields)
                 {
-                    /* Prefer first found non-void-initialized field
-                     * union U { int a; int b = 2; }
-                     * U u;    // Error: overlapping initialization for field a and b
-                     */
-                    if (!vx)
-                    {
-                        vx = v2;
-                        fieldi = j;
-                    }
-                    else if (v2._init)
-                    {
-                        .error(loc, "overlapping initialization for field %s and %s", v2.toChars(), vd.toChars());
-                        errors = true;
-                    }
-                }
-                else
-                {
-                    // Will fix Bugzilla 1432 by enabling this path always
+                    if (i == j)
+                        continue;
+                    auto v2 = fields[j];
+                    if (!vd.isOverlappedWith(v2))
+                        continue;
 
-                    /* Prefer explicitly initialized field
-                     * union U { int a; int b = 2; }
-                     * U u;    // OK (u.b == 2)
-                     */
-                    if (!vx || !vx._init && v2._init)
+                    if ((*elements)[elemoff + j])
                     {
-                        vx = v2;
-                        fieldi = j;
+                        vx = null;
+                        break;
                     }
-                    else if (vx != vd && !vx.isOverlappedWith(v2))
+                    if (v2._init && v2._init.isVoidInitializer())
+                        continue;
+
+                    version (all)
                     {
-                        // Both vx and v2 fills vd, but vx and v2 does not overlap
-                    }
-                    else if (vx._init && v2._init)
-                    {
-                        .error(loc, "overlapping default initialization for field %s and %s",
-                            v2.toChars(), vd.toChars());
-                        errors = true;
+                        /* Prefer first found non-void-initialized field
+                        * union U { int a; int b = 2; }
+                        * U u;    // Error: overlapping initialization for field a and b
+                        */
+                        if (!vx)
+                        {
+                            vx = v2;
+                            fieldi = j;
+                        }
+                        else if (v2._init)
+                        {
+                            .error(loc, "overlapping initialization for field %s and %s", v2.toChars(), vd.toChars());
+                            errors = true;
+                        }
                     }
                     else
-                        assert(vx._init || !vx._init && !v2._init);
-                }
-            }
-            if (vx)
-            {
-                Expression e;
-                if (vx.type.size() == 0)
-                {
-                    e = null;
-                }
-                else if (vx._init)
-                {
-                    assert(!vx._init.isVoidInitializer());
-                    e = vx.getConstInitializer(false);
-                }
-                else
-                {
-                    if ((vx.storage_class & STCnodefaultctor) && !ctorinit)
                     {
-                        .error(loc, "field %s.%s must be initialized because it has no default constructor",
-                            type.toChars(), vx.toChars());
-                        errors = true;
+                        // Will fix Bugzilla 1432 by enabling this path always
+
+                        /* Prefer explicitly initialized field
+                        * union U { int a; int b = 2; }
+                        * U u;    // OK (u.b == 2)
+                        */
+                        if (!vx || !vx._init && v2._init)
+                        {
+                            vx = v2;
+                            fieldi = j;
+                        }
+                        else if (vx != vd && !vx.isOverlappedWith(v2))
+                        {
+                            // Both vx and v2 fills vd, but vx and v2 does not overlap
+                        }
+                        else if (vx._init && v2._init)
+                        {
+                            .error(loc, "overlapping default initialization for field %s and %s",
+                                v2.toChars(), vd.toChars());
+                            errors = true;
+                        }
+                        else
+                            assert(vx._init || !vx._init && !v2._init);
                     }
-                    /* Bugzilla 12509: Get the element of static array type.
-                     */
-                    Type telem = vx.type;
-                    if (telem.ty == Tsarray)
+                }
+                if (vx)
+                {
+                    Expression e;
+                    if (vx.type.size() == 0)
                     {
-                        /* We cannot use Type::baseElemOf() here.
-                         * If the bottom of the Tsarray is an enum type, baseElemOf()
-                         * will return the base of the enum, and its default initializer
-                         * would be different from the enum's.
-                         */
-                        while (telem.toBasetype().ty == Tsarray)
-                            telem = (cast(TypeSArray)telem.toBasetype()).next;
-                        if (telem.ty == Tvoid)
-                            telem = Type.tuns8.addMod(telem.mod);
+                        e = null;
                     }
-                    if (telem.needsNested() && ctorinit)
-                        e = telem.defaultInit(loc);
+                    else if (vx._init)
+                    {
+                        assert(!vx._init.isVoidInitializer());
+                        e = vx.getConstInitializer(false);
+                    }
                     else
-                        e = telem.defaultInitLiteral(loc);
+                    {
+                        if ((vx.storage_class & STCnodefaultctor) && !ctorinit)
+                        {
+                            .error(loc, "field %s.%s must be initialized because it has no default constructor",
+                                type.toChars(), vx.toChars());
+                            errors = true;
+                        }
+                        /* Bugzilla 12509: Get the element of static array type.
+                        */
+                        Type telem = vx.type;
+                        if (telem.ty == Tsarray)
+                        {
+                            /* We cannot use Type::baseElemOf() here.
+                            * If the bottom of the Tsarray is an enum type, baseElemOf()
+                            * will return the base of the enum, and its default initializer
+                            * would be different from the enum's.
+                            */
+                            while (telem.toBasetype().ty == Tsarray)
+                                telem = (cast(TypeSArray)telem.toBasetype()).next;
+                            if (telem.ty == Tvoid)
+                                telem = Type.tuns8.addMod(telem.mod);
+                        }
+                        if (telem.needsNested() && ctorinit)
+                            e = telem.defaultInit(loc);
+                        else
+                            e = telem.defaultInitLiteral(loc);
+                    }
+                    (*elements)[elemoff + fieldi] = e;
                 }
-                (*elements)[fieldi] = e;
             }
+            elemoff += nfields;
         }
+        fillAgg(this);
+
         foreach (e; *elements)
         {
             if (e && e.op == TOKerror)
@@ -603,7 +720,7 @@ public:
 
     /* Append vthis field (this.tupleof[$-1]) to make this aggregate type nested.
      */
-    final void makeNested()
+    void makeNested() // CALYPSO
     {
         if (enclosing) // if already nested
             return;
@@ -681,6 +798,53 @@ public:
         return s;
     }
 
+    // CALYPSO moved from dclass.d
+    /*********************************************
+     * Determine if 'this' is a base class of cd.
+     * This is used to detect circular inheritance only.
+     */
+    final bool isBaseOf2(ClassDeclaration cd)
+    {
+        if (!cd)
+            return false;
+        //printf("ClassDeclaration.isBaseOf2(this = '%s', cd = '%s')\n", toChars(), cd.toChars());
+        for (size_t i = 0; i < cd.baseclasses.dim; i++)
+        {
+            BaseClass* b = (*cd.baseclasses)[i];
+            if (b.sym == this || isBaseOf2(isClassDeclarationOrNull(b.sym)))
+                return true;
+        }
+        return false;
+    }
+
+    // CALYPSO moved from dclass.d
+    /*******************************************
+     * Determine if 'this' is a base class of cd.
+     */
+    bool isBaseOf(ClassDeclaration cd, int* poffset)
+    {
+        //printf("ClassDeclaration.isBaseOf(this = '%s', cd = '%s')\n", toChars(), cd.toChars());
+        if (poffset)
+            *poffset = 0;
+        while (cd)
+        {
+            /* cd.baseClass might not be set if cd is forward referenced.
+             */
+            if (!cd.baseClass && cd._scope && !cd.isInterfaceDeclaration())
+            {
+                cd.semantic(null);
+                if (!cd.baseClass && cd._scope)
+                    cd.error("base class is forward referenced by %s", toChars());
+            }
+
+            if (this == cd.baseClass)
+                return true;
+
+            cd = isClassDeclarationOrNull(cd.baseClass);
+        }
+        return false;
+    }
+
     override final Prot prot()
     {
         return protection;
@@ -690,6 +854,119 @@ public:
     final Type handleType()
     {
         return type;
+    }
+
+    // CALYPSO
+    bool byRef() const
+    {
+        return false;
+    }
+
+    bool mayBeAnonymous()
+    {
+        return false;
+    }
+
+    Expression defaultInit(Loc loc)
+    {
+        assert(false);
+    }
+
+    final Expression defaultInitLiteral(Loc loc)
+    {
+        size(loc);
+        if (sizeok != SIZEOKdone)
+            return new ErrorExp();
+        auto structelems = new Expressions();
+        structelems.setDim(literalElemDim());
+
+        size_t elem_i = 0;
+        Expression addAgg(Loc loc, AggregateDeclaration ad) // returns null if ok, ErrorExp if not
+        {
+            if (auto base = toAggregateBase(ad))
+                if (auto e = addAgg(loc, base))
+                    return e;
+
+            uint offset = 0;
+            auto fieldsDim = ad.fields.dim - ad.isNested();
+            for (size_t j = 0; j < fieldsDim; j++, elem_i++)
+            {
+                VarDeclaration vd = ad.fields[j];
+                Expression e;
+                if (vd.inuse)
+                {
+                    error(loc, "circular reference to '%s'", vd.toPrettyChars());
+                    return new ErrorExp();
+                }
+                if (vd.offset < offset || vd.type.size() == 0)
+                    e = null;
+                else if (vd._init)
+                {
+                    if (vd._init.isVoidInitializer())
+                        e = null;
+                    else
+                        e = vd.getConstInitializer(false);
+                }
+                else
+                    e = vd.type.defaultInitLiteral(loc);
+                if (e && e.op == TOKerror)
+                    return e;
+                if (e)
+                    offset = vd.offset + cast(uint)vd.type.size();
+                (*structelems)[elem_i] = e;
+            }
+            return null;
+        }
+
+        if (auto e = addAgg(loc, this))
+            return e;
+        assert(elem_i == structelems.dim);
+
+        auto structinit = new StructLiteralExp(loc, this, structelems);
+        /* Copy from the initializer symbol for larger symbols,
+         * otherwise the literals expressed as code get excessively large.
+         */
+        if (size(loc) > Target.ptrsize * 4 && !type.needsNested())
+            structinit.useStaticInit = true;
+        structinit.type = type;
+        return structinit;
+    }
+
+    final size_t literalElemDim()
+    {
+        size_t n = 0;
+        auto cd = isClassDeclaration();
+        if (cd && cd.baseclasses)
+            foreach (b; *cd.baseclasses)
+                n += b.sym.literalElemDim();
+        n += fields.dim - isNested();
+        return n;
+    }
+
+    final CtorDeclaration hasImplicitCtor(Expression farg)
+    {
+        if (farg.op == TOKcomment) // do not go beyond depth of 1
+            return null;
+
+        size(loc);
+        assert(sizeok == SIZEOKdone); // forward ref
+
+        if (!ctor)
+            return null;
+
+        auto e = new NoImplicitCtorExp(farg.loc, farg);
+        e.type = farg.type;
+
+        auto fargs = new Expressions;
+        fargs.push(e);
+        FuncDeclaration fd = resolveFuncCall(farg.loc, null, ctor, null, null, fargs, 1|4);
+        if (fd && (fd.storage_class & STCimplicit)) // explicitly enabled @implicit constructor calls
+        {
+            assert(fd.isCtorDeclaration());
+            return cast(CtorDeclaration) fd;
+        }
+
+        return null;
     }
 
     // Back end
@@ -706,3 +983,60 @@ public:
         v.visit(this);
     }
 }
+
+// CALYPSO
+// While looking for implicit constructors wrap the argument inside a tagged expression to prevent
+// infinite recursion such as Type1(Type2(Type1(Type2(...
+extern(C++) class NoImplicitCtorExp : TaggedExp
+{
+public:
+    final extern(D) this(Loc loc, Expression e1)
+    {
+        super(loc, TOKcomment, NoImplicitCtorExp.sizeof, e1);
+    }
+}
+
+// CALYPSO
+extern(C++) void markAggregateReferenced(AggregateDeclaration ad)
+{
+    if (auto cd = ad.isClassDeclaration())
+        foreach (baseClass; *cd.baseclasses)
+            if (auto blp = baseClass.sym.langPlugin())
+                blp.markSymbolReferenced(baseClass.sym);
+
+    if (auto lp = ad.langPlugin())
+    {
+        if (ad.defaultCtor)
+            lp.markSymbolReferenced(ad.defaultCtor);
+        if (ad.dtor)
+            lp.markSymbolReferenced(ad.dtor);
+    }
+
+    void visitAggSyms(Type t)
+    {
+        switch (t.ty) {
+        case Taarray:
+            visitAggSyms((cast(TypeAArray)t).index);
+            visitAggSyms(t.nextOf());
+            break;
+        case Tarray:
+        case Tsarray:
+            visitAggSyms(t.nextOf());
+            break;
+        case Tvector:
+            visitAggSyms((cast(TypeVector)t).basetype);
+            break;
+        default:
+        {
+            auto aggSym = getAggregateSym(t);
+            if (aggSym && aggSym.langPlugin())
+                aggSym.langPlugin().markSymbolReferenced(aggSym);
+            break;
+        }
+        }
+    }
+
+    foreach (vd; ad.fields)
+        visitAggSyms(vd.type);
+}
+

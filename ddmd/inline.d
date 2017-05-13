@@ -365,6 +365,9 @@ public:
                 cost = COST_MAX;
                 return;
             }
+//             // CALYPSO HACK the following check was disabled for default arguments SomeClass() which gets semantic'd to (SomeClass __ctmp1653 = null;\n , __ctmp1653).this()
+//             // Not measured the full extent of that hack yet, but strange that StructLiteralExp don't get such a check, structs may have dtors too..
+//          1.1 NOTE: 8f5d26c177775d2bb2c513dc9f61e3559c9ef7e3 skipped for now (the if block below was disabled by that commit)
             if (vd.edtor)
             {
                 // if destructor required
@@ -425,6 +428,7 @@ final class InlineDoState
     FuncDeclaration fd; // function being inlined (old parent)
     // inline result
     bool foundReturn;
+//     Scope *sc; // CALYPSO
 
     this(Dsymbol parent, FuncDeclaration fd)
     {
@@ -912,6 +916,14 @@ Expression doInline(Expression e, InlineDoState ids)
                     auto vto = new VarDeclaration(vd.loc, vd.type, vd.ident, vd._init);
                     memcpy(cast(void*)vto, cast(void*)vd, __traits(classInstanceSize, VarDeclaration));
                     vto.parent = ids.parent;
+//                     vto.edtor = vto.callScopeDtor(ids.sc); // CALYPSO (1.1 NOTE: 8f5d26c177775d2bb2c513dc9f61e3559c9ef7e3 was skipped for now, is it still needed?)
+//                     if (vto.edtor)
+//                     {
+//                         if (ids.sc.func && vto.storage_class & (STCstatic|STCgshared))
+//                             vto.edtor = vto.edtor.semantic(ids.sc.module.scope);
+//                         else
+//                             vto.edtor = vto.edtor.semantic(ids.sc);
+//                     }
                     vto.csym = null;
                     vto.isym = null;
                     ids.from.push(vd);
@@ -2376,6 +2388,7 @@ public Expression inlineCopy(Expression e, Scope* sc)
         return new ErrorExp();
     }
     scope ids = new InlineDoState(sc.parent, null);
+//     ids.sc = sc; // CALYPSO
     return doInline(e, ids);
 }
 

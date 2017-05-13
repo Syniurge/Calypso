@@ -215,6 +215,7 @@ enum TOK : int
     TOKdelegate,
     TOKfunction,
     TOKmixin,
+    TOKmodmap, // CALYPSO
     TOKalign,
     TOKextern,
     TOKprivate,
@@ -472,6 +473,7 @@ alias TOKoverride = TOK.TOKoverride;
 alias TOKdelegate = TOK.TOKdelegate;
 alias TOKfunction = TOK.TOKfunction;
 alias TOKmixin = TOK.TOKmixin;
+alias TOKmodmap = TOK.TOKmodmap; // CALYPSO
 alias TOKalign = TOK.TOKalign;
 alias TOKextern = TOK.TOKextern;
 alias TOKprivate = TOK.TOKprivate;
@@ -1003,6 +1005,7 @@ immutable Keyword[] keywords =
     Keyword("enum", TOKenum),
     Keyword("import", TOKimport),
     Keyword("mixin", TOKmixin),
+    Keyword("modmap", TOKmodmap), // CALYPSO
     Keyword("static", TOKstatic),
     Keyword("final", TOKfinal),
     Keyword("const", TOKconst),

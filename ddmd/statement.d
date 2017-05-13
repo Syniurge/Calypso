@@ -626,7 +626,10 @@ public:
                         cresult = BEfallthru;
                     /* If we're catching Object, then there is no throwing
                      */
-                    Identifier id = c.type.toBasetype().isClassHandle().ident;
+                    Identifier id;
+                    auto cd = c.type.toBasetype().isClassHandle(); // CALYPSO
+                    if (cd && !cd.langPlugin())
+                        id = cd.ident;
                     if (c.internalCatch && (cresult & BEfallthru))
                     {
                         // Bugzilla 11542: leave blockExit flags of the body
@@ -5372,7 +5375,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class Catch : RootObject
+extern (C++) class Catch : RootObject // CALYPSO (made non final)
 {
 public:
     Loc loc;
@@ -5402,7 +5405,7 @@ public:
         return c;
     }
 
-    void semantic(Scope* sc)
+    final void semantic(Scope* sc)
     {
         //printf("Catch::semantic(%s)\n", ident->toChars());
         static if (!IN_GCC)
@@ -5441,6 +5444,8 @@ public:
             errors = true;
         else
         {
+            if (onlyCatchThrowableOrCppClass()) // CALYPSO
+            {
             auto cd = type.toBasetype().isClassHandle();
             if (!cd)
             {
@@ -5472,10 +5477,11 @@ public:
                 error(loc, "can only catch class objects derived from Exception in @safe code, not '%s'", type.toChars());
                 errors = true;
             }
+            }
 
             if (ident)
             {
-                var = new VarDeclaration(loc, type, ident, null);
+                var = createVar(); // CALYPSO
                 var.semantic(sc);
                 sc.insert(var);
             }
@@ -5484,6 +5490,22 @@ public:
                 errors = true;
         }
         sc.pop();
+    }
+
+    // CALYPSO
+    VarDeclaration createVar()
+    {
+        return new VarDeclaration(loc, type, ident, null);
+    }
+
+    bool onlyCatchThrowableOrCppClass()
+    {
+        return true;
+    }
+
+    LangPlugin langPlugin()
+    {
+        return null;
     }
 }
 

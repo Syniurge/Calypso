@@ -14,6 +14,7 @@
 #include "gen/arrays.h"
 #include "gen/binops.h"
 #include "gen/classes.h"
+#include "gen/cgforeign.h"
 #include "gen/complex.h"
 #include "gen/coverage.h"
 #include "gen/dvalue.h"
@@ -34,6 +35,7 @@
 #include "gen/warnings.h"
 #include "hdrgen.h"
 #include "id.h"
+#include "import.h"
 #include "init.h"
 #include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
@@ -178,6 +180,27 @@ static void write_struct_literal(Loc loc, LLValue *mem, StructDeclaration *sd,
   // initialize trailing padding
   if (sd->structsize != offset)
     voidptr = write_zeroes(voidptr, offset, sd->structsize);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void write_class_literal(Loc loc, LLValue *mem, ClassDeclaration *cd, // CALYPSO
+                                 Expressions *elements) {
+  // ready elements data
+  assert(elements && "struct literal has null elements");
+//   const size_t nexprs = elements->dim;
+//   Expression **exprs = reinterpret_cast<Expression **>(elements->data);
+
+  // might be reset to an actual i8* value so only a single bitcast is emitted.
+  LLValue *voidptr = mem;
+  unsigned offset = 0;
+
+  // FIXME go through fields
+
+  // initialize trailing padding
+  if (cd->structsize != offset) {
+    voidptr = write_zeroes(voidptr, offset, cd->structsize);
+  }
 }
 
 namespace {
@@ -932,12 +955,12 @@ public:
       // indexing normal struct
       else if (e1type->ty == Tstruct) {
         TypeStruct *ts = static_cast<TypeStruct *>(e1type);
-        arrptr = DtoIndexAggregate(DtoLVal(l), ts->sym, vd);
+        arrptr = DtoIndexAggregate(DtoLVal(l), ts->sym, vd, l->type); // CALYPSO
       }
       // indexing class
       else if (e1type->ty == Tclass) {
         TypeClass *tc = static_cast<TypeClass *>(e1type);
-        arrptr = DtoIndexAggregate(DtoRVal(l), tc->sym, vd);
+        arrptr = DtoIndexAggregate(DtoRVal(l), tc->sym, vd, l->type); // CALYPSO
       } else {
         llvm_unreachable("Unknown DotVarExp type for VarDeclaration.");
       }
@@ -956,16 +979,17 @@ public:
                             fdecl->prot().kind != PROTprivate &&
                             fdecl->prot().kind != PROTpackage;
 
+      LLValue *vthis = (DtoIsInMemoryOnly(l->type) ? DtoLVal(l) : DtoRVal(l)); // CALYPSO
+
       // Get the actual function value to call.
       LLValue *funcval = nullptr;
       if (nonFinal) {
-        funcval = DtoVirtualFunctionPointer(l, fdecl, e->toChars());
+        funcval = DtoVirtualFunctionPointer(DtoAggregateDValue(l->type, vthis), fdecl, e->toChars()); // CALYPSO
       } else {
         funcval = getIrFunc(fdecl)->func;
       }
       assert(funcval);
 
-      LLValue *vthis = (DtoIsInMemoryOnly(l->type) ? DtoLVal(l) : DtoRVal(l));
       result = new DFuncValue(fdecl, funcval, vthis);
     } else {
       llvm_unreachable("Unknown target for VarDeclaration.");
@@ -986,6 +1010,8 @@ public:
     if (!e->var) {
       Logger::println("this exp without var declaration");
       result = new DLValue(e->type, p->func()->thisArg);
+      auto thisval = new DLValue(p->func()->decl->vthis->type, p->func()->thisArg);
+      result = DtoCast(e->loc, thisval, e->type); // CALYPSO cast thisArg to the actual ThisExp type (super needs to be adjusted for DCXX classes) (1.1 NOTE: is this realy necessary in this case?)
       return;
     }
 
@@ -1006,6 +1032,9 @@ public:
     } else {
       Logger::println("normal this exp");
       v = p->func()->thisArg;
+      auto thisval = new DLValue(p->func()->decl->vthis->type, v);
+      result = DtoCast(e->loc, thisval, e->type); // CALYPSO cast thisArg to the actual ThisExp type (super needs to be adjusted for DCXX classes)
+      return;
     }
     result = new DLValue(e->type, DtoBitCast(v, DtoPtrToType(e->type)));
   }
@@ -1676,7 +1705,8 @@ public:
     // class invariants
     if (global.params.useInvariants && condty->ty == Tclass &&
         !(static_cast<TypeClass *>(condty)->sym->isInterfaceDeclaration()) &&
-        !(static_cast<TypeClass *>(condty)->sym->isCPPclass())) {
+        !(static_cast<TypeClass *>(condty)->sym->isCPPclass()) &&
+        !(static_cast<TypeClass*>(condty)->sym->langPlugin()) /* CALYPSO */) {
       Logger::println("calling class invariant");
       llvm::Function *fn = getRuntimeFunction(
           e->loc, gIR->module,
@@ -2292,7 +2322,7 @@ public:
     LOG_SCOPE;
 
     if (e->useStaticInit) {
-      DtoResolveStruct(e->sd);
+      DtoResolveAggregate(e->sd); // CALYPSO
       LLValue *initsym = getIrAggr(e->sd)->getInitSymbol();
       initsym = DtoBitCast(initsym, DtoType(e->type->pointerTo()));
 
@@ -2310,13 +2340,18 @@ public:
     }
 
     // make sure the struct is fully resolved
-    DtoResolveStruct(e->sd);
+    DtoResolveAggregate(e->sd); // CALYPSO
 
     if (!dstMem)
       dstMem = DtoAlloca(e->type, ".structliteral");
 
     e->inProgressMemory = dstMem;
-    write_struct_literal(e->loc, dstMem, e->sd, e->elements);
+    if (auto sd = e->sd->isStructDeclaration())
+      write_struct_literal(e->loc, dstMem, sd, e->elements); // CALYPSO
+    else {
+      assert(e->sd->isClassDeclaration());
+      write_class_literal(e->loc, dstMem, static_cast<ClassDeclaration*>(e->sd), e->elements);
+    }
     e->inProgressMemory = nullptr;
 
     return new DLValue(e->type, dstMem);

@@ -9,7 +9,9 @@
 
 #include "gen/trycatchfinally.h"
 
+#include "import.h"
 #include "statement.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/funcgenstate.h"
 #include "gen/llvmhelpers.h"
@@ -29,7 +31,7 @@ TryCatchScope::TryCatchScope(IRState &irs, llvm::Value *ehPtrSlot,
   catchesNonExceptions =
       std::any_of(stmt->catches->begin(), stmt->catches->end(), [](Catch *c) {
         for (auto cd = c->type->toBasetype()->isClassHandle(); cd;
-             cd = cd->baseClass) {
+             cd = isClassDeclarationOrNull(cd->baseClass)) { // CALYPSO
           if (cd == ClassDeclaration::exception)
             return false;
         }
@@ -58,7 +60,7 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
   const auto entryCount = PGO.setCurrentStmt(stmt);
 
   struct CBPrototype {
-    ClassDeclaration *cd;
+    Type *t;
     llvm::BasicBlock *catchBB;
     uint64_t catchCount;
     uint64_t uncaughtCount;
@@ -72,6 +74,11 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
     irs.scope() = IRScope(catchBB);
     irs.DBuilder.EmitBlockStart(c->loc);
     PGO.emitCounterIncrement(c);
+
+    if (auto lp = c->langPlugin()) // CALYPSO
+      lp->codegen()->toBeginCatch(irs, c);
+    else
+    {
 
     const auto enterCatchFn =
         getRuntimeFunction(Loc(), irs.module, "_d_eh_enter_catch");
@@ -91,6 +98,7 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
       DtoStore(DtoBitCast(throwableObj, DtoType(c->var->type)),
                getIrLocal(c->var)->value);
     }
+    }
 
     // Emit handler, if there is one. The handler is zero, for instance,
     // when building 'catch { debug foo(); }' in non-debug mode.
@@ -98,7 +106,12 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
       Statement_toIR(c->handler, &irs);
 
     if (!irs.scopereturned())
+    {
+      // CALYPSO FIXME: _cxa_end_catch won't be called if it has already returned
+      if (auto lp = c->langPlugin())
+        lp->codegen()->toEndCatch(irs, c);
       irs.ir->CreateBr(endbb);
+    }
 
     irs.DBuilder.EmitBlockEnd();
 
@@ -106,8 +119,7 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
     auto catchCount = PGO.getRegionCount(c);
     // uncaughtCount is handled in a separate pass below
 
-    auto cd = c->type->toBasetype()->isClassHandle();
-    cbPrototypes.push_back({cd, catchBB, catchCount, 0});
+    cbPrototypes.push_back({c->type->toBasetype(), catchBB, catchCount, 0});
   }
 
   // Total number of uncaught exceptions is equal to the execution count at
@@ -125,12 +137,20 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
 
   catchBlocks.reserve(stmt->catches->dim);
 
+  auto c_it = stmt->catches->begin(); // CALYPSO
   for (const auto &p : cbPrototypes) {
     auto branchWeights =
         PGO.createProfileWeights(p.catchCount, p.uncaughtCount);
-    DtoResolveClass(p.cd);
-    auto ci = getIrAggr(p.cd)->getClassInfoSymbol();
-    catchBlocks.push_back({ci, p.catchBB, branchWeights});
+    llvm::GlobalVariable* catchType;
+    if (auto lp = (*c_it)->langPlugin()) // CALYPSO
+      catchType = lp->codegen()->toCatchScopeType(irs, p.t);
+    else {
+      ClassDeclaration *cd = p.t->isClassHandle();
+      DtoResolveClass(cd);
+      catchType = getIrAggr(cd)->getClassInfoSymbol();
+    }
+    catchBlocks.push_back({catchType, p.catchBB, branchWeights});
+    c_it++;
   }
 }
 

@@ -7,17 +7,14 @@ matrix:
       d: ldc
       env: LLVM_VERSION=3.9.1
     - os: linux
-      d: ldc-beta
-      env: LLVM_VERSION=3.8.1
-    - os: linux
       d: ldc
-      env: LLVM_VERSION=3.7.1 OPTS="-DMULTILIB=ON -DLIB_SUFFIX=64"
+      env: LLVM_VERSION=3.9.1 OPTS="-DMULTILIB=ON -DLIB_SUFFIX=64"
     - os: linux
       d: ldc-0.17.2
-      env: LLVM_VERSION=3.6.2 OPTS="-DBUILD_SHARED_LIBS=ON"
+      env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON"
     - os: linux
       d: dmd
-      env: LLVM_VERSION=3.5.2 OPTS="-DTEST_COVERAGE=ON"
+      env: LLVM_VERSION=3.9.1 OPTS="-DTEST_COVERAGE=ON"
     - os: osx
       d: ldc
       env: LLVM_VERSION=3.9.0
@@ -28,10 +25,6 @@ cache:
   directories:
     - llvm-3.9.1
     - llvm-3.9.0
-    - llvm-3.8.1
-    - llvm-3.7.1
-    - llvm-3.6.2
-    - llvm-3.5.2
 addons:
   apt:
     sources:
@@ -106,13 +99,8 @@ after_success:
 notifications:
   email:
     recipients:
-      - "digitalmars-d-ldc@puremagic.com"
+      - "syniurge@gmail.com"
     on_success: never
     on_failure: change
-  irc:
-    channels:
-      - "irc.freenode.org#ldc"
-    on_success: always
-    on_failure: always
     use_notice: false
     skip_join: true

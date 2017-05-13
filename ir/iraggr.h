@@ -145,7 +145,9 @@ protected:
 private:
   llvm::StructType *llStructType = nullptr;
 
+public: // CALYPSO
   llvm::StructType *getLLStructType();
+private:
 
   /// Recursively adds all the initializers for the given aggregate and, in
   /// case of a class type, all its base classes.

@@ -15,6 +15,7 @@ import ddmd.arraytypes;
 import ddmd.canthrow;
 import ddmd.dclass;
 import ddmd.declaration;
+import ddmd.dimport;
 import ddmd.dscope;
 import ddmd.dsymbol;
 import ddmd.dtemplate;
@@ -968,10 +969,11 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             {
                 for (size_t i = 0; i < cd.baseclasses.dim; i++)
                 {
-                    auto cb = (*cd.baseclasses)[i].sym;
-                    assert(cb);
-                    ScopeDsymbol._foreach(null, cb.members, &pushIdentsDg);
-                    if (cb.baseclasses.dim)
+                    auto ab = (*cd.baseclasses)[i].sym; // CALYPSO
+                    assert(ab);
+                    ScopeDsymbol._foreach(null, ab.members, &pushIdentsDg);
+                    auto cb = ab.isClassDeclaration();
+                    if (cb && cb.baseclasses.dim)
                         pushBaseMembersDg(cb);
                 }
             }
@@ -1195,6 +1197,10 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
     {
         return ret;
     }
+
+    foreach (lp; langPlugins) // CALYPSO (1.1 NOTE: move to semanticTraitsHook?)
+        if (auto result = lp.semanticTraits(e, sc))
+            return result;
 
     extern (D) void* trait_search_fp(const(char)* seed, ref int cost)
     {

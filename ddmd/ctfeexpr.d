@@ -10,6 +10,7 @@ module ddmd.ctfeexpr;
 
 import core.stdc.stdio;
 import core.stdc.string;
+import ddmd.aggregate;
 import ddmd.arraytypes;
 import ddmd.complex;
 import ddmd.constfold;
@@ -68,12 +69,12 @@ public:
 
     VarDeclaration getFieldAt(uint index)
     {
-        ClassDeclaration cd = originalClass();
+        AggregateDeclaration cd = originalClass(); // CALYPSO
         uint fieldsSoFar = 0;
         while (index - fieldsSoFar >= cd.fields.dim)
         {
             fieldsSoFar += cd.fields.dim;
-            cd = cd.baseClass;
+            cd = toAggregateBase(cd);
         }
         return cd.fields[index - fieldsSoFar];
     }
@@ -81,14 +82,14 @@ public:
     // Return index of the field, or -1 if not found
     int getFieldIndex(Type fieldtype, uint fieldoffset)
     {
-        ClassDeclaration cd = originalClass();
+        AggregateDeclaration cd = originalClass(); // CALYPSO
         uint fieldsSoFar = 0;
         for (size_t j = 0; j < value.elements.dim; j++)
         {
             while (j - fieldsSoFar >= cd.fields.dim)
             {
                 fieldsSoFar += cd.fields.dim;
-                cd = cd.baseClass;
+                cd = toAggregateBase(cd);
             }
             VarDeclaration v2 = cd.fields[j - fieldsSoFar];
             if (fieldoffset == v2.offset && fieldtype.size() == v2.type.size())
@@ -103,14 +104,14 @@ public:
     // Same as getFieldIndex, but checks for a direct match with the VarDeclaration
     int findFieldIndexByName(VarDeclaration v)
     {
-        ClassDeclaration cd = originalClass();
+        AggregateDeclaration cd = originalClass(); // CALYPSO
         size_t fieldsSoFar = 0;
         for (size_t j = 0; j < value.elements.dim; j++)
         {
             while (j - fieldsSoFar >= cd.fields.dim)
             {
                 fieldsSoFar += cd.fields.dim;
-                cd = cd.baseClass;
+                cd = toAggregateBase(cd);
             }
             VarDeclaration v2 = cd.fields[j - fieldsSoFar];
             if (v == v2)
@@ -155,8 +156,9 @@ public:
 
 // Return index of the field, or -1 if not found
 // Same as getFieldIndex, but checks for a direct match with the VarDeclaration
-extern (C++) int findFieldIndexByName(StructDeclaration sd, VarDeclaration v)
+extern (C++) int findFieldIndexByName(AggregateDeclaration sd, VarDeclaration v) // CALYPSO
 {
+    assert(sd.isStructDeclaration() || !(cast(ClassDeclaration)sd).baseClass); // CALYPSO HACK
     for (size_t i = 0; i < sd.fields.dim; ++i)
     {
         if (sd.fields[i] == v)
@@ -369,7 +371,7 @@ extern (C++) UnionExp copyLiteral(Expression e)
         foreach (i, ref el; *newelems)
         {
             // We need the struct definition to detect block assignment
-            auto v = sle.sd.fields[i];
+            auto v = sle.correspondingField(i); // CALYPSO
             auto m = (*oldelems)[i];
 
             // If it is a void assignment, use the default initializer
@@ -1931,7 +1933,7 @@ extern (C++) void showCtfeExpr(Expression e, int level = 0)
         printf(" ");
     Expressions* elements = null;
     // We need the struct definition to detect block assignment
-    StructDeclaration sd = null;
+    AggregateDeclaration sd = null; // CALYPSO
     ClassDeclaration cd = null;
     if (e.op == TOKstructliteral)
     {
@@ -1996,17 +1998,18 @@ extern (C++) void showCtfeExpr(Expression e, int level = 0)
             }
             else if (cd)
             {
-                while (i - fieldsSoFar >= cd.fields.dim)
+                AggregateDeclaration ad = cd;
+                while (i - fieldsSoFar >= ad.fields.dim)
                 {
-                    fieldsSoFar += cd.fields.dim;
-                    cd = cd.baseClass;
+                    fieldsSoFar += ad.fields.dim;
+                    ad = toAggregateBase(ad); // CALYPSO
                     for (int j = level; j > 0; --j)
                         printf(" ");
-                    printf(" BASE CLASS: %s\n", cd.toChars());
+                    printf(" BASE CLASS: %s\n", ad.toChars());
                 }
-                v = cd.fields[i - fieldsSoFar];
-                assert((elements.dim + i) >= (fieldsSoFar + cd.fields.dim));
-                size_t indx = (elements.dim - fieldsSoFar) - cd.fields.dim + i;
+                v = ad.fields[i - fieldsSoFar];
+                assert((elements.dim + i) >= (fieldsSoFar + ad.fields.dim));
+                size_t indx = (elements.dim - fieldsSoFar) - ad.fields.dim + i;
                 assert(indx < elements.dim);
                 z = (*elements)[indx];
             }
@@ -2063,7 +2066,7 @@ extern (C++) UnionExp voidInitLiteral(Type t, VarDeclaration var)
         TypeStruct ts = cast(TypeStruct)t;
         auto exps = new Expressions();
         exps.setDim(ts.sym.fields.dim);
-        for (size_t i = 0; i < ts.sym.fields.dim; i++)
+        for (size_t i = 0; i < ts.sym.fields.dim - ts.sym.isNested(); i++) // CALYPSO DMD BUG: missing -isNested()
         {
             (*exps)[i] = voidInitLiteral(ts.sym.fields[i].type, ts.sym.fields[i]).copy();
         }

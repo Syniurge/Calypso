@@ -93,6 +93,7 @@ enum PINLINE;
 #define STCreturn        0x100000000000LL // 'return ref' for function parameters
 #define STCautoref       0x200000000000LL // Mark for the already deduced 'auto ref' parameter
 #define STCinference     0x400000000000LL // do attribute inference
+#define STCimplicit     0x800000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
@@ -109,7 +110,7 @@ struct Match
     FuncDeclaration *anyf;      // pick a func, any func, to use for error recovery
 };
 
-void functionResolve(Match *m, Dsymbol *fd, Loc loc, Scope *sc, Objects *tiargs, Type *tthis, Expressions *fargs);
+void functionResolve(Match *m, Dsymbol *fd, Loc loc, Scope *sc, Objects *tiargs, Type *tthis, Expressions *fargs, /* CALYPSO */ int flags = 0);
 int overloadApply(Dsymbol *fstart, void *param, int (*fp)(void *, Dsymbol *));
 
 void ObjectNotFound(Identifier *id);
@@ -136,9 +137,10 @@ public:
     const char *mangleOverride;      // overridden symbol with pragma(mangle, "...")
     Semantic sem;
 
-    Declaration(Identifier *id);
+//     Declaration(Identifier *id);
+    virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     unsigned size(Loc loc);
     int checkModify(Loc loc, Scope *sc, Type *t, Expression *e1, int flag);
 
@@ -186,7 +188,7 @@ public:
 
     TupleDeclaration(Loc loc, Identifier *ident, Objects *objects);
     Dsymbol *syntaxCopy(Dsymbol *);
-    const char *kind();
+    const char *kind() const;
     Type *getType();
     Dsymbol *toAlias2();
     bool needThis();
@@ -208,12 +210,13 @@ public:
     Dsymbol *overnext;          // next in overload list
     Dsymbol *import;            // !=NULL if unresolved internal alias for selective import
 
-    AliasDeclaration(Loc loc, Identifier *ident, Type *type);
-    AliasDeclaration(Loc loc, Identifier *ident, Dsymbol *s);
+//     AliasDeclaration(Loc loc, Identifier *ident, Type *type);
+//     AliasDeclaration(Loc loc, Identifier *ident, Dsymbol *s);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     bool overloadInsert(Dsymbol *s);
-    const char *kind();
+    const char *kind() const;
     Type *getType();
     Dsymbol *toAlias();
     Dsymbol *toAlias2();
@@ -232,7 +235,7 @@ public:
     bool hasOverloads;
 
     OverDeclaration(Identifier *ident, Dsymbol *s, bool hasOverloads = true);
-    const char *kind();
+    const char *kind() const;
     void semantic(Scope *sc);
     bool equals(RootObject *o);
     bool overloadInsert(Dsymbol *s);
@@ -274,12 +277,13 @@ public:
     Expression *edtor;          // if !=NULL, does the destruction of the variable
     IntRange *range;            // if !NULL, the variable is known to be within the range
 
-    VarDeclaration(Loc loc, Type *t, Identifier *id, Initializer *init);
+//     VarDeclaration(Loc loc, Type *t, Identifier *id, Initializer *init);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
     void semantic2(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     AggregateDeclaration *isThis();
     bool needThis();
     bool isExport();
@@ -287,7 +291,7 @@ public:
     bool isDataseg();
     bool isThreadlocal();
     bool isCTFE();
-    bool isOverlappedWith(VarDeclaration *v);
+    virtual bool isOverlappedWith(VarDeclaration *v); // CALYPSO
     bool hasPointers();
     bool canTakeAddressOf();
     bool needsScopeDtor();
@@ -308,9 +312,9 @@ public:
 class SymbolDeclaration : public Declaration
 {
 public:
-    StructDeclaration *dsym;
+    AggregateDeclaration *dsym;
 
-    SymbolDeclaration(Loc loc, StructDeclaration *dsym);
+    SymbolDeclaration(Loc loc, AggregateDeclaration *dsym); // CALYPSO
 
     // Eliminate need for dynamic_cast
     SymbolDeclaration *isSymbolDeclaration() { return (SymbolDeclaration *)this; }
@@ -621,13 +625,14 @@ public:
 
     unsigned flags;                     // FUNCFLAGxxxxx
 
-    FuncDeclaration(Loc loc, Loc endloc, Identifier *id, StorageClass storage_class, Type *type);
+//     FuncDeclaration(Loc loc, Loc endloc, Identifier *id, StorageClass storage_class, Type *type);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
     bool functionSemantic();
-    bool functionSemantic3();
+    virtual bool functionSemantic3(); // CALYPSO
     // called from semantic3
     VarDeclaration *declareThis(Scope *sc, AggregateDeclaration *ad);
     bool equals(RootObject *o);
@@ -676,7 +681,7 @@ public:
     virtual bool isFinalFunc();
     virtual bool addPreInvariant();
     virtual bool addPostInvariant();
-    const char *kind();
+    const char *kind() const;
     FuncDeclaration *isUnique();
     bool checkNestedReference(Scope *sc, Loc loc);
     bool needsClosure();
@@ -698,6 +703,11 @@ public:
     FuncDeclaration *isFuncDeclaration() { return this; }
 
     virtual FuncDeclaration *toAliasFunc() { return this; }
+
+    // CALYPSO
+    virtual bool allowFinalOverride() { return false; } // D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does
+    virtual bool preferNonTemplateOverloads();
+
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -716,7 +726,7 @@ public:
     FuncAliasDeclaration(Identifier *ident, FuncDeclaration *funcalias, bool hasOverloads = true);
 
     FuncAliasDeclaration *isFuncAliasDeclaration() { return this; }
-    const char *kind();
+    const char *kind() const;
 
     FuncDeclaration *toAliasFunc();
     void accept(Visitor *v) { v->visit(this); }
@@ -742,7 +752,7 @@ public:
     void modifyReturns(Scope *sc, Type *tret);
 
     FuncLiteralDeclaration *isFuncLiteralDeclaration() { return this; }
-    const char *kind();
+    const char *kind() const;
     const char *toPrettyChars(bool QualifyTypes = false);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -750,10 +760,11 @@ public:
 class CtorDeclaration : public FuncDeclaration
 {
 public:
-    CtorDeclaration(Loc loc, Loc endloc, StorageClass stc, Type *type);
+//     CtorDeclaration(Loc loc, Loc endloc, StorageClass stc, Type *type);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     const char *toChars();
     bool isVirtual();
     bool addPreInvariant();
@@ -781,11 +792,12 @@ public:
 class DtorDeclaration : public FuncDeclaration
 {
 public:
-    DtorDeclaration(Loc loc, Loc endloc);
-    DtorDeclaration(Loc loc, Loc endloc, StorageClass stc, Identifier *id);
+//     DtorDeclaration(Loc loc, Loc endloc);
+//     DtorDeclaration(Loc loc, Loc endloc, StorageClass stc, Identifier *id);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     const char *toChars();
     bool isVirtual();
     bool addPreInvariant();
@@ -895,7 +907,7 @@ public:
     NewDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments, int varargs);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();
@@ -913,7 +925,7 @@ public:
     DeleteDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     bool isDelete();
     bool isVirtual();
     bool addPreInvariant();

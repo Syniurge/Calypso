@@ -601,8 +601,8 @@ public:
 
     final Type copy()
     {
-        Type t = cast(Type)mem.xmalloc(sizeTy[ty]);
-        memcpy(cast(void*)t, cast(void*)this, sizeTy[ty]);
+        Type t = cast(Type)mem.xmalloc(sizeType()); // CALYPSO
+        memcpy(cast(void*)t, cast(void*)this, sizeType());
         return t;
     }
 
@@ -895,7 +895,7 @@ public:
         terror = basic[Terror];
         tnull = basic[Tnull];
         tnull = new TypeNull();
-        tnull.deco = tnull.merge().deco;
+        tnull.copyDeco(); // CALYPSO
         tvoidptr = tvoid.pointerTo();
         tstring = tchar.immutableOf().arrayOf();
         twstring = twchar.immutableOf().arrayOf();
@@ -914,6 +914,31 @@ public:
         tsize_t = basic[Tsize_t];
         tptrdiff_t = basic[Tptrdiff_t];
         thash_t = tsize_t;
+    }
+
+    // CALYPSO
+    LangPlugin langPlugin()
+    {
+        return null;
+    }
+
+    ushort sizeType() // CALYPSO
+    {
+        return sizeTy[ty];
+    }
+
+    bool isTransitive() // CALYPSO
+    {
+        return true;
+    }
+
+    final void copyDeco() // CALYPSO
+    {
+        Type tm = merge();
+        if (tm == this)
+            return;
+        deco = tm.deco;
+//         equivDeco = tm.equivDeco;
     }
 
     enum SIZE_INVALID = (~cast(d_uns64)0);
@@ -957,6 +982,11 @@ public:
         return t;
     }
 
+    bool isMergeable() // CALYPSO
+    {
+        return true;
+    }
+
     /************************************
      */
     final Type merge()
@@ -971,8 +1001,11 @@ public:
             return this;
         if (ty == Taarray && !(cast(TypeAArray)this).index.merge().deco)
             return this;
-        if (ty != Tenum && nextOf() && !nextOf().deco)
-            return this;
+        if (ty != Tenum && nextOf()) {
+            (cast(TypeNext)this).transitive(); // CALYPSO
+            if (!nextOf().deco)
+                return this;
+        }
         //printf("merge(%s)\n", toChars());
         Type t = this;
         assert(t);
@@ -995,7 +1028,8 @@ public:
             }
             else
             {
-                sv.ptrvalue = cast(char*)(t = stripDefaultArgs(t));
+                if (t.isMergeable()) // CALYPSO
+                    sv.ptrvalue = cast(char*)(t = stripDefaultArgs(t));
                 deco = t.deco = cast(char*)sv.toDchars();
                 //printf("new value, deco = '%s' %p\n", t->deco, t->deco);
             }
@@ -1021,7 +1055,7 @@ public:
             assert(t.deco);
         }
         else
-            assert(0);
+            assert(langPlugin()); // CALYPSO
         return t;
     }
 
@@ -1194,11 +1228,12 @@ public:
      */
     final Type nullAttributes()
     {
-        uint sz = sizeTy[ty];
+        uint sz = sizeType(); // CALYPSO
         Type t = cast(Type)mem.xmalloc(sz);
         memcpy(cast(void*)t, cast(void*)this, sz);
         // t->mod = NULL;  // leave mod unchanged
         t.deco = null;
+//         t.equivDeco = null; // CALYPSO
         t.arrayof = null;
         t.pto = null;
         t.rto = null;
@@ -1741,7 +1776,7 @@ public:
             case MODshared | MODwild:
             case MODshared | MODwildconst:
             case MODimmutable:
-                assert(tn.mod == MODimmutable || (tn.mod & mod) == mod);
+                assert(!isTransitive() || tn.mod == MODimmutable || (tn.mod & mod) == mod); // CALYPSO
                 break;
             default:
                 assert(0);
@@ -1989,7 +2024,7 @@ public:
             Type t = new TypePointer(this);
             if (ty == Tfunction)
             {
-                t.deco = t.merge().deco;
+                t.copyDeco(); // CALYPSO
                 pto = t;
             }
             else
@@ -3043,7 +3078,8 @@ public:
             return cto;
         }
         TypeNext t = cast(TypeNext)Type.makeConst();
-        if (ty != Tfunction && next.ty != Tfunction && !next.isImmutable())
+        if (isTransitive() && // CALYPSO
+                next.ty != Tfunction && !next.isImmutable())
         {
             if (next.isShared())
             {
@@ -3073,7 +3109,8 @@ public:
             return ito;
         }
         TypeNext t = cast(TypeNext)Type.makeImmutable();
-        if (ty != Tfunction && next.ty != Tfunction && !next.isImmutable())
+        if (isTransitive() && // CALYPSO
+                ty != Tfunction && next.ty != Tfunction && !next.isImmutable())
         {
             t.next = next.immutableOf();
         }
@@ -3280,7 +3317,8 @@ public:
     {
         /* Invoke transitivity of type attributes
          */
-        next = next.addMod(mod);
+        if (isTransitive()) // CALYPSO
+            next = next.addMod(mod);
     }
 
     override void accept(Visitor v)
@@ -3291,7 +3329,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class TypeBasic : Type
+extern (C++) class TypeBasic : Type // CALYPSO (final removed)
 {
 public:
     const(char)* dstring;
@@ -3418,7 +3456,7 @@ public:
         return this;
     }
 
-    override d_uns64 size(Loc loc) const
+    override d_uns64 size(Loc loc) // CALYPSO (const removed)
     {
         uint size;
         //printf("TypeBasic::size()\n");
@@ -3995,32 +4033,32 @@ else
         return (flags & TFLAGSintegral) != 0;
     }
 
-    override bool isfloating() const
+    override bool isfloating() // CALYPSO (const removed)
     {
         return (flags & TFLAGSfloating) != 0;
     }
 
-    override bool isreal() const
+    override bool isreal()
     {
         return (flags & TFLAGSreal) != 0;
     }
 
-    override bool isimaginary() const
+    override bool isimaginary()
     {
         return (flags & TFLAGSimaginary) != 0;
     }
 
-    override bool iscomplex() const
+    override bool iscomplex()
     {
         return (flags & TFLAGScomplex) != 0;
     }
 
-    override bool isscalar() const
+    override bool isscalar()
     {
         return (flags & (TFLAGSintegral | TFLAGSfloating)) != 0;
     }
 
-    override bool isunsigned() const
+    override bool isunsigned()
     {
         return (flags & TFLAGSunsigned) != 0;
     }
@@ -4136,7 +4174,7 @@ else
         return new IntegerExp(loc, value, this);
     }
 
-    override bool isZeroInit(Loc loc) const
+    override bool isZeroInit(Loc loc) // CALYPSO (const removed)
     {
         switch (ty)
         {
@@ -5496,7 +5534,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class TypePointer : TypeNext
+extern (C++) class TypePointer : TypeNext // CALYPSO (removed final)
 {
 public:
     extern (D) this(Type t)
@@ -5554,7 +5592,7 @@ public:
         }
         else
         {
-            deco = merge().deco;
+            copyDeco(); // CALYPSO
             /* Don't return merge(), because arg identifiers and default args
              * can be different
              * even though the types match
@@ -5563,7 +5601,7 @@ public:
         }
     }
 
-    override d_uns64 size(Loc loc) const
+    override d_uns64 size(Loc loc) // CALYPSO (const removed)
     {
         return Target.ptrsize;
     }
@@ -5620,7 +5658,11 @@ public:
             {
                 return MATCHconvert;
             }
-            MATCH m = next.constConv(tp.next);
+            MATCH m;
+            if (isClassValue(next) && isClassValue(tp.next)) // CALYPSO
+                m = next.implicitConvTo(tp.next);
+            else
+                m = next.constConv(tp.next);
             if (m > MATCHnomatch)
             {
                 if (m == MATCHexact && mod != to.mod)
@@ -5643,7 +5685,7 @@ public:
         return TypeNext.constConv(to);
     }
 
-    override bool isscalar() const
+    override bool isscalar() // CALYPSO (const removed)
     {
         return true;
     }
@@ -5657,14 +5699,19 @@ public:
         return new NullExp(loc, this);
     }
 
-    override bool isZeroInit(Loc loc) const
+    override bool isZeroInit(Loc loc) // CALYPSO (const removed)
     {
         return true;
     }
 
-    override bool hasPointers() const
+    override bool hasPointers() // CALYPSO (const removed)
     {
         return true;
+    }
+
+    override bool isTransitive() // CALYPSO
+    {
+        return next.ty != Tfunction;
     }
 
     override void accept(Visitor v)
@@ -5675,7 +5722,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class TypeReference : TypeNext
+extern (C++) class TypeReference : TypeNext // CALYPSO (removed final)
 {
 public:
     extern (D) this(Type t)
@@ -5713,7 +5760,7 @@ public:
         return merge();
     }
 
-    override d_uns64 size(Loc loc) const
+    override d_uns64 size(Loc loc) // CALYPSO (const removed)
     {
         return Target.ptrsize;
     }
@@ -5737,7 +5784,7 @@ public:
         return new NullExp(loc, this);
     }
 
-    override bool isZeroInit(Loc loc) const
+    override bool isZeroInit(Loc loc) // CALYPSO (const removed)
     {
         return true;
     }
@@ -5874,6 +5921,11 @@ public:
         return t;
     }
 
+    override bool isTransitive()
+    {
+        return false;
+    }
+
     override Type semantic(Loc loc, Scope* sc)
     {
         if (deco) // if semantic() already run
@@ -5943,6 +5995,14 @@ public:
             sc = sc.push();
             sc.stc &= ~(STC_TYPECTOR | STC_FUNCATTR);
             tf.next = tf.next.semantic(loc, sc);
+            // CALYPSO this isn't specific to C++. Since « ref » is equivalent to TypeReference, it seems wiser
+            // to use only ref whenever possible, in order to avoid having some functions taking TypeReference
+            // parameters while others use STCref.
+            if (tf.next.ty == Treference)
+            {
+                tf.next = tf.next.nextOf();
+                tf.isref = true;
+            }
             sc = sc.pop();
             errors |= tf.checkRetType(loc);
             if (tf.next.isscope() && !(sc.flags & SCOPEctor))
@@ -5974,6 +6034,11 @@ public:
                 {
                     errors = true;
                     continue;
+                }
+                if (fparam.type.ty == Treference) // CALYPSO
+                {
+                    fparam.type = fparam.type.nextOf();
+                    fparam.storageClass |= STCscope | STCref;
                 }
                 fparam.type = fparam.type.addStorageClass(fparam.storageClass);
                 if (fparam.storageClass & (STCauto | STCalias | STCstatic))
@@ -6068,7 +6133,8 @@ public:
                     }
                     e = e.implicitCastTo(argsc, fparam.type);
                     // default arg must be an lvalue
-                    if (fparam.storageClass & (STCout | STCref))
+                    if (fparam.storageClass & (STCout | STCref)
+                            && !(fparam.storageClass & STCscope)) // CALYPSO
                         e = e.toLvalue(argsc, e);
                     fparam.defaultArg = e;
                     if (e.op == TOKerror)
@@ -6182,7 +6248,7 @@ public:
         if (errors)
             return terror;
         if (tf.next)
-            tf.deco = tf.merge().deco;
+            tf.copyDeco(); // CALYPSO
         /* Don't return merge(), because arg identifiers and default args
          * can be different
          * even though the types match
@@ -6341,7 +6407,7 @@ public:
                 tf.isnogc = true;
             if (stc & STCsafe)
                 tf.trust = TRUSTsafe;
-            tf.deco = tf.merge().deco;
+            tf.copyDeco(); // CALYPSO
             t = tf;
         }
         return t;
@@ -6433,6 +6499,7 @@ public:
      * Determine match level.
      * Input:
      *      flag    1       performing a partial ordering match
+     *                2       disable @implicit ctor calls // CALYPSO
      * Returns:
      *      MATCHxxxx
      */
@@ -6537,7 +6604,7 @@ public:
                 else
                 {
                     //printf("%s of type %s implicitConvTo %s\n", arg->toChars(), targ->toChars(), tprm->toChars());
-                    if (flag)
+                    if (flag & 1)
                     {
                         // for partial ordering, value is an irrelevant mockup, just look at the type
                         m = targ.implicitConvTo(tprm);
@@ -6545,6 +6612,17 @@ public:
                     else
                         m = arg.implicitConvTo(tprm);
                     //printf("match %d\n", m);
+
+                    // CALYPSO explicit @implicit ctor
+                    if (m == MATCHnomatch && !(flag & 2))
+                    {
+                        auto toad = getAggregateSym(tprm);
+                        if (toad && toad.hasImplicitCtor(arg))
+                        {
+                            m = MATCHimplicitctor;
+                            targ = toad.getType();
+                        }
+                    }
                 }
 
                 // Non-lvalues do not match ref or out parameters
@@ -6555,7 +6633,7 @@ public:
                     Type tp = tprm;
                     //printf("fparam[%d] ta = %s, tp = %s\n", u, ta->toChars(), tp->toChars());
 
-                    if (m && !arg.isLvalue())
+                    if (m && !(p.storageClass & STCscope) && !arg.isLvalue()) // CALYPSO
                     {
                         if (p.storageClass & STCout)
                             goto Nomatch;
@@ -6774,7 +6852,7 @@ public:
              * can be different
              * even though the types match
              */
-            deco = merge().deco;
+            copyDeco(); // CALYPSO
             return this;
         }
     }
@@ -8144,6 +8222,17 @@ public:
         return e;
     }
 
+    override bool isBaseOf(Type t, int *poffset) // CALYPSO
+    {
+        if (t !is null && t.ty == Tclass)
+        {
+            ClassDeclaration cd = (cast(TypeClass)t).sym;
+            if (sym.isBaseOf(cd, poffset))
+                return true;
+        }
+        return false;
+    }
+
     override structalign_t alignment()
     {
         if (sym.alignment == 0)
@@ -8157,11 +8246,11 @@ public:
         {
             printf("TypeStruct::defaultInit() '%s'\n", toChars());
         }
-        Declaration d = new SymbolDeclaration(sym.loc, sym);
-        assert(d);
-        d.type = this;
-        d.storage_class |= STCrvalue; // Bugzilla 14398
-        return new VarExp(sym.loc, d);
+        auto e = sym.defaultInit(loc); // CALYPSO
+        if (e.type)
+            e.type = this; // restore the type qualifiers if any
+                // NOTE: the cpp:: version of TypeStruct::defaultInit creates a CallExp(TypeExp) that needs its .type set to null
+        return e;
     }
 
     /***************************************
@@ -8174,46 +8263,10 @@ public:
         {
             printf("TypeStruct::defaultInitLiteral() '%s'\n", toChars());
         }
-        sym.size(loc);
-        if (sym.sizeok != SIZEOKdone)
-            return new ErrorExp();
-        auto structelems = new Expressions();
-        structelems.setDim(sym.fields.dim - sym.isNested());
-        uint offset = 0;
-        for (size_t j = 0; j < structelems.dim; j++)
-        {
-            VarDeclaration vd = sym.fields[j];
-            Expression e;
-            if (vd.inuse)
-            {
-                error(loc, "circular reference to '%s'", vd.toPrettyChars());
-                return new ErrorExp();
-            }
-            if (vd.offset < offset || vd.type.size() == 0)
-                e = null;
-            else if (vd._init)
-            {
-                if (vd._init.isVoidInitializer())
-                    e = null;
-                else
-                    e = vd.getConstInitializer(false);
-            }
-            else
-                e = vd.type.defaultInitLiteral(loc);
-            if (e && e.op == TOKerror)
-                return e;
-            if (e)
-                offset = vd.offset + cast(uint)vd.type.size();
-            (*structelems)[j] = e;
-        }
-        auto structinit = new StructLiteralExp(loc, sym, structelems);
-        /* Copy from the initializer symbol for larger symbols,
-         * otherwise the literals expressed as code get excessively large.
-         */
-        if (size(loc) > Target.ptrsize * 4 && !needsNested())
-            structinit.useStaticInit = true;
-        structinit.type = this;
-        return structinit;
+        auto e = sym.defaultInitLiteral(loc); // CALYPSO
+        if (e.type)
+            e.type = this; // restore the type qualifiers if any
+        return e;
     }
 
     override bool isZeroInit(Loc loc) const
@@ -8381,6 +8434,11 @@ public:
     override Type toHeadMutable()
     {
         return this;
+    }
+
+    override bool isMergeable() // CALYPSO
+    {
+        return !sym.isAnonymous(); // is this acceptable? (1.1 NOTE: and necessary? aren't anon TypeStruct properly mangled by Clang already?)
     }
 
     override void accept(Visitor v)
@@ -8659,9 +8717,12 @@ public:
         return "class";
     }
 
-    override d_uns64 size(Loc loc) const
+    override d_uns64 size(Loc loc) // CALYPSO (const removed)
     {
-        return Target.ptrsize;
+        if (byRef()) // CALYPSO
+            return Target.ptrsize;
+        else
+            return sym.size(loc);
     }
 
     override Type syntaxCopy()
@@ -8694,6 +8755,23 @@ public:
         if (sc)
             this.cppmangle = sc.cppmangle;
         return merge();
+    }
+
+    override final uint alignsize() // CALYPSO
+    {
+        if (byRef())
+            return super.alignsize();
+        sym.size(Loc());               // give error for forward references
+        return sym.alignsize;
+    }
+
+    override final structalign_t alignment() // CALYPSO
+    {
+        if (byRef())
+            return super.alignment();
+        if (sym.alignment == 0)
+            sym.size(Loc());
+        return sym.alignment;
     }
 
     override Dsymbol toDsymbol(Scope* sc)
@@ -9151,6 +9229,11 @@ public:
         return sym;
     }
 
+    final bool byRef() const // CALYPSO
+    {
+        return sym.byRef();
+    }
+
     override bool isBaseOf(Type t, int* poffset)
     {
         if (t && t.ty == Tclass)
@@ -9168,15 +9251,18 @@ public:
         MATCH m = constConv(to);
         if (m > MATCHnomatch)
             return m;
+        if (byRef() && isClassValueHandle(to))
+            to = to.nextOf(); // CALYPSO may be a downcast from DCXX class to C++ base ptr/ref
+        AggregateDeclaration adto = getAggregateSym(to); // CALYPSO structs may be bases too
         ClassDeclaration cdto = to.isClassHandle();
-        if (cdto)
+        if (adto)
         {
             //printf("TypeClass::implicitConvTo(to = '%s') %s, isbase = %d %d\n", to->toChars(), toChars(), cdto->isBaseInfoComplete(), sym->isBaseInfoComplete());
-            if (cdto._scope && !cdto.isBaseInfoComplete())
+            if (cdto && cdto._scope && !cdto.isBaseInfoComplete())
                 cdto.semantic(null);
             if (sym._scope && !sym.isBaseInfoComplete())
                 sym.semantic(null);
-            if (cdto.isBaseOf(sym, null) && MODimplicitConv(mod, to.mod))
+            if (adto.isBaseOf(sym, null) && MODimplicitConv(mod, to.mod)) // CALYPSO
             {
                 //printf("'to' is base\n");
                 return MATCHconvert;
@@ -9196,10 +9282,13 @@ public:
     {
         if (equals(to))
             return MATCHexact;
-        if (ty == to.ty && sym == (cast(TypeClass)to).sym && MODimplicitConv(mod, to.mod))
+        if (ty == to.ty && sym == (cast(TypeClass)to).sym && (MODimplicitConv(mod, to.mod) || !byRef() /* CALYPSO HACK: TypeStruct returns MATCHconst for mutable -> immutable conv,
+                    we need it for immutable initializers, but reusing TypeStruct::implicitConvTo would be cleaner */))
             return MATCHconst;
         /* Conversion derived to const(base)
          */
+        if (byRef() && isClassValueHandle(to))
+            to = to.nextOf(); // CALYPSO downcast from DCXX class to C++ base ptr/ref
         int offset = 0;
         if (to.isBaseOf(this, &offset) && offset == 0 && MODimplicitConv(mod, to.mod))
         {
@@ -9238,12 +9327,29 @@ public:
         {
             printf("TypeClass::defaultInit() '%s'\n", toChars());
         }
-        return new NullExp(loc, this);
+        auto e = sym.defaultInit(loc); // CALYPSO
+        if (e.type)
+            e.type = this; // restore type qualifiers
+                // NOTE: the cpp:: version of TypeClass::defaultInit creates a CallExp(TypeExp) that needs its .type set to null
+        return e;
+    }
+
+    override Expression defaultInitLiteral(Loc loc) // CALYPSO
+    {
+        if (!byRef()) // hmm?
+        {
+            auto e = sym.defaultInitLiteral(loc); // CALYPSO
+            if (e.type)
+                e.type = this; // restore type qualifiers
+            return e;
+        }
+        else
+            return super.defaultInitLiteral(loc);
     }
 
     override bool isZeroInit(Loc loc) const
     {
-        return true;
+        return byRef(); // CALYPSO
     }
 
     override bool isscope() const
@@ -9259,6 +9365,11 @@ public:
     override bool hasPointers() const
     {
         return true;
+    }
+
+    override bool isMergeable() // CALYPSO
+    {
+        return !sym.isAnonymous(); // is this acceptable? (1.1 NOTE: and necessary? aren't anon TypeClass properly mangled by Clang already?)
     }
 
     override void accept(Visitor v)
@@ -9364,7 +9475,7 @@ public:
         //printf("TypeTuple::semantic(this = %p)\n", this);
         //printf("TypeTuple::semantic() %p, %s\n", this, toChars());
         if (!deco)
-            deco = merge().deco;
+            copyDeco(); // CALYPSO
         /* Don't return merge(), because a tuple with one type has the
          * same deco as that type.
          */
@@ -9816,4 +9927,41 @@ public:
             *pn = n; // update index
         return result;
     }
+}
+
+
+// CALYPSO
+extern(C++) AggregateDeclaration getAggregateSym(Type t)
+{
+    if (t.ty == Tstruct) return (cast(TypeStruct)t).sym;
+    if (t.ty == Tclass) return (cast(TypeClass)t).sym;
+    return null;
+}
+
+extern(C++) AggregateDeclaration getAggregateHandle(Type t)
+{
+    AggregateDeclaration ad = getAggregateSym(
+                    (t.ty == Tpointer) ? t.nextOf() : t);
+    if (ad && (ad.byRef() == (t.ty == Tpointer)))
+        return null; // only interested in handles
+    return ad;
+}
+
+extern(C++) TypeClass isClassValue(Type t)
+{
+    if (t.ty != Tclass) return null;
+    TypeClass tc = cast(TypeClass)t;
+    return tc.byRef() ? null : tc;
+}
+
+extern(C++) bool isAggregateValue(Type t)
+{
+    return t.ty == Tstruct || isClassValue(t);
+}
+
+extern(C++) TypeClass isClassValueHandle(Type t)
+{
+    if (t.ty != Tpointer && t.ty != Treference) return null;
+    if (!isClassValue(t.nextOf())) return null;
+    return cast(TypeClass) t.nextOf();
 }

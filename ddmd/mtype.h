@@ -38,6 +38,7 @@ class TypeInfoDeclaration;
 class Dsymbol;
 class TemplateInstance;
 class TemplateDeclaration;
+class LangPlugin;
 enum LINK;
 
 class TypeBasic;
@@ -144,6 +145,7 @@ public:
     TY ty;
     MOD mod;  // modifiers MODxxxx
     char *deco;
+//     char *equivDeco; // CALYPSO HACK? We're forced to differentiate equality by deco for mangling and equivalence e.g for function overriding or implicit conversions. C++ has logical const, more builtin types, and uniqueness of C++ types must be preserved for template instantiation to stay consistent. Or... perhaps we could get rid of the mtype intrusions by making DMD and Calypso communicate more abstractly but that's a lot more work.
 
     /* These are cached values that are lazily evaluated by constOf(), immutableOf(), etc.
      * They should not be referenced by anybody but mtype.c.
@@ -234,11 +236,13 @@ public:
     static unsigned char sizeTy[TMAX];
     static StringTable stringtable;
 
-    Type(TY ty);
-    virtual const char *kind();
+//     Type(TY ty);
+    virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
+    virtual const char *kind() const;
     Type *copy();
     virtual Type *syntaxCopy();
     bool equals(RootObject *o);
+    bool equivs(RootObject *o) { return equals(o); } // 1.1 FIXME: temporary to not break middle-end code // CALYPSO NOTE: introduced before dmd 2.067, used for function overloading
     bool equivalent(Type *t);
     // kludge for template.isType()
     int dyncast() { return DYNCAST_TYPE; }
@@ -248,12 +252,19 @@ public:
     static char needThisPrefix();
     static void _init();
 
+    // CALYPSO
+    virtual LangPlugin *langPlugin() { return NULL; }
+    virtual unsigned short sizeType();
+    virtual bool isTransitive() { return true; }
+    void copyDeco(); // some semantic() overrides do not return merge() e.g TypeFunction, both deco and equivDeco need to be set
+
     #define SIZE_INVALID (~(d_uns64)0)
     d_uns64 size();
     virtual d_uns64 size(Loc loc);
     virtual unsigned alignsize();
     virtual Type *semantic(Loc loc, Scope *sc);
     Type *trySemantic(Loc loc, Scope *sc);
+    virtual bool isMergeable() { return true; } // CALYPSO
     Type *merge();
     Type *merge2();
     void modToBuffer(OutBuffer *buf);
@@ -375,7 +386,8 @@ class TypeNext : public Type
 public:
     Type *next;
 
-    TypeNext(TY ty, Type *next);
+//     TypeNext(TY ty, Type *next);
+    virtual void _key(); // CALYPSO
     void checkDeprecated(Loc loc, Scope *sc);
     int hasWild() const;
     Type *nextOf();
@@ -400,8 +412,9 @@ public:
     const char *dstring;
     unsigned flags;
 
-    TypeBasic(TY ty);
-    const char *kind();
+//     TypeBasic(TY ty);
+    virtual void _key(); // CALYPSO
+    const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize();
@@ -432,7 +445,7 @@ public:
     Type *basetype;
 
     TypeVector(Loc loc, Type *basetype);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc);
@@ -468,7 +481,7 @@ public:
     Expression *dim;
 
     TypeSArray(Type *t, Expression *dim);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
     unsigned alignsize();
@@ -495,7 +508,7 @@ class TypeDArray : public TypeArray
 {
 public:
     TypeDArray(Type *t);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize() /*const*/;
@@ -521,7 +534,7 @@ public:
 
     TypeAArray(Type *t, Type *index);
     static TypeAArray *create(Type *t, Type *index);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
     Type *semantic(Loc loc, Scope *sc);
@@ -541,8 +554,9 @@ public:
 class TypePointer : public TypeNext
 {
 public:
-    TypePointer(Type *t);
-    const char *kind();
+//     TypePointer(Type *t);
+    virtual void _key(); // CALYPSO
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
@@ -552,6 +566,7 @@ public:
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc) /*const*/;
     bool hasPointers() /*const*/;
+    bool isTransitive(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -559,8 +574,9 @@ public:
 class TypeReference : public TypeNext
 {
 public:
-    TypeReference(Type *t);
-    const char *kind();
+//     TypeReference(Type *t);
+    virtual void _key(); // CALYPSO
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
@@ -626,8 +642,9 @@ public:
 
     TypeFunction(Parameters *parameters, Type *treturn, int varargs, LINK linkage, StorageClass stc = 0);
     static TypeFunction *create(Parameters *parameters, Type *treturn, int varargs, LINK linkage, StorageClass stc = 0);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
+    bool isTransitive() { return false; } // CALYPSO
     Type *semantic(Loc loc, Scope *sc);
     void purityLevel();
     bool hasLazyParameters();
@@ -652,7 +669,7 @@ public:
     // .next is a TypeFunction
 
     TypeDelegate(Type *t);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
@@ -699,7 +716,7 @@ public:
     Dsymbol *originalSymbol; // The symbol representing this identifier, before alias resolution
 
     TypeIdentifier(Loc loc, Identifier *ident);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Dsymbol *toDsymbol(Scope *sc);
@@ -716,7 +733,7 @@ public:
     TemplateInstance *tempinst;
 
     TypeInstance(Loc loc, TemplateInstance *tempinst);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Type *semantic(Loc loc, Scope *sc);
@@ -732,7 +749,7 @@ public:
     int inuse;
 
     TypeTypeof(Loc loc, Expression *exp);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
@@ -745,7 +762,7 @@ class TypeReturn : public TypeQualified
 {
 public:
     TypeReturn(Loc loc);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
@@ -778,13 +795,14 @@ public:
 #endif
 
     TypeStruct(StructDeclaration *sym);
-    const char *kind();
+    const char *kind() const;
     d_uns64 size(Loc loc);
     unsigned alignsize();
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     Dsymbol *toDsymbol(Scope *sc);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
+    bool isBaseOf(Type *t, int *poffset); // CALYPSO
     structalign_t alignment();
     Expression *defaultInit(Loc loc);
     Expression *defaultInitLiteral(Loc loc);
@@ -798,6 +816,7 @@ public:
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
     Type *toHeadMutable();
+    bool isMergeable(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -808,7 +827,7 @@ public:
     EnumDeclaration *sym;
 
     TypeEnum(EnumDeclaration *sym);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
     unsigned alignsize();
@@ -846,23 +865,28 @@ public:
     AliasThisRec att;
 
     TypeClass(ClassDeclaration *sym);
-    const char *kind();
+    const char *kind() const;
     d_uns64 size(Loc loc) /*const*/;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
+    unsigned alignsize(); // CALYPSO
+    structalign_t alignment(); // CALYPSO
     Dsymbol *toDsymbol(Scope *sc);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     ClassDeclaration *isClassHandle();
+    bool byRef() const; // CALYPSO
     bool isBaseOf(Type *t, int *poffset);
     MATCH implicitConvTo(Type *to);
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
     Type *toHeadMutable();
     Expression *defaultInit(Loc loc);
+    Expression *defaultInitLiteral(Loc loc); // CALYPSO
     bool isZeroInit(Loc loc) /*const*/;
     bool isscope() /*const*/;
     bool isBoolean() /*const*/;
     bool hasPointers() /*const*/;
+    bool isMergeable(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -878,7 +902,7 @@ public:
     TypeTuple();
     TypeTuple(Type *t1);
     TypeTuple(Type *t1, Type *t2);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     bool equals(RootObject *o);
@@ -894,7 +918,7 @@ public:
     Expression *upr;
 
     TypeSlice(Type *next, Expression *lwr, Expression *upr);
-    const char *kind();
+    const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
@@ -905,7 +929,7 @@ class TypeNull : public Type
 {
 public:
     TypeNull();
-    const char *kind();
+    const char *kind() const;
 
     Type *syntaxCopy();
     MATCH implicitConvTo(Type *to);
@@ -950,5 +974,11 @@ char *MODtoChars(MOD mod);
 bool MODimplicitConv(MOD modfrom, MOD modto);
 MATCH MODmethodConv(MOD modfrom, MOD modto);
 MOD MODmerge(MOD mod1, MOD mod2);
+
+// CALYPSO
+AggregateDeclaration *getAggregateSym(Type *t);
+AggregateDeclaration *getAggregateHandle(Type *t);
+TypeClass *isClassValue(Type *t);
+TypeClass *isClassValueHandle(Type *t);
 
 #endif /* DMD_MTYPE_H */

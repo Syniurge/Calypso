@@ -430,6 +430,9 @@ public:
                 a = parseImport();
                 // keep pLastDecl
                 break;
+            case TOKmodmap: // CALYPSO
+                a = parseModmap();
+                break;
             case TOKtemplate:
                 s = cast(Dsymbol)parseTemplateDeclaration();
                 break;
@@ -1256,6 +1259,8 @@ public:
                 stc = STCsystem;
             else if (token.ident == Id.disable)
                 stc = STCdisable;
+            else if (token.ident == Id.implicit) // CALYPSO
+                stc = STCimplicit;
             else
             {
                 // Allow identifier, template instantiation, or function call
@@ -2677,8 +2682,8 @@ public:
                         // if stc is not a power of 2
                         if (stc & (stc - 1) && !(stc == (STCin | STCref)))
                             error("incompatible parameter storage classes");
-                        if ((storageClass & STCscope) && (storageClass & (STCref | STCout)))
-                            error("scope cannot be ref or out");
+                        if ((storageClass & STCscope) && (storageClass & STCout)) // CALYPSO (scope can be ref)
+                            error("scope cannot be out");
                         Token* t;
                         if (tpl && token.value == TOKidentifier && (t = peek(&token), (t.value == TOKcomma || t.value == TOKrparen || t.value == TOKdotdotdot)))
                         {
@@ -3005,6 +3010,8 @@ public:
         auto decldefs = new Dsymbols();
         Identifier aliasid = null;
         int isstatic = token.value == TOKstatic;
+        LangPlugin lp; // CALYPSO
+        int treeId = -1;  // id returned by the plugin // CALYPSO
         if (isstatic)
             nextToken();
         //printf("Parser::parseImport()\n");
@@ -3012,6 +3019,30 @@ public:
         {
         L1:
             nextToken();
+            // parse the import tree if specified // CALYPSO
+            if (token.value == TOKlparen)
+            {
+                parenthesedSpecialToken(&token);    // WARNING: is bypassing scan() ok?
+                if (!token.len)
+                    error("import tree expected");
+                else if (strcmp(token.toChars(), "D") == 0)
+                {}
+                else
+                {
+                    foreach (plugin; langPlugins)
+                    {
+                        treeId = plugin.doesHandleImport(token.ustring);
+                        if (treeId != -1)
+                        {
+                            lp = plugin;
+                            break;
+                        }
+                    }
+                    if (lp is null)
+                        error("no language plugin was found to support import tree %s", token.toChars());
+                }
+                nextToken();
+            }
             if (token.value != TOKidentifier)
             {
                 error("identifier expected following import");
@@ -3040,7 +3071,11 @@ public:
                 id = token.ident;
                 nextToken();
             }
-            auto s = new Import(loc, a, id, aliasid, isstatic);
+            Import s;
+            if (treeId == -1) // CALYPSO
+                s = new Import(loc, a, id, aliasid, isstatic);
+            else
+                s = lp.createImport(treeId, loc, a, id, aliasid, isstatic);
             decldefs.push(s);
             /* Look for
              *      : alias=name, alias=name;
@@ -3091,6 +3126,59 @@ public:
             error("';' expected");
             nextToken();
         }
+        return decldefs;
+    }
+
+    Dsymbols *parseModmap() // CALYPSO
+    {
+        auto decldefs = new Dsymbols();
+        Loc loc;
+        StringExp arg;
+        LangPlugin lp;
+        int langId = -1;  // id returned by the plugin when several languages are supported (e.g Calypso has one for C, one for C++, ..)
+        //printf("Parser::parseModmap()\n");
+        nextToken();
+        // parse the language token and look for a language plugin supporting it
+        if (token.value != TOKlparen)
+            error("modmap language expected");
+        else
+        {
+            parenthesedSpecialToken(&token);
+            if (!token.len)
+                error("modmap language expected");
+            else
+            {
+                foreach (plugin; langPlugins)
+                {
+                    langId = plugin.doesHandleModmap(token.ustring);
+                    if (langId != -1)
+                    {
+                        lp = plugin;
+                        break;
+                    }
+                }
+                if (lp is null)
+                    error("no language plugin was found to support language %s", token.toChars());
+            }
+            nextToken();
+        }
+        // parse the argument (typically a string, might force that later)
+        do
+        {
+        L1:
+            loc = token.loc;
+            arg = parsePrimaryExp().toStringExp();
+            if (!arg)
+                error("Expected a string expression following modmap");
+            auto s = lp.createModmap(langId, loc, arg);
+            decldefs.push(s);
+            if (token.value != TOKcomma)
+                break;
+            nextToken();
+        } while (1);
+        if (token.value != TOKsemicolon)
+            error("';' expected");
+        nextToken();
         return decldefs;
     }
 
@@ -5354,22 +5442,51 @@ public:
                     Catch c;
                     Type t;
                     Identifier id;
+                    StorageClass stc; // CALYPSO
                     const catchloc = token.loc;
-                    nextToken();
-                    if (token.value == TOKlcurly || token.value != TOKlparen)
+                    LangPlugin langPlugin; // CALYPSO
+                    Token *tk = peek(&token);
+                    if (tk.value == TOKlcurly || tk.value != TOKlparen)
                     {
+                        nextToken();
                         t = null;
                         id = null;
                     }
                     else
                     {
+                        if (tk.value == TOKlparen && peekPastParen(tk).value == TOKlparen) // CALYPSO
+                        {
+                            Identifiers* idents = null;
+                            CPPMANGLE cppmangle;
+                            auto lang = parseLinkage(&idents, cppmangle);
+                            foreach (plugin; langPlugins)
+                            {
+                                if (plugin.doesHandleCatch(lang))
+                                {
+                                    langPlugin = plugin;
+                                    break;
+                                }
+                            }
+                            if (langPlugin is null)
+                                error("no language plugin was found to support language %s in try block", token.toChars());
+                        }
+                        else
+                            nextToken();
                         check(TOKlparen);
+                        if (langPlugin !is null && token.value == TOKref) // CALYPSO
+                        {
+                            stc |= STCref;
+                            nextToken();
+                        }
                         id = null;
                         t = parseType(&id);
                         check(TOKrparen);
                     }
                     handler = parseStatement(0);
-                    c = new Catch(catchloc, t, id, handler);
+                    if (langPlugin !is null)
+                        c = langPlugin.createCatch(catchloc, t, id, handler, stc); // CALYPSO
+                    else
+                        c = new Catch(catchloc, t, id, handler);
                     if (!catches)
                         catches = new Catches();
                     catches.push(c);

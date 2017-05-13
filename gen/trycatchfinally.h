@@ -293,7 +293,9 @@ private:
   /// cleanups on the way to the latter, the value must also dominate all other
   /// predecessors of the cleanup. Thus, we just use a single alloca in the
   /// entry BB of the function.
+public: // CALYPSO
   llvm::AllocaInst *getOrCreateEhPtrSlot();
+private:
 
   /// Returns the basic block with the call to the unwind resume function.
   ///

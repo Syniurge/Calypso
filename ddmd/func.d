@@ -726,7 +726,7 @@ public:
                 tret = tret.addStorageClass(storage_class | sc.stc);
                 tret = tret.addMod(type.mod);
                 tf.next = tret;
-                if (ad.isStructDeclaration())
+                if (!ad.byRef()) // CALYPSO
                     sc.stc |= STCref;
             }
             sc.linkage = linkage;
@@ -931,7 +931,8 @@ public:
             /* Find index of existing function in base class's vtbl[] to override
              * (the index will be the same as in cd's current vtbl[])
              */
-            int vi = cd.baseClass ? findVtblIndex(&cd.baseClass.vtbl, cast(int)cd.baseClass.vtbl.dim) : -1;
+            ClassDeclaration cb = isClassDeclarationOrNull(cd.baseClass);  // CALYPSO
+            int vi = cb ? findVtblIndex(&cb.vtbl, cast(int)cb.vtbl.dim) : -1;
             bool doesoverride = false;
             switch (vi)
             {
@@ -942,7 +943,7 @@ public:
                  * slot in the vtbl[].
                  */
                 // Verify this doesn't override previous final function
-                if (cd.baseClass)
+                if (!allowFinalOverride() && cd.baseClass) // CALYPSO
                 {
                     Dsymbol s = cd.baseClass.search(loc, ident);
                     if (s)
@@ -960,7 +961,7 @@ public:
                 /* These quirky conditions mimic what VC++ appears to do
                  */
                 if (global.params.mscoff && cd.cpp &&
-                    cd.baseClass && cd.baseClass.vtbl.dim)
+                    cd.baseClass && cd.baseClass.isClassDeclaration() && (cast(ClassDeclaration)cd.baseClass).vtbl.dim) // CALYPSO
                 {
                     /* if overriding an interface function, then this is not
                      * introducing and don't put it in the class vtbl[]
@@ -1022,7 +1023,7 @@ public:
                 return;
             default:
                 {
-                    FuncDeclaration fdv = cd.baseClass.vtbl[vi].isFuncDeclaration();
+                    FuncDeclaration fdv = cb.vtbl[vi].isFuncDeclaration();  // CALYPSO
                     FuncDeclaration fdc = cd.vtbl[vi].isFuncDeclaration();
                     // This function is covariant with fdv
                     if (fdc == this)
@@ -1097,7 +1098,10 @@ public:
         Linterfaces:
             foreach (b; cd.interfaces)
             {
-                vi = findVtblIndex(&b.sym.vtbl, cast(int)b.sym.vtbl.dim);
+                ClassDeclaration icd = b.sym.isClassDeclaration();  // CALYPSO
+                if (!icd)
+                    continue;
+                vi = findVtblIndex(&icd.vtbl, cast(int)icd.vtbl.dim);
                 switch (vi)
                 {
                 case -1:
@@ -1108,7 +1112,7 @@ public:
                     return;
                 default:
                     {
-                        FuncDeclaration fdv = cast(FuncDeclaration)b.sym.vtbl[vi];
+                        FuncDeclaration fdv = cast(FuncDeclaration)icd.vtbl[vi]; // CALYPSO
                         Type ti = null;
                         /* Remember which functions this overrides
                          */
@@ -1187,7 +1191,7 @@ public:
                         if (f2)
                         {
                             f2 = f2.overloadExactMatch(type);
-                            if (f2 && f2.isFinalFunc() && f2.prot().kind != PROTprivate)
+                            if (!allowFinalOverride() && f2 && f2.isFinalFunc() && f2.prot().kind != PROTprivate)  // CALYPSO
                                 error("cannot override final function %s.%s", b.sym.toChars(), f2.toPrettyChars());
                         }
                     }
@@ -1436,7 +1440,7 @@ public:
     }
 
     // Do the semantic analysis on the internals of the function.
-    override final void semantic3(Scope* sc)
+    override void semantic3(Scope* sc) // CALYPSO
     {
         VarDeclaration argptr = null;
         VarDeclaration _arguments = null;
@@ -2476,7 +2480,7 @@ else
      * Resolve forward reference of function body.
      * Returns false if any errors exist in the body.
      */
-    final bool functionSemantic3()
+    bool functionSemantic3() // CALYPSO
     {
         if (semanticRun < PASSsemantic3 && _scope)
         {
@@ -2545,7 +2549,7 @@ else
             thandle = thandle.addStorageClass(storage_class);
             VarDeclaration v = new ThisDeclaration(loc, thandle);
             v.storage_class |= STCparameter;
-            if (thandle.ty == Tstruct)
+            if (isAggregateValue(thandle)) // CALYPSO
             {
                 v.storage_class |= STCref;
                 // if member function is marked 'inout', then 'this' is 'return ref'
@@ -2714,7 +2718,8 @@ else
         ClassDeclaration cd = parent.isClassDeclaration();
         foreach (b; cd.interfaces)
         {
-            auto v = findVtblIndex(&b.sym.vtbl, cast(int)b.sym.vtbl.dim);
+            auto cb = cast(ClassDeclaration) b.sym;
+            auto v = findVtblIndex(&cb.vtbl, cast(int)cb.vtbl.dim); // CALYPSO
             if (v >= 0)
                 return b;
         }
@@ -4090,6 +4095,18 @@ else
         return this;
     }
 
+    // CALYPSO
+    bool allowFinalOverride()
+    {
+        // D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does so the check has to be disabled
+        return false;
+    }
+
+    bool preferNonTemplateOverloads()
+    {
+        return true;
+    }
+
     override void accept(Visitor v)
     {
         v.visit(this);
@@ -4115,10 +4132,10 @@ extern (C++) Expression addInvariant(Loc loc, Scope* sc, AggregateDeclaration ad
         ClassDeclaration cd = ad.isClassDeclaration();
         while (!inv && cd)
         {
-            cd = cd.baseClass;
-            if (!cd)
+            if (!cd.baseClass) // CALYPSO
                 break;
-            inv = cd.inv;
+            inv = cd.baseClass.inv;
+            cd = cd.baseClass.isClassDeclaration();
         }
         if (inv)
         {
@@ -4284,6 +4301,8 @@ extern (C++) static void MODMatchToBuffer(OutBuffer* buf, ubyte lhsMod, ubyte rh
  *      fargs           arguments to function
  *      flags           1: do not issue error message on no match, just return NULL
  *                      2: overloadResolve only
+ *                      4: do not issue error message on multiple matches, return NULL // CALYPSO
+ *                      8: disable @implicit ctors // CALYPSO
  */
 extern (C++) FuncDeclaration resolveFuncCall(Loc loc, Scope* sc, Dsymbol s,
     Objects* tiargs, Type tthis, Expressions* fargs, int flags = 0)
@@ -4315,7 +4334,7 @@ extern (C++) FuncDeclaration resolveFuncCall(Loc loc, Scope* sc, Dsymbol s,
     Match m;
     m.last = MATCHnomatch;
 
-    functionResolve(&m, s, loc, sc, tiargs, tthis, fargs);
+    functionResolve(&m, s, loc, sc, tiargs, tthis, fargs, flags); // CALYPSO
 
     if (m.last > MATCHnomatch && m.lastf)
     {
@@ -4329,6 +4348,8 @@ extern (C++) FuncDeclaration resolveFuncCall(Loc loc, Scope* sc, Dsymbol s,
         {
             return m.lastf;
         }
+        if (flags & 4) // CALYPSO
+            return null;
     }
 
     /* Failed to find a best match.
@@ -4800,7 +4821,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class CtorDeclaration : FuncDeclaration
+extern (C++) class CtorDeclaration : FuncDeclaration // CALYPSO (made non final)
 {
 public:
     extern (D) this(Loc loc, Loc endloc, StorageClass stc, Type type)
@@ -4852,7 +4873,8 @@ public:
         {
             immutable dim = Parameter.dim(tf.parameters);
 
-            if (auto sd = ad.isStructDeclaration())
+            auto sd = ad.isStructDeclaration();
+            if (sd && sd.disableDefaultCtor()) // CALYPSO
             {
                 if (dim == 0 && tf.varargs == 0) // empty default ctor w/o any varargs
                 {
@@ -4894,7 +4916,7 @@ public:
         return "constructor";
     }
 
-    override const(char)* toChars() const
+    override const(char)* toChars() // CALYPSO (const removed)
     {
         return "this";
     }
@@ -5008,7 +5030,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class DtorDeclaration : FuncDeclaration
+extern (C++) class DtorDeclaration : FuncDeclaration // CALYPSO (made non final)
 {
 public:
     extern (D) this(Loc loc, Loc endloc)
@@ -5066,7 +5088,7 @@ public:
         return "destructor";
     }
 
-    override const(char)* toChars() const
+    override const(char)* toChars()  // CALYPSO (const removed)
     {
         return "~this";
     }

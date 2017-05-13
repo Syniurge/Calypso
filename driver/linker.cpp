@@ -9,6 +9,7 @@
 
 #include "driver/linker.h"
 #include "mars.h"
+#include "import.h"
 #include "module.h"
 #include "root.h"
 #include "driver/cl_options.h"
@@ -415,6 +416,9 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
     break;
   }
 
+  for (auto lp: langPlugins)
+      lp->adjustLinkerArgs(args); // CALYPSO
+
   if (global.params.targetTriple->isWindowsGNUEnvironment()) {
     // This is really more of a kludge, as linking in the Winsock functions
     // should be handled by the pragma(lib, ...) in std.socket, but it
@@ -629,7 +633,7 @@ int executeMsvcToolAndWait(const std::string &tool,
     commandLine.append(windows::quoteArg(args[i]));
   }
 
-  const bool useResponseFile = (!args.empty() && commandLine.size() > 2000);
+  const bool useResponseFile = (!args.empty()/* && commandLine.size() > 2000*/); // CALYPSO HACK FIXME should writeFileWithEncoding be replaced since it can't take UTF-16 input?
   llvm::SmallString<128> responseFilePath;
   if (useResponseFile) {
     const size_t firstArgIndex = commandLineLengthAfterTool + 1;
@@ -640,7 +644,8 @@ int executeMsvcToolAndWait(const std::string &tool,
                                            responseFilePath) ||
         llvm::sys::writeFileWithEncoding(
             responseFilePath,
-            content)) // keep encoding (LLVM assumes UTF-8 input)
+            content,
+            llvm::sys::WEM_UTF16)) // CALYPSO uses § as a replacement character to prevent C++ names from colliding with D names, the response file needs to be encoded in UTF-16 for MSVC tools
     {
       error(Loc(), "cannot write temporary response file for %s", tool.c_str());
       return -1;
@@ -782,6 +787,9 @@ static int linkObjToBinaryMSVC(bool sharedLib) {
   args.push_back("uuid.lib");
   args.push_back("comdlg32.lib");
   args.push_back("advapi32.lib");
+
+  for (auto lp: langPlugins)
+      lp->adjustLinkerArgs(args); // CALYPSO
 
   Logger::println("Linking with: ");
   Stream logstr = Logger::cout();

@@ -411,7 +411,7 @@ struct TemplatePrevious
 
 /***********************************************************
  */
-extern (C++) final class TemplateDeclaration : ScopeDsymbol
+extern (C++) class TemplateDeclaration : ScopeDsymbol // CALYPSO (made non-final)
 {
 public:
     TemplateParameters* parameters;     // array of TemplateParameter's
@@ -565,7 +565,7 @@ else
             {
                 errors = true;
             }
-            if (i + 1 != parameters.dim && tp.isTemplateTupleParameter())
+            if (i + 1 != parameters.dim && tp.isTemplateTupleParameter() && !allowTupleParameterAnywhere() /* CALYPSO */)
             {
                 error("template tuple parameter must be last one");
                 errors = true;
@@ -813,6 +813,15 @@ else
         return true;
     }
 
+    bool earlyFunctionValidityCheck(TemplateInstance ti, Scope *sc, Objects *dedtypes) // CALYPSO
+    {
+        return true;
+    }
+
+    void prepareBestMatch(TemplateInstance ti, Scope* sc, Expressions* fargs) // CALYPSO
+    {
+    }
+
     /***************************************
      * Given that ti is an instance of this TemplateDeclaration,
      * deduce the types of the parameters to this, and store
@@ -866,6 +875,7 @@ else
         paramscope.stc = 0;
         // Attempt type deduction
         m = MATCHexact;
+        size_t argi = 0; // CALYPSO
         for (size_t i = 0; i < dedtypes_dim; i++)
         {
             MATCH m2;
@@ -879,7 +889,7 @@ else
                 if (ttp)
                     printf("\tparameter[%d] is %s : %s\n", i, tp.ident.toChars(), ttp.specType ? ttp.specType.toChars() : "");
             }
-            m2 = tp.matchArg(ti.loc, paramscope, ti.tiargs, i, parameters, dedtypes, &sparam);
+            m2 = tp.matchArg(ti.loc, paramscope, ti.tiargs, i, &argi /* CALYPSO */, parameters, dedtypes, &sparam);
             //printf("\tm2 = %d\n", m2);
             if (m2 == MATCHnomatch)
             {
@@ -1051,6 +1061,11 @@ else
         return MATCHnomatch;
     }
 
+    Dsymbols* copySyntaxTree(TemplateInstance ti) // CALYPSO move below?
+    {
+        return super.arraySyntaxCopy(members);
+    }
+
     /*************************************************
      * Match function arguments against a specific template function.
      * Input:
@@ -1153,11 +1168,12 @@ else
             else
                 n = ntargs;
             memcpy(dedargs.tdata(), tiargs.tdata(), n * (*dedargs.tdata()).sizeof);
+            size_t argi = 0; // CALYPSO
             for (size_t i = 0; i < n; i++)
             {
                 assert(i < parameters.dim);
                 Declaration sparam = null;
-                MATCH m = (*parameters)[i].matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, &sparam);
+                MATCH m = (*parameters)[i].matchArg(instLoc, paramscope, dedargs, i, &argi /* CALYPSO */, parameters, dedtypes, &sparam);
                 //printf("\tdeduceType m = %d\n", m);
                 if (m <= MATCHnomatch)
                     goto Lnomatch;
@@ -1442,6 +1458,11 @@ else
                                 (*dedtypes)[i] = xt.tded; // 'unbox'
                             }
                         }
+                        // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
+                        // WARNING: is this appropriate to do it this early? can C++ template functions have default function args which template args get inferred from?
+                        if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
+                            goto Lnomatch;
+                        { size_t argidx = ntargs; // CALYPSO FIXME: this is wrong if there are packs before [ntargs]
                         for (size_t i = ntargs; i < dedargs.dim; i++)
                         {
                             TemplateParameter tparam = (*parameters)[i];
@@ -1457,7 +1478,7 @@ else
                                          * the oded == oarg
                                          */
                                         (*dedargs)[i] = oded;
-                                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, null);
+                                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, &argidx /* CALYPSO */, parameters, dedtypes, null);
                                         //printf("m2 = %d\n", m2);
                                         if (m2 <= MATCHnomatch)
                                             goto Lnomatch;
@@ -1480,6 +1501,7 @@ else
                                         (*dedargs)[i] = declareParameter(paramscope, tparam, oded);
                                 }
                             }
+                        }
                         }
                     }
                     nfargs2 = argi + 1;
@@ -1602,7 +1624,7 @@ else
                             }
                         }
                     }
-                    if (m > MATCHnomatch && (fparam.storageClass & (STCref | STCauto)) == STCref)
+                    if (m > MATCHnomatch && (fparam.storageClass & (STCref | STCauto | STCscope)) == STCref) // CALYPSO
                     {
                         if (!farg.isLvalue())
                         {
@@ -1765,8 +1787,16 @@ else
                 (*dedtypes)[i] = at.merge2();
             }
         }
+        // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
+        if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
+            goto Lnomatch;
         for (size_t i = ntargs; i < dedargs.dim; i++)
         {
+            size_t argidx = i; // CALYPSO NOTE/WARNING: for some reason dedargs has Tuple(s) unlike tiargs (see the beginning of the function)
+                // See also: http://forum.dlang.org/post/CAC_JBqp5Lqqt0ADwnM5GfE+zO8oh6TyLpnDKDHT80S-UNtVUOw@mail.gmail.com
+                // When called from functionResolve the TemplateInstance.havetempdecl is set to true, and Tuple do not get expanded
+                // This isn't consistent with other TemplateInstance where Tuple get expanded during findBestMatch.
+                // IMHO there should be a single case, and that would make C++ multiple parameter pack support easier to support.
             TemplateParameter tparam = (*parameters)[i];
             //printf("tparam[%d] = %s\n", i, tparam->ident->toChars());
 
@@ -1788,7 +1818,7 @@ else
                          * the oded == oarg
                          */
                         (*dedargs)[i] = oded;
-                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, null);
+                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, &argidx /* CALYPSO */, parameters, dedtypes, null);
                         //printf("m2 = %d\n", m2);
                         if (m2 <= MATCHnomatch)
                             goto Lnomatch;
@@ -1834,7 +1864,7 @@ else
                     if (tparam.specialization())
                     {
                         (*dedargs)[i] = oded;
-                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, parameters, dedtypes, null);
+                        MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, &argidx /* CALYPSO */, parameters, dedtypes, null);
                         //printf("m2 = %d\n", m2);
                         if (m2 <= MATCHnomatch)
                             goto Lnomatch;
@@ -1915,7 +1945,7 @@ else
     /**************************************************
      * Declare template parameter tp with value o, and install it in the scope sc.
      */
-    RootObject declareParameter(Scope* sc, TemplateParameter tp, RootObject o)
+    final RootObject declareParameter(Scope* sc, TemplateParameter tp, RootObject o)
     {
         //printf("TemplateDeclaration::declareParameter('%s', o = %p)\n", tp->ident->toChars(), o);
         Type ta = isType(o);
@@ -2005,7 +2035,7 @@ else
     /*************************************************
      * Limited function template instantiation for using fd->leastAsSpecialized()
      */
-    FuncDeclaration doHeaderInstantiation(TemplateInstance ti, Scope* sc2, FuncDeclaration fd, Type tthis, Expressions* fargs)
+    final FuncDeclaration doHeaderInstantiation(TemplateInstance ti, Scope* sc2, FuncDeclaration fd, Type tthis, Expressions* fargs)
     {
         assert(fd);
         version (none)
@@ -2085,7 +2115,7 @@ else
      * see if there already exists an instance.
      * If so, return that existing instance.
      */
-    TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs)
+    final TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs)
     {
         tithis.fargs = fargs;
         hash_t hash = tithis.hashCode();
@@ -2120,7 +2150,7 @@ else
      * Add instance ti to TemplateDeclaration's table of instances.
      * Return a handle we can use to later remove it if it fails instantiation.
      */
-    TemplateInstance addInstance(TemplateInstance ti)
+    final TemplateInstance addInstance(TemplateInstance ti)
     {
         /* See if we need to rehash
          */
@@ -2166,7 +2196,7 @@ else
      * Input:
      *      handle returned by addInstance()
      */
-    void removeInstance(TemplateInstance handle)
+    final void removeInstance(TemplateInstance handle)
     {
         size_t bi = handle.hash % buckets.dim;
         TemplateInstances* instances = buckets[bi];
@@ -2182,12 +2212,64 @@ else
         --numinstances;
     }
 
+     // CALYPSO
+    TemplateInstance foreignInstance(TemplateInstance tithis, Scope *sc)
+    {
+        return null;
+    }
+
+    bool checkTempDeclFwdRefs(Scope *sc, Dsymbol tempdecl, TemplateInstance ti)
+    {
+        // Look for forward references
+        auto tovers = tempdecl.isOverloadSet();
+        foreach (size_t oi; 0 .. tovers ? tovers.a.dim : 1)
+        {
+            Dsymbol dstart = tovers ? tovers.a[oi] : tempdecl;
+            int r = overloadApply(dstart, (Dsymbol s)
+            {
+                auto td = s.isTemplateDeclaration();
+                if (!td)
+                    return 0;
+                if (td.semanticRun == PASSinit)
+                {
+                    if (td._scope)
+                    {
+                        // Try to fix forward reference. Ungag errors while doing so.
+                        Ungag ungag = td.ungagSpeculative();
+                        td.semantic(td._scope);
+                    }
+                    if (td.semanticRun == PASSinit)
+                    {
+                        error("%s forward references template declaration %s",
+                            toChars(), td.toChars());
+                        return 1;
+                    }
+                }
+                return 0;
+            });
+            if (r)
+                return false;
+        }
+        return true;
+    }
+
+    // Variadic template generalization for Calypso (pretty intrusive...)
+    final size_t numParameterPacks()
+    {
+        return .numParameterPacks(parameters);
+    }
+
+    bool allowTupleParameterAnywhere()
+    {
+        return false;
+    }
+
     override inout(TemplateDeclaration) isTemplateDeclaration() inout
     {
         return this;
     }
 
-    TemplateTupleParameter isVariadic()
+    final TemplateTupleParameter isVariadic()
     {
         return .isVariadic(parameters);
     }
@@ -2259,11 +2341,19 @@ public:
  */
 extern (C++) TemplateTupleParameter isVariadic(TemplateParameters* parameters)
 {
-    size_t dim = parameters.dim;
-    TemplateTupleParameter tp = null;
-    if (dim)
-        tp = (*parameters)[dim - 1].isTemplateTupleParameter();
-    return tp;
+    foreach (param; *parameters) // CALYPSO
+        if (auto tp = param.isTemplateTupleParameter())
+            return tp;
+    return null;
+}
+
+size_t numParameterPacks(TemplateParameters* parameters) // CALYPSO
+{
+    size_t numPacks = 0;
+    foreach (param; *parameters)
+        if (param.isTemplateTupleParameter())
+            numPacks++;
+    return numPacks;
 }
 
 /*************************************************
@@ -2277,8 +2367,9 @@ extern (C++) TemplateTupleParameter isVariadic(TemplateParameters* parameters)
  *      tiargs          initial list of template arguments
  *      tthis           if !NULL, the 'this' pointer argument
  *      fargs           arguments to function
+ *      flags           resolveFuncCall flags // CALYPSO
  */
-extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiargs, Type tthis, Expressions* fargs)
+extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiargs, Type tthis, Expressions* fargs, int flags = 0) // CALYPSO
 {
     version (none)
     {
@@ -2312,6 +2403,8 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
     TemplateInstance ti_best;
     MATCH ta_last = m.last != MATCHnomatch ? MATCHexact : MATCHnomatch;
     Type tthis_best;
+
+    int callMatchFlags = (flags & 8) ? 2 : 0; // CALYPSO
 
     int applyFunction(FuncDeclaration fd)
     {
@@ -2363,7 +2456,7 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
             else
                 return 0;   // MATCHnomatch
         }
-        MATCH mfa = tf.callMatch(tthis_fd, fargs);
+        MATCH mfa = tf.callMatch(tthis_fd, fargs, callMatchFlags); // CALYPSO
         //printf("test1: mfa = %d\n", mfa);
         if (mfa > MATCHnomatch)
         {
@@ -2414,7 +2507,12 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
         LfIsBetter:
             td_best = null;
             ti_best = null;
-            ta_last = MATCHexact;
+            if (fd.preferNonTemplateOverloads())
+                ta_last = MATCHexact;
+            else
+                ta_last = (mfa >= MATCHconst) ? MATCHexact : mfa; // CALYPSO: If an @implicit ctor is available, callMatch returns MATCHconvert
+                                            // but for C++ functions we do not want a non-template taking precedence over a better matching template function.
+                                            // This should only be enabled for C++ overloads, as it breaks D test cases by picking wrong overloads in some cases.
             m.last = mfa;
             m.lastf = fd;
             tthis_best = tthis_fd;
@@ -2528,7 +2626,7 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
             Type tthis_fd = fd.needThis() && !fd.isCtorDeclaration() ? tthis : null;
 
             auto tf = cast(TypeFunction)fd.type;
-            MATCH mfa = tf.callMatch(tthis_fd, fargs);
+            MATCH mfa = tf.callMatch(tthis_fd, fargs, callMatchFlags); // CALYPSO
             if (mfa < m.last)
                 return 0;
 
@@ -2625,9 +2723,11 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
                 assert(tf1.ty == Tfunction);
                 auto tf2 = cast(TypeFunction)m.lastf.type;
                 assert(tf2.ty == Tfunction);
-                MATCH c1 = tf1.callMatch(tthis_fd, fargs);
-                MATCH c2 = tf2.callMatch(tthis_best, fargs);
+                MATCH c1 = tf1.callMatch(tthis_fd, fargs, callMatchFlags); // CALYPSO
+                MATCH c2 = tf2.callMatch(tthis_best, fargs, callMatchFlags); // CALYPSO
                 //printf("2: c1 = %d, c2 = %d\n", c1, c2);
+                if (c1 == c2 && !td_best) // CALYPSO renew preference for non-template functions over template functions here
+                    c2 = MATCHexact;
                 if (c1 > c2) goto Ltd;
                 if (c1 < c2) goto Ltd_best;
             }
@@ -2722,7 +2822,7 @@ extern (C++) void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, 
         if (tf.ty == Terror)
             goto Lerror;
         assert(tf.ty == Tfunction);
-        if (!tf.callMatch(tthis_best, fargs))
+        if (!tf.callMatch(tthis_best, fargs, callMatchFlags)) // CALYPSO
             goto Lnomatch;
 
         /* As Bugzilla 3682 shows, a template instance can be matched while instantiating
@@ -4025,7 +4125,7 @@ extern (C++) MATCH deduceType(RootObject o, Scope* sc, Type tparam, TemplatePara
                     {
                         deduceBaseClassParameters(*b, sc, tparam, parameters, dedtypes, best, numBaseClassMatches);
                     }
-                    s = (*s.baseclasses)[0].sym;
+                    s = isClassDeclarationOrNull((*s.baseclasses)[0].sym); // CALYPSO
                 }
                 if (numBaseClassMatches == 0)
                 {
@@ -4447,12 +4547,12 @@ extern (C++) bool reliesOnTident(Type t, TemplateParameters* tparams = null, siz
                 t.next.accept(this);
         }
 
-        override void visit(TypeIdentifier t)
+        final void visitIdentifier(Identifier id) // CALYPSO
         {
             for (size_t i = iStart; i < tparams.dim; i++)
             {
-                TemplateParameter tp = (*tparams)[i];
-                if (tp.ident.equals(t.ident))
+                auto tp = (*tparams)[i];
+                if (tp.ident.equals(id))
                 {
                     result = true;
                     return;
@@ -4460,29 +4560,53 @@ extern (C++) bool reliesOnTident(Type t, TemplateParameters* tparams = null, siz
             }
         }
 
+        final void visitTempArgs(Objects* tiargs) // CALYPSO
+        {
+            foreach (oa; *tiargs)
+            {
+                if (auto ea = isExpression(oa))
+                    ea.accept(this);
+                else if (auto ta = isType(oa))
+                    ta.accept(this);
+            }
+        }
+
+        final void visitTempInst(TemplateInstance ti) // CALYPSO
+        {
+            visitIdentifier(ti.name);
+            if (result)
+                return;
+            if (ti.tiargs)
+                visitTempArgs(ti.tiargs);
+        }
+
+        final void visitIdents(TypeQualified t)
+        {
+            foreach (o; t.idents)
+            {
+                if (o.dyncast() == DYNCAST_IDENTIFIER)
+                    visitIdentifier(cast(Identifier) o);
+                else if (o.dyncast() == DYNCAST_DSYMBOL)
+                    visitTempInst(cast(TemplateInstance) o);
+                if (result)
+                    return;
+            }
+        }
+
+        override void visit(TypeIdentifier t)
+        {
+            visitIdentifier(t.ident); // CALYPSO
+            if (result)
+                return;
+            visitIdents(t);
+        }
+
         override void visit(TypeInstance t)
         {
-            for (size_t i = iStart; i < tparams.dim; i++)
-            {
-                TemplateParameter tp = (*tparams)[i];
-                if (t.tempinst.name == tp.ident)
-                {
-                    result = true;
-                    return;
-                }
-            }
-            if (!t.tempinst.tiargs)
+            visitTempInst(t.tempinst); // CALYPSO
+            if (result)
                 return;
-            for (size_t i = 0; i < t.tempinst.tiargs.dim; i++)
-            {
-                Type ta = isType((*t.tempinst.tiargs)[i]);
-                if (ta)
-                {
-                    ta.accept(this);
-                    if (result)
-                        return;
-                }
-            }
+            visitIdents(t);
         }
 
         override void visit(TypeTypeof t)
@@ -4750,6 +4874,12 @@ extern (C++) bool reliesOnTident(Type t, TemplateParameters* tparams = null, siz
             if (!result)
                 visit(cast(BinExp)e);
         }
+
+        override void visit(DotIdExp e) // CALYPSO addition (1.1 NOTE: strange that so many Expression got added since 0.17 but no DotIdExp)
+        {
+            visit(cast(UnaExp)e);
+            visitIdentifier(e.ident);
+        }
     }
 
     if (!t)
@@ -4829,16 +4959,21 @@ public:
      * Input:
      *      instLoc         location that the template is instantiated.
      *      tiargs[]        actual arguments to template instance
-     *      i               i'th argument
+     *      prmi               i'th parameter
+     *      argi               (CALYPSO) i'th argument (not always <= prmi since tuple parameters may be anywhere in C++ templates)
      *      parameters[]    template parameters
      *      dedtypes[]      deduced arguments to template instance
      *      *psparam        set to symbol declared and initialized to dedtypes[i]
      */
-    MATCH matchArg(Loc instLoc, Scope* sc, Objects* tiargs, size_t i, TemplateParameters* parameters, Objects* dedtypes, Declaration* psparam)
+    MATCH matchArg(Loc instLoc, Scope* sc, Objects* tiargs, size_t prmi, size_t* argi /*CALYPSO*/, TemplateParameters* parameters, Objects* dedtypes, Declaration* psparam)
     {
+        alias i = prmi;
         RootObject oarg;
-        if (i < tiargs.dim)
-            oarg = (*tiargs)[i];
+        if (*argi < (*tiargs).dim) // CALYPSO
+        {
+            oarg = (*tiargs)[*argi];
+            (*argi)++;
+        }
         else
         {
             // Get default argument instead
@@ -4860,6 +4995,7 @@ public:
     }
 
     abstract MATCH matchArg(Scope* sc, RootObject oarg, size_t i, TemplateParameters* parameters, Objects* dedtypes, Declaration* psparam);
+        // CALYPSO TODO: the second matchArg overload is used by deduceType which doesn't handle multiple parameter packs yet
 
     /* Create dummy argument based on parameter.
      */
@@ -5121,7 +5257,7 @@ public:
 
     override bool semantic(Scope* sc, TemplateParameters* parameters)
     {
-        valType = valType.semantic(loc, sc);
+//         valType = valType.semantic(loc, sc); // CALYPSO DMD BUG?: this is too early if valType is dependent upon a previous parameter (TODO: needs a D test case)
         version (none)
         {
             // defer semantic analysis to arg match
@@ -5656,30 +5792,37 @@ public:
         return false;
     }
 
-    override MATCH matchArg(Loc instLoc, Scope* sc, Objects* tiargs, size_t i, TemplateParameters* parameters, Objects* dedtypes, Declaration* psparam)
+    override MATCH matchArg(Loc instLoc, Scope* sc, Objects* tiargs, size_t i, size_t* argi /*CALYPSO*/, TemplateParameters* parameters, Objects* dedtypes, Declaration* psparam)
     {
         /* The rest of the actual arguments (tiargs[]) form the match
          * for the variadic parameter.
          */
-        assert(i + 1 == dedtypes.dim); // must be the last one
+//         assert(i + 1 == dedtypes.dim); // must be the last one // CALYPSO allowTupleParameterAnywhere() may be true
         Tuple ovar;
         if (Tuple u = isTuple((*dedtypes)[i]))
         {
             // It has already been deduced
             ovar = u;
         }
-        else if (i + 1 == tiargs.dim && isTuple((*tiargs)[i]))
-            ovar = isTuple((*tiargs)[i]);
+        else if (*argi + 1 == tiargs.dim && isTuple((*tiargs)[*argi])) // CALYPSO
+            ovar = isTuple((*tiargs)[*argi]);
         else
         {
             ovar = new Tuple();
             //printf("ovar = %p\n", ovar);
-            if (i < tiargs.dim)
+            size_t numPrevPacks = 0; // CALYPSO
+            for (size_t pidx = 0; pidx < i; pidx++)
+                if ((*parameters)[pidx].isTemplateTupleParameter())
+                    numPrevPacks++;
+            size_t numParamPacks = numParameterPacks(parameters);
+            size_t packDim =
+                    (2*numParamPacks + tiargs.dim - parameters.dim - 1 - numPrevPacks) / numParamPacks;
+            if (packDim > 0)
             {
                 //printf("i = %d, tiargs->dim = %d\n", i, tiargs->dim);
-                ovar.objects.setDim(tiargs.dim - i);
-                for (size_t j = 0; j < ovar.objects.dim; j++)
-                    ovar.objects[j] = (*tiargs)[i + j];
+                ovar.objects.setDim(packDim);
+                for (size_t j = 0; j < ovar.objects.dim; j++, (*argi)++)
+                    ovar.objects[j] = (*tiargs)[*argi];
             }
         }
         return matchArg(sc, ovar, i, parameters, dedtypes, psparam);
@@ -5863,7 +6006,7 @@ public:
         minst = sc.minst;
         // Bugzilla 10920: If the enclosing function is non-root symbol,
         // this instance should be speculative.
-        if (!tinst && sc.func && sc.func.inNonRoot())
+        if (!tinst && sc.func && sc.func.inNonCodegen()) // CALYPSO
         {
             minst = null;
         }
@@ -5906,6 +6049,14 @@ public:
          */
         inst = tempdecl.findExistingInstance(this, fargs);
         TemplateInstance errinst = null;
+        if (!inst)
+        {
+            if (auto foreignInst = tempdecl.foreignInstance(this, sc))  // CALYPSO
+            {
+                inst = foreignInst;
+                foreignInst.semantic(sc);
+            }
+        }
         if (!inst)
         {
             // So, we need to implement 'this' instance.
@@ -6000,7 +6151,7 @@ public:
         size_t target_symbol_list_idx = target_symbol_list ? target_symbol_list.dim - 1 : 0;
 
         // Copy the syntax trees from the TemplateDeclaration
-        members = Dsymbol.arraySyntaxCopy(tempdecl.members);
+        members = tempdecl.copySyntaxTree(this); // CALYPSO
         // resolve TemplateThisParameter
         for (size_t i = 0; i < tempdecl.parameters.dim; i++)
         {
@@ -6166,7 +6317,7 @@ public:
         }
         if (global.errors != errorsave)
             goto Laftersemantic;
-        if ((sc.func || (sc.flags & SCOPEfullinst)) && !tinst)
+        if ((sc.func || (sc.flags & SCOPEfullinst) || langPlugin()) && !tinst) // CALYPSO 0.17 HACK FIXME: sc->func gets reset if too deep during DeclReferencer and some times that resulted in functions not getting semantic3'd.. is this the correct fix?
         {
             /* If a template is instantiated inside function, the whole instantiation
              * should be done at that position. But, immediate running semantic3 of
@@ -6576,10 +6727,11 @@ public:
      * Lazily generate identifier for template instance.
      * This is because 75% of the ident's are never needed.
      */
-    override final Identifier getIdent()
+    override Identifier getIdent() // CALYPSO
     {
         if (!ident && inst && !errors)
             ident = genIdent(tiargs); // need an identifier for name mangling purposes.
+//             ident = genIdent(inst.tiargs); // need an identifier for name mangling purposes. // CALYPSO 1.1 NOTE: skipped, https://github.com/Syniurge/Calypso/commit/2502925cf14e58022ebb0f532cc70a66fb55e61d doesn't make sense to me (the cpp:: getIdent switches this.tiargs to primTiargs, so why take inst.tiargs?..)
         return ident;
     }
 
@@ -6705,14 +6857,14 @@ public:
             {
                 minst = tinst.minst; // cache result
                 assert(minst);
-                assert(minst.isRoot() || minst.rootImports());
+                assert(minst.isCodegen() || minst.rootImports()); // CALYPSO
                 return true;
             }
             if (tnext && (tnext.needsCodegen() || tnext.minst))
             {
                 minst = tnext.minst; // cache result
                 assert(minst);
-                return minst.isRoot() || minst.rootImports();
+                return minst.isCodegen() || minst.rootImports(); // CALYPSO
             }
 
             // Elide codegen because this is really speculative.
@@ -6750,7 +6902,7 @@ public:
             global.params.debuglevel)
         {
             // Prefer instantiations from root modules, to maximize link-ability.
-            if (minst.isRoot())
+            if (minst.isCodegen()) // CALYPSO
                 return true;
 
             TemplateInstance tnext = this.tnext;
@@ -6762,14 +6914,14 @@ public:
             {
                 minst = tinst.minst; // cache result
                 assert(minst);
-                assert(minst.isRoot() || minst.rootImports());
+                assert(minst.isCodegen() || minst.rootImports()); // CALYPSO
                 return true;
             }
             if (tnext && tnext.needsCodegen())
             {
                 minst = tnext.minst; // cache result
                 assert(minst);
-                assert(minst.isRoot() || minst.rootImports());
+                assert(minst.isCodegen() || minst.rootImports()); // CALYPSO
                 return true;
             }
 
@@ -6796,7 +6948,7 @@ public:
              *
              * See Bugzilla 2500.
              */
-            if (!minst.isRoot() && !minst.rootImports())
+            if (!minst.isCodegen() && !minst.rootImports()) // CALYPSO
                 return false;
 
             TemplateInstance tnext = this.tnext;
@@ -6805,7 +6957,7 @@ public:
             if (tnext && !tnext.needsCodegen() && tnext.minst)
             {
                 minst = tnext.minst; // cache result
-                assert(!minst.isRoot());
+                assert(!minst.isCodegen()); // CALYPSO
                 return false;
             }
 
@@ -6883,37 +7035,7 @@ public:
         }
         assert(tempdecl);
 
-        // Look for forward references
-        auto tovers = tempdecl.isOverloadSet();
-        foreach (size_t oi; 0 .. tovers ? tovers.a.dim : 1)
-        {
-            Dsymbol dstart = tovers ? tovers.a[oi] : tempdecl;
-            int r = overloadApply(dstart, (Dsymbol s)
-            {
-                auto td = s.isTemplateDeclaration();
-                if (!td)
-                    return 0;
-                if (td.semanticRun == PASSinit)
-                {
-                    if (td._scope)
-                    {
-                        // Try to fix forward reference. Ungag errors while doing so.
-                        Ungag ungag = td.ungagSpeculative();
-                        td.semantic(td._scope);
-                    }
-                    if (td.semanticRun == PASSinit)
-                    {
-                        error("%s forward references template declaration %s",
-                            toChars(), td.toChars());
-                        return 1;
-                    }
-                }
-                return 0;
-            });
-            if (r)
-                return false;
-        }
-        return true;
+        return firstTempDecl().checkTempDeclFwdRefs(sc, tempdecl, this); // CALYPSO
     }
 
     /**********************************************
@@ -7016,6 +7138,34 @@ public:
         return (tempdecl !is null);
     }
 
+    final TemplateDeclaration firstTempDecl() // CALYPSO return the first overload
+    {
+        if (tempdecl.isTemplateDeclaration())
+            return cast(TemplateDeclaration) tempdecl;
+
+        TemplateDeclaration td;
+        int findFirstTempDecl(Dsymbol s)
+        {
+            td = s.isTemplateDeclaration();
+            return td ? 1 : 0;
+        }
+
+        if (auto tovers = tempdecl.isOverloadSet())
+        {
+            foreach (over; tovers.a)
+            {
+                overloadApply(over, &findFirstTempDecl);
+                if (td)
+                    break;
+            }
+        }
+        else
+            overloadApply(tempdecl, &findFirstTempDecl);
+
+        assert(td);
+        return td;
+    }
+
     /**********************************
      * Run semantic of tiargs as arguments of template.
      * Input:
@@ -7024,6 +7174,7 @@ public:
      *      tiargs  array of template arguments
      *      flags   1: replace const variables with their initializers
      *              2: don't devolve Parameter to Type
+     *              CALYPSO 4: handle Tuple (TODO: should become a template parameter after the switch to DDMD)
      * Returns:
      *      false if one or more arguments have errors.
      */
@@ -7040,6 +7191,7 @@ public:
             Type ta = isType(o);
             Expression ea = isExpression(o);
             Dsymbol sa = isDsymbol(o);
+            Tuple tupa = isTuple(o); // CALYPSO
             //printf("1: (*tiargs)[%d] = %p, s=%p, v=%p, ea=%p, ta=%p\n", j, o, isDsymbol(o), isTuple(o), ea, ta);
             if (ta)
             {
@@ -7229,6 +7381,10 @@ public:
                 if (fd)
                     fd.functionSemantic();
             }
+            else if ((flags & 4) && tupa) // CALYPSO
+            {
+                semanticTiargs(loc, sc, &tupa.objects, flags);
+            }
             else if (isParameter(o))
             {
             }
@@ -7264,7 +7420,7 @@ public:
      *      This function is reentrant against error occurrence. If returns false,
      *      all elements of tiargs won't be modified.
      */
-    final bool semanticTiargs(Scope* sc)
+    bool semanticTiargs(Scope* sc) // CALYPSO
     {
         //printf("+TemplateInstance::semanticTiargs() %s\n", toChars());
         if (semantictiargsdone)
@@ -7280,6 +7436,7 @@ public:
 
     final bool findBestMatch(Scope* sc, Expressions* fargs)
     {
+        firstTempDecl().prepareBestMatch(this, sc, fargs); // CALYPSO hook (ugly)
         if (havetempdecl)
         {
             TemplateDeclaration tempdecl = this.tempdecl.isTemplateDeclaration();
@@ -7292,7 +7449,7 @@ public:
                 error("incompatible arguments for template instantiation");
                 return false;
             }
-            // TODO: Normalizing tiargs for bugzilla 7469 is necessary?
+            // TODO: Normalizing tiargs for bugzilla 7469 is necessary? // CALYPSO FIXME yeah probably
             return true;
         }
         static if (LOG)
@@ -7401,25 +7558,29 @@ public:
              *    S!num s;             // S!1 is instantiated, not S!num
              *  }
              */
-            size_t dim = td_last.parameters.dim - (td_last.isVariadic() ? 1 : 0);
-            for (size_t i = 0; i < dim; i++)
+            size_t i = 0;
+            void addTiarg(RootObject a) // CALYPSO generalize parameter packs
             {
-                if (tiargs.dim <= i)
-                    tiargs.push(tdtypes[i]);
-                assert(i < tiargs.dim);
-                auto tvp = (*td_last.parameters)[i].isTemplateValueParameter();
-                if (!tvp)
-                    continue;
-                assert(tdtypes[i]);
-                // tdtypes[i] is already normalized to the required type in matchArg
-                (*tiargs)[i] = tdtypes[i];
+                if (Tuple va = isTuple(a)) {
+                    foreach (va_obj; va.objects)
+                        addTiarg(va_obj);
+                } else if (tiargs.dim <= i)
+                    tiargs.push(a);
+                else
+                    (*tiargs)[i] = a;
+                i++;
             }
-            if (td_last.isVariadic() && tiargs.dim == dim && tdtypes[dim])
+            for (size_t pidx = 0; pidx < td_last.parameters.dim; pidx++)
             {
-                Tuple va = isTuple(tdtypes[dim]);
-                assert(va);
-                for (size_t i = 0; i < va.objects.dim; i++)
-                    tiargs.push(va.objects[i]);
+                auto tvp = (*td_last.parameters)[pidx].isTemplateValueParameter();
+                auto tup = (*td_last.parameters)[pidx].isTemplateTupleParameter();
+
+                if (tvp || tup)
+                    addTiarg(tdtypes[pidx]);
+                else
+                    i++; // tdtypes[i] is already normalized to the required type in matchArg
+                        // CALYPSO NOTE/potential DMD BUG: if we addTiarg for every parameter, then VarExp get replaced by Dsymbol which messes up genIdent,
+                        // but so what about Tuple containing VarExp?
             }
         }
         else if (errors && inst)
@@ -7773,7 +7934,7 @@ public:
      * Declare parameters of template instance, initialize them with the
      * template instance arguments.
      */
-    final void declareParameters(Scope* sc)
+    void declareParameters(Scope* sc) // CALYPSO
     {
         TemplateDeclaration tempdecl = this.tempdecl.isTemplateDeclaration();
         assert(tempdecl);
@@ -7808,6 +7969,8 @@ public:
         else
             buf.printf("__T%llu%s", cast(ulong)strlen(id), id);
         size_t nparams = tempdecl.parameters.dim - (tempdecl.isVariadic() ? 1 : 0);
+        void processArgs(Objects* args, bool insideTuple = false) // CALYPSO
+        {
         for (size_t i = 0; i < args.dim; i++)
         {
             RootObject o = (*args)[i];
@@ -7816,8 +7979,14 @@ public:
             Dsymbol sa = isDsymbol(o);
             Tuple va = isTuple(o);
             //printf("\to [%d] %p ta %p ea %p sa %p va %p\n", i, o, ta, ea, sa, va);
-            if (i < nparams && (*tempdecl.parameters)[i].specialization())
-                buf.writeByte('H'); // Bugzilla 6574
+            if (!insideTuple)
+            {
+                auto tp = correspondingParam(i); // CALYPSO
+                if (!tp.isTemplateTupleParameter() && tp.specialization())
+                    buf.writeByte('H');     // Bugzilla 6574
+                // DMD BUG in vanilla: the original code is wrong when i and args get switched by "else if (va)" below
+                // More information: http://forum.dlang.org/post/CAC_JBqp5Lqqt0ADwnM5GfE+zO8oh6TyLpnDKDHT80S-UNtVUOw@mail.gmail.com
+            }
             if (ta)
             {
                 buf.writeByte('T');
@@ -7900,10 +8069,14 @@ public:
                 assert(i + 1 == args.dim); // must be last one
                 args = &va.objects;
                 i = -cast(size_t)1;
+                assert(i + 1 == args.dim || tempdecl.allowTupleParameterAnywhere() /* CALYPSO */); // must be last one
+                processArgs(&va.objects, true); // CALYPSO W.O.N.D.E.R.F.U.L code, but why and how does writeln get a Tuple in its tiargs? this seems inconsistent with the flattening in findBestMatch..
             }
             else
                 assert(0);
         }
+        }
+        processArgs(args);
         buf.writeByte('Z');
         //printf("\tgenIdent = %s\n", buf.peekString());
         return Identifier.idPool(buf.peekSlice());
@@ -7964,6 +8137,20 @@ public:
         }
         semantic3(sc2);
         --nest;
+    }
+
+    // CALYPSO variadic template generalization (pretty intrusive...)
+    size_t correspondingParamIdx(size_t argi)
+    {
+        assert(tempdecl && tempdecl.isTemplateDeclaration());
+        return .correspondingParamIdx(argi, cast(TemplateDeclaration)tempdecl, tiargs);
+    }
+
+    TemplateParameter correspondingParam(size_t argi)
+    {
+        assert(tempdecl && tempdecl.isTemplateDeclaration());
+        auto tempdecl = cast(TemplateDeclaration)this.tempdecl;
+        return (*tempdecl.parameters)[.correspondingParamIdx(argi, tempdecl, tiargs)];
     }
 
     override final inout(TemplateInstance) isTemplateInstance() inout
@@ -8084,6 +8271,29 @@ extern (C++) bool definitelyValueParameter(Expression e)
 
     // TODO: Should we force CTFE if it is a global constant?
     return false;
+}
+
+extern(C++) size_t correspondingParamIdx(size_t argi, TemplateDeclaration tempdecl, Objects* tiargs) // CALYPSO
+{
+    auto numParamPacks = tempdecl.numParameterPacks();
+    auto numArgsInOnePack = numParamPacks ?
+                ((2*numParamPacks + tiargs.dim - tempdecl.parameters.dim - 1) / numParamPacks) : 0;
+
+    // NOTE: template<typename... _Args1, std::size_t... _Indexes1, typename... _Args2, std::size_t... _Indexes2> pair
+    //   may be instantiated with only two arguments, so we add (numParamPacks-1) to tiargs.dim to ensure
+    //   that any remainder counts as one in numArgsInOnePack
+
+    size_t aidx = 0, pidx = 0;
+    for (;; pidx++) {
+        assert(pidx < tempdecl.parameters.dim);
+        if ((*tempdecl.parameters)[pidx].isTemplateTupleParameter())
+            aidx += numArgsInOnePack;
+        else
+            aidx++;
+        if (aidx > argi)
+            break;
+    }
+    return pidx;
 }
 
 /***********************************************************

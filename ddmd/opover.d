@@ -1163,7 +1163,7 @@ extern (C++) Expression op_overload(Expression e, Scope* sc)
             {
                 ClassDeclaration cd1 = t1.isClassHandle();
                 ClassDeclaration cd2 = t2.isClassHandle();
-                if (!(cd1.cpp || cd2.cpp))
+                if (!(cd1.cpp || cd2.cpp /*CALYPSO*/|| !cd1.byRef() || !cd2.byRef()))
                 {
                     /* Rewrite as:
                      *      .object.opEquals(e1, e2)

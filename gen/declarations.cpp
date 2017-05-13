@@ -11,10 +11,12 @@
 #include "declaration.h"
 #include "enum.h"
 #include "id.h"
+#include "import.h"
 #include "init.h"
 #include "nspace.h"
 #include "rmem.h"
 #include "template.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
@@ -201,9 +203,15 @@ public:
     DtoResolveStruct(decl);
     decl->ir->setDefined();
 
+    if (auto lp = decl->langPlugin())  // CALYPSO
+        lp->codegen()->toDefineStruct(decl);
+
     for (auto m : *decl->members) {
       m->accept(this);
     }
+
+    if (decl->langPlugin())  // CALYPSO
+        return;
 
     // Define the __initZ symbol.
     IrAggr *ir = getIrAggr(decl);
@@ -247,9 +255,15 @@ public:
       DtoResolveClass(decl);
       decl->ir->setDefined();
 
+      if (auto lp = decl->langPlugin())  // CALYPSO
+        lp->codegen()->toDefineClass(decl);
+
       for (auto m : *decl->members) {
         m->accept(this);
       }
+
+      if (decl->langPlugin())  // CALYPSO
+        return;
 
       IrAggr *ir = getIrAggr(decl);
       const auto lwc = DtoLinkage(decl);
@@ -265,6 +279,9 @@ public:
       llvm::GlobalVariable *classZ = ir->getClassInfoSymbol();
       classZ->setInitializer(ir->getClassInfoInit());
       setLinkage(lwc, classZ);
+
+      for (auto lp: langPlugins)
+        lp->codegen()->emitAdditionalClassSymbols(decl); // CALYPSO
 
       // No need to do TypeInfo here, it is <name>__classZ for classes in D2.
     }
@@ -341,7 +358,11 @@ public:
       // If we reach here during codegen of an available_externally function,
       // new variable declarations should stay external and therefore must not
       // have an initializer.
-      if (!(decl->storage_class & STCextern) && !decl->inNonRoot()) {
+      if ((decl->storage_class & STCextern) || decl->inNonRoot())
+        ;
+      else if (auto lp = decl->langPlugin())  // CALYPSO
+        lp->codegen()->toDefineVariable(decl);
+      else {
         // Build the initializer. Might use this->ir.irGlobal->value!
         LLConstant *initVal =
             DtoConstInitializer(decl->loc, decl->type, decl->_init);

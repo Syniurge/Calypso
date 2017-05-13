@@ -516,12 +516,14 @@ alias DYNCAST_PARAMETER = DYNCAST.parameter;
 enum MATCH : int
 {
     nomatch,   // no match
+    implicitctor,  // match with implicit ctor calls // CALYPSO
     convert,   // match with conversions
     constant,  // match with conversion to const
     exact,     // exact match
 }
 
 alias MATCHnomatch = MATCH.nomatch;
+alias MATCHimplicitctor = MATCH.implicitctor; // CALYPSO
 alias MATCHconvert = MATCH.convert;
 alias MATCHconst = MATCH.constant;
 alias MATCHexact = MATCH.exact;

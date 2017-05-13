@@ -268,7 +268,7 @@ public:
         return ScopeDsymbol.syntaxCopy(sd);
     }
 
-    override final void semantic(Scope* sc)
+    override void semantic(Scope* sc) // CALYPSO (made non final)
     {
         //printf("StructDeclaration::semantic(this=%p, '%s', sizeok = %d)\n", this, toPrettyChars(), sizeok);
 
@@ -293,7 +293,7 @@ public:
             assert(sc.parent && sc.func);
             parent = sc.parent;
         }
-        assert(parent && !isAnonymous());
+        assert(parent && (!isAnonymous() || mayBeAnonymous())); // CALYPSO
 
         if (this.errors)
             type = Type.terror;
@@ -507,6 +507,9 @@ public:
             deferred.semantic3(sc);
         }
 
+        if (!langPlugin()) // CALYPSO
+            markAggregateReferenced(this);
+
         version (none)
         {
             if (type.ty == Tstruct && (cast(TypeStruct)type).sym != this)
@@ -590,12 +593,8 @@ public:
         return "struct";
     }
 
-    override final void finalizeSize()
+    void buildLayout() // CALYPSO
     {
-        //printf("StructDeclaration::finalizeSize() %s\n", toChars());
-        if (sizeok != SIZEOKnone)
-            return;
-
         // Set the offsets of the fields and determine the size of the struct
         uint offset = 0;
         bool isunion = isUnionDeclaration() !is null;
@@ -621,6 +620,17 @@ public:
             structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
         else
             structsize = (structsize + alignment - 1) & ~(alignment - 1);
+    }
+
+    override final void finalizeSize()
+    {
+        //printf("StructDeclaration::finalizeSize() %s\n", toChars());
+        if (sizeok != SIZEOKnone)
+            return;
+
+        buildLayout(); // CALYPSO
+        if (sizeok == SIZEOKfwd)
+            return;
         sizeok = SIZEOKdone;
 
         // Calculate fields[i].overlapped
@@ -675,96 +685,6 @@ public:
     }
 
     /***************************************
-     * Fit elements[] to the corresponding type of field[].
-     * Input:
-     *      loc
-     *      sc
-     *      elements    The explicit arguments that given to construct object.
-     *      stype       The constructed object type.
-     * Returns false if any errors occur.
-     * Otherwise, returns true and elements[] are rewritten for the output.
-     */
-    final bool fit(Loc loc, Scope* sc, Expressions* elements, Type stype)
-    {
-        if (!elements)
-            return true;
-
-        size_t nfields = fields.dim - isNested();
-        size_t offset = 0;
-        for (size_t i = 0; i < elements.dim; i++)
-        {
-            Expression e = (*elements)[i];
-            if (!e)
-                continue;
-
-            e = resolveProperties(sc, e);
-            if (i >= nfields)
-            {
-                if (i == fields.dim - 1 && isNested() && e.op == TOKnull)
-                {
-                    // CTFE sometimes creates null as hidden pointer; we'll allow this.
-                    continue;
-                }
-                .error(loc, "more initializers than fields (%d) of %s", nfields, toChars());
-                return false;
-            }
-            VarDeclaration v = fields[i];
-            if (v.offset < offset)
-            {
-                .error(loc, "overlapping initialization for %s", v.toChars());
-                return false;
-            }
-            offset = cast(uint)(v.offset + v.type.size());
-
-            Type t = v.type;
-            if (stype)
-                t = t.addMod(stype.mod);
-            Type origType = t;
-            Type tb = t.toBasetype();
-
-            /* Look for case of initializing a static array with a too-short
-             * string literal, such as:
-             *  char[5] foo = "abc";
-             * Allow this by doing an explicit cast, which will lengthen the string
-             * literal.
-             */
-            if (e.op == TOKstring && tb.ty == Tsarray)
-            {
-                StringExp se = cast(StringExp)e;
-                Type typeb = se.type.toBasetype();
-                TY tynto = tb.nextOf().ty;
-                if (!se.committed &&
-                    (typeb.ty == Tarray || typeb.ty == Tsarray) &&
-                    (tynto == Tchar || tynto == Twchar || tynto == Tdchar) &&
-                    se.numberOfCodeUnits(tynto) < (cast(TypeSArray)tb).dim.toInteger())
-                {
-                    e = se.castTo(sc, t);
-                    goto L1;
-                }
-            }
-
-            while (!e.implicitConvTo(t) && tb.ty == Tsarray)
-            {
-                /* Static array initialization, as in:
-                 *  T[3][5] = e;
-                 */
-                t = tb.nextOf();
-                tb = t.toBasetype();
-            }
-            if (!e.implicitConvTo(t))
-                t = origType; // restore type for better diagnostic
-
-            e = e.implicitCastTo(sc, t);
-        L1:
-            if (e.op == TOKerror)
-                return false;
-
-            (*elements)[i] = doCopyOrMove(sc, e);
-        }
-        return true;
-    }
-
-    /***************************************
      * Return true if struct is POD (Plain Old Data).
      * This is defined as:
      *      not nested
@@ -809,6 +729,20 @@ public:
         return (ispod == ISPODyes);
     }
 
+    bool disableDefaultCtor() // CALYPSO
+    {
+        return true;
+    }
+
+    override Expression defaultInit(Loc loc) // CALYPSO
+    {
+        Declaration d = new SymbolDeclaration(this.loc, this);
+        assert(d);
+        d.type = type;
+        d.storage_class |= STCrvalue;      // Bugzilla 14398
+        return new VarExp(this.loc, d);
+    }
+
     override final inout(StructDeclaration) isStructDeclaration() inout
     {
         return this;
@@ -822,7 +756,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class UnionDeclaration : StructDeclaration
+extern (C++) class UnionDeclaration : StructDeclaration // CALYPSO (made non final)
 {
 public:
     extern (D) this(Loc loc, Identifier id)
@@ -851,4 +785,12 @@ public:
     {
         v.visit(this);
     }
+}
+
+// CALYPSO
+extern(C++) StructDeclaration isStructDeclarationOrNull(Dsymbol s)
+{
+    if (s !is null)
+        return null;
+    return s.isStructDeclaration();
 }

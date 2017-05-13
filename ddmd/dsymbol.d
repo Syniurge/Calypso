@@ -429,6 +429,18 @@ public:
         return null;
     }
 
+    /**********************************
+    * CALYPSO
+    */
+    final Module getInstantiatingModule()
+    {
+        //printf("Dsymbol::getAccessModule()\n");
+        if (TemplateInstance ti = isInstantiated())
+            return ti.minst;
+
+        return getModule();
+    }
+
     final Dsymbol pastMixin()
     {
         Dsymbol s = this;
@@ -1037,6 +1049,28 @@ public:
         return false;
     }
 
+    /****************************************
+    * (CALYPSO) Returns true if this symbol is defined in a module that won't be codegen'd.
+    */
+    final bool inNonCodegen()
+    {
+        Dsymbol s = parent;
+        for (; s; s = s.toParent())
+        {
+            if (TemplateInstance ti = s.isTemplateInstance())
+            {
+                return false;
+            }
+            if (Module m = s.isModule())
+            {
+                if (!m.isCodegen())
+                    return true;
+                break;
+            }
+        }
+        return false;
+    }
+
     // Eliminate need for dynamic_cast
     inout(Package) isPackage() inout
     {
@@ -1253,6 +1287,12 @@ public:
     void accept(Visitor v)
     {
         v.visit(this);
+    }
+
+    // CALYPSO
+    LangPlugin langPlugin()
+    {
+        return null;
     }
 }
 

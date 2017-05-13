@@ -25,6 +25,7 @@ import ddmd.arraytypes;
 import ddmd.gluelayer;
 import ddmd.builtin;
 import ddmd.cond;
+import ddmd.dimport;
 import ddmd.dinifile;
 import ddmd.dinterpret;
 import ddmd.dmodule;
@@ -153,6 +154,7 @@ version(IN_LLVM)
     // in driver/main.cpp
     void addDefaultVersionIdentifiers();
     void codegenModules(ref Modules modules);
+    void finalizeCodegen(); // CALYPSO
     // in driver/linker.cpp
     int linkObjToBinary();
     int createStaticLibrary();
@@ -1172,6 +1174,9 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     objc_tryMain_init();
     builtin_init();
 
+    foreach (lp; langPlugins)
+        lp._init(); // CALYPSO
+
   version (IN_LLVM) {} else
   {
     if (global.params.verbose)
@@ -1578,6 +1583,8 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     Module.runDeferredSemantic3();
     if (global.errors)
         fatal();
+    foreach (lp; langPlugins) // CALYPSO
+        lp.semanticModules();
   version (IN_LLVM) {} else
   {
     // Scan for functions to inline
@@ -1680,6 +1687,9 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
   version (IN_LLVM)
   {
     codegenModules(modules);
+    foreach (lp; langPlugins)
+        lp.codegenModules();
+    finalizeCodegen(); // CALYPSO
   }
   else
   {

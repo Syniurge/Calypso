@@ -10,10 +10,12 @@
 #include "gen/llvm.h"
 #include "aggregate.h"
 #include "declaration.h"
+#include "import.h"
 #include "init.h"
 #include "mtype.h"
 #include "target.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/dvalue.h"
 #include "gen/functions.h"
@@ -31,6 +33,33 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// CALYPSO
+LLValue *DtoClassHandle(DValue *val)
+{
+    if (isClassValueHandle(val->type))
+        return DtoRVal(val);
+
+    assert(val->type->ty == Tclass);
+    auto tc = static_cast<TypeClass*>(val->type);
+    if (tc->byRef())
+        return DtoRVal(val);
+    else
+        return DtoLVal(val);
+}
+
+DValue *DtoAggregateDValue(Type *t, LLValue *v)
+{
+    if (t->ty == Tstruct)
+        return new DLValue(t, v);
+
+    assert(t->ty == Tclass);
+    auto tc = static_cast<TypeClass*>(t);
+    if (tc->byRef())
+        return new DImValue(t, v);
+    else
+        return new DLValue(t, v);
+}
+
 // FIXME: this needs to be cleaned up
 
 void DtoResolveClass(ClassDeclaration *cd) {
@@ -45,7 +74,7 @@ void DtoResolveClass(ClassDeclaration *cd) {
 
   // make sure the base classes are processed first
   for (auto bc : *cd->baseclasses) {
-    DtoResolveClass(bc->sym);
+    DtoResolveAggregate(bc->sym);  // CALYPSO
   }
 
   // make sure type exists
@@ -75,6 +104,31 @@ void DtoResolveClass(ClassDeclaration *cd) {
   }
 }
 
+void DtoResolveAggregate(AggregateDeclaration* ad) // CALYPSO
+{
+    if (auto cd = ad->isClassDeclaration())
+        DtoResolveClass(cd);
+    else
+    {
+        assert(ad->isStructDeclaration());
+        DtoResolveStruct(static_cast<StructDeclaration*>(ad));
+    }
+}
+
+LLType* DtoAggregateHandleType(Type* t)
+{
+    if (t->ty == Tclass) return DtoClassHandleType(static_cast<TypeClass*>(t));
+    if (t->ty == Tstruct) return DtoType(t)->getPointerTo();
+    assert(false);
+    return nullptr;
+}
+
+LLType* DtoClassHandleType(TypeClass *tc) // CALYPSO
+{
+    auto Ty = DtoType(tc);
+    return tc->byRef() ? Ty : Ty->getPointerTo();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
@@ -102,7 +156,7 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
                                 DtoType(Type::typeinfoclass->type));
     mem =
         gIR->CreateCallOrInvoke(fn, ci, ".newclass_gc_alloc").getInstruction();
-    mem = DtoBitCast(mem, DtoType(tc), ".newclass_gc");
+    mem = DtoBitCast(mem, DtoClassHandleType(tc), ".newclass_gc"); // CALYPSO
   }
 
   // init
@@ -123,6 +177,14 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     DtoResolveNestedContext(loc, tc->sym, mem);
   }
 
+  DValue *result = new DImValue(tc->byRef() ? tc : tc->pointerTo(), mem); // CALYPSO (TODO: move to toAggregateHandle()?)
+
+  // CALYPSO NOTE: while LDC sets the vptr inside DtoInitClass, Clang makes the ctor set it before any user-provided code
+  // We should be "maturing" the C++ vptrs right after the super() call, but since D ctors do not require it,
+  // do it here before the ctor call anyway.
+  for (auto lp: langPlugins)
+    lp->codegen()->toPostNewClass(loc, tc, result);
+
   // call constructor
   if (newexp->member) {
     // evaluate argprefix
@@ -134,19 +196,25 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     assert(newexp->arguments != NULL);
     DtoResolveFunction(newexp->member);
     DFuncValue dfn(newexp->member, getIrFunc(newexp->member)->func, mem);
-    return DtoCallFunction(newexp->loc, tc, &dfn, newexp->arguments);
+    /*return*/ DtoCallFunction(newexp->loc, tc, &dfn, newexp->arguments); // CALYPSO WARNING: was the return really needed?
+                                                                                      // The return value is expected to be "this" but Clang doesn't return it
   }
 
   assert(newexp->argprefix == NULL);
 
   // return default constructed class
-  return new DImValue(tc, mem);
+  return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void DtoInitClass(TypeClass *tc, LLValue *dst) {
   DtoResolveClass(tc->sym);
+
+  if (auto lp = tc->sym->langPlugin()) { // CALYPSO
+    lp->codegen()->toInitClass(tc, dst);
+    return;
+  }
 
   // Set vtable field. Doing this seperately might be optimized better.
   LLValue *tmp = DtoGEPi(dst, 0, 0, "vtbl");
@@ -199,27 +267,33 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   LOG_SCOPE;
 
   Type *to = _to->toBasetype();
+  Type *from = val->type->toBasetype();
+
+  if (isClassValueHandle(from)) // CALYPSO
+      from = from->nextOf();
+  if (isClassValueHandle(to))
+      to = to->nextOf();
+
+  // get class ptr
+  LLValue *v = DtoClassHandle(val); // CALYPSO
 
   // class -> pointer
   if (to->ty == Tpointer) {
     IF_LOG Logger::println("to pointer");
     LLType *tolltype = DtoType(_to);
-    LLValue *rval = DtoBitCast(DtoRVal(val), tolltype);
+    LLValue *rval = DtoBitCast(v, tolltype);
     return new DImValue(_to, rval);
   }
   // class -> bool
   if (to->ty == Tbool) {
     IF_LOG Logger::println("to bool");
-    LLValue *llval = DtoRVal(val);
-    LLValue *zero = LLConstant::getNullValue(llval->getType());
-    return new DImValue(_to, gIR->ir->CreateICmpNE(llval, zero));
+    LLValue *zero = LLConstant::getNullValue(v->getType());
+    return new DImValue(_to, gIR->ir->CreateICmpNE(v, zero));
   }
   // class -> integer
   if (to->isintegral()) {
     IF_LOG Logger::println("to %s", to->toChars());
 
-    // get class ptr
-    LLValue *v = DtoRVal(val);
     // cast to size_t
     v = gIR->ir->CreatePtrToInt(v, DtoSize_t(), "");
     // cast to the final int type
@@ -233,11 +307,10 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   }
 
   // must be class/interface
-  assert(to->ty == Tclass);
-  TypeClass *tc = static_cast<TypeClass *>(to);
+  assert(to->ty == Tclass || /* CALYPSO */ to->ty == Tstruct);
+  AggregateDeclaration *tsym = getAggregateSym(to);
 
   // from type
-  Type *from = val->type->toBasetype();
   TypeClass *fc = static_cast<TypeClass *>(from);
 
   // copy DMD logic:
@@ -247,16 +320,15 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   // else if from is interface:          _d_interface_cast(to)
   // else if from is class:              _d_dynamic_cast(to)
 
-  LLType *toType = DtoType(_to);
+  LLType *toType = DtoAggregateHandleType(to); // CALYPSO
   int offset = 0;
-  if (tc->sym->isBaseOf(fc->sym, &offset)) {
+  if (tsym->isBaseOf(fc->sym, &offset)) {
     Logger::println("static down cast");
     // interface types don't cover the full object in case of multiple inheritence
     //  so GEP on the original type is inappropriate
 
     // offset pointer
-    LLValue *orig = DtoRVal(val);
-    LLValue *v = orig;
+    LLValue *orig = v;
     if (offset != 0) {
       v = DtoBitCast(v, getVoidPtrType());
       LLValue *off =
@@ -274,17 +346,20 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
     // it's just a GEP and (maybe) a pointer-to-pointer BitCast, so it
     // should be pretty cheap and perfectly safe even if the original was
     // null.
+//     if (fc->byRef()) { // CALYPSO (1.1 merge addition, may not be necessary
     LLValue *isNull = gIR->ir->CreateICmpEQ(
         orig, LLConstant::getNullValue(orig->getType()), ".nullcheck");
     v = gIR->ir->CreateSelect(isNull, LLConstant::getNullValue(toType), v,
                               ".interface");
+//     }
     // return r-value
-    return new DImValue(_to, v);
+    return DtoAggregateDValue(to, v); // CALYPSO
   }
 
   if (fc->sym->cpp) {
     Logger::println("C++ class/interface cast");
-    LLValue *v = tc->sym->cpp ? DtoBitCast(DtoRVal(val), toType)
+    auto tcd = tsym->isClassDeclaration();
+    LLValue *v = (tcd && tcd->cpp) ? DtoBitCast(DtoRVal(val), toType) // CALYPSO
                               : LLConstant::getNullValue(toType);
     return new DImValue(_to, v);
   }
@@ -304,6 +379,10 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
 DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
   // call:
   // Object _d_dynamic_cast(Object o, ClassInfo c)
+
+  AggregateDeclaration* adfrom = getAggregateHandle(val->type);
+  if (auto lp = adfrom->langPlugin())
+      val = lp->codegen()->adjustForDynamicCast(loc, val, _to); // CALYPSO
 
   DtoResolveClass(ClassDeclaration::object);
   DtoResolveClass(Type::typeinfoclass);
@@ -385,8 +464,11 @@ LLValue *DtoVirtualFunctionPointer(DValue *inst, FuncDeclaration *fdecl,
          (fdecl->vtblIndex == 0 && fdecl->linkage == LINKcpp));
 
   // get instance
-  LLValue *vthis = DtoRVal(inst);
+  LLValue *vthis = DtoClassHandle(inst); // CALYPSO
   IF_LOG Logger::cout() << "vthis: " << *vthis << '\n';
+
+  if (auto lp = fdecl->langPlugin()) // CALYPSO
+    return lp->codegen()->toVirtualFunctionPointer(inst, fdecl, name);
 
   LLValue *funcval = vthis;
   // get the vtbl for objects
@@ -479,7 +561,8 @@ static LLConstant *build_class_dtor(ClassDeclaration *cd) {
   FuncDeclaration *dtor = cd->dtor;
 
   // if no destructor emit a null
-  if (!dtor) {
+  if (!dtor ||
+      (dtor->langPlugin() && !dtor->langPlugin()->isSymbolReferenced(dtor))) { // CALYPSO
     return getNullPtr(getVoidPtrType());
   }
 
@@ -504,15 +587,15 @@ static ClassFlags::Type build_classinfo_flags(ClassDeclaration *cd) {
   if (cd->isCOMclass()) {
     flags |= ClassFlags::isCOMclass;
   }
-  if (cd->isCPPclass()) {
+  if (cd->isCPPclass() || !ClassDeclaration::object->isBaseOf2(cd)) { // CALYPSO HACK NOTE: This is checked by the GC, which expects the first member in the vtbl to point to ClassInfo and thus segfaults during destruction, we need to implement a c++ specific destruction
     flags |= ClassFlags::isCPPclass;
   }
   flags |= ClassFlags::hasGetMembers;
   if (cd->ctor) {
     flags |= ClassFlags::hasCtor;
   }
-  for (ClassDeclaration *pc = cd; pc; pc = pc->baseClass) {
-    if (pc->dtor) {
+  for (AggregateDeclaration *pa = cd; pa; pa = toAggregateBase(pa)) { // CALYPSO
+    if (pa->dtor) {
       flags |= ClassFlags::hasDtor;
       break;
     }
@@ -520,7 +603,10 @@ static ClassFlags::Type build_classinfo_flags(ClassDeclaration *cd) {
   if (cd->isabstract) {
     flags |= ClassFlags::isAbstract;
   }
-  for (ClassDeclaration *pc = cd; pc; pc = pc->baseClass) {
+  if (!cd->byRef()) { // CALYPSO
+    flags |= ClassFlags::byVal;
+  }
+  for (AggregateDeclaration *pc = cd; pc; pc = toAggregateBase(pc)) { // CALYPSO
     if (pc->members) {
       for (Dsymbol *sm : *pc->members) {
         // printf("sm = %s %s\n", sm->kind(), sm->toChars());
@@ -595,7 +681,7 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   b.push_string(name);
 
   // vtbl[]
-  if (cd->isInterfaceDeclaration()) {
+  if (cd->isInterfaceDeclaration() || cd->langPlugin()) { // CALYPSO FIXME temporary?
     b.push_array(0, getNullValue(voidPtrPtr));
   } else {
     c = DtoBitCast(ir->getVtblSymbol(), voidPtrPtr);
@@ -607,8 +693,8 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
 
   // base
   // interfaces never get a base, just the interfaces[]
-  if (cd->baseClass && !cd->isInterfaceDeclaration()) {
-    b.push_classinfo(cd->baseClass);
+  if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) { // CALYPSO
+    b.push_classinfo(static_cast<ClassDeclaration*>(cd->baseClass));
   } else {
     b.push_null(cinfo->type);
   }
@@ -645,7 +731,8 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   // defaultConstructor
   VarDeclaration *defConstructorVar = cinfo->fields.data[10];
   CtorDeclaration *defConstructor = cd->defaultCtor;
-  if (defConstructor && (defConstructor->storage_class & STCdisable)) {
+  if (defConstructor && ((defConstructor->storage_class & STCdisable) ||
+      (defConstructor->langPlugin() && !defConstructor->langPlugin()->isSymbolReferenced(defConstructor)))) {
     defConstructor = nullptr;
   }
   b.push_funcptr(defConstructor, defConstructorVar->type);

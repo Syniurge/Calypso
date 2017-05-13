@@ -15,11 +15,13 @@
 #include "declaration.h"
 #include "init.h"
 #include "mtype.h"
+#include "import.h"
 
 #include "gen/irstate.h"
 #include "gen/tollvm.h"
 #include "gen/logger.h"
 #include "gen/llvmhelpers.h"
+#include "gen/cgforeign.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -39,6 +41,22 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
 
   // if it's a forward declaration, all bets are off, stick with the opaque
   if (sd->sizeok != SIZEOKdone) {
+    return t;
+  }
+
+  // CALYPSO
+  if (auto lp = sd->langPlugin())
+    t->type = lp->codegen()->toType(sd->type);
+          // what about default_fields
+  else
+    for (auto lp: langPlugins)
+      if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // CALYPSO wonderful HACK for __cpp_member_ptr
+        t->type = Ty;
+
+  auto StructTy = llvm::cast<LLStructType>(t->type);
+  if (!StructTy->isOpaque())
+  {
+    t->packed = StructTy->isPacked();
     return t;
   }
 

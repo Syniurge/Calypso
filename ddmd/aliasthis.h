@@ -31,7 +31,7 @@ public:
 
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     AliasThis *isAliasThis() { return this; }
     void accept(Visitor *v) { v->visit(this); }
 };

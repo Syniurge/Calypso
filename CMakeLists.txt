@@ -21,8 +21,8 @@ endif()
 # Locate LLVM.
 #
 
-find_package(LLVM 3.5 REQUIRED
-    all-targets analysis asmparser asmprinter bitreader bitwriter codegen core debuginfocodeview debuginfodwarf debuginfomsf debuginfopdb globalisel instcombine ipa ipo instrumentation irreader linker lto mc mcdisassembler mcparser objcarcopts object option profiledata scalaropts selectiondag support tablegen target transformutils vectorize ${EXTRA_LLVM_MODULES})
+find_package(LLVM 3.9 REQUIRED
+    all-targets analysis asmparser asmprinter bitreader bitwriter codegen core coverage debuginfocodeview debuginfodwarf debuginfomsf debuginfopdb globalisel instcombine ipa ipo instrumentation irreader linker lto mc mcdisassembler mcparser objcarcopts object option profiledata scalaropts selectiondag support tablegen target transformutils vectorize ${EXTRA_LLVM_MODULES})
 math(EXPR LDC_LLVM_VER ${LLVM_VERSION_MAJOR}*100+${LLVM_VERSION_MINOR})
 # Remove LLVMTableGen library from list of libraries
 string(REGEX MATCH "^-.*LLVMTableGen[^;]*;|;-.*LLVMTableGen[^;]*" LLVM_TABLEGEN_LIBRARY "${LLVM_LIBRARIES}")
@@ -248,6 +248,11 @@ if(MSVC)
 else()
     separate_arguments(LLVM_LDFLAGS UNIX_COMMAND "${LLVM_LDFLAGS}")
 endif()
+
+# CALYPSO
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # LLVM_CXXFLAGS may contain -Wcovered-switch-default and -fcolor-diagnostics
 # which are clang-only options
 if(CMAKE_COMPILER_IS_GNUCXX)
@@ -329,6 +334,7 @@ configure_file(driver/ldc-version.cpp.in driver/ldc-version.cpp)
 # Also add the header files to the build so that they are available in IDE
 # project files generated via CMake.
 file(GLOB_RECURSE FE_SRC_D ${DDMDFE_PATH}/*.d)
+file(GLOB_RECURSE FE_SRC_C ${DDMDFE_PATH}/*.cpp) # CALYPSO
 file(GLOB_RECURSE FE_HDR   ${DDMDFE_PATH}/*.h)
 file(GLOB_RECURSE GEN_SRC gen/*.cpp)
 file(GLOB_RECURSE GEN_HDR gen/*.h)
@@ -374,6 +380,7 @@ list(REMOVE_ITEM DRV_SRC_D
 )
 set(LDC_CXX_SOURCE_FILES
     ${LDC_CXX_GENERATED}
+    ${FE_SRC_C}
     ${FE_HDR}
     ${GEN_SRC}
     ${GEN_HDR}
@@ -388,7 +395,7 @@ set(LDC_D_SOURCE_FILES
     ${IR_SRC_D}
 )
 
-source_group("Source Files\\${DDMDFE_PATH}" FILES ${FE_SRC_D})
+source_group("Source Files\\${DDMDFE_PATH}" FILES ${FE_SRC_D} ${FE_SRC_C})
 source_group("Header Files\\${DDMDFE_PATH}" FILES ${FE_HDR})
 source_group("Source Files\\gen" FILES ${GEN_SRC})
 source_group("Header Files\\gen" FILES ${GEN_HDR})
@@ -522,10 +529,80 @@ set_target_properties(
     COMPILE_FLAGS "${LLVM_CXXFLAGS} ${LDC_CXXFLAGS} ${EXTRA_CXXFLAGS}"
     LINK_FLAGS "${SANITIZE_LDFLAGS}"
 )
+
+### CALYPSO ###
+
+include(ExternalProject)
+
+set(CLANG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/clang)
+set(CLANG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/clang)
+
+include_directories(
+    "${CLANG_BINARY_DIR}/include" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/deps"
+    "${CLANG_SOURCE_DIR}/include"
+)
+
+set(CLANG_TARGETS "clang-headers")
+
+macro(add_clang_lib _libname_)
+    set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
+    set(CLANG_TARGETS ${CLANG_TARGETS} ${_libname_})
+endmacro(add_clang_lib)
+
+add_clang_lib(clangFrontend)
+add_clang_lib(clangDriver)
+add_clang_lib(clangCodeGen)
+add_clang_lib(clangSerialization)
+add_clang_lib(clangSema)
+add_clang_lib(clangEdit)
+add_clang_lib(clangAnalysis)
+add_clang_lib(clangAST)
+add_clang_lib(clangParse)
+add_clang_lib(clangSema)
+add_clang_lib(clangLex)
+add_clang_lib(clangBasic)
+
+set(CLANG_STAMP_DIR ${CMAKE_CURRENT_BINARY_DIR}/clang-prefix/src/clang-stamp)
+
+ExternalProject_Add(clang
+    SOURCE_DIR ${CLANG_SOURCE_DIR}
+    BINARY_DIR ${CLANG_BINARY_DIR}
+    STAMP_DIR ${CLANG_STAMP_DIR}
+	CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
+			# - with MSBuild only one project can be specified and the build command fails
+			# - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG}
+    BUILD_COMMAND ninja ${CLANG_TARGETS}
+	BUILD_BYPRODUCTS ${CLANG_LIBS}
+    INSTALL_COMMAND ""
+    STEP_TARGETS rtcopy
+)
+
+# Always trigger a rebuild of Clang in case there were changes.
+# NOTE: CMake 3.2 introduces BUILD_ALWAYS for this.
+ExternalProject_Add_Step(clang rebuild
+   COMMAND ${CMAKE_COMMAND} -E remove "${CLANG_STAMP_DIR}/clang-build"
+   DEPENDERS build
+   ALWAYS 1
+)
+
+ExternalProject_Add_Step(clang rtcopy
+   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CLANG_BINARY_DIR}/lib/clang ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc
+   DEPENDEES build
+)
+
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+
+add_dependencies(${LDC_LIB} clang)
+
+### CALYPSO ###
+
 # LDFLAGS should actually be in target property LINK_FLAGS, but this works, and gets around linking problems
-target_link_libraries(${LDC_LIB} ${LLVM_LIBRARIES} ${PTHREAD_LIBS} ${TERMINFO_LIBS} ${LLVM_LDFLAGS})
+target_link_libraries(${LDC_LIB} ${CLANG_LIBS} ${LLVM_LIBRARIES} ${PTHREAD_LIBS} ${TERMINFO_LIBS} ${LLVM_LDFLAGS})
 if(WIN32)
-    target_link_libraries(${LDC_LIB} imagehlp psapi)
+    target_link_libraries(${LDC_LIB} imagehlp psapi version) # CALYPSO: ClangDriver requires Version.lib
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     target_link_libraries(${LDC_LIB} dl)
 endif()
@@ -537,7 +614,7 @@ add_custom_target(${LDMD_EXE} ALL DEPENDS ${LDMD_EXE_FULL})
 
 # Figure out how to link the main LDC executable, for which we need to take the
 # libconfig/LLVM flags into account.
-set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${LIBCONFIG_LIBRARY};${LLVM_LIBRARIES};${LLVM_LDFLAGS}")
+set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${LIBCONFIG_LIBRARY};${CLANG_LIBS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}")
 
 set(LDC_LINK_MANUALLY OFF)
 if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")))

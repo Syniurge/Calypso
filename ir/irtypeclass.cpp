@@ -12,10 +12,12 @@
 #include "aggregate.h"
 #include "declaration.h"
 #include "dsymbol.h"
+#include "import.h"
 #include "mtype.h"
 #include "target.h"
 #include "template.h"
 
+#include "gen/cgforeign.h"
 #include "gen/irstate.h"
 #include "gen/logger.h"
 #include "gen/tollvm.h"
@@ -29,7 +31,15 @@ IrTypeClass::IrTypeClass(ClassDeclaration *cd)
 }
 
 void IrTypeClass::addClassData(AggrTypeBuilder &builder,
-                               ClassDeclaration *currCd) {
+                               AggregateDeclaration *currAd) { // CALYPSO
+  if (auto lp = currAd->langPlugin()) {
+    lp->codegen()->addBaseClassData(builder, currAd); // CALYPSO
+    return;
+  }
+
+  assert(currAd->isClassDeclaration());
+  ClassDeclaration *currCd = static_cast<ClassDeclaration*>(currAd);
+
   // First, recursively add the fields for our base class and interfaces, if
   // any.
   if (currCd->baseClass) {
@@ -50,8 +60,10 @@ void IrTypeClass::addClassData(AggrTypeBuilder &builder,
                              b->sym->toPrettyChars());
 
       // add to the interface map
-      addInterfaceToMap(b->sym, builder.currentFieldIndex());
-      auto vtblTy = LLArrayType::get(getVoidPtrType(), b->sym->vtbl.dim);
+      assert(b->sym->isInterfaceDeclaration());
+      auto ib = static_cast<InterfaceDeclaration*>(b->sym);
+      addInterfaceToMap(ib, builder.currentFieldIndex()); // CALYPSO
+      auto vtblTy = LLArrayType::get(getVoidPtrType(), ib->vtbl.dim);
       builder.addType(llvm::PointerType::get(vtblTy, 0), Target::ptrsize);
 
       ++num_interface_vtbls;
@@ -71,9 +83,15 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
   LOG_SCOPE;
   IF_LOG Logger::println("Instance size: %u", cd->structsize);
 
+  if (auto lp = cd->langPlugin()) { // CALYPSO
+    t->type = lp->codegen()->toType(cd->type);
+    t->packed = llvm::cast<LLStructType>(t->type)->isPacked();
+    return t;
+  }
+
   // This class may contain an align declaration. See GitHub #726.
   t->packed = false;
-  for (auto base = cd; base != nullptr && !t->packed; base = base->baseClass) {
+  for (AggregateDeclaration* base = cd; base != nullptr && !t->packed; base = toAggregateBase(base)) { // CALYPSO
     t->packed = isPacked(base);
   }
 
@@ -114,7 +132,13 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
   return t;
 }
 
-llvm::Type *IrTypeClass::getLLType() { return llvm::PointerType::get(type, 0); }
+llvm::Type *IrTypeClass::getLLType()
+{
+    if (tc->byRef()) // CALYPSO
+        return llvm::PointerType::get(type, 0);
+    else
+        return type;
+}
 
 llvm::Type *IrTypeClass::getMemoryLLType() { return type; }
 
@@ -139,6 +163,6 @@ void IrTypeClass::addInterfaceToMap(ClassDeclaration *inter, size_t index) {
   // are accessed through the same index
   if (inter->interfaces.length > 0) {
     BaseClass *b = inter->interfaces.ptr[0];
-    addInterfaceToMap(b->sym, index);
+    addInterfaceToMap(static_cast<ClassDeclaration *>(b->sym), index); // CALYPSO
   }
 }

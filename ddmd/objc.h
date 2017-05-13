@@ -52,13 +52,13 @@ struct Objc_ClassDeclaration
 
 struct Objc_FuncDeclaration
 {
-    FuncDeclaration* fdecl;
+    FuncDeclaration* fdecl = nullptr;
 
     // Objective-C method selector (member function only)
-    ObjcSelector *selector;
+    ObjcSelector *selector = nullptr;
 
-    Objc_FuncDeclaration();
-    Objc_FuncDeclaration(FuncDeclaration* fdecl);
+//     Objc_FuncDeclaration();
+//     Objc_FuncDeclaration(FuncDeclaration* fdecl);
 };
 
 void objc_ClassDeclaration_semantic_PASSinit_LINKobjc(ClassDeclaration *cd);

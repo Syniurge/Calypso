@@ -10,11 +10,13 @@
 #include "driver/codegenerator.h"
 
 #include "id.h"
+#include "import.h"
 #include "mars.h"
 #include "module.h"
 #include "scope.h"
 #include "driver/linker.h"
 #include "driver/toobj.h"
+#include "gen/cgforeign.h"
 #include "gen/logger.h"
 #include "gen/modules.h"
 #include "gen/runtime.h"
@@ -147,6 +149,9 @@ void CodeGenerator::prepareLLModule(Module *m) {
   ir_->module.setDataLayout(gDataLayout->getStringRepresentation());
 #endif
 
+  for (auto lp: langPlugins) // CALYPSO
+    lp->codegen()->enterModule(m, &ir_->module);
+
   // TODO: Make ldc::DIBuilder per-Module to be able to emit several CUs for
   // single-object compilations?
   ir_->DBuilder.EmitCompileUnit(m);
@@ -155,6 +160,9 @@ void CodeGenerator::prepareLLModule(Module *m) {
 }
 
 void CodeGenerator::finishLLModule(Module *m) {
+  for (auto lp: langPlugins) // CALYPSO
+    lp->codegen()->leaveModule(m, &ir_->module);
+
   if (singleObj_) {
     return;
   }

@@ -98,6 +98,7 @@ extern (C++) void MODtoDecoBuffer(OutBuffer* buf, MOD mod)
     switch (mod)
     {
     case 0:
+//         buf.writeByte('V'); // CALYPSO: zero mod must be written since nextOf might have a "lesser" mod. NOTE: 'V' is also used for LINKpascal..
         break;
     case MODconst:
         buf.writeByte('x');
@@ -154,11 +155,14 @@ public:
 
     override void visit(Type t)
     {
+        if (auto langPlugin = t.langPlugin()) // CALYPSO
+            langPlugin.getForeignMangler(buf, false /+rigorous+/, this).visit(t); // 1.1 FIXME
         buf.writestring(mangleChar[t.ty]);
     }
 
     override void visit(TypeNext t)
     {
+//         t.transitive(); // CALYPSO: ensure that the MOD characters end up in the mangled names
         visit(cast(Type)t);
         visitWithMask(t.next, t.mod);
     }
@@ -557,7 +561,11 @@ public:
                 ad.parent = null;
             }
         }
-        visit(cast(Dsymbol)ad);
+        auto lp = ad.langPlugin();
+        if (ad.isAnonymous() && lp)
+            lp.mangleAnonymousAggregate(buf, ad); // CALYPSO HACK (very ugly)
+        else
+            visit(cast(Dsymbol)ad);
         ad.parent = parentsave;
     }
 
@@ -578,6 +586,15 @@ public:
         const(char)* id = ti.ident ? ti.ident.toChars() : ti.toChars();
         toBuffer(id, ti);
         //printf("TemplateInstance.mangle() %s = %s\n", ti.toChars(), ti.id);
+    }
+
+    override void visit(Module m) // CALYPSO
+    {
+        mangleParent(m);
+
+        if (auto prefix = m.manglePrefix())
+            buf.writestring(prefix);
+        toBuffer(m.ident.toChars(), m);
     }
 
     override void visit(Dsymbol s)
@@ -815,6 +832,13 @@ public:
 }
 
 extern (C++) const(char)* mangle(Dsymbol s)
+{
+    if (auto lp = s.langPlugin()) // CALYPSO
+        return lp.mangle(s);
+    return mangleImpl(s);
+}
+
+extern (C++) const(char)* mangleImpl(Dsymbol s)
 {
     OutBuffer buf;
     scope Mangler v = new Mangler(&buf);

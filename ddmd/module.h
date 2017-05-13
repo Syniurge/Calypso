@@ -52,8 +52,9 @@ public:
     unsigned tag;       // auto incremented tag, used to mask package tree in scopes
     Module *mod;        // != NULL if isPkgMod == PKGmodule
 
-    Package(Identifier *ident);
-    const char *kind();
+//     Package(Identifier *ident);
+    virtual void _key(); // CALYPSO
+    const char *kind() const;
 
     static DsymbolTable *resolve(Identifiers *packages, Dsymbol **pparent, Package **ppkg);
 
@@ -128,12 +129,13 @@ public:
     size_t nameoffset;          // offset of module name from start of ModuleInfo
     size_t namelen;             // length of module name in characters
 
-    Module(const char *arg, Identifier *ident, int doDocComment, int doHdrGen);
+//     Module(const char *arg, Identifier *ident, int doDocComment, int doHdrGen);
+    virtual void _key(); // CALYPSO
     static Module* create(const char *arg, Identifier *ident, int doDocComment, int doHdrGen);
 
     static Module *load(Loc loc, Identifiers *packages, Identifier *ident);
 
-    const char *kind();
+    const char *kind() const;
     File *setOutfile(const char *name, const char *dir, const char *arg, const char *ext);
     void setDocfile();
     bool read(Loc loc); // read file, returns 'true' if succeed, 'false' otherwise.
@@ -153,7 +155,12 @@ public:
     static void clearCache();
     int imports(Module *m);
 
+    // CALYPSO
+    virtual void addPreambule();
+    virtual const char *manglePrefix();
+
     bool isRoot() { return this->importedFrom == this; }
+    virtual bool isCodegen(); // CALYPSO
     // true if the module source file is directly
     // listed in command line.
     bool isCoreModule(Identifier *ident);

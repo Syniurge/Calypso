@@ -258,7 +258,7 @@ public:
 
 /***********************************************************
  */
-extern (C++) final class Module : Package
+extern (C++) class Module : Package // CALYPSO (made non final)
 {
 public:
     extern (C++) static __gshared Module rootModule;
@@ -292,7 +292,7 @@ public:
     /*************************************
      * Return true if module imports itself.
      */
-    bool selfImports()
+    final bool selfImports()
     {
         //printf("Module::selfImports() %s\n", toChars());
         if (selfimports == 0)
@@ -311,7 +311,7 @@ public:
     /*************************************
      * Return true if module imports root module.
      */
-    bool rootImports()
+    final bool rootImports()
     {
         //printf("Module::rootImports() %s\n", toChars());
         if (rootimports == 0)
@@ -481,7 +481,7 @@ else
      *      global.params.preservePaths     get output path from arg
      *      srcfile Input file - output file name must not match input file
      */
-    File* setOutfile(const(char)* name, const(char)* dir, const(char)* arg, const(char)* ext)
+    final File* setOutfile(const(char)* name, const(char)* dir, const(char)* arg, const(char)* ext)
     {
         const(char)* docfilename;
         if (name)
@@ -528,13 +528,13 @@ else
         return new File(docfilename);
     }
 
-    void setDocfile()
+    final void setDocfile()
     {
         docfile = setOutfile(global.params.docname, global.params.docdir, arg, global.doc_ext);
     }
 
     // read file, returns 'true' if succeed, 'false' otherwise.
-    bool read(Loc loc)
+    final bool read(Loc loc)
     {
         //printf("Module::read('%s') file '%s'\n", toChars(), srcfile->toChars());
         if (srcfile.read())
@@ -585,7 +585,7 @@ else
     }
 
     // syntactic parse
-    Module parse()
+    final Module parse()
     {
         //printf("Module::parse(srcfile='%s') this=%p\n", srcfile->name->toChars(), this);
         const(char)* srcname = srcfile.name.toChars();
@@ -976,15 +976,7 @@ else
          * Ignore prevsc.
          */
         Scope* sc = Scope.createGlobal(this); // create root scope
-        // Add import of "object", even for the "object" module.
-        // If it isn't there, some compiler rewrites, like
-        //    classinst == classinst -> .object.opEquals(classinst, classinst)
-        // would fail inside object.d.
-        if (members.dim == 0 || (*members)[0].ident != Id.object)
-        {
-            auto im = new Import(Loc(), null, Id.object, null, 0);
-            members.shift(im);
-        }
+        addPreambule(); // CALYPSO
         if (!symtab)
         {
             // Add all symbols into module's symbol table
@@ -1113,7 +1105,7 @@ else
      * Determine if we need to generate an instance of ModuleInfo
      * for this Module.
      */
-    int needModuleInfo()
+    final int needModuleInfo()
     {
         //printf("needModuleInfo() %s, %d, %d\n", toChars(), needmoduleinfo, global.params.cov);
 version(IN_LLVM)
@@ -1180,7 +1172,7 @@ else
         return Package.symtabInsert(s);
     }
 
-    void deleteObjFile()
+    final void deleteObjFile()
     {
         if (global.params.obj)
             objfile.remove();
@@ -1298,7 +1290,7 @@ else
      * return true if it imports m.
      * Can be used to detect circular imports.
      */
-    int imports(Module m)
+    final int imports(Module m)
     {
         //printf("%s Module::imports(%s)\n", toChars(), m->toChars());
         version (none)
@@ -1325,14 +1317,37 @@ else
         return false;
     }
 
-    bool isRoot()
+    void addPreambule() // CALYPSO
+    {
+        // Add import of "object", even for the "object" module.
+        // If it isn't there, some compiler rewrites, like
+        //    classinst == classinst -> .object.opEquals(classinst, classinst)
+        // would fail inside object.d.
+        if (members.dim == 0 || (*members)[0].ident != Id.object)
+        {
+            auto im = new Import(Loc(), null, Id.object, null, 0);
+            members.shift(im);
+        }
+    }
+
+    const(char) *manglePrefix() // CALYPSO
+    {
+        return null;
+    }
+
+    final bool isRoot()
     {
         return this.importedFrom == this;
     }
 
+    bool isCodegen() // CALYPSO
+    {
+        return isRoot();
+    }
+
     // true if the module source file is directly
     // listed in command line.
-    bool isCoreModule(Identifier ident)
+    final bool isCoreModule(Identifier ident)
     {
         return this.ident == ident && parent && parent.ident == Id.core && !parent.parent;
     }
@@ -1355,8 +1370,8 @@ else
     version(IN_LLVM)
     {
         //llvm::Module* genLLVMModule(llvm::LLVMContext& context);
-        void checkAndAddOutputFile(File* file);
-        void makeObjectFilenameUnique();
+        final void checkAndAddOutputFile(File* file);
+        final void makeObjectFilenameUnique();
 
         bool llvmForceLogging;
         bool noModuleInfo; /// Do not emit any module metadata.

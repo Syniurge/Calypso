@@ -14,6 +14,7 @@
 #include "id.h"
 #include "init.h"
 #include "ldcbindings.h"
+#include "import.h"
 #include "module.h"
 #include "mtype.h"
 #include "statement.h"
@@ -21,6 +22,7 @@
 #include "driver/cl_options.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/dvalue.h"
 #include "gen/funcgenstate.h"
@@ -105,8 +107,9 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     if (isCtor) {
       attrs.add(LLAttribute::Returned);
     }
+    Type *tb = thistype->toBasetype();
     newIrFty.arg_this =
-        new IrFuncTyArg(thistype, thistype->toBasetype()->ty == Tstruct, attrs);
+        new IrFuncTyArg(thistype, tb->ty == Tstruct || isClassValue(tb), attrs); // CALYPSO
     ++nextLLArgIdx;
   } else if (nesttype) {
     // Add the context pointer for nested functions
@@ -260,6 +263,9 @@ static llvm::FunctionType *DtoVaFunctionType(FuncDeclaration *fdecl) {
 ////////////////////////////////////////////////////////////////////////////////
 
 llvm::FunctionType *DtoFunctionType(FuncDeclaration *fdecl) {
+  if (auto lp = fdecl->langPlugin())
+    return lp->codegen()->toFunctionType(fdecl); // CALYPSO
+
   // handle for C vararg intrinsics
   if (DtoIsVaIntrinsic(fdecl)) {
     return DtoVaFunctionType(fdecl);
@@ -339,6 +345,11 @@ void DtoResolveFunction(FuncDeclaration *fdecl) {
     return;
   }
   fdecl->ir->setResolved();
+
+  if (auto lp = fdecl->langPlugin()) { // CALYPSO
+    lp->codegen()->toResolveFunction(fdecl);
+    return;
+  }
 
   Type *type = fdecl->type;
   // If errors occurred compiling it, such as bugzilla 6118
@@ -845,6 +856,11 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   }
   fd->ir->setDefined();
 
+  if (auto lp = fd->langPlugin()) { // CALYPSO
+      lp->codegen()->toDefineFunction(fd);
+      return;
+  }
+
   // We cannot emit nested functions with parents that have not gone through
   // semantic analysis. This can happen as DMD leaks some template instances
   // from constraints into the module member list. DMD gets away with being
@@ -1021,6 +1037,9 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   if (fd->parameters)
     defineParameters(irFty, *fd->parameters);
 
+  for (auto lp: langPlugins)
+    lp->codegen()->enterFunc(fd); // CALYPSO
+
   // Initialize PGO state for this function
   funcGen.pgo.assignRegionCounters(fd, irFunc->func);
 
@@ -1107,6 +1126,10 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     }
   }
   gIR->DBuilder.EmitFuncEnd(fd);
+
+  // CALYPSO
+  for (auto lp: langPlugins)
+    lp->codegen()->leaveFunc();
 
   // erase alloca point
   if (allocaPoint->getParent()) {

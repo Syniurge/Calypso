@@ -1630,6 +1630,77 @@ public:
 
     /**************************************
      */
+     // CALYPSO
+     final TOK parenthesedSpecialToken(Token *t)
+    {
+        uint c;
+        Loc start = scanloc;
+        bool pendingSpace = false;
+
+        stringbuffer.reset();
+        while (1)
+        {
+            c = *p++;
+            switch (c)
+            {
+            case ' ':
+            case '\t':
+            case '\v':
+            case '\f':
+                if (stringbuffer.data)
+                    pendingSpace = true;
+                break;                       // skip heading and trailing white space
+            case '\n':
+                scanloc.linnum++;
+                break;
+            case '\r':
+                if (*p == '\n')
+                    continue;   // ignore
+                c = '\n';       // treat EndOfLine as \n character
+                scanloc.linnum++;
+                break;
+            case ')':
+                t.len = cast(uint) stringbuffer.offset;
+                stringbuffer.writeByte(0);
+                t.ustring = cast(const(char)*)mem.xmalloc(stringbuffer.offset);
+                memcpy(cast(void*)t.ustring, stringbuffer.data, stringbuffer.offset);
+                stringPostfix(t);
+                t.value = TOKstring;
+                return t.value;
+            case 0:
+            case 0x1A:
+                p--;
+                error("unterminated string enclosed within parentheses starting at %s", start.toChars());
+                t.ustring = cast(const(char)*) "";
+                t.len = 0;
+                t.postfix = 0;
+                return TOKstring;
+            default:
+                if (pendingSpace)
+                {
+                    stringbuffer.writeByte(' ');
+                    pendingSpace = false;
+                }
+                if (c & 0x80)
+                {
+                    p--;
+                    c = decodeUTF();
+                    if (c == LS || c == PS)
+                    {   c = '\n';
+                        scanloc.linnum++;
+                    }
+                    p++;
+                    stringbuffer.writeUTF8(c);
+                    continue;
+                }
+                break;
+            }
+            stringbuffer.writeByte(c);
+        }
+    }
+
+    /**************************************
+     */
     final TOK charConstant(Token* t)
     {
         auto tk = TOKcharv;

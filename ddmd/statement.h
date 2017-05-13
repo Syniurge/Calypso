@@ -645,9 +645,13 @@ public:
     // wasn't present in source code
     bool internalCatch;
 
-    Catch(Loc loc, Type *t, Identifier *id, Statement *handler);
-    Catch *syntaxCopy();
+//     Catch(Loc loc, Type *t, Identifier *id, Statement *handler);
+    virtual void _key(); // CALYPSO
+    virtual Catch *syntaxCopy(); // CALYPSO
     void semantic(Scope *sc);
+    virtual VarDeclaration *createVar(); // CALYPSO
+    virtual bool onlyCatchThrowableOrCppClass() { return true; }  // CALYPSO
+    virtual LangPlugin *langPlugin() { return NULL; }
 };
 
 class TryFinallyStatement : public Statement

@@ -17,14 +17,32 @@
 
 #include "gen/structs.h"
 
+class AggregateDeclaration;
 class ClassDeclaration;
 class CtorDeclaration;
 class FuncDeclaration;
 class NewExp;
 class TypeClass;
 
+/// CALYPSO
+llvm::Value* DtoClassHandle(DValue* val);
+DValue *DtoAggregateDValue(Type *t, llvm::Value *v);
+llvm::Type* DtoAggregateHandleType( Type* t );
+llvm::Type* DtoClassHandleType(TypeClass *tc);
+
+void DtoResolveAggregate(AggregateDeclaration* ad);
+
 /// Resolves the llvm type for a class declaration
 void DtoResolveClass(ClassDeclaration *cd);
+
+/// Provides the llvm declaration for a class declaration
+// void DtoDeclareClass(ClassDeclaration* cd);
+
+/// Constructs the constant initializer for a class declaration
+// void DtoConstInitClass(ClassDeclaration* cd);
+
+/// Provides the llvm definition for a class declaration
+void DtoDefineClass(ClassDeclaration* cd);
 
 /// Builds the initializer of cd's ClassInfo.
 /// FIXME: this should be put into IrStruct and eventually IrClass.

@@ -108,6 +108,7 @@ struct Scope
 
     structalign_t structalign;  // alignment for struct members
     LINK linkage;               // linkage for external functions
+    CPPMANGLE cppmangle;        // C++ mangle type // CALYPSO DMD BUG missing in LDC 1.1, added later
     PINLINE inlining;            // inlining strategy for functions
 
     Prot protection;            // protection for class members
@@ -158,6 +159,9 @@ struct Scope
     ClassDeclaration *getClassScope();
     AggregateDeclaration *getStructClassScope();
     void setNoFree();
+
+    // CALYPSO
+    bool isD();
 };
 
 #endif /* DMD_SCOPE_H */

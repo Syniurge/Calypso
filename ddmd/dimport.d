@@ -29,7 +29,7 @@ import ddmd.visitor;
 
 /***********************************************************
  */
-extern (C++) final class Import : Dsymbol
+extern (C++) class Import : Dsymbol // CALYPSO (made non final)
 {
 public:
     /* static import aliasId = pkg1.pkg2.id : alias1 = name1, alias2 = name2;
@@ -73,6 +73,11 @@ public:
         this.aliasId = aliasId;
         this.isstatic = isstatic;
         this.protection = PROTprivate; // default to private
+        setSymIdent(); // CALYPSO
+    }
+
+    final void setSymIdent() // CALYPSO
+    {
         // Set symbol name (bracketed)
         if (aliasId)
         {
@@ -91,7 +96,7 @@ public:
         }
     }
 
-    void addAlias(Identifier name, Identifier _alias)
+    final void addAlias(Identifier name, Identifier _alias)
     {
         if (isstatic)
             error("cannot have an import bind list");
@@ -152,7 +157,7 @@ public:
                 {
                     if (p.isPkgMod == PKGunknown)
                     {
-                        mod = Module.load(loc, packages, id);
+                        mod = loadModule(loc, packages, id); // CALYPSO
                         if (!mod)
                             p.isPkgMod = PKGpackage;
                         else
@@ -185,7 +190,7 @@ public:
         if (!mod)
         {
             // Load module
-            mod = Module.load(loc, packages, id);
+            mod = loadModule(loc, packages, id); // CALYPSO
             if (mod)
             {
                 dst.insert(id, mod); // id may be different from mod.ident,
@@ -472,6 +477,12 @@ public:
             return false;
     }
 
+    // CALYPSO
+    Module loadModule(Loc loc, Identifiers *packages, Identifier id)
+    {
+        return Module.load(loc, packages, id);
+    }
+
     override inout(Import) isImport() inout
     {
         return this;
@@ -482,3 +493,105 @@ public:
         v.visit(this);
     }
 }
+
+// CALYPSO
+extern(C++) class Modmap : Dsymbol
+{
+public:
+    StringExp arg;
+
+    extern(D) this(Loc loc, StringExp arg)
+    {
+        this.loc = loc;
+        this.arg = arg;
+    }
+}
+
+import ddmd.aggregate;
+import ddmd.dinterpret;
+import ddmd.dstruct;
+import ddmd.func;
+import ddmd.statement;
+
+alias ForeignCodeGen = void*;
+
+extern(C++) interface LangPlugin
+{
+public:
+    void _init();
+
+    // ===== - - - - - ===== //
+
+    // returns -1 if said lang isn't handled by this plugin, or its id number
+    // to be passed to createImport otherwise
+    int doesHandleModmap(const (char)* lang);
+
+    Modmap createModmap(int langId,
+        Loc loc, Expression arg);
+
+    // returns -1 if said tree isn't handled by this plugin, or its id number
+    // to be passed to createImport otherwise
+    int doesHandleImport(const (char)* tree);
+
+    Import createImport(int treeId,
+        Loc loc, Identifiers *packages, Identifier id,
+        Identifier aliasId, int isstatic);
+
+    // foreign exceptions
+    bool doesHandleCatch(LINK lang);
+    Catch createCatch(Loc loc, Type t, Identifier id,
+                               Statement handler, StorageClass stc);
+
+    // ===== - - - - - ===== //
+
+    const char *mangle(Dsymbol s); // TODO replace by getForeignMangler
+    void mangleAnonymousAggregate(OutBuffer *buf, AggregateDeclaration ad); // HACK
+
+    // create a mangler for types and symbols specific to this plugin
+    // base is the D mangler
+    Visitor getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor base);
+
+    // ===== - - - - - ===== //
+
+    Expression getRightThis(Loc loc, Scope *sc, AggregateDeclaration ad,
+        Expression e1, Declaration var, int flag = 0);
+    Expression callCpCtor(Scope *sc, Expression e);
+
+    FuncDeclaration buildDtor(AggregateDeclaration ad, Scope *sc);
+    FuncDeclaration buildOpAssign(StructDeclaration sd, Scope *sc);
+    FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);
+
+    // ===== - - - - - ===== //
+
+    bool isSymbolReferenced(Dsymbol s);
+    void markSymbolReferenced(Dsymbol s);
+
+    // ===== - - - - - ===== //
+
+    Expression semanticTraits(TraitsExp e, Scope *sc);
+
+    // ===== - - - - - ===== //
+
+    Expression interpret(FuncDeclaration fd, InterState *istate, Expressions *arguments,
+                                  Expression thisarg);
+    bool canInterpret(FuncDeclaration fd);
+
+    // ===== - - - - - ===== //
+
+    void adjustLinkerArgs(const (char)** args); // FIXME: not the original type
+
+    // ===== - - - - - ===== //
+    // mars_mainBody hooks
+
+    void semanticModules();
+    void codegenModules();
+
+    // ===== - - - - - ===== //
+
+    ForeignCodeGen codegen();
+    bool needsCodegen(Module m);
+}
+
+import ddmd.root.array;
+alias LangPlugins = Array!(LangPlugin);
+extern (C++) __gshared LangPlugins langPlugins; // CALYPSO (1.1 NOTE: moved from globals.d to prevent cycles)

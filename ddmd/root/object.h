@@ -32,6 +32,8 @@ class RootObject
 public:
     RootObject() { }
 
+    virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
+
     virtual bool equals(RootObject *o);
 
     /**

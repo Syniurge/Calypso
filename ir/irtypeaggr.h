@@ -24,6 +24,11 @@ class StructType;
 class AggregateDeclaration;
 class VarDeclaration;
 
+namespace cpp
+{
+    class LangPlugin;
+}
+
 using VarGEPIndices = std::map<VarDeclaration *, unsigned>;
 
 class AggrTypeBuilder {
@@ -53,6 +58,9 @@ protected:
   unsigned m_fieldIndex = 0;
   unsigned m_overallAlignment = 0;
   bool m_packed = false;
+
+  // CALYPSO HACK
+  friend class cpp::LangPlugin;
 };
 
 /// Base class of IrTypes for aggregate types.

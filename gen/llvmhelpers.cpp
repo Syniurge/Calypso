@@ -13,6 +13,7 @@
 #include "expression.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/complex.h"
 #include "gen/dvalue.h"
@@ -30,6 +31,7 @@
 #include "gen/typinf.h"
 #include "gen/uda.h"
 #include "id.h"
+#include "import.h"
 #include "init.h"
 #include "ir/irfunction.h"
 #include "ir/irmodule.h"
@@ -312,9 +314,9 @@ void DtoAssign(Loc &loc, DValue *lhs, DValue *rhs, int op,
 
   if (t->ty == Tbool) {
     DtoStoreZextI8(DtoRVal(rhs), DtoLVal(lhs));
-  } else if (t->ty == Tstruct) {
+  } else if (t->ty == Tstruct || isClassValue(t)) { // CALYPSO
     // don't copy anything to empty structs
-    if (static_cast<TypeStruct *>(t)->sym->fields.dim > 0) {
+    if (getAggregateSym(t)->structsize > 0) {
       llvm::Value *src = DtoLVal(rhs);
       llvm::Value *dst = DtoLVal(lhs);
 
@@ -473,6 +475,17 @@ DValue *DtoCastPtr(Loc &loc, DValue *val, Type *to) {
 
   LLValue *rval;
 
+  if (totype->ty == Tpointer && fromtype->nextOf()->constConv(totype->nextOf()) >= MATCHconst)
+    return val; // CALYPSO workaround DMD semi-BUG? [A*]->constConv([const(A)*]) returns MATCHnomatch, is this intended?
+                // It makes implicitCastTo() not avoid the cast, whereas it would have avoided « cast(const(A*)) someAptr »
+
+  // CALYPSO
+  AggregateDeclaration* adfrom = getAggregateSym(fromtype->nextOf());
+  AggregateDeclaration* adto = getAggregateHandle(totype);
+
+  if (adfrom && adto && !adfrom->byRef() /*TODO: cast struct adfrom*/&& adfrom->isClassDeclaration())
+    return DtoCastClass(loc, val, to);  // CALYPSO WARNING: this brings C++-style pointer derived <-> base casts to D struct pointers so changes vanilla behavior slightly
+
   if (totype->ty == Tpointer || totype->ty == Tclass) {
     LLValue *src = DtoRVal(val);
     IF_LOG {
@@ -627,7 +640,7 @@ DValue *DtoCast(Loc &loc, DValue *val, Type *to) {
     }
   }
 
-  if (fromtype->equals(totype)) {
+  if (fromtype->equivs(totype)) {
     return val;
   }
 
@@ -822,6 +835,10 @@ void DtoResolveVariable(VarDeclaration *vd) {
     if (gIR->dmodule) {
       vd->ir->setInitialized();
     }
+    if (auto lp = vd->langPlugin()) { // CALYPSO
+      lp->codegen()->toDeclareVariable(vd);
+      return;
+    }
     std::string llName(getMangledName(vd));
 
     // Since the type of a global must exactly match the type of its
@@ -929,6 +946,11 @@ void DtoVarDeclaration(VarDeclaration *vd) {
 
   if (vd->_init) {
     if (ExpInitializer *ex = vd->_init->isExpInitializer()) {
+      // CALYPSO HACK FIXME remove when temporaries from CallExp(TypeExp) get replaced by NullExp
+      if ((vd->storage_class & STCtemp) && ex->exp->op == TOKconstruct)
+        if (static_cast<AssignExp*>(ex->exp)->e2->op == TOKnull)
+            return;
+
       // TODO: Refactor this so that it doesn't look like toElem has no effect.
       Logger::println("expression initializer");
       toElem(ex->exp);
@@ -1615,13 +1637,13 @@ DValue *DtoSymbolAddress(Loc &loc, Type *type, Declaration *decl) {
     // this seems to be the static initialiser for structs
     Type *sdecltype = sdecl->type->toBasetype();
     IF_LOG Logger::print("Sym: type=%s\n", sdecltype->toChars());
-    assert(sdecltype->ty == Tstruct);
-    TypeStruct *ts = static_cast<TypeStruct *>(sdecltype);
-    assert(ts->sym);
-    DtoResolveStruct(ts->sym);
+    assert(sdecltype->ty == Tstruct || isClassValue(sdecltype)); // CALYPSO
+    AggregateDeclaration *sym = getAggregateSym(sdecltype);
+    assert(sym);
+    DtoResolveAggregate(sym);
 
-    LLValue *initsym = getIrAggr(ts->sym)->getInitSymbol();
-    initsym = DtoBitCast(initsym, DtoType(ts->pointerTo()));
+    LLValue *initsym = getIrAggr(sym)->getInitSymbol();
+    initsym = DtoBitCast(initsym, DtoType(sdecltype->pointerTo()));
     return new DLValue(type, initsym);
   }
 
@@ -1772,7 +1794,7 @@ FuncDeclaration *getParentFunc(Dsymbol *sym) {
 }
 
 LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
-                           VarDeclaration *vd) {
+                           VarDeclaration *vd, Type *srcType) {
   IF_LOG Logger::println("Indexing aggregate field %s:", vd->toPrettyChars());
   LOG_SCOPE;
 
@@ -1780,6 +1802,9 @@ LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
   // isIrVarCreated(vd). This is a bit of a hack, we don't actually need this
   // ourselves, DtoType below would be enough.
   DtoResolveDsymbol(ad);
+
+  if (auto lp = ad->langPlugin()) // CALYPSO
+    return lp->codegen()->toIndexAggregate(src, ad, vd, srcType);
 
   // Cast the pointer we got to the canonical struct type the indices are
   // based on.

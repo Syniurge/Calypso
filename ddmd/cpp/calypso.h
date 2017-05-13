@@ -1,0 +1,317 @@
+// Contributed by Elie Morisse, same license DMD uses
+
+#ifndef DMD_CPP_CALYPSO_H
+#define DMD_CPP_CALYPSO_H
+
+#ifdef __DMC__
+#pragma once
+#endif /* __DMC__ */
+
+#include "../mars.h"
+#include "../import.h"
+#include "../gen/cgforeign.h"
+
+#include <memory>
+#include "llvm/ADT/StringSet.h"
+#include "llvm/IR/DataLayout.h"
+#include "clang/AST/ASTMutationListener.h"
+#include "clang/Basic/SourceLocation.h"
+#include "clang/Sema/DeclSpec.h"
+#include "clang/CodeGen/ModuleBuilder.h"
+#include "clang/lib/CodeGen/CodeGenModule.h"
+
+#define USE_CLANG_MODULES
+
+class Identifier;
+
+namespace clang
+{
+class IdentifierInfo;
+class CodeGenFunction;
+class Sema;
+class ASTUnit;
+class MacroInfo;
+class ModuleMap;
+class PCHContainerOperations;
+namespace driver { class Compilation; }
+}
+
+namespace cpp
+{
+
+class ClassDeclaration;
+class BuiltinTypes;
+class TemplateInstance;
+class TypeMapper;
+
+namespace reclang { class DiagnosticPrinter; }
+using clang::ASTUnit;
+using clang::ModuleMap;
+using reclang::DiagnosticPrinter;
+
+namespace clangCG = clang::CodeGen;
+
+struct SpecValue
+{
+    const char *op = nullptr; // for overloaded operators
+    Type *t = nullptr; // for conversion operators
+
+    TypeMapper &mapper;
+    SpecValue(TypeMapper &mapper) : mapper(mapper) {}
+
+    operator bool() { return op || t; }
+    RootObject *toTemplateArg(Loc loc);
+};
+
+Identifier *idPool(const char *s);
+
+Identifier *fromIdentifier(const clang::IdentifierInfo *II);
+Identifier *fromDeclarationName(const clang::DeclarationName N, SpecValue *spec = nullptr);
+Identifier *getIdentifier(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
+Identifier *getIdentifierOrNull(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
+Identifier *getExtendedIdentifier(const clang::NamedDecl *D, TypeMapper &mapper); // will return the name of the non-templated method for operators, same than getIdentifier() for other Decls
+Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, TypeMapper &mapper);
+
+RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
+                               TypeMapper &mapper);
+
+const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
+                                                           const clang::NamedDecl *SpecificTag = nullptr);
+
+Loc fromLoc(clang::SourceLocation L);
+
+class InstantiationChecker : public clang::ASTConsumer, public clang::ASTMutationListener
+{
+public:
+    clang::ASTMutationListener *GetASTMutationListener() override { return this; }
+
+    void CompletedImplicitDefinition(const clang::FunctionDecl *D) override;
+    void FunctionDefinitionInstantiated(const clang::FunctionDecl *D) override;
+};
+
+class DiagMuter
+{
+public:
+   DiagMuter();
+   ~DiagMuter();
+};
+
+class PCH
+{
+public:
+    Strings headers; // array of all C/C++ header names with the "" or <>, required as long as we're using a PCH
+            // the array is initialized at the first Modmap::semantic and kept in sync with a cache file named 'calypso_cache.list'
+            // TODO: it's currently pretty basic and dumb and doesn't check whether the same header might be named differently or is already included by another
+    bool needHeadersReload = false;
+    ASTUnit *AST = nullptr;
+    clang::MangleContext *MangleCtx = nullptr;
+
+    DiagnosticPrinter *DiagClient;
+    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
+    std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps;
+    
+    ModuleMap *MMap = nullptr;
+
+    void init(); // load the list of headers already cached in the PCH
+    void add(const char* header, ::Module *from);
+
+    void update(); // re-emit the PCH if needed, and update the cached list
+
+    bool needSaving = false;
+    void save();
+
+    std::string pchHeader;
+    std::string pchFilename;
+//     std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
+
+    int cxxStdlibType;
+
+protected:
+    void loadFromHeaders(clang::driver::Compilation* C);
+    void loadFromPCH(clang::driver::Compilation* C);
+};
+
+class LangPlugin : public ::LangPlugin, public ::ForeignCodeGen
+{
+public:
+    void _init() override;
+
+    // ==== LangPlugin ====
+    // returns -1 if said lang isn't handled by this plugin, or its id number
+    // to be passed to createImport otherwise
+    int doesHandleModmap(const char* lang) override;
+
+    ::Modmap *createModmap(int langId,
+        Loc loc, Expression *arg) override;
+
+    // returns -1 if said tree isn't handled by this plugin, or its id number
+    // to be passed to createImport otherwise
+    int doesHandleImport(const char* tree) override;
+
+    ::Import *createImport(int treeId,
+        Loc loc, Identifiers *packages, Identifier *id,
+        Identifier *aliasId, int isstatic) override;
+
+    bool doesHandleCatch(LINK lang) override;
+    ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
+                               Statement *handler, StorageClass stc) override;
+
+    const char *mangle(Dsymbol *s) override;
+    void mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad) override;
+    Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
+
+    Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
+        Expression *e1, Declaration *var, int flag = 0) override;
+    Expression *callCpCtor(Scope *sc, Expression *e) override;
+
+    ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
+    ::FuncDeclaration *buildOpAssign(::StructDeclaration *sd, Scope *sc) override;
+    ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
+
+    bool isSymbolReferenced(Dsymbol *s) override;
+    void markSymbolReferenced(Dsymbol *s) override;
+
+    Expression *semanticTraits(TraitsExp *e, Scope *sc) override;
+
+    Expression *interpret(FuncDeclaration *fd, InterState *istate, Expressions *arguments,
+                                  Expression *thisarg) override;
+    bool canInterpret(FuncDeclaration *fd) override;
+
+    void adjustLinkerArgs(std::vector<std::string>& args) override;
+
+    // ==== mars_mainBody ====
+    void semanticModules() override;
+    void codegenModules() override;
+
+    // ==== CodeGen ====
+    ForeignCodeGen *codegen() override { return this; }
+    bool needsCodegen(::Module *m) override;
+
+    std::stack<clangCG::CodeGenFunction *> CGFStack;
+    inline clangCG::CodeGenFunction *CGF() { return CGFStack.top(); }
+
+    void enterModule(::Module *m, llvm::Module *) override;
+    void leaveModule(::Module *m, llvm::Module *) override;
+
+    void enterFunc(::FuncDeclaration *fd) override;
+    void leaveFunc() override;
+
+    LLType *toType(Type *t) override;
+    llvm::FunctionType *toFunctionType(::FuncDeclaration *fdecl) override;
+    llvm::Type *IrTypeStructHijack(::StructDeclaration *sd) override;
+
+    llvm::Constant *createInitializerConstant(IrAggr *irAggr,
+        const std::map<VarDeclaration *, llvm::Constant *>& explicitInitializers) override;
+    llvm::Constant *createStructLiteralConstant(StructLiteralExp *e) override;
+    llvm::Constant *toConstElemFallback(Expression *e) override;
+    bool addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& constants,
+        const std::map<VarDeclaration *, llvm::Constant *>& explicitInitializers, ::AggregateDeclaration* decl,
+        unsigned& offset, bool populateInterfacesWithVtbls) override;
+
+    void toResolveFunction(::FuncDeclaration* fdecl) override;
+    void toDefineFunction(::FuncDeclaration* fdecl) override;
+    void toDeclareVariable(::VarDeclaration* vd) override;
+    void toDefineVariable(::VarDeclaration* vd) override;
+    void toDefineStruct(::StructDeclaration* sd) override;
+    void toDefineClass(::ClassDeclaration* cd) override;
+
+    bool toIsReturnInArg(CallExp* ce) override;
+    LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, const char* name) override;
+    DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
+                                   Expressions* arguments, llvm::Value *retvar) override;
+
+    bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
+
+    LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd, Type *srcType) override;
+    void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
+    void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
+    void toInitClass(TypeClass* tc, LLValue* dst) override;
+    DValue *adjustForDynamicCast(Loc &loc, DValue *val, Type *_to) override;
+
+    void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;
+
+    void toBeginCatch(IRState& irs, ::Catch *cj) override;
+    void toEndCatch(IRState& irs, ::Catch *cj) override;
+    llvm::GlobalVariable* toCatchScopeType(IRState& irs, Type *t) override;
+         
+    // ==== ==== ====
+    PCH pch;
+    llvm::StringSet<> TargetFeatures;
+    llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
+
+    typedef std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMapEntryTy;
+    llvm::DenseMap<const clang::Module::Header*, MacroMapEntryTy*> MacroMap;
+
+    BuiltinTypes &builtinTypes;
+
+    ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
+    std::map<llvm::Constant*, llvm::GlobalVariable*> type_infoWrappers; // FIXME put into module state with the CodeGenModule
+
+    const char *Argv0;
+
+    Identifier* id_cpp;
+    Identifier* id_core;
+    Identifier* id__;
+
+    Identifier* id_isCpp;
+    Identifier* id_getCppVirtualIndex;
+    Identifier* id_getBaseOffset;
+    Identifier* id_getMemberPointerExtraSlots;
+
+    Identifier *id___cpp_type_info_ptr;
+    Identifier* id_cpp_member_ptr;
+
+    Identifier* id_op;
+    Identifier* id_type;
+
+    Identifier* id___va_list_tag;
+    Identifier* id___NSConstantString_tag;
+
+    std::string executablePath; // from argv[0] to locate Clang builtin headers
+
+    struct GenModSet : public llvm::StringSet<> // already compiled modules
+    {
+        bool parsed = false;
+
+        void parse();
+        void add(::Module *m);
+    } genModSet;
+
+    // settings
+    const char *cachePrefix = "calypso_cache"; // prefix of cached files (list of headers, PCH)
+
+    std::unique_ptr<clangCG::CodeGenModule> CGM;  // selectively emit external C++ declarations, template instances, ...
+
+    LangPlugin();
+
+    void buildMacroMap();
+
+    ASTUnit *getASTUnit() { return pch.AST; }
+    clang::ASTContext &getASTContext();
+    clang::Sema &getSema();
+    clang::DiagnosticsEngine &getDiagnostics();
+    clang::Preprocessor &getPreprocessor();
+    clang::SourceManager &getSourceManager();
+
+    std::string getCacheFilename(const char *suffix = nullptr);
+    
+private:
+    void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly
+
+    // Keep the existing LLVM types generated by CodeGenTypes between modules
+    llvm::DenseMap<const clang::Type*, clangCG::CGRecordLayout*> CGRecordLayouts;
+    llvm::DenseMap<const clang::Type*, llvm::StructType*> RecordDeclTypes;
+    llvm::DenseMap<const clang::Type *, llvm::Type*> TypeCache;
+};
+
+extern LangPlugin calypso;
+bool isCPP(Type* t);
+bool isCPP(Dsymbol *s);
+cpp::ClassDeclaration *isDCXX(Dsymbol *s);
+
+}
+
+#define CALYPSO_LANGPLUGIN \
+    ::LangPlugin *langPlugin() override { return &calypso; }
+
+#endif /* DMD_CPP_CALYPSO_H */

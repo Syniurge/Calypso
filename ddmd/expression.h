@@ -428,7 +428,7 @@ public:
     ArrayLiteralExp(Loc loc, Expressions *elements);
     ArrayLiteralExp(Loc loc, Expression *e);
     ArrayLiteralExp(Loc loc, Expression *basis, Expressions *elements);
-    ArrayLiteralExp(Loc loc, Expression *basis, size_t dim);
+//     ArrayLiteralExp(Loc loc, Expression *basis, size_t dim);
 
     Expression *syntaxCopy();
     bool equals(RootObject *o);
@@ -474,8 +474,8 @@ public:
 class StructLiteralExp : public Expression
 {
 public:
-    StructDeclaration *sd;      // which aggregate this is for
-    Expressions *elements;      // parallels sd->fields[] with NULL entries for fields to skip
+    AggregateDeclaration *sd;      // which aggregate this is for    // CALYPSO HACK: StructLiteralExp is also used for C++ classes, but only zeroinit
+    Expressions *elements;      // parallels sd->fields[] with NULL entries for fields to skip // CALYPSO NOTE: to stay consistent with interpret.c base fields are added before, in the order in which bases are declared
     Type *stype;                // final type of result (can be different from sd's type)
 
 #if IN_LLVM
@@ -509,14 +509,17 @@ public:
     // (with infinite recursion) of this expression.
     int stageflags;
 
-    StructLiteralExp(Loc loc, StructDeclaration *sd, Expressions *elements, Type *stype = NULL);
-    static StructLiteralExp *create(Loc loc, StructDeclaration *sd, void *elements, Type *stype = NULL);
+    StructLiteralExp(Loc loc, AggregateDeclaration *sd, Expressions *elements, Type *stype = NULL);
+    static StructLiteralExp *create(Loc loc, AggregateDeclaration *sd, void *elements, Type *stype = NULL);
     bool equals(RootObject *o);
     Expression *syntaxCopy();
     Expression *semantic(Scope *sc);
     Expression *getField(Type *type, unsigned offset);
     int getFieldIndex(Type *type, unsigned offset);
     Expression *addDtorHook(Scope *sc);
+
+    // CALYPSO
+    VarDeclaration* correspondingField(size_t elemIdx);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -1621,6 +1624,15 @@ private:
         // Ensure that the union is suitably aligned.
         longdouble for_alignment_only;
     } u;
+};
+
+// CALYPSO
+class TaggedExp : public UnaExp
+{
+public:
+    TaggedExp (Loc loc, TOK op, int size, Expression* e1);
+    Expression *semantic(Scope *) { return this; }
+    void accept(Visitor *v) { v->visit(this); }
 };
 
 /****************************************************************/

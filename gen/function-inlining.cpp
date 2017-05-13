@@ -71,7 +71,7 @@ bool isInlineCandidate(FuncDeclaration &fdecl) {
 
 bool alreadyOrWillBeDefined(FuncDeclaration &fdecl) {
   for (FuncDeclaration *f = &fdecl; f;) {
-    if (!f->isInstantiated() && f->inNonRoot()) {
+    if (!f->isInstantiated() && f->inNonCodegen()) { // CALYPSO
       return false;
     }
     if (f->isNested()) {

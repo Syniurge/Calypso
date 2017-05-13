@@ -11,9 +11,11 @@
 #include "aggregate.h"
 #include "declaration.h"
 #include "init.h"
+#include "import.h"
 #include "mtype.h"
 #include "target.h"
 #include "gen/irstate.h"
+#include "gen/cgforeign.h"
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/mangling.h"
@@ -140,6 +142,10 @@ IrAggr::createInitializerConstant(const VarInitMap &explicitInitializers) {
                          aggrdecl->toChars());
   LOG_SCOPE;
 
+  if (auto lp = aggrdecl->langPlugin()) // CALYPSO
+    if (auto c = lp->codegen()->createInitializerConstant(this, explicitInitializers))
+        return c;
+
   llvm::SmallVector<llvm::Constant *, 16> constants;
 
   unsigned offset = 0;
@@ -199,6 +205,11 @@ void IrAggr::addFieldInitializers(
     llvm::SmallVectorImpl<llvm::Constant *> &constants,
     const VarInitMap &explicitInitializers, AggregateDeclaration *decl,
     unsigned &offset, bool populateInterfacesWithVtbls) {
+
+  if (auto lp = decl->langPlugin()) // CALYPSO
+    if (lp->codegen()->addFieldInitializers(constants, explicitInitializers,
+                          decl, offset, populateInterfacesWithVtbls))
+      return;
 
   if (ClassDeclaration *cd = decl->isClassDeclaration()) {
     if (cd->baseClass) {

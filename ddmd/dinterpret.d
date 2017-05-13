@@ -10,6 +10,7 @@ module ddmd.dinterpret;
 
 import core.stdc.stdio;
 import core.stdc.string;
+import ddmd.aggregate;
 import ddmd.apply;
 import ddmd.arraytypes;
 import ddmd.attrib;
@@ -2771,26 +2772,27 @@ public:
         size_t dim = e.elements ? e.elements.dim : 0;
         auto expsx = e.elements;
 
-        if (dim != e.sd.fields.dim)
-        {
-            // guaranteed by AggregateDeclaration.fill and TypeStruct.defaultInitLiteral
-            assert(e.sd.isNested() && dim == e.sd.fields.dim - 1);
-
-            /* If a nested struct has no initialized hidden pointer,
-             * set it to null to match the runtime behaviour.
-             */
-            auto ne = new NullExp(e.loc);
-            ne.type = e.sd.vthis.type;
-
-            expsx = copyArrayOnWrite(expsx, e.elements);
-            expsx.push(ne);
-            ++dim;
-        }
-        assert(dim == e.sd.fields.dim);
+        // CALYPSO NOTE about BUG: this isn't consistent with defaultInitLiteral and fill that explicitly skip the nested this field
+//         if (dim != e.sd.fields.dim)
+//         {
+//             // guaranteed by AggregateDeclaration.fill and TypeStruct.defaultInitLiteral
+//             assert(e.sd.isNested() && dim == e.sd.fields.dim - 1);
+//
+//             /* If a nested struct has no initialized hidden pointer,
+//              * set it to null to match the runtime behaviour.
+//              */
+//             auto ne = new NullExp(e.loc);
+//             ne.type = e.sd.vthis.type;
+//
+//             expsx = copyArrayOnWrite(expsx, e.elements);
+//             expsx.push(ne);
+//             ++dim;
+//         }
+//         assert(dim == e.sd.fields.dim);
 
         foreach (i; 0 .. dim)
         {
-            auto v = e.sd.fields[i];
+            auto v = e.correspondingField(i); // CALYPSO
             Expression exp = (*expsx)[i];
             Expression ex;
             if (!exp)
@@ -2823,7 +2825,7 @@ public:
         if (expsx !is e.elements)
         {
             expandTuples(expsx);
-            if (expsx.dim != e.sd.fields.dim)
+            if (expsx.dim != e.sd.literalElemDim()) // CALYPSO
             {
                 e.error("CTFE internal error: invalid struct literal");
                 result = CTFEExp.cantexp;
@@ -2940,12 +2942,12 @@ public:
         {
             ClassDeclaration cd = (cast(TypeClass)e.newtype.toBasetype()).sym;
             size_t totalFieldCount = 0;
-            for (ClassDeclaration c = cd; c; c = c.baseClass)
+            for (AggregateDeclaration c = cd; c; c = toAggregateBase(c)) // CALYPSO
                 totalFieldCount += c.fields.dim;
             auto elems = new Expressions();
             elems.setDim(totalFieldCount);
             size_t fieldsSoFar = totalFieldCount;
-            for (ClassDeclaration c = cd; c; c = c.baseClass)
+            for (AggregateDeclaration c = cd; c; c = toAggregateBase(c)) // CALYPSO // FIXME: multiple base support
             {
                 fieldsSoFar -= c.fields.dim;
                 for (size_t i = 0; i < c.fields.dim; i++)
@@ -4832,11 +4834,18 @@ public:
             return;
         if (!fd.fbody)
         {
+            auto lp = fd.langPlugin();
+            if (lp && lp.canInterpret(fd))
+                result = lp.interpret(fd, istate, e.arguments, pthis);  // CALYPSO
+            else
+            {
             e.error("%s cannot be interpreted at compile time, because it has no available source code", fd.toChars());
             result = CTFEExp.cantexp;
             return;
+            }
         }
-        result = interpret(fd, istate, e.arguments, pthis);
+        if (!result) // CALYPSO
+            result = interpret(fd, istate, e.arguments, pthis);
         if (result.op == TOKvoidexp)
             return;
         if (!exceptionOrCantInterpret(result))

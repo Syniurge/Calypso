@@ -88,28 +88,41 @@ public:
     const char *intrinsicName;
 #endif
 
-    TemplateDeclaration(Loc loc, Identifier *id, TemplateParameters *parameters,
-        Expression *constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false);
+//     TemplateDeclaration(Loc loc, Identifier *id, TemplateParameters *parameters,
+//         Expression *constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false);
+    virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     bool overloadInsert(Dsymbol *s);
     bool hasStaticCtorOrDtor();
-    const char *kind();
+    const char *kind() const;
     const char *toChars();
 
     Prot prot();
 
-    bool evaluateConstraint(TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, FuncDeclaration *fd);
+    virtual bool evaluateConstraint(TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, FuncDeclaration *fd); // CALYPSO
 
-    MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag);
-    MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs);
+    virtual bool earlyFunctionValidityCheck(TemplateInstance *ti, Scope *sc, Objects *dedtypes) { return true; } // CALYPSO
+    virtual void prepareBestMatch(TemplateInstance* ti, Scope* sc, Expressions* fargs); // CALYPSO
 
-    MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs);
+    virtual MATCH matchWithInstance(Scope *sc, TemplateInstance *ti, Objects *atypes, Expressions *fargs, int flag); // CALYPSO
+    virtual MATCH leastAsSpecialized(Scope *sc, TemplateDeclaration *td2, Expressions *fargs); // CALYPSO
+    virtual Dsymbols* copySyntaxTree(TemplateInstance *ti); // CALYPSO TODO 1.1: move below?
+
+    virtual MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs); // CALYPSO
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);
     FuncDeclaration *doHeaderInstantiation(TemplateInstance *ti, Scope *sc, FuncDeclaration *fd, Type *tthis, Expressions *fargs);
     TemplateInstance *findExistingInstance(TemplateInstance *tithis, Expressions *fargs);
     TemplateInstance *addInstance(TemplateInstance *ti);
     void removeInstance(TemplateInstance *handle);
+
+    // CALYPSO
+    virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
+    virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti);
+
+    // CALYPSO variadic template generalization (pretty intrusive...)
+    size_t numParameterPacks();
+    virtual bool allowTupleParameterAnywhere() { return false; }
 
     TemplateDeclaration *isTemplateDeclaration() { return this; }
 
@@ -164,8 +177,9 @@ public:
 
     /* Match actual argument against parameter.
      */
-    virtual MATCH matchArg(Loc instLoc, Scope *sc, Objects *tiargs, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
+    virtual MATCH matchArg(Loc instLoc, Scope *sc, Objects *tiargs, size_t prmi, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     virtual MATCH matchArg(Scope *sc, RootObject *oarg, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam) = 0;
+        // CALYPSO TODO: the second matchArg overload is used by deduceType which doesn't handle multiple parameter packs yet
 
     /* Create dummy argument based on parameter.
      */
@@ -282,7 +296,7 @@ public:
     RootObject *specialization();
     RootObject *defaultArg(Loc instLoc, Scope *sc);
     bool hasDefaultArg();
-    MATCH matchArg(Loc loc, Scope *sc, Objects *tiargs, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
+    MATCH matchArg(Loc loc, Scope *sc, Objects *tiargs, size_t prmi, size_t* argi /*CALYPSO*/, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     MATCH matchArg(Scope *sc, RootObject *oarg, size_t i, TemplateParameters *parameters, Objects *dedtypes, Declaration **psparam);
     void *dummyArg();
     void accept(Visitor *v) { v->visit(this); }
@@ -328,8 +342,9 @@ public:
     TemplateInstance *tnext;            // non-first instantiated instances
     Module *minst;                      // the top module that instantiated this instance
 
-    TemplateInstance(Loc loc, Identifier *temp_id);
-    TemplateInstance(Loc loc, TemplateDeclaration *tempdecl, Objects *tiargs);
+//     TemplateInstance(Loc loc, Identifier *temp_id);
+//     TemplateInstance(Loc loc, TemplateDeclaration *tempdecl, Objects *tiargs);
+    virtual void _key(); // CALYPSO
     static Objects *arraySyntaxCopy(Objects *objs);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc, Expressions *fargs);
@@ -337,12 +352,12 @@ public:
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
     Dsymbol *toAlias();                 // resolve real symbol
-    const char *kind();
+    const char *kind() const;
     bool oneMember(Dsymbol **ps, Identifier *ident);
     const char *toChars();
     char* toPrettyCharsHelper();
     void printInstantiationTrace();
-    Identifier *getIdent();
+    virtual Identifier *getIdent(); // CALYPSO made virtual to use the original tiargs for mangling
     int compare(RootObject *o);
     hash_t hashCode();
 
@@ -351,17 +366,22 @@ public:
     // Internal
     bool findTempDecl(Scope *sc, WithScopeSymbol **pwithsym);
     bool updateTempDecl(Scope *sc, Dsymbol *s);
+    TemplateDeclaration* firstTempDecl(); // CALYPSO returns the first overload
     static bool semanticTiargs(Loc loc, Scope *sc, Objects *tiargs, int flags);
-    bool semanticTiargs(Scope *sc);
+    virtual bool semanticTiargs(Scope *sc); // CALYPSO
     bool findBestMatch(Scope *sc, Expressions *fargs);
     bool needsTypeInference(Scope *sc, int flag = 0);
     bool hasNestedArgs(Objects *tiargs, bool isstatic);
     Dsymbols *appendToModuleMember();
-    void declareParameters(Scope *sc);
+    virtual void declareParameters(Scope *sc); // CALYPSO
     Identifier *genIdent(Objects *args);
     void expandMembers(Scope *sc);
     void tryExpandMembers(Scope *sc);
     void trySemantic3(Scope *sc2);
+
+    // CALYPSO variadic template generalization (pretty intrusive...)
+    virtual size_t correspondingParamIdx(size_t argi);
+    virtual TemplateParameter* correspondingParam(size_t argi);
 
     TemplateInstance *isTemplateInstance() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -377,7 +397,7 @@ public:
     void semantic(Scope *sc);
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
-    const char *kind();
+    const char *kind() const;
     bool oneMember(Dsymbol **ps, Identifier *ident);
     int apply(Dsymbol_apply_ft_t fp, void *param);
     bool hasPointers();

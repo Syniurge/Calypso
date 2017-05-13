@@ -9,6 +9,7 @@
 
 #include "gen/arrays.h"
 #include "gen/binops.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/complex.h"
 #include "gen/irstate.h"
@@ -24,6 +25,7 @@
 #include "template.h"
 // Needs other includes.
 #include "ctfe.h"
+#include "import.h"
 
 /// Emits an LLVM constant corresponding to the expression.
 ///
@@ -580,11 +582,19 @@ public:
     LOG_SCOPE;
 
     if (e->useStaticInit) {
-      DtoResolveStruct(e->sd);
+      DtoResolveAggregate(e->sd); // CALYPSO
       result = getIrAggr(e->sd)->getDefaultInit();
     } else {
       // make sure the struct is resolved
-      DtoResolveStruct(e->sd);
+      DtoResolveAggregate(e->sd); // CALYPSO
+
+      // CALYPSO HACK? Translating a StructLiteralExp to an APValue and calling CodeGenModule::EmitConstantValue
+      // is easier than handling a map of field <-> llvm::Constant. An alternative would be to , but it looks more complicated as well.
+      if (auto lp = e->sd->langPlugin())
+        if (auto c = lp->codegen()->createStructLiteralConstant(e)) {
+          result = c;
+          return;
+        }
 
       std::map<VarDeclaration *, llvm::Constant *> varInits;
       const size_t nexprs = e->elements->dim;
@@ -628,11 +638,11 @@ public:
       {
         const size_t nexprs = value->elements->dim;
 
-        std::stack<ClassDeclaration *> classHierachy;
-        ClassDeclaration *cur = origClass;
+        std::stack<AggregateDeclaration *> classHierachy; // CALYPSO
+        AggregateDeclaration *cur = origClass;
         while (cur) {
           classHierachy.push(cur);
-          cur = cur->baseClass;
+          cur = toAggregateBase(cur);
         }
         size_t i = 0;
         while (!classHierachy.empty()) {
@@ -742,6 +752,16 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   void visit(Expression *e) override {
+    if (e->op == TOKcall) {  // CALYPSO ugly HACK FIXME for C++ ctor call inits (emit a null constant and assume that the ctor gets called at some point)
+      auto ce = static_cast<CallExp*>(e);
+      if (auto tsym = ce->e1->type->toDsymbol(nullptr))
+        if (auto lp = tsym->langPlugin())
+          if (auto C = lp->codegen()->toConstElemFallback(e)) {
+            result = C;
+            return;
+          }
+    }
+
     e->error("expression '%s' is not a constant", e->toChars());
     if (!global.gag) {
       fatal();

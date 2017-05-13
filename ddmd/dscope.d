@@ -746,6 +746,15 @@ else
         }
     }
 
+    extern (C++) bool isD() // CALYPSO
+    {
+        if (func && func.langPlugin())
+            return false;
+        if (minst && minst.langPlugin())
+            return false;
+        return true;
+    }
+
     extern (D) this(ref Scope sc)
     {
         this._module = sc._module;
