@@ -633,6 +633,8 @@ public:
         }
         else
             linkage = sc.linkage;
+        if (forceCppLinkage())
+            linkage = LINKcpp; // CALYPSO HACK and an ugly one to remind that ideally Calypso modules should be entirely LINKcpp
         inlining = sc.inlining;
         protection = sc.protection;
         userAttribDecl = sc.userAttribDecl;
@@ -4105,6 +4107,11 @@ else
     bool preferNonTemplateOverloads()
     {
         return true;
+    }
+
+    bool forceCppLinkage()// HACK and an ugly one to remind that ideally Calypso modules should be entirely LINKcpp
+    {
+        return false;
     }
 
     override void accept(Visitor v)
