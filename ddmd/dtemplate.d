@@ -5956,7 +5956,7 @@ public:
         return ti;
     }
 
-    void semantic(Scope* sc, Expressions* fargs)
+    final void semantic(Scope* sc, Expressions* fargs) // CALYPSO (missing final)
     {
         //printf("[%s] TemplateInstance::semantic('%s', this=%p, gag = %d, sc = %p)\n", loc.toChars(), toChars(), this, global.gag, sc);
         version (none)
