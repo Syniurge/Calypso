@@ -52,9 +52,13 @@ DValue *DtoAggregateDValue(Type *t, LLValue *v)
     if (t->ty == Tstruct)
         return new DLValue(t, v);
 
-    assert(t->ty == Tclass);
-    auto tc = static_cast<TypeClass*>(t);
-    if (tc->byRef())
+    auto tc = isClassValueHandle(t);
+    bool isHandle = tc != nullptr;
+    if (!tc) {
+        assert(t->ty == Tclass);
+        tc = static_cast<TypeClass*>(t);
+    }
+    if (isHandle || tc->byRef())
         return new DImValue(t, v);
     else
         return new DLValue(t, v);
@@ -346,14 +350,12 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
     // it's just a GEP and (maybe) a pointer-to-pointer BitCast, so it
     // should be pretty cheap and perfectly safe even if the original was
     // null.
-//     if (fc->byRef()) { // CALYPSO (1.1 merge addition, may not be necessary
     LLValue *isNull = gIR->ir->CreateICmpEQ(
         orig, LLConstant::getNullValue(orig->getType()), ".nullcheck");
     v = gIR->ir->CreateSelect(isNull, LLConstant::getNullValue(toType), v,
                               ".interface");
-//     }
     // return r-value
-    return DtoAggregateDValue(to, v); // CALYPSO
+    return DtoAggregateDValue(_to->toBasetype(), v); // CALYPSO
   }
 
   if (fc->sym->cpp) {
