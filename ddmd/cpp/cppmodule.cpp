@@ -99,7 +99,7 @@ Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
     loadEmittedSymbolList();
 
     // FIXME 1.1: needs rework to avoid dup code
-    const char* objExt;
+    const char* objExt = nullptr;
     if (global.params.output_o)
         objExt = global.obj_ext;
     else if (global.params.output_bc)
