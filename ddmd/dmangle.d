@@ -98,7 +98,7 @@ extern (C++) void MODtoDecoBuffer(OutBuffer* buf, MOD mod)
     switch (mod)
     {
     case 0:
-//         buf.writeByte('V'); // CALYPSO: zero mod must be written since nextOf might have a "lesser" mod. NOTE: 'V' is also used for LINKpascal..
+        buf.writeByte('V'); // CALYPSO: zero mod must be written since nextOf might have a "lesser" mod. NOTE: 'V' is also used for LINKpascal..
         break;
     case MODconst:
         buf.writeByte('x');
@@ -162,7 +162,7 @@ public:
 
     override void visit(TypeNext t)
     {
-//         t.transitive(); // CALYPSO: ensure that the MOD characters end up in the mangled names
+        t.transitive(); // CALYPSO: ensure that the MOD characters end up in the mangled names
         visit(cast(Type)t);
         visitWithMask(t.next, t.mod);
     }
