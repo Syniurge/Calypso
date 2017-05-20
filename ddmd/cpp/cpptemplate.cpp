@@ -573,16 +573,10 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     else
     {
         ti = new cpp::TemplateInstance(tithis->loc, tithis->name);
-        tithis->syntaxCopy(ti);
-
-        ti->tdtypes.setDim(tithis->tdtypes.dim);
-        for (size_t i = 0; i < tithis->tdtypes.dim; i++)
-            ti->tdtypes[i] = objectSyntaxCopy(tithis->tdtypes[i]);
-
+        ti->tiargs = tithis->tiargs; // HACK avoid syntaxCopy, which is slow and would require many improvements to even work (they made a large part of the changes to the frontend before the switch to DDMD)
         ti->semantictiargsdone = true;
-        // redo semanticTiargs because most TypeXXX::syntaxCopy throw away decos
-        // flags set to 4 since there might be Tuple from deduceFunctionTemplateMatch (which may be a DMD inconsistency?)
-        ::TemplateInstance::semanticTiargs(ti->loc, sc, ti->tiargs, 4); 
+        ti->tdtypes.setDim(tithis->tdtypes.dim);
+        memcpy(ti->tdtypes.data, tithis->tdtypes.data, ti->tdtypes.dim * sizeof(void*));
     }
 
     if (!ti->Inst)
