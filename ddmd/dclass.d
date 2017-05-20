@@ -561,7 +561,7 @@ public:
                 BaseClass* b = (*baseclasses)[0];
                 Type tb = b.type.toBasetype();
                 auto sym = getAggregateSym(tb); // CALYPSO
-                auto bcd = cast(ClassDeclaration) sym;
+                auto bcd = isClassDeclarationOrNull(sym);
                 if (!sym || (sym.isStructDeclaration() && !allowInheritFromStruct()))
                 {
                     if (b.type != Type.terror)
@@ -700,7 +700,7 @@ public:
                 if (baseClass.storage_class & STCfinal)
                     error("cannot inherit from final class %s", baseClass.toChars());
 
-                if (auto bcd = cast(ClassDeclaration)baseClass) // CALYPSO
+                if (auto bcd = isClassDeclarationOrNull(baseClass)) // CALYPSO
                 {
                 // Inherit properties from base class
                 if (bcd.isCOMclass())
