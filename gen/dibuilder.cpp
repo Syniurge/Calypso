@@ -275,7 +275,7 @@ ldc::DIType ldc::DIBuilder::CreateEnumType(Type *type) {
       getTypeAllocSize(T) * 8,               // size (bits)
       getABITypeAlign(T) * 8,                // align (bits)
       DBuilder.getOrCreateArray(subscripts), // subscripts
-      CreateTypeDescription(te->sym->memtype, false));
+      CreateTypeDescription(te->sym->memtype));
 }
 
 ldc::DIType ldc::DIBuilder::CreatePointerType(Type *type) {
@@ -289,7 +289,7 @@ ldc::DIType ldc::DIBuilder::CreatePointerType(Type *type) {
   if (nt->toBasetype()->ty == Tvoid)
     nt = Type::tuns8;
 
-  return DBuilder.createPointerType(CreateTypeDescription(nt, false),
+  return DBuilder.createPointerType(CreateTypeDescription(nt),
                                     getTypeAllocSize(T) * 8, // size (bits)
                                     getABITypeAlign(T) * 8,  // align (bits)
 #if LDC_LLVM_VER >= 500
@@ -316,7 +316,7 @@ ldc::DIType ldc::DIBuilder::CreateVectorType(Type *type) {
   return DBuilder.createVectorType(
       getTypeAllocSize(T) * 8,              // size (bits)
       getABITypeAlign(T) * 8,               // align (bits)
-      CreateTypeDescription(te, false),     // element type
+      CreateTypeDescription(te),            // element type
       DBuilder.getOrCreateArray(subscripts) // subscripts
       );
 }
@@ -374,7 +374,7 @@ ldc::DIType ldc::DIBuilder::CreateMemberType(unsigned linnum, Type *type,
   llvm::Type *T = DtoType(t);
 
   // find base type
-  ldc::DIType basetype = CreateTypeDescription(t, true);
+  ldc::DIType basetype = CreateTypeDescription(t);
 
   auto Flags = DIFlagZero;
   switch (prot) {
@@ -593,7 +593,7 @@ ldc::DIType ldc::DIBuilder::CreateSArrayType(Type *type) {
   return DBuilder.createArrayType(
       getTypeAllocSize(T) * 8,              // size (bits)
       getABITypeAlign(T) * 8,               // align (bits)
-      CreateTypeDescription(t, false),      // element type
+      CreateTypeDescription(t),             // element type
       DBuilder.getOrCreateArray(subscripts) // subscripts
       );
 }
@@ -611,7 +611,7 @@ ldc::DISubroutineType ldc::DIBuilder::CreateFunctionType(Type *type) {
   Type *retType = t->next;
 
   // Create "dummy" subroutine type for the return type
-  LLMetadata *params = {CreateTypeDescription(retType, true)};
+  LLMetadata *params = {CreateTypeDescription(retType)};
 #if LDC_LLVM_VER == 305
   auto paramsArray = DBuilder.getOrCreateArray(params);
 #else
@@ -676,16 +676,12 @@ bool isOpaqueEnumType(Type *type) {
   return !te->sym->memtype;
 }
 
-ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type, bool derefclass) {
+ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type) {
   // Check for opaque enum first, Bugzilla 13792
   if (isOpaqueEnumType(type))
     return DBuilder.createUnspecifiedType(type->toChars());
 
   Type *t = type->toBasetype();
-  if (derefclass && t->ty == Tclass) {
-    type = type->pointerTo();
-    t = type->toBasetype();
-  }
 
   if (t->ty == Tvoid)
 #if LDC_LLVM_VER >= 309
@@ -694,7 +690,7 @@ ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type, bool derefclass) {
     return DBuilder.createUnspecifiedType(t->toChars());
 #endif
   if (t->ty == Tnull) // display null as void*
-    return DBuilder.createPointerType(CreateTypeDescription(Type::tvoid, false),
+    return DBuilder.createPointerType(CreateTypeDescription(Type::tvoid),
                                       8, 8, "typeof(null)");
   if (t->ty == Tvector)
     return CreateVectorType(type);
@@ -711,8 +707,18 @@ ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type, bool derefclass) {
     return CreateSArrayType(type);
   if (t->ty == Taarray)
     return CreateAArrayType(type);
-  if (t->ty == Tstruct || t->ty == Tclass)
-    return CreateCompositeType(type);
+  if (t->ty == Tstruct || t->ty == Tclass) {
+    ldc::DIType ret = CreateCompositeType(type);
+    if (getAggregateSym(t)->byRef()) {
+      auto T = DtoType(t);
+      ret = DBuilder.createPointerType(ret, getTypeAllocSize(T) * 8, getABITypeAlign(T) * 8,
+#if LDC_LLVM_VER >= 500
+                                      llvm::None,
+#endif
+                                      t->toChars());
+    }
+    return ret;
+  }
   if (t->ty == Tfunction)
     return CreateFunctionType(type);
   if (t->ty == Tdelegate)
@@ -920,7 +926,7 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function *Fn,
   ldc::DIFile file = CreateFile();
 
   // Create "dummy" subroutine type for the return type
-  LLMetadata *params = {CreateTypeDescription(Type::tvoid, true)};
+  LLMetadata *params = {CreateTypeDescription(Type::tvoid)};
 #if LDC_LLVM_VER >= 306
   auto paramsArray = DBuilder.getOrCreateTypeArray(params);
 #else
@@ -1088,7 +1094,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
   // get type description
   if (!type)
     type = vd->type;
-  ldc::DIType TD = CreateTypeDescription(type, true);
+  ldc::DIType TD = CreateTypeDescription(type);
   if (static_cast<llvm::MDNode *>(TD) == nullptr)
     return; // unsupported
 
@@ -1229,7 +1235,7 @@ void ldc::DIBuilder::EmitGlobalVariable(llvm::GlobalVariable *llVar,
       mangle(vd),                             // linkage name
       CreateFile(vd),                         // file
       vd->loc.linnum,                         // line num
-      CreateTypeDescription(vd->type, false), // type
+      CreateTypeDescription(vd->type), // type
       vd->protection.kind == PROTprivate,     // is local to unit
 #if LDC_LLVM_VER >= 400
       nullptr // relative location of field
