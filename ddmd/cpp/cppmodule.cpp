@@ -633,8 +633,21 @@ bool isMapped(const clang::Decl *D)
         if (isa<clang::FunctionNoProtoType>(FD->getType()))
             return false; // functions without prototypes are afaik builtins, and since D needs a prototype they can't be mapped
 
-        if (FD->getDeclName().getNameKind() == clang::DeclarationName::CXXLiteralOperatorName)
+        auto Name = FD->getDeclName();
+        if (Name.getNameKind() == clang::DeclarationName::CXXLiteralOperatorName)
             return false; // skip C++14 literal operators for now (always visible in MSVC 2015 regardless of compiler flags)
+
+        if (Name.getNameKind() == clang::DeclarationName::CXXOperatorName)
+            switch (Name.getCXXOverloadedOperator())
+            {
+                case clang::OO_New:
+                case clang::OO_Delete:
+                case clang::OO_Array_New:
+                case clang::OO_Array_Delete:
+                    return false; // skip new and delete operators for now (FIXME?)
+                default:
+                    break;
+            }
 
         // Clang/MSVC's __builtin_addressof(void&) doesn't have a valid type
         // Do not map the builtin and eventually (TODO) handle it specifically
