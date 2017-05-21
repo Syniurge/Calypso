@@ -252,6 +252,7 @@ public:
     Identifier* id_cpp;
     Identifier* id_core;
     Identifier* id__;
+    Identifier* id_Scpp;
 
     Identifier* id_isCpp;
     Identifier* id_getCppVirtualIndex;

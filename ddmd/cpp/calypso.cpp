@@ -1240,6 +1240,25 @@ void LangPlugin::_init()
 {
     executablePath = GetExecutablePath(Argv0);
 
+    id_cpp = idPool("cpp");
+    id_core = idPool("core");
+    id__ = idPool("_");
+    id_Scpp = idPool(u8"§cpp");
+
+    id_isCpp = idPool("isCpp");
+    id_getCppVirtualIndex = idPool("getCppVirtualIndex");
+    id_getBaseOffset = idPool("getBaseOffset");
+    id_getMemberPointerExtraSlots = idPool("getMemberPointerExtraSlots");
+
+    id___cpp_type_info_ptr = idPool("__calypso_type_info_ptr"); // FIXME
+    id_cpp_member_ptr = idPool("__cpp_member_ptr");
+
+    id_op = idPool("op");
+    id_type = idPool("type");
+
+    id___va_list_tag = idPool("__va_list_tag");
+    id___NSConstantString_tag = idPool("__NSConstantString_tag");
+
     Module::init();
     pch.init();
 
@@ -1258,24 +1277,6 @@ void LangPlugin::_init()
 
         TargetFeatures.insert(Feature);
     }
-
-    id_cpp = idPool("cpp");
-    id_core = idPool("core");
-    id__ = idPool("_");
-
-    id_isCpp = idPool("isCpp");
-    id_getCppVirtualIndex = idPool("getCppVirtualIndex");
-    id_getBaseOffset = idPool("getBaseOffset");
-    id_getMemberPointerExtraSlots = idPool("getMemberPointerExtraSlots");
-
-    id___cpp_type_info_ptr = idPool("__calypso_type_info_ptr"); // FIXME
-    id_cpp_member_ptr = idPool("__cpp_member_ptr");
-
-    id_op = idPool("op");
-    id_type = idPool("type");
-
-    id___va_list_tag = idPool("__va_list_tag");
-    id___NSConstantString_tag = idPool("__NSConstantString_tag");
 }
 
 clang::ASTContext& LangPlugin::getASTContext()

@@ -76,7 +76,7 @@ Modules Module::amodules;
 
 void Module::init()
 {
-    rootPackage = new_Package(idPool(u8"§cpp"));
+    rootPackage = new_Package(calypso.id_Scpp);
     rootPackage->symtab = new_DsymbolTable();
 
     modules->insert(rootPackage);

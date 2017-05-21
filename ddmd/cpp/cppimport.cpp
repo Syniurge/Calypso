@@ -20,7 +20,7 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
     // add "§cpp" as leftmost package to avoid name clashes
     if (!this->packages)
         this->packages = new Identifiers;
-    this->packages->shift(idPool(u8"§cpp"));
+    this->packages->shift(calypso.id_Scpp);
 
     if (!aliasId)
         setSymIdent();
@@ -67,7 +67,7 @@ void Modmap::semantic(Scope* sc)
 
 GlobalImport::GlobalImport(Loc loc)
 {
-    construct_Import(this, loc, nullptr, idPool(u8"§cpp"), nullptr, 0);
+    construct_Import(this, loc, nullptr, calypso.id_Scpp, nullptr, 0);
     this->pkg = cpp::Module::rootPackage;
 }
 
