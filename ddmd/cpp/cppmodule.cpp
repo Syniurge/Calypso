@@ -212,8 +212,6 @@ inline Prot DeclMapper::toProt(clang::AccessSpecifier AS)
             return PROTprivate;
         case clang::AS_none:
             return PROTnone;
-        default:
-            return PROTundefined;
     }
 }
 

@@ -15,7 +15,7 @@
 
 namespace cpp {
 
-class Import : public ::Import
+class Import final : public ::Import
 {
 public:
     CALYPSO_LANGPLUGIN
