@@ -5,6 +5,8 @@
  *   $ ldc2 set.d
  */
 
+module _set_;
+
 modmap (C++) "<set>";
 
 import std.stdio, std.conv, std.string;

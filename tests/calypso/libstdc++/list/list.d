@@ -5,6 +5,8 @@
  *   $ ldc2 list.d
  */
 
+module _list_;
+
 modmap (C++) "<list>";
 
 import std.stdio, std.conv, std.string;

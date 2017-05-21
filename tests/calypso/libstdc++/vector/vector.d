@@ -5,6 +5,8 @@
  *   $ ldc2 vector.d
  */
 
+module _vector_;
+
 modmap (C++) "<vector>";
 
 import std.stdio, std.conv, std.string;

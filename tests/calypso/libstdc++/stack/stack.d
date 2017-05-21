@@ -5,6 +5,8 @@
  *   $ ldc2 stack.d
  */
 
+module _stack_;
+
 modmap (C++) "<stack>";
 modmap (C++) "<vector>";
 modmap (C++) "<deque>";

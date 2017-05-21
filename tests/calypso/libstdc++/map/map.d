@@ -5,6 +5,8 @@
  *   $ ldc2 map.d
  */
 
+module _map_;
+
 modmap (C++) "<map>";
 modmap (C++) "<string>";
 

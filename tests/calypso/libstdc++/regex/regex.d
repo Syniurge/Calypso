@@ -5,6 +5,8 @@
  *   $ ldc2 -cpp-args -std=c++11 regex.d
  */
 
+module _regex_;
+
 modmap (C++) "<regex>";
 modmap (C++) "<string>";
 

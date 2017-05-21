@@ -5,6 +5,8 @@
  *   $ ldc2 complex.d
  */
 
+module _complex_;
+
 modmap (C++) "<complex>";
 
 import std.stdio, std.conv, std.string;

@@ -5,6 +5,8 @@
  *   $ ldc2 queue.d
  */
 
+module _queue_;
+
 modmap (C++) "<queue>";
 
 import std.stdio, std.conv, std.string;

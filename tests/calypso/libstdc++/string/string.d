@@ -5,6 +5,8 @@
  *   $ ldc2 string.d
  */
 
+module _string_;
+
 modmap (C++) "<string>";
 
 import std.stdio, std.conv, std.string;

@@ -5,6 +5,8 @@
  *   $ ldc2 bitset.d
  */
 
+module _bitset_;
+
 modmap (C++) "<bitset>";
 
 import std.stdio;
