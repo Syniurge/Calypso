@@ -9947,6 +9947,13 @@ extern(C++) AggregateDeclaration getAggregateHandle(Type t)
     return ad;
 }
 
+extern(C++) TypeClass isClassReference(Type t)
+{
+    if (t.ty != Tclass) return null;
+    TypeClass tc = cast(TypeClass)t;
+    return tc.byRef() ? tc : null;
+}
+
 extern(C++) TypeClass isClassValue(Type t)
 {
     if (t.ty != Tclass) return null;

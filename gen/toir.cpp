@@ -1338,7 +1338,7 @@ public:
 
     // the Tclass catches interface comparisons, regular
     // class equality should be rewritten as a.opEquals(b) by this time
-    if (t->isintegral() || t->ty == Tpointer || t->ty == Tclass ||
+    if (t->isintegral() || t->ty == Tpointer || isClassReference(t) || // CALYPSO
         t->ty == Tnull) {
       Logger::println("integral or pointer or interface");
       llvm::ICmpInst::Predicate cmpop;
@@ -1374,7 +1374,7 @@ public:
     } else if (t->ty == Tdelegate) {
       Logger::println("delegate");
       eval = DtoDelegateEquals(e->op, DtoRVal(l), DtoRVal(r));
-    } else if (t->ty == Tstruct) {
+    } else if (t->ty == Tstruct || isClassValue(t)) { // CALYPSO
       Logger::println("struct");
       // when this is reached it means there is no opEquals overload.
       eval = DtoStructEquals(e->op, l, r);

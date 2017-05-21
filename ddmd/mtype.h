@@ -978,6 +978,7 @@ MOD MODmerge(MOD mod1, MOD mod2);
 // CALYPSO
 AggregateDeclaration *getAggregateSym(Type *t);
 AggregateDeclaration *getAggregateHandle(Type *t);
+TypeClass *isClassReference(Type *t);
 TypeClass *isClassValue(Type *t);
 TypeClass *isClassValueHandle(Type *t);
 

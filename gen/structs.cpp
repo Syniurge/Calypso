@@ -72,7 +72,7 @@ void DtoResolveStruct(StructDeclaration *sd, Loc &callerLoc) {
 
 LLValue *DtoStructEquals(TOK op, DValue *lhs, DValue *rhs) {
   Type *t = lhs->type->toBasetype();
-  assert(t->ty == Tstruct);
+  assert(t->ty == Tstruct || isClassValue(t)); // CALYPSO
 
   // set predicate
   llvm::ICmpInst::Predicate cmpop;
@@ -83,7 +83,7 @@ LLValue *DtoStructEquals(TOK op, DValue *lhs, DValue *rhs) {
   }
 
   // empty struct? EQ always true, NE always false
-  if (static_cast<TypeStruct *>(t)->sym->fields.dim == 0) {
+  if (getAggregateSym(t)->fields.dim == 0) { // CALYPSO
     return DtoConstBool(cmpop == llvm::ICmpInst::ICMP_EQ);
   }
 
