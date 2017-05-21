@@ -433,6 +433,8 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type) {
   // Use the actual type associated with the declaration, ignoring any
   // const/wrappers.
   LLType *T = DtoType(sd->type);
+  if (sd->byRef()) // CALYPSO
+      T = llvm::cast<llvm::PointerType>(T)->getElementType();
   IrTypeAggr *ir = sd->type->ctype->isAggr();
   assert(ir);
 
