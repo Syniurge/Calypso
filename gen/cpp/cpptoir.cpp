@@ -692,8 +692,9 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     updateCGFInsertPoint(); // emitLandingPad() may have run the cleanups and call C++ dtors, hence changing the insert point
 
     auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
+    llvm::Instruction *callOrInvoke;
     RV = CGF()->EmitCall(FInfo, callable, ReturnValue, Args, FD,
-                            nullptr, invokeDest, postinvoke);
+                            &callOrInvoke, invokeDest, postinvoke);
 
     if (postinvoke)
         gIR->scope() = IRScope(postinvoke);
@@ -722,7 +723,9 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         return new DLValue(resulttype, RV.getScalarVal());
     }
 
-    if (RV.isScalar())
+    if (resulttype->ty == Tvoid)
+        return new DImValue(resulttype, callOrInvoke);
+    else if (RV.isScalar())
         return new DImValue(resulttype, RV.getScalarVal());
     else if (RV.isAggregate())
         return new DLValue(resulttype, RV.getAggregatePointer());
