@@ -646,7 +646,8 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                         fd->_scope, fnarg->storageClass);
 
         auto ad = getAggregateSym(argval->type);
-        llvm::Value* val = DtoRVal(argval);
+        llvm::Value* val = (fnarg->storageClass & STCref || DtoIsInMemoryOnly(argval->type))
+                    ? DtoLVal(argval) : DtoRVal(argval);
 
         if (isa<clang::MemberPointerType>(ArgTy) && ad->fields.dim == 1)
         {
