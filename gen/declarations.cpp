@@ -358,7 +358,7 @@ public:
       // If we reach here during codegen of an available_externally function,
       // new variable declarations should stay external and therefore must not
       // have an initializer.
-      if ((decl->storage_class & STCextern) || decl->inNonRoot())
+      if ((decl->storage_class & STCextern) || decl->inNonCodegen()) // CALYPSO
         ;
       else if (auto lp = decl->langPlugin())  // CALYPSO
         lp->codegen()->toDefineVariable(decl);
