@@ -5946,13 +5946,14 @@ public:
 
     override Dsymbol syntaxCopy(Dsymbol s)
     {
+        if (semanticRun != PASSinit)
+        {
+            assert(!s);
+            return this;
+        }
         TemplateInstance ti = s ? cast(TemplateInstance)s : new TemplateInstance(loc, name);
         ti.tiargs = arraySyntaxCopy(tiargs);
-        TemplateDeclaration td;
-        if (inst && tempdecl && (td = tempdecl.isTemplateDeclaration()) !is null)
-            td.ScopeDsymbol.syntaxCopy(ti);
-        else
-            ScopeDsymbol.syntaxCopy(ti);
+        assert(!members);
         return ti;
     }
 
