@@ -94,7 +94,7 @@ Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
     }
     objFilename += ident->string;
 
-    construct_Module(this, objFilename.c_str(), ident, 0, 0);
+    construct_Module(this, strdup(objFilename.c_str()), ident, 0, 0);
 
     loadEmittedSymbolList();
 
