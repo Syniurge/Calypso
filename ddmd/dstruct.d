@@ -622,7 +622,7 @@ public:
             structsize = (structsize + alignment - 1) & ~(alignment - 1);
     }
 
-    override final void finalizeSize()
+    override void finalizeSize() // CALYPSO (made non final)
     {
         //printf("StructDeclaration::finalizeSize() %s\n", toChars());
         if (sizeok != SIZEOKnone)
