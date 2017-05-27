@@ -5311,7 +5311,7 @@ public:
                 continue;
             }
             auto cd = c.type.toBasetype().isClassHandle();
-            flags |= cd.isCPPclass() ? FLAGcpp : FLAGd;
+            flags |= cd && cd.isCPPclass() ? FLAGcpp : FLAGd; // CALYPSO
 
             // Determine if current catch 'hides' any previous catches
             foreach (j; 0 .. i)
