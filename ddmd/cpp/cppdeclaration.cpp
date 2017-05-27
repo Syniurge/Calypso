@@ -62,10 +62,10 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
     storage_class = o.storage_class; // workaround for syntaxCopy because base method only assigns storage_class if the arg is null (BUG?)
 }
 
-bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
-{
-    return false; // HACK
-}
+// bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
+// {
+//     return false; // HACK
+// }
 
 void MarkVarReferenced(::VarDeclaration* vd)
 {
