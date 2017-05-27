@@ -225,6 +225,40 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
     return isBaseOfImpl(this, cd, poffset);
 }
 
+template <typename AggTy>
+ Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
+{
+    // We need to avoid useless temporaries that needlessly complicate codegen and result in added (wrong) dtor calls into AST
+    // buildVarInitializer must be called before the initializer exp gets semantic'd(), or else addDtorHook will already have taken effect
+    if (exp->op != TOKcall || static_cast<CallExp*>(exp)->e1->op != TOKtype)
+        return nullptr;
+
+    // FIXME? sc->intypeof?
+
+    auto ce = static_cast<CallExp*>(exp);
+    if (ad->ctor)
+    {
+        auto ve = new_VarExp(exp->loc, vd);
+        assert(ad->ctor->isDeclaration());
+        ce->e1 = new_DotVarExp(exp->loc, ve, static_cast<Declaration*>(ad->ctor));
+    }
+    else
+    {
+        exp = new_StructLiteralExp(exp->loc, ad, ce->arguments, ad->getType());
+    }
+    return exp;
+}
+
+Expression* StructDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
+{
+    return buildVarInitializerImpl(this, sc, vd, exp);
+}
+
+Expression* ClassDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
+{
+    return buildVarInitializerImpl(this, sc, vd, exp);
+}
+
 void ClassDeclaration::interfaceSemantic(Scope *sc)
 {
 }

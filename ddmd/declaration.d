@@ -1585,7 +1585,13 @@ public:
                     }
                     Expression exp = ei.exp;
                     Expression e1 = new VarExp(loc, this);
-                    if (isBlit)
+                    Expression foreignExp; // CALYPSO
+                    auto adty = getAggregateSym(type);
+                    if (adty && adty.langPlugin())
+                        foreignExp = adty.buildVarInitializer(sc, this, exp);
+                    if (foreignExp)
+                        exp = foreignExp;
+                    else if (isBlit)
                         exp = new BlitExp(loc, e1, exp);
                     else
                         exp = new ConstructExp(loc, e1, exp);

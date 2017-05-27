@@ -5205,6 +5205,8 @@ public:
     // (with infinite recursion) of this expression.
     int stageflags;
 
+    bool disableDtor; // CALYPSO HACK
+
     extern (D) this(Loc loc, AggregateDeclaration sd, Expressions* elements, Type stype = null) // CALYPSO
     {
         super(loc, TOKstructliteral, __traits(classInstanceSize, StructLiteralExp));
@@ -5368,6 +5370,8 @@ public:
 
     override Expression addDtorHook(Scope* sc)
     {
+        if (disableDtor) // CALYPSO HACK for variable initializers
+            return this;
         /* If struct requires a destructor, rewrite as:
          *    (S tmp = S()),tmp
          * so that the destructor can be hung on tmp.

@@ -946,11 +946,6 @@ void DtoVarDeclaration(VarDeclaration *vd) {
 
   if (vd->_init) {
     if (ExpInitializer *ex = vd->_init->isExpInitializer()) {
-      // CALYPSO HACK FIXME remove when temporaries from CallExp(TypeExp) get replaced by NullExp
-      if ((vd->storage_class & STCtemp) && ex->exp->op == TOKconstruct)
-        if (static_cast<AssignExp*>(ex->exp)->e2->op == TOKnull)
-            return;
-
       // TODO: Refactor this so that it doesn't look like toElem has no effect.
       Logger::println("expression initializer");
       toElem(ex->exp);

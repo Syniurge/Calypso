@@ -509,6 +509,8 @@ public:
     // (with infinite recursion) of this expression.
     int stageflags;
 
+    bool disableDtor; // CALYPSO HACK
+
     StructLiteralExp(Loc loc, AggregateDeclaration *sd, Expressions *elements, Type *stype = NULL);
     static StructLiteralExp *create(Loc loc, AggregateDeclaration *sd, void *elements, Type *stype = NULL);
     bool equals(RootObject *o);

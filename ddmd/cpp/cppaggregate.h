@@ -45,6 +45,7 @@ public:
     bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     bool disableDefaultCtor() override { return false; }
+    Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 };
 
 // The rest, i.e anything involving inheritance, virtual functions.
@@ -67,16 +68,17 @@ public:
     bool mayBeAnonymous() override;
 
     void addLocalClass(ClassDeclarations *) override;
-    
+
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     void interfaceSemantic(Scope *sc) override;
-    
+
     bool byRef() const override { return false; }
     Expression *defaultInit(Loc loc) override;
     bool allowMultipleInheritance() override { return true; }
     bool allowInheritFromStruct() override { return true; }
     void makeNested() override;
     void finalizeVtbl() override;
+    Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
     void buildCpCtor(Scope *sc);
 };

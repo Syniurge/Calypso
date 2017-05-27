@@ -969,6 +969,11 @@ public:
         return null;
     }
 
+    Expression buildVarInitializer(Scope* sc, VarDeclaration vd, Expression exp)
+    {
+        return null;
+    }
+
     // Back end
     Symbol* stag; // tag symbol for debug data
     Symbol* sinit;
