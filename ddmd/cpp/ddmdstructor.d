@@ -68,7 +68,7 @@ ArrayLiteralExp new_ArrayLiteralExp(Loc loc, Expression e) { return new ArrayLit
 ArrayLiteralExp new_ArrayLiteralExp(Loc loc, Expression basis, Expressions *elements) { return new ArrayLiteralExp(loc, basis, elements); }
 // ArrayLiteralExp new_ArrayLiteralExp(Loc loc, Expression basis, size_t dim) { return new ArrayLiteralExp(loc, basis, dim); }
 AssocArrayLiteralExp new_AssocArrayLiteralExp(Loc loc, Expressions *keys, Expressions *values) { return new AssocArrayLiteralExp(loc, keys, values); }
-StructLiteralExp new_StructLiteralExp(Loc loc, StructDeclaration sd, Expressions *elements, Type stype) { return new StructLiteralExp(loc, sd, elements, stype); }
+StructLiteralExp new_StructLiteralExp(Loc loc, AggregateDeclaration sd, Expressions *elements, Type stype) { return new StructLiteralExp(loc, sd, elements, stype); }
 TypeExp new_TypeExp(Loc loc, Type type) { return new TypeExp(loc, type); }
 ScopeExp new_ScopeExp(Loc loc, ScopeDsymbol sds) { return new ScopeExp(loc, sds); }
 TemplateExp new_TemplateExp(Loc loc, TemplateDeclaration td, FuncDeclaration fd) { return new TemplateExp(loc, td, fd); }

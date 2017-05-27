@@ -38,7 +38,7 @@ ArrayLiteralExp* new_ArrayLiteralExp(Loc loc, Expression *e);
 ArrayLiteralExp* new_ArrayLiteralExp(Loc loc, Expression *basis, Expressions *elements);
 ArrayLiteralExp* new_ArrayLiteralExp(Loc loc, Expression *basis, size_t dim);
 AssocArrayLiteralExp* new_AssocArrayLiteralExp(Loc loc, Expressions *keys, Expressions *values);
-StructLiteralExp* new_StructLiteralExp(Loc loc, StructDeclaration *sd, Expressions *elements, Type *stype);
+StructLiteralExp* new_StructLiteralExp(Loc loc, AggregateDeclaration *sd, Expressions *elements, Type *stype);
 TypeExp* new_TypeExp(Loc loc, Type *type);
 ScopeExp* new_ScopeExp(Loc loc, ScopeDsymbol *sds);
 TemplateExp* new_TemplateExp(Loc loc, TemplateDeclaration *td, FuncDeclaration *fd = nullptr);
