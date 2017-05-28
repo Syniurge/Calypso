@@ -651,7 +651,7 @@ public:
 
                 b.sym = sym;
 
-                auto bcd = cast(ClassDeclaration) sym; // CALYPSO
+                auto bcd = isClassDeclarationOrNull(sym); // CALYPSO
                 if (sym._scope && (!bcd || bcd.baseok < BASEOKdone))
                     resolveBase(sym.semantic(null)); // Try to resolve forward reference
                 if (bcd && bcd.baseok < BASEOKdone)
@@ -717,7 +717,7 @@ public:
             interfaces = baseclasses.tdata()[(baseClass ? 1 : 0) .. baseclasses.dim];
             foreach (b; interfaces)
             {
-                auto bcd = cast(ClassDeclaration)b.sym; // CALYPSO
+                auto bcd = isClassDeclarationOrNull(b.sym); // CALYPSO
                 if (!bcd)
                     continue;
 
