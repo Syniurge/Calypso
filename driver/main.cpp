@@ -1031,10 +1031,10 @@ void addDefaultVersionIdentifiers() {
   dumpPredefinedVersions();
 }
 
-void codegenModules(Modules &modules) {
+void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
   // Generate one or more object/IR/bitcode files.
   if (global.params.obj && !modules.empty()) {
-    ldc::CodeGenerator cg(getGlobalContext(), global.params.oneobj);
+    ldc::CodeGenerator cg(getGlobalContext(), oneobj);
 
     // When inlining is enabled, we are calling semantic3 on function
     // declarations, which may _add_ members to the first module in the modules
@@ -1050,7 +1050,7 @@ void codegenModules(Modules &modules) {
         fprintf(global.stdmsg, "code      %s\n", m->toChars());
 
       auto lp = m->langPlugin();
-      if (lp && !singleObj && !lp->needsCodegen(m)) { // CALYPSO UGLY?
+      if (lp && !oneobj && !lp->needsCodegen(m)) { // CALYPSO UGLY?
           global.params.objfiles->push(m->objfile->name->str);
           continue;
       }

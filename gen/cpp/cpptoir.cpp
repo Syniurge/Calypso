@@ -186,7 +186,7 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
     CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache); // save the CodeGenTypes state
     CGM.reset();
 
-    if (!global.errors && isCPP(m))
+    if (!global.errors && m && isCPP(m))
         calypso.genModSet.add(m);
 }
 

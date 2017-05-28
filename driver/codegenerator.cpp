@@ -116,6 +116,9 @@ CodeGenerator::CodeGenerator(llvm::LLVMContext &context, bool singleObj)
 
 CodeGenerator::~CodeGenerator() {
   if (singleObj_) {
+    for (auto lp: langPlugins) // CALYPSO
+      lp->codegen()->leaveModule(nullptr, &ir_->module);
+
     // For singleObj builds, the first object file name is the one for the first
     // source file (e.g., `b.o` for `ldc2 a.o b.d c.d`).
     const char *filename = (*global.params.objfiles)[0];
@@ -160,12 +163,12 @@ void CodeGenerator::prepareLLModule(Module *m) {
 }
 
 void CodeGenerator::finishLLModule(Module *m) {
-  for (auto lp: langPlugins) // CALYPSO
-    lp->codegen()->leaveModule(m, &ir_->module);
-
   if (singleObj_) {
     return;
   }
+
+  for (auto lp: langPlugins) // CALYPSO
+    lp->codegen()->leaveModule(m, &ir_->module);
 
   // Add bitcode files passed on the cmdline to
   // the first module only, to avoid duplications.

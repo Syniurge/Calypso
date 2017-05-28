@@ -47,7 +47,7 @@
 #include "llvm/Target/TargetMachine.h"
 
 const char *mangleImpl(Dsymbol *s);
-void codegenModules(Modules &modules);
+void codegenModules(Modules &modules, bool oneobj);
 
 namespace cpp
 {
@@ -1128,7 +1128,7 @@ void LangPlugin::codegenModules()
         m->checkAndAddOutputFile(m->objfile);
         global.params.objfiles->push(m->objfile->name->str);
     }
-    ::codegenModules(cpp::Module::amodules);
+    ::codegenModules(cpp::Module::amodules, false);
 }
 
 bool LangPlugin::needsCodegen(::Module *m)

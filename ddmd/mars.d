@@ -153,7 +153,7 @@ version(IN_LLVM)
     void genCmain(Scope* sc);
     // in driver/main.cpp
     void addDefaultVersionIdentifiers();
-    void codegenModules(ref Modules modules);
+    void codegenModules(ref Modules modules, bool oneobj);
     void finalizeCodegen(); // CALYPSO
     // in driver/linker.cpp
     int linkObjToBinary();
@@ -1686,7 +1686,7 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     }
   version (IN_LLVM)
   {
-    codegenModules(modules);
+    codegenModules(modules, global.params.oneobj);
     foreach (lp; langPlugins)
         lp.codegenModules();
     finalizeCodegen(); // CALYPSO
