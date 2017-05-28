@@ -301,13 +301,9 @@ struct ResolvedFunc
 llvm::Type *LangPlugin::toType(::Type *t)
 {
     auto& Context = getASTContext();
-
     auto RD = getRecordDecl(t);
 
-    if (RD->isInvalidDecl() || !RD->getDefinition())
-        return llvm::StructType::get(gIR->context());
-    else
-        return CGM->getTypes().ConvertTypeForMem(
+    return CGM->getTypes().ConvertTypeForMem(
                     Context.getRecordType(RD));
 }
 
