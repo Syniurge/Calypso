@@ -4195,6 +4195,8 @@ public:
         {
             type = cd.baseClass.type;
             type = type.castMod(var.type.mod);
+            if (!cd.baseClass.byRef()) // CALYPSO
+                type = type.pointerTo();
         }
 
         if (var.checkNestedReference(sc, loc))
