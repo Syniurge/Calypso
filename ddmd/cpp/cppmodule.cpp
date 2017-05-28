@@ -1832,6 +1832,11 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
 
 //         srcFilename = AST->getSourceManager().getFilename(TD->getLocation());
     }
+
+    // Enclose every mapped symbol into an extern(C++) declaration
+    auto s = new_LinkDeclaration(LINKcpp, m->members);
+    m->members = new Dsymbols;
+    m->members->push(s);
     
     amodules.push_back(m);
     pkg->symtab->insert(m);

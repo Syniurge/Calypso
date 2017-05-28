@@ -314,6 +314,7 @@ TemplateTupleParameter new_TemplateTupleParameter(Loc loc, Identifier ident) { r
 TemplateInstance new_TemplateInstance(Loc loc, Identifier temp_id) { return new TemplateInstance(loc, temp_id); }
 TemplateInstance new_TemplateInstance(Loc loc, TemplateDeclaration tempdecl, Objects *tiargs) { return new TemplateInstance(loc, tempdecl, tiargs); }
 TemplateMixin new_TemplateMixin(Loc loc, Identifier ident, TypeQualified tqual, Objects *tiargs) { return new TemplateMixin(loc, ident, tqual, tiargs); }
+LinkDeclaration new_LinkDeclaration(LINK p, Dsymbols *decl) { return new LinkDeclaration(p, decl); }
 
 LangPlugins* new_LangPlugins() { return new LangPlugins; }
 

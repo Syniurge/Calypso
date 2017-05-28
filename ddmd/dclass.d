@@ -478,7 +478,7 @@ public:
 
             userAttribDecl = sc.userAttribDecl;
 
-            if (sc.linkage == LINKcpp)
+            if (sc.linkage == LINKcpp && !langPlugin()) // CALYPSO
                 cpp = true;
             if (sc.linkage == LINKobjc)
                 objc_ClassDeclaration_semantic_PASSinit_LINKobjc(this);

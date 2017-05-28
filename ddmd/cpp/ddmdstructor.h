@@ -284,6 +284,7 @@ TemplateTupleParameter* new_TemplateTupleParameter(Loc loc, Identifier *ident);
 TemplateInstance* new_TemplateInstance(Loc loc, Identifier *temp_id);
 TemplateInstance* new_TemplateInstance(Loc loc, TemplateDeclaration *tempdecl, Objects *tiargs);
 TemplateMixin* new_TemplateMixin(Loc loc, Identifier *ident, TypeQualified *tqual, Objects *tiargs);
+LinkDeclaration* new_LinkDeclaration(LINK p, Dsymbols *decl);
 
 LangPlugins* new_LangPlugins();
 
