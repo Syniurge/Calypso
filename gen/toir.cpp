@@ -726,7 +726,10 @@ public:
       FuncDeclaration *fdecl = dve->var->isFuncDeclaration();
       assert(fdecl);
       DtoDeclareFunction(fdecl);
-      fnval = new DFuncValue(fdecl, getIrFunc(fdecl)->func, DtoRVal(dve->e1));
+      LLValue* vthis = DtoIsInMemoryOnly(dve->e1->type)
+                           ? DtoLVal(dve->e1)
+                           : DtoRVal(dve->e1); // CALYPSO
+      fnval = new DFuncValue(fdecl, getIrFunc(fdecl)->func, vthis);
     } else {
       fnval = toElem(e->e1);
     }
