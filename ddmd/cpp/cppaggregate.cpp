@@ -455,6 +455,7 @@ template <typename AggTy>
 
                 auto fldIdx = FD->getFieldIndex();
                 vd->offset = baseoffset + Layout.getFieldOffset(fldIdx) / 8;
+                c_vd->offsetInBits = baseoffset * 8 + Layout.getFieldOffset(fldIdx);
 
                 ad->fields.push(vd);
             }

@@ -34,15 +34,16 @@ class VarDeclaration : public ::VarDeclaration
 {
 public:
     CALYPSO_LANGPLUGIN
-    
+
     const clang::ValueDecl *VD;
+    unsigned offsetInBits; // for bit fields
     bool isUsed = false;
 
     VarDeclaration(Loc loc, Identifier *id,
                    const clang::ValueDecl *VD, Type *t, Initializer *init = nullptr);
     VarDeclaration(const VarDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-//     bool isOverlappedWith(::VarDeclaration *v2) override;
+    bool isOverlappedWith(::VarDeclaration *v2) override;
 };
 
 class FuncDeclaration : public ::FuncDeclaration

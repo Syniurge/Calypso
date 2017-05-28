@@ -62,10 +62,18 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
     storage_class = o.storage_class; // workaround for syntaxCopy because base method only assigns storage_class if the arg is null (BUG?)
 }
 
-// bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
-// {
-//     return false; // HACK
-// }
+bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
+{
+    auto& Context = calypso.getASTContext();
+    assert(isCPP(v2));
+    auto c_v2 = static_cast<cpp::VarDeclaration*>(v2);
+    auto Field1 = cast<clang::FieldDecl>(VD);
+    auto Field2 = cast<clang::FieldDecl>(c_v2->VD);
+    unsigned size1 = Field1->isBitField() ? Field1->getBitWidthValue(Context) : (type->size() * 8);
+    unsigned size2 = Field2->isBitField() ? Field2->getBitWidthValue(Context) : (v2->type->size() * 8);
+    return (offsetInBits < c_v2->offsetInBits + size2 &&
+            c_v2->offsetInBits < offsetInBits + size1);
+}
 
 void MarkVarReferenced(::VarDeclaration* vd)
 {
