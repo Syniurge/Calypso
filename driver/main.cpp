@@ -1055,7 +1055,6 @@ void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
           continue;
       }
 
-      m->deleteObjFile(); // CALYPSO
       cg.emit(m);
 
       if (global.errors)
