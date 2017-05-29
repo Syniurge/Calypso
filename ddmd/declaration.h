@@ -707,7 +707,6 @@ public:
     // CALYPSO
     virtual bool allowFinalOverride() { return false; } // D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does
     virtual bool preferNonTemplateOverloads();
-    virtual bool forceCppLinkage() { return false; } // HACK
 
     void accept(Visitor *v) { v->visit(this); }
 };

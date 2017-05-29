@@ -63,7 +63,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-    bool forceCppLinkage() override { return true; } // HACK and an ugly one to remind that ideally Calypso modules should be entirely LINKcpp
 
     static void doSemantic3(::FuncDeclaration *fd, Scope *sc);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
@@ -85,7 +84,6 @@ public:
     void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-    bool forceCppLinkage() override { return true; }
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -105,7 +103,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-    bool forceCppLinkage() override { return true; }
 };
 
 class EnumDeclaration : public ::EnumDeclaration
