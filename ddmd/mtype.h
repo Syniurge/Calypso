@@ -816,7 +816,6 @@ public:
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
     Type *toHeadMutable();
-    bool isMergeable(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -886,7 +885,6 @@ public:
     bool isscope() /*const*/;
     bool isBoolean() /*const*/;
     bool hasPointers() /*const*/;
-    bool isMergeable(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };

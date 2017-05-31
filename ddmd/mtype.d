@@ -8436,11 +8436,6 @@ public:
         return this;
     }
 
-    override bool isMergeable() // CALYPSO
-    {
-        return !sym.isAnonymous(); // is this acceptable? (1.1 NOTE: and necessary? aren't anon TypeStruct properly mangled by Clang already?)
-    }
-
     override void accept(Visitor v)
     {
         v.visit(this);
@@ -9365,11 +9360,6 @@ public:
     override bool hasPointers() const
     {
         return true;
-    }
-
-    override bool isMergeable() // CALYPSO
-    {
-        return !sym.isAnonymous(); // is this acceptable? (1.1 NOTE: and necessary? aren't anon TypeClass properly mangled by Clang already?)
     }
 
     override void accept(Visitor v)
