@@ -9754,7 +9754,7 @@ public:
                         ue.e1 = (cast(DotTypeExp)ue.e1).e1;
                         directcall = true;
                     }
-                    else if (ue.e1.op == TOKsuper)
+                    else if (ue.e1.op == TOKsuper || (ue.e1.op == TOKstar && (cast(PtrExp)ue.e1).e1.op == TOKsuper)) // CALYPSO
                         directcall = true;
                     else if ((cd.storage_class & STCfinal) != 0) // Bugzilla 14211
                         directcall = true;
