@@ -1050,10 +1050,8 @@ void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
         fprintf(global.stdmsg, "code      %s\n", m->toChars());
 
       auto lp = m->langPlugin();
-      if (lp && !oneobj && !lp->needsCodegen(m)) { // CALYPSO UGLY?
-          global.params.objfiles->push(m->objfile->name->str);
+      if (lp && !oneobj && !lp->needsCodegen(m)) // CALYPSO UGLY?
           continue;
-      }
 
       cg.emit(m);
 
