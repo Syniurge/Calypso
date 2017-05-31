@@ -960,7 +960,7 @@ public:
         // If this class has no constructor, but base class has a default
         // ctor, create a constructor:
         //    this() { }
-        if (!ctor && baseClass && baseClass.ctor)
+        if (!ctor && baseClass && baseClass.ctor && !langPlugin()) // CALYPSO HACK do not generate a D ctor for extern(C++) classes mapped by Calypso
         {
             FuncDeclaration fd = resolveFuncCall(loc, sc2, baseClass.ctor, null, null, null, 1);
             if (fd && !fd.errors)
