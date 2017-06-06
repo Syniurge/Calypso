@@ -6,6 +6,7 @@
 #include "cpp/ddmdstructor.h"
 #include "aggregate.h"
 #include "enum.h"
+#include "id.h"
 #include "scope.h"
 
 #include "clang/AST/DeclCXX.h"
@@ -447,6 +448,8 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
     clang::SourceLocation Loc;
     clang::sema::TemplateDeductionInfo DedInfo(Loc);
 
+    bool isConversion = ident == Id::_cast;
+
     TypeMapper tymap;
     ExprMapper expmap(tymap);
     tymap.addImplicitDecls = false;
@@ -454,7 +457,7 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
     auto FunctionTemplate = cast<clang::FunctionTemplateDecl>(TempOrSpec); // probably going to fail epxlicit spec
 
     clang::TemplateArgumentListInfo ExplicitTemplateArgs;
-    if (ti->tiargs)
+    if (ti->tiargs && !isConversion)
         fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
                                      FunctionTemplate, tymap, expmap);
 
@@ -474,7 +477,20 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
 
     clang::FunctionDecl *Specialization;
 
-    if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+    if (isConversion)
+    {
+        assert(ti->tiargs && ti->tiargs->dim == 1);
+        Type* to = isType((*ti->tiargs)[0]);
+        clang::QualType To = tymap.toType(ti->loc, to, /*sc=*/ nullptr);
+
+        clang::CXXConversionDecl *Conversion;
+
+        if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+                    To, Conversion, DedInfo))
+            return MATCHnomatch;
+        Specialization = Conversion;
+    }
+    else if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
                     &ExplicitTemplateArgs, Args, Specialization, DedInfo))
         return MATCHnomatch;
 
