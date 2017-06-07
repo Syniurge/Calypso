@@ -501,6 +501,9 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
 MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc, ::FuncDeclaration *&fd,
                                                        Type *tthis, Expressions *fargs)
 {
+    if (!isa<clang::RedeclarableTemplateDecl>(TempOrSpec))
+        return MATCHnomatch; // only primary templates may be matched
+
     TypeMapper tymap;
     tymap.addImplicitDecls = false;
 
