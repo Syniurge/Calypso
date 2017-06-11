@@ -1175,7 +1175,7 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 {
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
 
-    std::unique_ptr<Dsymbols> a(VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations));
+    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
         return static_cast<::FuncDeclaration*>((*a)[0]);
@@ -1188,7 +1188,7 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 {
     rebuildScope(cast<clang::Decl>(D->getDeclContext()));
 
-    std::unique_ptr<Dsymbols> a(VisitDecl(D, MapExplicitSpecs | MapTemplateInstantiations));
+    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
         return static_cast<::VarDeclaration*>((*a)[0]);
