@@ -274,7 +274,7 @@ bool TemplateDeclaration::earlyFunctionValidityCheck(::TemplateInstance* ti, Sco
 
 void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Expressions* fargs)
 {
-    if (!ti->havetempdecl)
+    if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) && !ti->havetempdecl)
     {
         ti->havetempdecl = true;
         ti->tempdecl = primaryTemplate();
@@ -331,9 +331,9 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    auto cpptdtypes = tdtypesFromInst(Inst, isForeignInstance(ti));
+    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(Inst, isForeignInstance(ti)));
     assert(cpptdtypes->dim == dedtypes->dim);
-    dedtypes->data = cpptdtypes->data;
+    memcpy(dedtypes->tdata(), cpptdtypes->tdata(), dedtypes->dim * sizeof(void*));
 
     return m;
 }

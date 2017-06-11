@@ -7490,7 +7490,7 @@ public:
 
                 dedtypes.setDim(td.parameters.dim);
                 dedtypes.zero();
-                assert(td.semanticRun != PASSinit);
+                assert(td.semanticRun != PASSinit || td.langPlugin()); // CALYPSO
 
                 MATCH m = td.matchWithInstance(sc, this, &dedtypes, fargs, 0);
                 //printf("matchWithInstance = %d\n", m);
