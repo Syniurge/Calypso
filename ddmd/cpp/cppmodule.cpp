@@ -882,7 +882,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
 
     if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-            D->getPrimaryTemplate()) // weird, but the explicit instantiation of basic_istream<char>::getline is considered an explicit specialization
+            D->getPrimaryTemplate() && // forward-declared explicit specializations do not have their primary template set (stangely)
+            !(flags & MapTemplateInstantiations))
     {
         auto tpl = new TemplateParameters;
 
