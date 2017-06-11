@@ -82,6 +82,7 @@ public:
 
     bool completeInst();
     void correctTiargs();
+    void markInvalid();
 
     const clang::NamedDecl* getInstantiatedTemplate();
 

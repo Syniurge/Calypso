@@ -886,6 +886,22 @@ void TemplateInstance::correctTiargs()
     }
 }
 
+void TemplateInstance::markInvalid()
+{
+    if (!errors)
+    {
+        error(loc, "error instantiating");
+        if (tinst)
+            tinst->printInstantiationTrace();
+    }
+    errors = true;
+
+    if (!members)
+        return;
+    auto s = (*members)[0];
+    s->errors = true;
+}
+
 const clang::NamedDecl* TemplateInstance::getInstantiatedTemplate()
 {
     if (Inst.is<clang::NamedDecl*>())
