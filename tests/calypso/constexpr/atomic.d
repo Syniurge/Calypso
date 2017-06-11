@@ -1,3 +1,5 @@
+module _atomic_;
+
 modmap (C++) "<atomic>";
 
 import std.stdio, std.conv;
