@@ -329,7 +329,8 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     ReferenceTemplateArguments(D);
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
-    if (Func && Func->getPrimaryTemplate())
+    auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
+    if (Prim)
         D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
 
     // HACK FIXME
@@ -344,7 +345,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             return true;
     }
 
-    auto e = expmap.fromExpressionDeclRef(loc, const_cast<clang::NamedDecl*>(D),
+    auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
     e = e->semantic(sc);
 
