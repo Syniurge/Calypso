@@ -1880,7 +1880,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
                     continue; // the matching decl is part of another module, no conflict
 
                 { auto importIdent = getIdentifier(TD);
-                llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty
+                llvm::SmallString<48> s(u8"ℂ"); // non-ASCII but pretty
                 s += llvm::StringRef(importIdent->string, importIdent->len);
                 importAliasid = Identifier::idPool(s.c_str(), s.size()); }
 

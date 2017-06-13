@@ -458,7 +458,7 @@ void writeModule(llvm::Module *m, const char *filename) {
 
   // CALYPSO (UGLY)
   llvm::SmallString<128> utf8path(filename);
-  llvm::sys::path::native(utf8path); // convert UTF-8 chars such as § to UTF-16 on Windows
+  llvm::sys::path::native(utf8path); // convert UTF-8 chars such as ℂ to UTF-16 on Windows
   filename = utf8path.c_str();
 
   // write LLVM bitcode

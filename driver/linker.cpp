@@ -645,7 +645,7 @@ int executeMsvcToolAndWait(const std::string &tool,
         llvm::sys::writeFileWithEncoding(
             responseFilePath,
             content,
-            llvm::sys::WEM_UTF16)) // CALYPSO uses § as a replacement character to prevent C++ names from colliding with D names, the response file needs to be encoded in UTF-16 for MSVC tools
+            llvm::sys::WEM_UTF16)) // CALYPSO uses ℂ as a replacement character to prevent C++ names from colliding with D names, the response file needs to be encoded in UTF-16 for MSVC tools
     {
       error(Loc(), "cannot write temporary response file for %s", tool.c_str());
       return -1;

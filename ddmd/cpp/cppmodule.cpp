@@ -1376,7 +1376,7 @@ static clang::DeclContext::lookup_result lookup(const clang::DeclContext *DC,
 {
     auto& Table = calypso.getPreprocessor().getIdentifierTable();
 
-    const char prefix[] = u8"§";
+    const char prefix[] = u8"ℂ";
     bool prefixed = strncmp(id->string, prefix, sizeof(prefix)-1) == 0;
     auto& II = Table.get(!prefixed ? id->string : id->string + sizeof(prefix)-1);
 

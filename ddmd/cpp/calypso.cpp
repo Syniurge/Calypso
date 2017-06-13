@@ -373,7 +373,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
 
     if (isa<clang::RecordDecl>(D))
     {
-        // Prefix reserved class names with '§'
+        // Prefix reserved class names with 'ℂ'
         if (ident == Id::Object || ident == Id::Throwable || ident == Id::Exception || ident == Id::Error ||
             ident == Id::TypeInfo || ident == Id::TypeInfo_Class || ident == Id::TypeInfo_Interface ||
             ident == Id::TypeInfo_Struct || ident == Id::TypeInfo_Pointer ||
@@ -386,7 +386,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
 
     if (needsPrefixing)
     {
-        llvm::SmallString<48> s(u8"§"); // non-ASCII but pretty and available on most keyboards (in France)
+        llvm::SmallString<48> s(u8"ℂ"); // non-ASCII and unavailable on most keyboards, but pretty
         s += llvm::StringRef(ident->string, ident->len);
         ident = Identifier::idPool(s.c_str(), s.size());
     }
@@ -1243,7 +1243,7 @@ void LangPlugin::_init()
     id_cpp = idPool("cpp");
     id_core = idPool("core");
     id__ = idPool("_");
-    id_Scpp = idPool(u8"§cpp");
+    id_Scpp = idPool(u8"ℂcpp");
 
     id_isCpp = idPool("isCpp");
     id_getCppVirtualIndex = idPool("getCppVirtualIndex");
