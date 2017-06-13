@@ -25,7 +25,8 @@ import (C++) Ogre.MovableObject, Ogre.Light, Ogre.Billboard,
         Ogre.HardwareOcclusionQuery, Ogre.Animation,
         Ogre.Root, Ogre.RenderSystem, Ogre.MaterialManager,
         Ogre.AutoParamDataSource, Ogre.Pass, Ogre.Renderable,
-        Ogre.FrameEvent, Ogre.ResourceGroupManager;
+        Ogre.FrameEvent, Ogre.ResourceGroupManager,
+        Ogre.ℂException, Ogre.LogManager, Ogre.LogMessageLevel;
 import (C++) OgreBites.SdkCameraMan, OgreBites.CameraStyle;
 
 import (C++) BaseApplication;
@@ -120,7 +121,7 @@ protected:
         mTrail.setRenderQueueGroup(cPriorityLights);
 
         // Create the occlusion queries to be used in this sample
-//         try {
+        try {
             RenderSystem* renderSystem = Root.getSingleton().getRenderSystem();
             mLight1QueryArea = renderSystem.createHardwareOcclusionQuery();
             mLight1QueryVisible = renderSystem.createHardwareOcclusionQuery();
@@ -131,15 +132,16 @@ protected:
                 (mLight1QueryVisible != null) &&
                 (mLight2QueryArea != null) &&
                 (mLight2QueryVisible != null);
-//         }
-//         catch (Ogre.Exception e)
-//         {
-//             mUseOcclusionQuery = false;
-//         }
-//         if (mUseOcclusionQuery == false)
-//         {
-//             LogManager.getSingleton().logMessage("Sample_Lighting - Error: failed to create hardware occlusion query", LML_CRITICAL);
-//         }
+        }
+        catch (C++) (ref ℂException e)
+        {
+            mUseOcclusionQuery = false;
+        }
+        if (mUseOcclusionQuery == false)
+        {
+            LogManager.getSingleton().logMessage(cppstring("Sample_Lighting - Error: failed to create hardware occlusion query"),
+                                LogMessageLevel.LML_CRITICAL);
+        }
 
         assert(mUseOcclusionQuery);
 
