@@ -766,7 +766,7 @@ void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *ba
     auto RD = getRecordDecl(base);
     auto& CGRL = CGM->getTypes().getCGRecordLayout(RD);
 
-    auto BaseTy = CGRL.getBaseSubobjectLLVMType();
+    auto BaseTy = CGRL.getLLVMType();
     auto BaseLayout = gDataLayout->getStructLayout(BaseTy);
 
     b.m_defaultTypes.push_back(BaseTy);
