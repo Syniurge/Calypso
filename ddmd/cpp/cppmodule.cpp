@@ -765,7 +765,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         if (isa<clang::CXXDestructorDecl>(D))
             stc &= ~(STCoverride|STCabstract); // dtors aren't added to D's VTBLs
 
-        if (CCD && !CCD->isExplicit() && FPT->getNumParams() == 1)
+        if (CCD && !CCD->isExplicit())
             stc |= STCimplicit;
     }
     tf->addSTC(stc);
