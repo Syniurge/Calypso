@@ -596,7 +596,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
         DeclReferencer declReferencer(fd);
         declReferencer.Traverse(fd->loc, sc2, Def->getBody());
 
-        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(D))
+        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
             for (auto& Init: Ctor->inits())
                 declReferencer.Traverse(fd->loc, sc2, Init->getInit());
     }
