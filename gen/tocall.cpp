@@ -800,15 +800,15 @@ DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
   IF_LOG Logger::println("DtoCallFunction()");
   LOG_SCOPE
 
-  // make sure the D callee type has been processed
-  DtoType(fnval->type);
-
   // get func value if any
   DFuncValue *dfnval = fnval->isFunc();
 
   if (dfnval)
     if (auto lp = dfnval->func->langPlugin())
         return lp->codegen()->toCallFunction(loc, resulttype, fnval, arguments, sretPointer); // CALYPSO
+
+  // make sure the D callee type has been processed
+  DtoType(fnval->type);
 
   // get function type info
   IrFuncTy &irFty = DtoIrTypeFunction(fnval);
