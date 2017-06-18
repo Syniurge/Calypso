@@ -6405,8 +6405,8 @@ extern (C++) final class TypeFunction : TypeNext
                     }
                 }
 
-                if (fparam.storageClass & STCscope && !fparam.type.hasPointers())
-                    fparam.storageClass &= ~(STCreturn | STCscope);
+//                 if (fparam.storageClass & STCscope && !fparam.type.hasPointers()) // CALYPSO: disabled, we accept "scope ref" for any type and those parameters take rvalues (the implementation is a hack atm but this makes writing D code over const T&-heavy C++ libraries bearable)
+//                     fparam.storageClass &= ~(STCreturn | STCscope);
 
                 if (t.hasWild())
                 {
