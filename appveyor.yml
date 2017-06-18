@@ -33,7 +33,7 @@ init:
 install:
   - cd c:\projects
   # Fetch submodules
-  - cd ldc
+  - cd Calypso
   - git submodule update --init --recursive
   - cd ..
   # Clone libconfig (v1.6 does not work due to https://github.com/hyperrealm/libconfig/issues/47)
@@ -128,8 +128,8 @@ build_script:
   # Generate build files for LDC
   - md ninja-ldc
   - cd ninja-ldc
-  - if "%APPVEYOR_JOB_ARCH%"=="x64" ( cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=c:\projects\ldc-x64 -DLLVM_ROOT_DIR=c:/projects/llvm-x64 -DLIBCONFIG_INCLUDE_DIR=c:/projects/libconfig/lib -DLIBCONFIG_LIBRARY=c:/projects/libconfig/lib/x64/ReleaseStatic/libconfig.lib ..\ldc )
-  - if "%APPVEYOR_JOB_ARCH%"=="x86" ( cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=c:\projects\ldc-x86 -DLLVM_ROOT_DIR=c:/projects/llvm-x86 -DLIBCONFIG_INCLUDE_DIR=c:/projects/libconfig/lib -DLIBCONFIG_LIBRARY=c:/projects/libconfig/lib/ReleaseStatic/libconfig.lib ..\ldc )
+  - if "%APPVEYOR_JOB_ARCH%"=="x64" ( cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=c:\projects\ldc-x64 -DLLVM_ROOT_DIR=c:/projects/llvm-x64 -DLIBCONFIG_INCLUDE_DIR=c:/projects/libconfig/lib -DLIBCONFIG_LIBRARY=c:/projects/libconfig/lib/x64/ReleaseStatic/libconfig.lib ..\Calypso )
+  - if "%APPVEYOR_JOB_ARCH%"=="x86" ( cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=c:\projects\ldc-x86 -DLLVM_ROOT_DIR=c:/projects/llvm-x86 -DLIBCONFIG_INCLUDE_DIR=c:/projects/libconfig/lib -DLIBCONFIG_LIBRARY=c:/projects/libconfig/lib/ReleaseStatic/libconfig.lib ..\Calypso )
   # Build LDC, druntime and phobos
   - ninja -j2
 
