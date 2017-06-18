@@ -39,6 +39,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
+    bool determineFields() override;
     bool buildLayout() override;
     void finalizeSize() override;
     Expression *defaultInit(Loc loc) override;
@@ -64,6 +65,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
+    bool determineFields() override;
     bool buildLayout() override;
     bool mayBeAnonymous() override;
 
@@ -95,6 +97,7 @@ public:
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool mayBeAnonymous() override;
+    bool determineFields() override;
     bool buildLayout() override;
 };
 

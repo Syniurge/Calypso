@@ -123,7 +123,7 @@ public:
     virtual Scope *newScope(Scope *sc);
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
-    bool determineFields();
+    virtual bool determineFields(); // CALYPSO
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
     d_uns64 size(Loc loc);

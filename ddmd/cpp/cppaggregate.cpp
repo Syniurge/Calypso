@@ -111,6 +111,17 @@ bool StructDeclaration::mayBeAnonymous()
     return true;
 }
 
+bool StructDeclaration::determineFields()
+{
+    if (!buildAggLayout(this))
+        return false;
+
+    if (sizeok != SIZEOKdone)
+        sizeok = SIZEOKfwd;
+
+    return true;
+}
+
 bool StructDeclaration::buildLayout()
 {
     return buildAggLayout(this);
@@ -309,6 +320,17 @@ void ClassDeclaration::finalizeVtbl()
     }
 }
 
+bool ClassDeclaration::determineFields()
+{
+    if (!buildAggLayout(this))
+        return false;
+
+    if (sizeok != SIZEOKdone)
+        sizeok = SIZEOKfwd;
+
+    return true;
+}
+
 bool ClassDeclaration::buildLayout()
 {
     return buildAggLayout(this);
@@ -316,6 +338,17 @@ bool ClassDeclaration::buildLayout()
 
 bool UnionDeclaration::mayBeAnonymous()
 {
+    return true;
+}
+
+bool UnionDeclaration::determineFields()
+{
+    if (!buildAggLayout(this))
+        return false;
+
+    if (sizeok != SIZEOKdone)
+        sizeok = SIZEOKfwd;
+
     return true;
 }
 
@@ -446,6 +479,9 @@ template <typename AggTy>
             if (auto vd = m->isVarDeclaration())
             {
                 assert(isCPP(vd));
+
+                if (vd->_scope)
+                    vd->semantic(nullptr);
 
                 auto c_vd = static_cast<VarDeclaration*>(vd);
                 auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);

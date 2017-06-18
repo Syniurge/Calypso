@@ -241,7 +241,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
      * Returns:
      *      false if any errors occur.
      */
-    final bool determineFields()
+    bool determineFields() // CALYPSO (made non-final)
     {
         if (sizeok != SIZEOKnone)
             return true;
