@@ -14,7 +14,7 @@ ArrayScopeSymbol* new_ArrayScopeSymbol(Scope *sc, TypeTuple *t);
 ArrayScopeSymbol* new_ArrayScopeSymbol(Scope *sc, TupleDeclaration *td);
 OverloadSet* new_OverloadSet(Identifier *ident, OverloadSet *os);
 DsymbolTable* new_DsymbolTable();
-Identifier* new_Identifier(const char *_string, ulong length, int value);
+Identifier* new_Identifier(const char *_string, unsigned long length, int value);
 Expression* new_Expression(Loc loc, TOK op, int size);
 IntegerExp* new_IntegerExp(Loc loc, dinteger_t value, Type *type);
 IntegerExp* new_IntegerExp(dinteger_t value);
