@@ -745,6 +745,11 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
     }
 
     auto resolved = ResolvedFunc::get(*CGM, FD);
+    if (!resolved.Func)
+    {
+        assert(!getIsUsed(fdecl));
+        return;
+    }
     irFunc->setLLVMFunc(resolved.Func);
     irFty.funcType = resolved.Ty;
 }
