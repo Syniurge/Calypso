@@ -26,6 +26,11 @@
 // FIXME: Just for the BOUDNSCHECK enum; this is not pretty
 #include "globals.h"
 
+namespace llvm {
+class FastMathFlags;
+class TargetMachine;
+}
+
 namespace opts {
 namespace cl = llvm::cl;
 
@@ -39,6 +44,7 @@ extern llvm::SmallVector<const char *, 32> allArguments;
  */
 extern cl::list<std::string> fileList;
 extern cl::list<std::string> runargs;
+extern cl::opt<bool> invokedByLDMD;
 extern cl::opt<bool> compileOnly;
 extern cl::opt<bool, true> enforcePropertySyntax;
 extern cl::opt<bool> noAsm;
@@ -56,6 +62,7 @@ extern cl::opt<std::string> ddocFile;
 extern cl::opt<std::string> jsonFile;
 extern cl::opt<std::string> hdrDir;
 extern cl::opt<std::string> hdrFile;
+extern cl::opt<bool> hdrKeepAllBodies;
 extern cl::list<std::string> versions;
 extern cl::list<std::string> transitions;
 extern cl::opt<std::string> moduleDeps;
@@ -77,6 +84,11 @@ extern cl::opt<FloatABI::Type> mFloatABI;
 extern cl::opt<bool, true> singleObj;
 extern cl::opt<bool> linkonceTemplates;
 extern cl::opt<bool> disableLinkerStripDead;
+
+// Math options
+extern bool fFastMath;
+extern llvm::FastMathFlags defaultFMF;
+void setDefaultMathOptions(llvm::TargetMachine &target);
 
 extern cl::opt<BOUNDSCHECK> boundsCheck;
 extern bool nonSafeBoundsChecks;

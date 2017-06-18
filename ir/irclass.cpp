@@ -136,15 +136,16 @@ LLGlobalVariable *IrAggr::getInterfaceArraySymbol() {
   LLArrayType *array_type = llvm::ArrayType::get(InterfaceTy, n);
 
   // put it in a global
-  std::string name("_D");
-  name.append(mangle(cd));
-  name.append("16__interfaceInfosZ");
+  OutBuffer mangledName;
+  mangledName.writestring("_D");
+  mangleToBuffer(cd, &mangledName);
+  mangledName.writestring("16__interfaceInfosZ");
 
   // We keep this as external for now and only consider template linkage if
   // we emit the initializer later.
-  classInterfacesArray =
-      getOrCreateGlobal(cd->loc, gIR->module, array_type, true,
-                        llvm::GlobalValue::ExternalLinkage, nullptr, name);
+  classInterfacesArray = getOrCreateGlobal(
+      cd->loc, gIR->module, array_type, true,
+      llvm::GlobalValue::ExternalLinkage, nullptr, mangledName.peekString());
 
   return classInterfacesArray;
 }
@@ -200,7 +201,7 @@ LLConstant *IrAggr::getVtblInit() {
 
       DtoResolveFunction(fd);
       assert(isIrFuncCreated(fd) && "invalid vtbl function");
-      c = DtoBitCast(getIrFunc(fd)->func, voidPtrType);
+      c = DtoBitCast(DtoCallee(fd), voidPtrType);
 
       if (cd->isFuncHidden(fd)) {
         // fd is hidden from the view of this class. If fd overlaps with any
@@ -330,7 +331,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
     if (fd->interfaceVirtual)
       thunkOffset -= fd->interfaceVirtual->offset;
     if (thunkOffset == 0) {
-      constants.push_back(DtoBitCast(irFunc->func, voidPtrTy));
+      constants.push_back(DtoBitCast(irFunc->getLLVMCallee(), voidPtrTy));
       continue;
     }
 
@@ -346,11 +347,12 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
     if (!thunk) {
       const LinkageWithCOMDAT lwc(LLGlobalValue::LinkOnceODRLinkage,
                                   supportsCOMDAT());
+      const auto callee = irFunc->getLLVMCallee();
       thunk = LLFunction::Create(
-          isaFunction(irFunc->func->getType()->getContainedType(0)), lwc.first,
+          isaFunction(callee->getType()->getContainedType(0)), lwc.first,
           thunkName, &gIR->module);
       setLinkage(lwc, thunk);
-      thunk->copyAttributesFrom(irFunc->func);
+      thunk->copyAttributesFrom(callee);
 
 // Thunks themselves don't have an identity, only the target
 // function has.
@@ -377,7 +379,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
                  sizeof(FuncDeclaration)));
       thunkFd->ir = new IrDsymbol();
       auto thunkFunc = getIrFunc(thunkFd, true); // create the IrFunction
-      thunkFunc->func = thunk;
+      thunkFunc->setLLVMFunc(thunk);
       thunkFunc->type = irFunc->type;
       gIR->funcGenStates.emplace_back(new FuncGenState(*thunkFunc, *gIR));
 
@@ -396,7 +398,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
       // latter being just for IR readablilty).
       std::vector<LLValue *> args;
       llvm::Function::arg_iterator thunkArg = thunk->arg_begin();
-      llvm::Function::arg_iterator origArg = irFunc->func->arg_begin();
+      llvm::Function::arg_iterator origArg = callee->arg_begin();
       for (; thunkArg != thunk->arg_end(); ++thunkArg, ++origArg) {
         thunkArg->setName(origArg->getName());
         args.push_back(&(*thunkArg));
@@ -418,8 +420,8 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
       gIR->DBuilder.EmitStopPoint(fd->loc);
 
       // call the real vtbl function.
-      llvm::CallInst *call = gIR->ir->CreateCall(irFunc->func, args);
-      call->setCallingConv(irFunc->func->getCallingConv());
+      llvm::CallInst *call = gIR->ir->CreateCall(callee, args);
+      call->setCallingConv(irFunc->getCallingConv());
       call->setTailCallKind(llvm::CallInst::TCK_Tail);
 
       // return from the thunk
@@ -444,18 +446,19 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
   llvm::Constant *vtbl_constant = LLConstantArray::get(
       LLArrayType::get(voidPtrTy, constants.size()), constants);
 
-  std::string mangledName("_D");
-  mangledName.append(mangle(cd));
-  mangledName.append("11__interface");
-  mangledName.append(mangle(b->sym));
-  mangledName.append(thunkPrefixLen);
-  mangledName.append(thunkPrefix);
-  mangledName.append("6__vtblZ");
+  OutBuffer mangledName;
+  mangledName.writestring("_D");
+  mangleToBuffer(cd, &mangledName);
+  mangledName.writestring("11__interface");
+  mangleToBuffer(b->sym, &mangledName);
+  mangledName.writestring(thunkPrefixLen);
+  mangledName.writestring(thunkPrefix);
+  mangledName.writestring("6__vtblZ");
 
   const auto lwc = DtoLinkage(cd);
   LLGlobalVariable *GV =
       getOrCreateGlobal(cd->loc, gIR->module, vtbl_constant->getType(), true,
-                        lwc.first, vtbl_constant, mangledName);
+                        lwc.first, vtbl_constant, mangledName.peekString());
   setLinkage(lwc, GV);
 
   // insert into the vtbl map

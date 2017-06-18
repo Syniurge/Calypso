@@ -39,7 +39,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
-    void buildLayout() override;
+    bool buildLayout() override;
     void finalizeSize() override;
     Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
@@ -59,12 +59,12 @@ public:
     bool layoutQueried = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
-                     const clang::CXXRecordDecl *RD);
+                     Dsymbols* members, const clang::CXXRecordDecl *RD);
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void semantic(Scope *sc) override;
     void semantic3(Scope *sc) override;
-    void buildLayout() override;
+    bool buildLayout() override;
     bool mayBeAnonymous() override;
 
     void addLocalClass(ClassDeclarations *) override;
@@ -95,7 +95,7 @@ public:
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool mayBeAnonymous() override;
-    void buildLayout() override;
+    bool buildLayout() override;
 };
 
 class AnonDeclaration : public ::AnonDeclaration

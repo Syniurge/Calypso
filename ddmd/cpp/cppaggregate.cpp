@@ -26,7 +26,7 @@ using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
 
-template<typename AggTy> void buildAggLayout(AggTy *ad);
+template<typename AggTy> bool buildAggLayout(AggTy *ad);
 
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 {
@@ -56,15 +56,15 @@ StructDeclaration::StructDeclaration(const StructDeclaration& o)
 }
 
 ClassDeclaration::ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
-                                   const clang::CXXRecordDecl *RD)
+                                   Dsymbols* members, const clang::CXXRecordDecl *RD)
 {
-    construct_ClassDeclaration(this, loc, id, baseclasses);
+    construct_ClassDeclaration(this, loc, id, baseclasses, members);
     this->RD = RD;
 }
 
 ClassDeclaration::ClassDeclaration(const ClassDeclaration& o)
-    : ClassDeclaration(o.loc, o.ident, nullptr, o.RD)
-{ // NOTE: baseclasses will be duplicated by syntaxCopy, but this makes the copy constructor not doing what it should be doing
+    : ClassDeclaration(o.loc, o.ident, nullptr, nullptr, o.RD)
+{ // NOTE: baseclasses/members will be duplicated by syntaxCopy, but this makes the copy constructor not doing what it should be doing
 }
 
 UnionDeclaration::UnionDeclaration(Loc loc, Identifier* id,
@@ -111,9 +111,9 @@ bool StructDeclaration::mayBeAnonymous()
     return true;
 }
 
-void StructDeclaration::buildLayout()
+bool StructDeclaration::buildLayout()
 {
-    buildAggLayout(this);
+    return buildAggLayout(this);
 }
 
 void StructDeclaration::finalizeSize()
@@ -309,9 +309,9 @@ void ClassDeclaration::finalizeVtbl()
     }
 }
 
-void ClassDeclaration::buildLayout()
+bool ClassDeclaration::buildLayout()
 {
-    buildAggLayout(this);
+    return buildAggLayout(this);
 }
 
 bool UnionDeclaration::mayBeAnonymous()
@@ -319,9 +319,9 @@ bool UnionDeclaration::mayBeAnonymous()
     return true;
 }
 
-void UnionDeclaration::buildLayout()
+bool UnionDeclaration::buildLayout()
 {
-    buildAggLayout(this);
+    return buildAggLayout(this);
 }
 
 AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
@@ -417,19 +417,19 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 }
 
 template <typename AggTy>
- void buildAggLayout(AggTy *ad)
+ bool buildAggLayout(AggTy *ad)
 {
     assert(isCPP(ad));
 
     if (ad->layoutQueried)
-        return;
+        return true;
 
     if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
     {
        // if it's a forward reference, consider the record empty
         ad->structsize = 1;
         ad->alignsize = 1;
-        return;
+        return true;
     }
 
     auto& Context = calypso.getASTContext();
@@ -476,6 +476,7 @@ template <typename AggTy>
     addRecord(ad->members, 0, RL);
 
     ad->layoutQueried = true;
+    return true;
 }
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad)

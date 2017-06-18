@@ -48,7 +48,7 @@ llvm::Function *buildForwarderFunction(
     }
 
     if (funcs.size() == 1) {
-      return getIrFunc(funcs.front())->func;
+      return DtoCallee(funcs.front());
     }
   }
 
@@ -74,7 +74,7 @@ llvm::Function *buildForwarderFunction(
 
   // ... calling the given functions, and...
   for (auto func : funcs) {
-    const auto f = getIrFunc(func)->func;
+    const auto f = DtoCallee(func);
 #if LDC_LLVM_VER < 307
     const auto call = builder.CreateCall(f, "");
     const auto ft = call->getCalledFunction()->getFunctionType();
@@ -98,40 +98,41 @@ llvm::Function *buildForwarderFunction(
   return fn;
 }
 
+namespace {
+std::string getMangledName(Module *m, const char *suffix) {
+  OutBuffer buf;
+  buf.writestring("_D");
+  mangleToBuffer(m, &buf);
+  if (suffix)
+    buf.writestring(suffix);
+  return buf.peekString();
+}
+}
+
 llvm::Function *buildModuleCtor(Module *m) {
-  std::string name("_D");
-  name.append(mangle(m));
-  name.append("6__ctorZ");
+  std::string name = getMangledName(m, "6__ctorZ");
   IrModule *irm = getIrModule(m);
   return buildForwarderFunction(name, irm->ctors, irm->gates);
 }
 
 llvm::Function *buildModuleDtor(Module *m) {
-  std::string name("_D");
-  name.append(mangle(m));
-  name.append("6__dtorZ");
+  std::string name = getMangledName(m, "6__dtorZ");
   return buildForwarderFunction(name, getIrModule(m)->dtors);
 }
 
 llvm::Function *buildModuleUnittest(Module *m) {
-  std::string name("_D");
-  name.append(mangle(m));
-  name.append("10__unittestZ");
+  std::string name = getMangledName(m, "10__unittestZ");
   return buildForwarderFunction(name, getIrModule(m)->unitTests);
 }
 
 llvm::Function *buildModuleSharedCtor(Module *m) {
-  std::string name("_D");
-  name.append(mangle(m));
-  name.append("13__shared_ctorZ");
+  std::string name = getMangledName(m, "13__shared_ctorZ");
   IrModule *irm = getIrModule(m);
   return buildForwarderFunction(name, irm->sharedCtors, irm->sharedGates);
 }
 
 llvm::Function *buildModuleSharedDtor(Module *m) {
-  std::string name("_D");
-  name.append(mangle(m));
-  name.append("13__shared_dtorZ");
+  std::string name = getMangledName(m, "13__shared_dtorZ");
   return buildForwarderFunction(name, getIrModule(m)->sharedDtors);
 }
 

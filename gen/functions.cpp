@@ -39,6 +39,7 @@
 #include "gen/pgo.h"
 #include "gen/pragma.h"
 #include "gen/runtime.h"
+#include "gen/scope_exit.h"
 #include "gen/tollvm.h"
 #include "gen/uda.h"
 #include "ir/irfunction.h"
@@ -328,7 +329,7 @@ static llvm::Function *DtoDeclareVaFunction(FuncDeclaration *fdecl) {
   }
   assert(func);
 
-  getIrFunc(fdecl)->func = func;
+  getIrFunc(fdecl)->setLLVMFunc(func);
   return func;
 }
 
@@ -456,8 +457,17 @@ void applyTargetMachineAttributes(llvm::Function &func,
 
   // Floating point settings
   func.addFnAttr("unsafe-fp-math", TO.UnsafeFPMath ? "true" : "false");
+  const bool lessPreciseFPMADOption =
+#if LDC_LLVM_VER >= 500
+      // This option was removed from llvm::TargetOptions in LLVM 5.0.
+      // Clang sets this to true when `-cl-mad-enable` is passed (OpenCL only).
+      // TODO: implement interface for this option.
+      false;
+#else
+      TO.LessPreciseFPMADOption;
+#endif
   func.addFnAttr("less-precise-fpmad",
-                 TO.LessPreciseFPMADOption ? "true" : "false");
+                 lessPreciseFPMADOption ? "true" : "false");
   func.addFnAttr("no-infs-fp-math", TO.NoInfsFPMath ? "true" : "false");
   func.addFnAttr("no-nans-fp-math", TO.NoNaNsFPMath ? "true" : "false");
 #if LDC_LLVM_VER < 307
@@ -558,7 +568,7 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
   IF_LOG Logger::cout() << "func = " << *func << std::endl;
 
   // add func to IRFunc
-  irFunc->func = func;
+  irFunc->setLLVMFunc(func);
 
   // parameter attributes
   if (!DtoIsIntrinsic(fdecl)) {
@@ -791,12 +801,14 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   }
 
   if (fd->ir->isDefined()) {
+    llvm::Function *func = getIrFunc(fd)->getLLVMFunc();
+    assert(nullptr != func);
     if (!linkageAvailableExternally &&
-        (getIrFunc(fd)->func->getLinkage() ==
+        (func->getLinkage() ==
          llvm::GlobalValue::AvailableExternallyLinkage)) {
       // Fix linkage
       const auto lwc = lowerFuncLinkage(fd);
-      setLinkage(lwc, getIrFunc(fd)->func);
+      setLinkage(lwc, func);
     }
     return;
   }
@@ -925,10 +937,14 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   IF_LOG Logger::println("Doing function body for: %s", fd->toChars());
   gIR->funcGenStates.emplace_back(new FuncGenState(*irFunc, *gIR));
   auto &funcGen = gIR->funcGen();
+  SCOPE_EXIT {
+    assert(&gIR->funcGen() == &funcGen);
+    gIR->funcGenStates.pop_back();
+  };
 
   const auto f = static_cast<TypeFunction *>(fd->type->toBasetype());
   IrFuncTy &irFty = irFunc->irFty;
-  llvm::Function *func = irFunc->func;
+  llvm::Function *func = irFunc->getLLVMFunc();
 
   const auto lwc = lowerFuncLinkage(fd);
   if (linkageAvailableExternally) {
@@ -944,10 +960,8 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
 
   assert(!func->hasDLLImportStorageClass());
 
-  // On x86_64, always set 'uwtable' for System V ABI compatibility.
-  // TODO: Find a better place for this.
-  if (global.params.targetTriple->getArch() == llvm::Triple::x86_64 &&
-      !global.params.isWindows) {
+  // function attributes
+  if (gABI->needsUnwindTables()) {
     func->addFnAttr(LLAttribute::UWTable);
   }
   if (opts::sanitize != opts::None) {
@@ -1041,7 +1055,7 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     lp->codegen()->enterFunc(fd); // CALYPSO
 
   // Initialize PGO state for this function
-  funcGen.pgo.assignRegionCounters(fd, irFunc->func);
+  funcGen.pgo.assignRegionCounters(fd, func);
 
   DtoCreateNestedContext(funcGen);
 
@@ -1139,9 +1153,6 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   }
 
   gIR->scopes.pop_back();
-
-  assert(&gIR->funcGen() == &funcGen);
-  gIR->funcGenStates.pop_back();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

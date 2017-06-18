@@ -11,6 +11,7 @@ include(FindDCompiler)
 include(CheckIncludeFile)
 include(CheckLibraryExists)
 include(CheckCXXCompilerFlag)
+include(CheckDSourceCompiles)
 
 # The script currently only supports the DMD-style commandline interface
 if (NOT D_COMPILER_DMD_COMPAT)
@@ -54,10 +55,10 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.1.1") # May be overridden by git hash tag
+set(LDC_VERSION "1.2.1") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   71)
+set(DMDFE_PATCH_VERSION   72)
 set(DMDFE_FIX_LEVEL       2) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
@@ -315,7 +316,7 @@ if(NOT TAG MATCHES "NOTFOUND")
         set(LDC_VERSION "${TAG}")
     endif()
 else()
-    get_git_head_revision(REFSPEC HASH)
+    get_git_head_revision(REFSPEC HASH FALSE)
     if(NOT HASH STREQUAL "GITDIR-NOTFOUND")
         # Append git hash to LDC_VERSION
         string(SUBSTRING "${HASH}" 0 7 LDC_VERSION_HASH)
@@ -405,13 +406,18 @@ source_group("Generated Files" REGULAR_EXPRESSION "(id\\.[cdh]|impcnvtab\\.c)$")
 
 
 #
+# Configure the build system to use LTO and/or PGO while building LDC
+#
+include(HandleLTOPGOBuildOptions)
+
+#
 # Enable PGO if supported for this platform and LLVM version.
 # LLVM >= 3.7 is required for PGO.
 #
 set(LDC_WITH_PGO False)  # must be a valid Python boolean constant (case sensitive)
 if (NOT (LDC_LLVM_VER LESS 307))
     message(STATUS "Building LDC with PGO support")
-    add_definitions(-DLDC_WITH_PGO)
+    append("-DLDC_WITH_PGO" LDC_CXXFLAGS)
     set(LDC_WITH_PGO True)
 endif()
 
@@ -445,14 +451,24 @@ if(MSVC)
     append("-version=IN_LLVM_MSVC" DDMD_DFLAGS)
 endif()
 append("-version=IN_LLVM" DDMD_DFLAGS)
-append("-DIN_LLVM" CMAKE_CXX_FLAGS)
-append("-DOPAQUE_VTBLS" CMAKE_CXX_FLAGS)
-append("\"-DLDC_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}\"" CMAKE_CXX_FLAGS)
-append("-DLDC_LLVM_VER=${LDC_LLVM_VER}" CMAKE_CXX_FLAGS)
-append("\"-DLDC_LIBDIR_SUFFIX=\\\"${LIB_SUFFIX}\\\"\"" CMAKE_CXX_FLAGS)
+append("-DIN_LLVM" LDC_CXXFLAGS)
+append("-DOPAQUE_VTBLS" LDC_CXXFLAGS)
+append("\"-DLDC_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}\"" LDC_CXXFLAGS)
+append("-DLDC_LLVM_VER=${LDC_LLVM_VER}" LDC_CXXFLAGS)
+append("\"-DLDC_LIBDIR_SUFFIX=\\\"${LIB_SUFFIX}\\\"\"" LDC_CXXFLAGS)
 
 if(GENERATE_OFFTI)
-    append("-DGENERATE_OFFTI" CMAKE_CXX_FLAGS)
+    append("-DGENERATE_OFFTI" LDC_CXXFLAGS)
+endif()
+
+option(RISCV_LLVM_DEV, "full RISC-V support with riscv-llvm")
+mark_as_advanced(RISCV_LLVM_DEV)
+
+#
+# Enable building with riscv-llvm, for full RISC-V support.
+#
+if(RISCV_LLVM_DEV)
+    append("-DRISCV_LLVM_DEV" LDC_CXXFLAGS)
 endif()
 
 # if llvm was built with assertions we have to do the same

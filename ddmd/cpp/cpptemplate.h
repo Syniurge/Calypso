@@ -70,8 +70,8 @@ public:
     TemplateInstUnion Inst;
     Objects* primTiargs = nullptr;
 
-    TemplateInstance(Loc loc, Identifier *temp_id);
-    TemplateInstance(Loc loc, ::TemplateDeclaration *tempdecl, Objects *tiargs);
+    TemplateInstance(Loc loc, Identifier *ident, Objects *tiargs);
+    TemplateInstance(Loc loc, ::TemplateDeclaration *td, Objects *tiargs);
     TemplateInstance(const TemplateInstance&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
     Identifier *getIdent() override;

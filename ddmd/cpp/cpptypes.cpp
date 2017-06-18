@@ -870,8 +870,7 @@ void TypeQualifiedBuilder::pushInst(TypeQualified *&tqual,
     if (o->dyncast() == DYNCAST_IDENTIFIER)
     {
         auto ident = static_cast<Identifier*>(o);
-        tempinst = new_TemplateInstance(loc, ident);
-        tempinst->tiargs = tiargs;
+        tempinst = new_TemplateInstance(loc, ident, tiargs);
     }
     else // templated overloaded operator
     {
@@ -897,9 +896,9 @@ RootObject *TypeQualifiedBuilder::getIdentOrTempinst(const clang::Decl *D)
     if (spec && !(options & TQ_OverOpSkipSpecArg))
     {
         auto loc = fromLoc(D->getLocation());
-        auto tempinst = new_TemplateInstance(loc, ident);
-        tempinst->tiargs = new Objects;
-        tempinst->tiargs->push(spec.toTemplateArg(from.loc));
+        auto tiargs = new Objects;
+        tiargs->push(spec.toTemplateArg(from.loc));
+        auto tempinst = new_TemplateInstance(loc, ident, tiargs);
         return tempinst;
     }
 
@@ -1152,10 +1151,10 @@ Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType
     auto mt = fromType(T->getPointeeType());
     auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
 
-    auto ti = new_TemplateInstance(loc, calypso.id_cpp_member_ptr);
-    ti->tiargs = new Objects;
-    ti->tiargs->push(mt); // we need to remember the member type and the parent class, in case we have to send the type back to Clang
-    ti->tiargs->push(tc);
+    auto tiargs = new Objects;
+    tiargs->push(mt); // we need to remember the member type and the parent class, in case we have to send the type back to Clang
+    tiargs->push(tc);
+    auto ti = new_TemplateInstance(loc, calypso.id_cpp_member_ptr, tiargs);
 
     auto t = new_TypeIdentifier(loc, Id::empty);
     t->addIdent(calypso.id_cpp);
@@ -1391,9 +1390,9 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
 
     if (ArgBegin)
     {
-        auto ti = new_TemplateInstance(loc, tempIdent);
-        ti->tiargs = fromTemplateArguments(ArgBegin, ArgEnd,
+        auto tiargs =fromTemplateArguments(ArgBegin, ArgEnd,
                                         Name.getAsTemplateDecl()->getTemplateParameters());
+        auto ti = new_TemplateInstance(loc, tempIdent, tiargs);
 
         return new_TypeInstance(loc, ti);
     }
@@ -1642,8 +1641,7 @@ Type* TypeMapper::FromType::fromTypeDependentTemplateSpecialization(const clang:
     auto ident = fromIdentifier(T->getIdentifier());
     auto tiargs = fromTemplateArguments(T->begin(), T->end());
 
-    auto tempinst = new_TemplateInstance(loc, ident);
-    tempinst->tiargs = tiargs;
+    auto tempinst = new_TemplateInstance(loc, ident, tiargs);
 
     if (!tqual)
         tqual = new_TypeInstance(loc, tempinst);
@@ -1881,7 +1879,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 
                 { auto importIdent = getIdentifier(TD);
                 llvm::SmallString<48> s(u8"ℂ"); // non-ASCII but pretty
-                s += llvm::StringRef(importIdent->string, importIdent->len);
+                s += llvm::StringRef(importIdent->toChars(), importIdent->length());
                 importAliasid = Identifier::idPool(s.c_str(), s.size()); }
 
                 assert(!Key.second);

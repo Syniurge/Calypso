@@ -7,6 +7,9 @@ matrix:
       d: ldc
       env: LLVM_VERSION=3.9.1
     - os: linux
+      d: ldc-beta
+      env: LLVM_VERSION=3.9.1
+    - os: linux
       d: ldc
       env: LLVM_VERSION=3.9.1 OPTS="-DMULTILIB=ON -DLIB_SUFFIX=64"
     - os: linux
@@ -29,6 +32,7 @@ addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
+    - george-edison55-precise-backports # more recent CMake
     packages:
     - libconfig++8-dev
     - gdb

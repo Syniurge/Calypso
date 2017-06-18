@@ -15,6 +15,7 @@ namespace {
 
 /// Names of the attribute structs we recognize.
 namespace attr {
+const std::string allocSize = "allocSize";
 const std::string llvmAttr = "llvmAttr";
 const std::string llvmFastMathFlag = "llvmFastMathFlag";
 const std::string optStrategy = "optStrategy";
@@ -28,12 +29,12 @@ bool isLdcAttibutes(const ModuleDeclaration *moduleDecl) {
   if (!moduleDecl)
     return false;
 
-  if (strcmp("attributes", moduleDecl->id->string)) {
+  if (strcmp("attributes", moduleDecl->id->toChars())) {
     return false;
   }
 
   if (moduleDecl->packages->dim != 1 ||
-      strcmp("ldc", (*moduleDecl->packages)[0]->string)) {
+      strcmp("ldc", (*moduleDecl->packages)[0]->toChars())) {
     return false;
   }
   return true;
@@ -72,15 +73,15 @@ void checkStructElems(StructLiteralExp *sle, ArrayParam<Type *> elemTypes) {
     sle->error(
         "unexpected field count in 'ldc.attributes.%s'; does druntime not "
         "match compiler version?",
-        sle->sd->ident->string);
+        sle->sd->ident->toChars());
     fatal();
   }
 
   for (size_t i = 0; i < sle->elements->dim; ++i) {
-    if ((*sle->elements)[i]->type != elemTypes[i]) {
+    if ((*sle->elements)[i]->type->toBasetype() != elemTypes[i]) {
       sle->error("invalid field type in 'ldc.attributes.%s'; does druntime not "
                  "match compiler version?",
-                 sle->sd->ident->string);
+                 sle->sd->ident->toChars());
       fatal();
     }
   }
@@ -100,12 +101,17 @@ StructLiteralExp *getMagicAttribute(Dsymbol *sym, std::string name) {
     if (!sle)
       continue;
 
-    if (name == sle->sd->ident->string) {
+    if (name == sle->sd->ident->toChars()) {
       return sle;
     }
   }
 
   return nullptr;
+}
+
+sinteger_t getIntElem(StructLiteralExp *sle, size_t idx) {
+  auto arg = (*sle->elements)[idx];
+  return arg->toInteger();
 }
 
 /// Returns a null-terminated string
@@ -123,6 +129,68 @@ const char *getStringElem(StructLiteralExp *sle, size_t idx) {
 /// Returns a null-terminated string
 const char *getFirstElemString(StructLiteralExp *sle) {
   return getStringElem(sle, 0);
+}
+
+// @allocSize(1)
+// @allocSize(0,2)
+void applyAttrAllocSize(StructLiteralExp *sle, IrFunction *irFunc) {
+  llvm::Function *func = irFunc->getLLVMFunc();
+
+  checkStructElems(sle, {Type::tint32, Type::tint32});
+  auto sizeArgIdx = getIntElem(sle, 0);
+  auto numArgIdx = getIntElem(sle, 1);
+
+  // Get the number of parameters that the user specified (excluding the
+  // implicit `this` parameter)
+  auto numUserParams = irFunc->irFty.args.size();
+
+  // Get the number of parameters of the function in LLVM IR. This includes
+  // the `this` and sret parameters.
+  auto llvmNumParams = irFunc->irFty.funcType->getNumParams();
+
+  // Verify that the index values are valid
+  bool error = false;
+  if (sizeArgIdx + 1 > sinteger_t(numUserParams)) {
+    sle->error("@ldc.attributes.allocSize.sizeArgIdx=%d too large for function "
+               "`%s` with %d arguments.",
+               (int)sizeArgIdx, irFunc->decl->toChars(), (int)numUserParams);
+    error = true;
+  }
+  if (numArgIdx + 1 > sinteger_t(numUserParams)) {
+    sle->error("@ldc.attributes.allocSize.numArgIdx=%d too large for function "
+               "`%s` with %d arguments.",
+               (int)numArgIdx, irFunc->decl->toChars(), (int)numUserParams);
+    error = true;
+  }
+  if (error)
+    return;
+
+// The allocSize attribute is only effective for LLVM >= 3.9.
+#if LDC_LLVM_VER >= 309
+  // Offset to correct indices for sret and this parameters.
+  // These parameters can never be used for allocsize, and the user-specified
+  // index does not account for these.
+  unsigned offset = llvmNumParams - numUserParams;
+
+  // Calculate the param indices for the function as defined in LLVM IR
+  auto llvmSizeIdx =
+      irFunc->irFty.reverseParams ? numUserParams - sizeArgIdx - 1 : sizeArgIdx;
+  auto llvmNumIdx =
+      irFunc->irFty.reverseParams ? numUserParams - numArgIdx - 1 : numArgIdx;
+  llvmSizeIdx += offset;
+  llvmNumIdx += offset;
+
+  llvm::AttrBuilder builder;
+  if (numArgIdx >= 0) {
+    builder.addAllocSizeAttr(llvmSizeIdx, llvmNumIdx);
+  } else {
+    builder.addAllocSizeAttr(llvmSizeIdx, llvm::Optional<unsigned>());
+  }
+  func->addAttributes(LLAttributeSet::FunctionIndex,
+                      LLAttributeSet::get(func->getContext(),
+                                          LLAttributeSet::FunctionIndex,
+                                          builder));
+#endif
 }
 
 // @llvmAttr("key", "value")
@@ -160,7 +228,7 @@ void applyAttrLLVMFastMathFlag(StructLiteralExp *sle, IrFunction *irFunc) {
     // to warning("... %s ...").
     sle->warning(
         "ignoring unrecognized flag parameter '%s' for '@ldc.attributes.%s'",
-        value.data(), sle->sd->ident->string);
+        value.data(), sle->sd->ident->toChars());
   }
 }
 
@@ -168,23 +236,24 @@ void applyAttrOptStrategy(StructLiteralExp *sle, IrFunction *irFunc) {
   checkStructElems(sle, {Type::tstring});
   llvm::StringRef value = getStringElem(sle, 0);
 
+  llvm::Function *func = irFunc->getLLVMFunc();
   if (value == "none") {
     if (irFunc->decl->inlining == PINLINEalways) {
       sle->error("cannot combine '@ldc.attributes.%s(\"none\")' with "
                  "'pragma(inline, true)'",
-                 sle->sd->ident->string);
+                 sle->sd->ident->toChars());
       return;
     }
     irFunc->decl->inlining = PINLINEnever;
-    irFunc->func->addFnAttr(llvm::Attribute::OptimizeNone);
+    func->addFnAttr(llvm::Attribute::OptimizeNone);
   } else if (value == "optsize") {
-    irFunc->func->addFnAttr(llvm::Attribute::OptimizeForSize);
+    func->addFnAttr(llvm::Attribute::OptimizeForSize);
   } else if (value == "minsize") {
-    irFunc->func->addFnAttr(llvm::Attribute::MinSize);
+    func->addFnAttr(llvm::Attribute::MinSize);
   } else {
     sle->warning(
         "ignoring unrecognized parameter '%s' for '@ldc.attributes.%s'",
-        value.data(), sle->sd->ident->string);
+        value.data(), sle->sd->ident->toChars());
   }
 }
 
@@ -271,7 +340,7 @@ void applyVarDeclUDAs(VarDeclaration *decl, llvm::GlobalVariable *gvar) {
     if (!sle)
       continue;
 
-    auto name = sle->sd->ident->string;
+    auto name = sle->sd->ident->toChars();
     if (name == attr::section) {
       applyAttrSection(sle, gvar);
     } else if (name == attr::optStrategy || name == attr::target) {
@@ -291,7 +360,7 @@ void applyFuncDeclUDAs(FuncDeclaration *decl, IrFunction *irFunc) {
   if (!decl->userAttribDecl)
     return;
 
-  llvm::Function *func = irFunc->func;
+  llvm::Function *func = irFunc->getLLVMFunc();
   assert(func);
 
   Expressions *attrs = decl->userAttribDecl->getAttributes();
@@ -301,8 +370,10 @@ void applyFuncDeclUDAs(FuncDeclaration *decl, IrFunction *irFunc) {
     if (!sle)
       continue;
 
-    auto name = sle->sd->ident->string;
-    if (name == attr::llvmAttr) {
+    auto name = sle->sd->ident->toChars();
+    if (name == attr::allocSize) {
+      applyAttrAllocSize(sle, irFunc);
+    } else if (name == attr::llvmAttr) {
       applyAttrLLVMAttr(sle, func);
     } else if (name == attr::llvmFastMathFlag) {
       applyAttrLLVMFastMathFlag(sle, irFunc);

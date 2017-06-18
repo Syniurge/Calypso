@@ -107,28 +107,24 @@ void DtoSetArrayToNull(LLValue *v) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void DtoArrayInit(Loc &loc, LLValue *ptr, LLValue *length,
-                         DValue *dvalue) {
+                         DValue *elementValue) {
   IF_LOG Logger::println("DtoArrayInit");
   LOG_SCOPE;
 
-  // lets first optimize all zero/constant i8 initializations down to a memset.
-  // this simplifies codegen later on as llvm null's have no address!
-  if (!dvalue->isLVal()) {
-    LLConstant *constantVal = isaConstant(DtoRVal(dvalue));
-    if (constantVal &&
-        (constantVal->isNullValue() ||
-         constantVal->getType() == LLType::getInt8Ty(gIR->context()))) {
+  // Let's first optimize all zero/i8 initializations down to a memset.
+  // This simplifies codegen later on as llvm null's have no address!
+  if (!elementValue->isLVal() || !DtoIsInMemoryOnly(elementValue->type)) {
+    LLValue *val = DtoRVal(elementValue);
+    LLConstant *constantVal = isaConstant(val);
+    bool isNullConstant = (constantVal && constantVal->isNullValue());
+    if (isNullConstant || val->getType() == LLType::getInt8Ty(gIR->context())) {
       LLValue *size = length;
-      size_t elementSize = getTypeAllocSize(constantVal->getType());
+      size_t elementSize = getTypeAllocSize(val->getType());
       if (elementSize != 1) {
         size = gIR->ir->CreateMul(length, DtoConstSize_t(elementSize),
                                   ".arraysize");
       }
-      if (constantVal->isNullValue()) {
-        DtoMemSetZero(ptr, size);
-      } else {
-        DtoMemSet(ptr, constantVal, size);
-      }
+      DtoMemSet(ptr, isNullConstant ? DtoConstUbyte(0) : val, size);
       return;
     }
   }
@@ -161,9 +157,9 @@ static void DtoArrayInit(Loc &loc, LLValue *ptr, LLValue *length,
 
   LLValue *itr_val = DtoLoad(itr);
   // assign array element value
-  DLValue arrayelem(dvalue->type->toBasetype(),
+  DLValue arrayelem(elementValue->type->toBasetype(),
                     DtoGEP1(ptr, itr_val, true, "arrayinit.arrayelem"));
-  DtoAssign(loc, &arrayelem, dvalue, TOKblit);
+  DtoAssign(loc, &arrayelem, elementValue, TOKblit);
 
   // increment iterator
   DtoStore(gIR->ir->CreateAdd(itr_val, DtoConstSize_t(1), "arrayinit.new_itr"),
@@ -248,6 +244,12 @@ void DtoArrayAssign(Loc &loc, DValue *lhs, DValue *rhs, int op,
   LLValue *lhsPtr = DtoBitCast(realLhsPtr, getVoidPtrType());
   LLValue *lhsLength = DtoArrayLen(lhs);
 
+  auto computeSize = [](LLValue *length, size_t elementSize) {
+    return elementSize == 1
+               ? length
+               : gIR->ir->CreateMul(length, DtoConstSize_t(elementSize));
+  };
+
   // Be careful to handle void arrays correctly when modifying this (see tests
   // for DMD issue 7493).
   // TODO: This should use AssignExp::memset.
@@ -264,14 +266,13 @@ void DtoArrayAssign(Loc &loc, DValue *lhs, DValue *rhs, int op,
 
     if (!needsDestruction && !needsPostblit) {
       // fast version
-      LLValue *elemSize =
-          DtoConstSize_t(getTypeAllocSize(DtoMemType(elemType)));
-      LLValue *lhsSize = gIR->ir->CreateMul(elemSize, lhsLength);
+      const size_t elementSize = getTypeAllocSize(DtoMemType(elemType));
+      LLValue *lhsSize = computeSize(lhsLength, elementSize);
 
       if (rhs->isNull()) {
         DtoMemSetZero(lhsPtr, lhsSize);
       } else {
-        LLValue *rhsSize = gIR->ir->CreateMul(elemSize, rhsLength);
+        LLValue *rhsSize = computeSize(rhsLength, elementSize);
         const bool knownInBounds =
             isConstructing || (t->ty == Tsarray && t2->ty == Tsarray);
         copySlice(loc, lhsPtr, lhsSize, rhsPtr, rhsSize, knownInBounds);
@@ -302,13 +303,19 @@ void DtoArrayAssign(Loc &loc, DValue *lhs, DValue *rhs, int op,
 
     if (!needsDestruction && !needsPostblit) {
       // fast version
-      LLValue *elemSize = DtoConstSize_t(
-          getTypeAllocSize(realLhsPtr->getType()->getContainedType(0)));
-      LLValue *lhsSize = gIR->ir->CreateMul(elemSize, lhsLength);
+      const size_t lhsElementSize =
+          getTypeAllocSize(realLhsPtr->getType()->getContainedType(0));
       LLType *rhsType = DtoMemType(t2);
-      LLValue *rhsSize = DtoConstSize_t(getTypeAllocSize(rhsType));
-      LLValue *actualPtr = DtoBitCast(lhsPtr, rhsType->getPointerTo());
-      LLValue *actualLength = gIR->ir->CreateExactUDiv(lhsSize, rhsSize);
+      const size_t rhsSize = getTypeAllocSize(rhsType);
+      LLValue *actualPtr = DtoBitCast(realLhsPtr, rhsType->getPointerTo());
+      LLValue *actualLength = lhsLength;
+      if (rhsSize != lhsElementSize) {
+        LLValue *lhsSize = computeSize(lhsLength, lhsElementSize);
+        actualLength =
+            rhsSize == 1
+                ? lhsSize
+                : gIR->ir->CreateExactUDiv(lhsSize, DtoConstSize_t(rhsSize));
+      }
       DtoArrayInit(loc, actualPtr, actualLength, rhs);
     } else {
       LLFunction *fn = getRuntimeFunction(loc, gIR->module,
@@ -534,6 +541,19 @@ bool isConstLiteral(Expression *e, bool immutableType) {
   // isConst also returns 0 for string literals that are obviously constant.
   case TOKstring:
     return true;
+
+  case TOKsymoff: {
+    // Note: dllimported symbols are not link-time constant.
+    auto soe = static_cast<SymOffExp *>(e);
+    if (VarDeclaration *vd = soe->var->isVarDeclaration()) {
+       return vd->isDataseg() && !vd->isImportedSymbol();
+    }
+    if (FuncDeclaration *fd = soe->var->isFuncDeclaration()) {
+        return !fd->isImportedSymbol();
+    }
+    // Assume the symbol is non-const if we can't prove it is const.
+    return false;
+  } break;
 
   default:
     if (e->isConst() != 1)
@@ -942,8 +962,9 @@ DSliceValue *DtoAppendDCharToUnicodeString(Loc &loc, DValue *arr,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+namespace {
 // helper for eq and cmp
-static LLValue *DtoArrayEqCmp_impl(Loc &loc, const char *func, DValue *l,
+LLValue *DtoArrayEqCmp_impl(Loc &loc, const char *func, DValue *l,
                                    DValue *r, bool useti) {
   IF_LOG Logger::println("comparing arrays");
   LLFunction *fn = getRuntimeFunction(loc, gIR->module, func);
@@ -974,14 +995,151 @@ static LLValue *DtoArrayEqCmp_impl(Loc &loc, const char *func, DValue *l,
   return gIR->funcGen().callOrInvoke(fn, args).getInstruction();
 }
 
+/// When `true` is returned, the type can be compared using `memcmp`.
+/// See `validCompareWithMemcmp`.
+bool validCompareWithMemcmpType(Type *t) {
+  switch (t->ty) {
+  case Tsarray: {
+    auto *elemType = t->nextOf()->toBasetype();
+    return validCompareWithMemcmpType(elemType);
+  }
+
+  case Tstruct:
+    // TODO: Implement when structs can be compared with memcmp. Remember that
+    // structs can have a user-defined opEquals, alignment padding bytes (in
+    // arrays), and padding bytes.
+    return false;
+
+  case Tvoid:
+  case Tint8:
+  case Tuns8:
+  case Tint16:
+  case Tuns16:
+  case Tint32:
+  case Tuns32:
+  case Tint64:
+  case Tuns64:
+  case Tint128:
+  case Tuns128:
+  case Tbool:
+  case Tchar:
+  case Twchar:
+  case Tdchar:
+  case Tpointer:
+    return true;
+
+    // TODO: Determine whether this can be "return true" too:
+    // case Tvector:
+  }
+
+  return false;
+}
+
+/// When `true` is returned, `l` and `r` can be compared using `memcmp`.
+///
+/// This function may return `false` even though `memcmp` would be valid.
+/// It may only return `true` if it is 100% certain.
+///
+/// Comparing with memcmp is often not valid, for example due to
+/// - Floating point types
+/// - Padding bytes
+/// - User-defined opEquals
+bool validCompareWithMemcmp(DValue *l, DValue *r) {
+  auto *ltype = l->type->toBasetype();
+  auto *rtype = r->type->toBasetype();
+
+  // Only memcmp equivalent types (memcmp should be used for `const int[3] ==
+  // int[3]`, but not for `int[3] == short[3]`).
+  // Note: Type::equivalent returns true for `int[4]` and `int[]`, and also for
+  // `int[4]` and `int[3]`! That is exactly what we want in this case.
+  if (!ltype->equivalent(rtype))
+    return false;
+
+  auto *elemType = ltype->nextOf()->toBasetype();
+  return validCompareWithMemcmpType(elemType);
+}
+
+// Create a call instruction to memcmp.
+llvm::CallInst *callMemcmp(Loc &loc, IRState &irs, LLValue *l_ptr,
+                           LLValue *r_ptr, LLValue *numElements) {
+  assert(l_ptr && r_ptr && numElements);
+  LLFunction *fn = getRuntimeFunction(loc, gIR->module, "memcmp");
+  assert(fn);
+  auto sizeInBytes = numElements;
+  size_t elementSize = getTypeAllocSize(l_ptr->getType()->getContainedType(0));
+  if (elementSize != 1) {
+    sizeInBytes = irs.ir->CreateMul(sizeInBytes, DtoConstSize_t(elementSize));
+  }
+  // Call memcmp.
+  LLValue *args[] = {DtoBitCast(l_ptr, getVoidPtrType()),
+                     DtoBitCast(r_ptr, getVoidPtrType()), sizeInBytes};
+  return irs.ir->CreateCall(fn, args);
+}
+
+/// Compare `l` and `r` using memcmp. No checks are done for validity.
+///
+/// This function can deal with comparisons of static and dynamic arrays
+/// with memcmp.
+///
+/// Note: the dynamic array length check is not covered by (LDC's) PGO.
+LLValue *DtoArrayEqCmp_memcmp(Loc &loc, DValue *l, DValue *r, IRState &irs) {
+  IF_LOG Logger::println("Comparing arrays using memcmp");
+
+  auto *l_ptr = DtoArrayPtr(l);
+  auto *r_ptr = DtoArrayPtr(r);
+  auto *l_length = DtoArrayLen(l);
+
+  // Early return for the simple case of comparing two static arrays.
+  const bool staticArrayComparison = (l->type->toBasetype()->ty == Tsarray) &&
+                                     (r->type->toBasetype()->ty == Tsarray);
+  if (staticArrayComparison) {
+    // TODO: simply codegen when comparing static arrays with different length (int[3] == int[2])
+    return callMemcmp(loc, irs, l_ptr, r_ptr, l_length);
+  }
+
+  // First compare the array lengths
+  auto lengthsCompareEqual =
+      irs.ir->CreateICmp(llvm::ICmpInst::ICMP_EQ, l_length, DtoArrayLen(r));
+
+  llvm::BasicBlock *incomingBB = irs.scopebb();
+  llvm::BasicBlock *memcmpBB = irs.insertBB("domemcmp");
+  llvm::BasicBlock *memcmpEndBB = irs.insertBBAfter(memcmpBB, "memcmpend");
+  irs.ir->CreateCondBr(lengthsCompareEqual, memcmpBB, memcmpEndBB);
+
+  // If lengths are equal: call memcmp.
+  // Note: no extra null checks are needed before passing the pointers to memcmp.
+  // The array comparison is UB for non-zero length, and memcmp will correctly
+  // return 0 (equality) when the length is zero.
+  irs.scope() = IRScope(memcmpBB);
+  auto memcmpAnswer = callMemcmp(loc, irs, l_ptr, r_ptr, l_length);
+  irs.ir->CreateBr(memcmpEndBB);
+
+  // Merge the result of length check and memcmp call into a phi node.
+  irs.scope() = IRScope(memcmpEndBB);
+  llvm::PHINode *phi =
+      irs.ir->CreatePHI(LLType::getInt32Ty(gIR->context()), 2, "cmp_result");
+  phi->addIncoming(DtoConstInt(1), incomingBB);
+  phi->addIncoming(memcmpAnswer, memcmpBB);
+
+  return phi;
+}
+} // end anonymous namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 LLValue *DtoArrayEquals(Loc &loc, TOK op, DValue *l, DValue *r) {
   LLValue *res = nullptr;
 
-  // optimize comparisons against null by rewriting to `l.length op 0`
   if (r->isNull()) {
+    // optimize comparisons against null by rewriting to `l.length op 0`
     const auto predicate = eqTokToICmpPred(op);
     res = gIR->ir->CreateICmp(predicate, DtoArrayLen(l), DtoConstSize_t(0));
+  } else if (validCompareWithMemcmp(l, r)) {
+    // Use memcmp directly if possible. This avoids typeinfo lookup, and enables
+    // further optimization because LLVM understands the semantics of C's
+    // `memcmp`.
+    const auto predicate = eqTokToICmpPred(op);
+    const auto memcmp_result = DtoArrayEqCmp_memcmp(loc, l, r, *gIR);
+    res = gIR->ir->CreateICmp(predicate, memcmp_result, DtoConstInt(0));
   } else {
     res = DtoArrayEqCmp_impl(loc, "_adEq2", l, r, true);
     const auto predicate = eqTokToICmpPred(op, /* invert = */ true);

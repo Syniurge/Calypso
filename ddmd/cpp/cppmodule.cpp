@@ -89,10 +89,10 @@ Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
     for (size_t i = 1; i < packages->dim; i++)
     {
         Identifier *pid = (*packages)[i];
-        objFilename += pid->string;
+        objFilename += pid->toChars();
         objFilename += "-";
     }
-    objFilename += ident->string;
+    objFilename += ident->toChars();
 
     construct_Module(this, strdup(objFilename.c_str()), ident, 0, 0);
 
@@ -450,6 +450,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         // NOTE: CXXRecordDecl will disappear in a future version of Clang and only
         // RecordDecl will remain to be used for both C and C++.
 
+    auto members = new Dsymbols;
+
     AggregateDeclaration *a;
     if (!anon)
     {
@@ -473,21 +475,16 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                         BEnd = CRD->bases_end(); B != BEnd; ++B)
                 {
                     auto brt = fromType(B->getType(), loc);
-
-                    baseclasses->push(new BaseClass(brt,
-                                                    toProt(B->getAccessSpecifier())));
+                    baseclasses->push(new BaseClass(brt));
                 }
             }
 
-            auto cd = new ClassDeclaration(loc, id, baseclasses, CRD);
+            auto cd = new ClassDeclaration(loc, id, baseclasses, members, CRD);
             a = cd;
         }
     }
 
     CXXScope.push(D);
-
-    // atm we're sortof mirroring parseAggregate()
-    auto members = new Dsymbols;
 
     if (!isDefined)
         goto Ldeclaration;
@@ -774,14 +771,14 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         if (!prefixVolatile)
             return baseIdent;
 
-        std::string idStr(baseIdent->string, baseIdent->len);
+        std::string idStr(baseIdent->toChars(), baseIdent->length());
         // insert _vtlNUM_ backwards
         idStr.insert(0, "_");
         idStr.insert(0, std::to_string(funcVolatileNumber));
         idStr.insert(0, "_vtl");
 
         if (opts::cppVerboseDiags)
-            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->string, idStr.c_str());
+            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
         return Identifier::idPool(idStr.c_str(), idStr.size());
     };
     
@@ -1363,10 +1360,10 @@ std::string moduleName(Identifiers *packages, Identifier *ident)
     for (size_t i = 1; i < packages->dim; i++)
     {
         Identifier *pid = (*packages)[i];
-        result.append(pid->string, pid->len);
+        result.append(pid->toChars(), pid->length());
         result.append("/");
     }
-    result.append(ident->string, ident->len);
+    result.append(ident->toChars(), ident->length());
     return result;
 }
 
@@ -1377,8 +1374,8 @@ static clang::DeclContext::lookup_result lookup(const clang::DeclContext *DC,
     auto& Table = calypso.getPreprocessor().getIdentifierTable();
 
     const char prefix[] = u8"ℂ";
-    bool prefixed = strncmp(id->string, prefix, sizeof(prefix)-1) == 0;
-    auto& II = Table.get(!prefixed ? id->string : id->string + sizeof(prefix)-1);
+    bool prefixed = strncmp(id->toChars(), prefix, sizeof(prefix)-1) == 0;
+    auto& II = Table.get(!prefixed ? id->toChars() : id->toChars() + sizeof(prefix)-1);
 
     return DC->lookup(clang::DeclarationName(&II));
 }
@@ -1463,7 +1460,7 @@ static clang::Module *tryFindClangModule(Loc loc, Identifiers *packages, Identif
     {
         Identifier *pid = (*packages)[i];
 
-        llvm::StringRef name(pid->string, pid->len);
+        llvm::StringRef name(pid->toChars(), pid->length());
         M = MMap->lookupModuleQualified(name, M);
         if (!M)
             return nullptr;
@@ -1472,7 +1469,7 @@ static clang::Module *tryFindClangModule(Loc loc, Identifiers *packages, Identif
         assert(pkg);
     }
 
-    llvm::StringRef name(id->string, id->len);
+    llvm::StringRef name(id->toChars(), id->length());
     M = MMap->lookupModuleQualified(name, M);
     if (!M)
         return nullptr;
@@ -1733,7 +1730,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         m->rootKey.second = M;
         mapClangModule(mapper, D, M, m->members);
     }
-    else if (strcmp(id->string, "_") == 0)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
+    else if (strcmp(id->toChars(), "_") == 0)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
     {
         m->rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
 

@@ -46,7 +46,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Target/TargetMachine.h"
 
-const char *mangleImpl(Dsymbol *s);
 void codegenModules(Modules &modules, bool oneobj);
 
 namespace cpp
@@ -110,7 +109,7 @@ static const char *getDOperatorSpelling(const clang::OverloadedOperatorKind OO)
 static Identifier *fullOperatorMapIdent(Identifier *baseIdent,
                                        clang::OverloadedOperatorKind OO)
 {
-    std::string fullName(baseIdent->string, baseIdent->len);
+    std::string fullName(baseIdent->toChars(), baseIdent->length());
     fullName += "_";
     fullName += getOperatorName(OO);
 
@@ -253,7 +252,7 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
     auto T = D->getConversionType().getDesugaredType(Context);
     auto t = mapper.fromType(T, Loc());
 
-    std::string fullName(baseIdent->string, baseIdent->len);
+    std::string fullName(baseIdent->toChars(), baseIdent->length());
     fullName += "_";
     if (t->isTypeBasic()) // not too complex, use a readable suffix
     {
@@ -387,7 +386,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
     if (needsPrefixing)
     {
         llvm::SmallString<48> s(u8"ℂ"); // non-ASCII and unavailable on most keyboards, but pretty
-        s += llvm::StringRef(ident->string, ident->len);
+        s += llvm::StringRef(ident->toChars(), ident->length());
         ident = Identifier::idPool(s.c_str(), s.size());
     }
 
@@ -445,9 +444,9 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
 
     if (spec)
     {
-        auto tempinst = new cpp::TemplateInstance(loc, ident);
-        tempinst->tiargs = new Objects;
-        tempinst->tiargs->push(spec.toTemplateArg(loc));
+        auto tiargs = new Objects;
+        tiargs->push(spec.toTemplateArg(loc));
+        auto tempinst = new cpp::TemplateInstance(loc, ident, tiargs);
         return tempinst;
     }
     else
@@ -499,8 +498,8 @@ const char *LangPlugin::mangle(Dsymbol *s)
 {
     assert(isCPP(s));
 
-    if (s->isModule())
-        return ::mangleImpl(s);
+//     if (s->isModule())
+//         return ::mangleImpl(s); // LDC 1.2 FIXME: mangle() shouldn't be needed anymore except in .slist/MarkModuleForGenIfNeeded, where it should be replaced by querying Clang directly?
 
     auto ND = cast<clang::NamedDecl>(getDecl(s));
 

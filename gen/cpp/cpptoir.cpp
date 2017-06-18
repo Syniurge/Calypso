@@ -586,7 +586,7 @@ static const clangCG::CGFunctionInfo &arrangeFunctionCall(
 }
 
 DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval, 
-                                   Expressions* arguments, llvm::Value *retvar)
+                                   const std::vector<DValue *> &argvals, llvm::Value *retvar)
 {
     updateCGFInsertPoint();
     
@@ -635,7 +635,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     for (size_t i=0; i<n; ++i) {
         Parameter* fnarg = Parameter::getNth(tf->parameters, i);
         assert(fnarg);
-        DValue* argval = DtoArgument(fnarg, arguments->data[i]);
+        DValue* argval = argvals[i];
 
         auto argty = fnarg->type;
         auto ArgTy = TypeMapper().toType(loc, argty,
@@ -698,7 +698,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     if (isa<clang::CXXConstructorDecl>(FD))
     {
         assert(RV.isScalar() && RV.getScalarVal() == nullptr);
-        auto calleead = fd->isAggregateMember2();
+        auto calleead = fd->isMember2();
         auto thisTy = calleead->getType();
         if (!calleead->byRef())
             thisTy = thisTy->pointerTo();  // resulttype isn't always the This type
@@ -745,7 +745,7 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
     }
 
     auto resolved = ResolvedFunc::get(*CGM, FD);
-    irFunc->func = resolved.Func;
+    irFunc->setLLVMFunc(resolved.Func);
     irFty.funcType = resolved.Ty;
 }
 
@@ -757,7 +757,7 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
     auto FD = getFD(fdecl);
     const clang::FunctionDecl *Def;
 
-    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->func->isDeclaration())
+    if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->getLLVMFunc()->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
 }
 
@@ -854,7 +854,7 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
         return false; // is this enough? are we sure that A a = B(); where A and B are value types will never happen?
 
     DtoResolveFunction(ce->f);
-    auto fnval = new DFuncValue(ce->f, getIrFunc(ce->f)->func, value);
+    auto fnval = new DFuncValue(ce->f, getIrFunc(ce->f)->getLLVMFunc(), value);
 
     DtoCallFunction(ce->loc, ce->type, fnval, ce->arguments);
     return true;

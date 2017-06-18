@@ -514,8 +514,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
             auto tiargs = fromASTTemplateArgumentListInfo(loc,
                         DSDR->getTemplateArgs(), DSDR->getNumTemplateArgs(), tymap);
 
-            tempinst = new_TemplateInstance(loc, ident);
-            tempinst->tiargs = tiargs;
+            tempinst = new_TemplateInstance(loc, ident, tiargs);
         }
 
         if (e1)
@@ -591,9 +590,9 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
 
         if (UL->hasExplicitTemplateArgs())
         {
-            auto tempinst = new_TemplateInstance(loc, id);
-            tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
+            auto tiargs = fromASTTemplateArgumentListInfo(loc,
                         UL->getTemplateArgs(), UL->getNumTemplateArgs(), tymap);
+            auto tempinst = new_TemplateInstance(loc, id, tiargs);
             e = new_ScopeExp(loc, tempinst);
         }
         else
@@ -839,10 +838,10 @@ template<typename T>
     {
         assert(member->dyncast() == DYNCAST_IDENTIFIER);
 
-        auto tempinst = new_TemplateInstance(loc,
-            static_cast<Identifier*>(member));
-        tempinst->tiargs = fromASTTemplateArgumentListInfo(loc,
+        auto tiargs = fromASTTemplateArgumentListInfo(loc,
             E->getTemplateArgs(), E->getNumTemplateArgs(), tymap);
+        auto tempinst = new_TemplateInstance(loc,
+            static_cast<Identifier*>(member), tiargs);
 
         member = tempinst;
     }

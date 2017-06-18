@@ -29,6 +29,7 @@
 #include "gen/optimizer.h"
 #include "gen/pragma.h"
 #include "gen/runtime.h"
+#include "gen/scope_exit.h"
 #include "gen/structs.h"
 #include "gen/tollvm.h"
 #include "gen/typinf.h"
@@ -509,31 +510,38 @@ public:
       }
     }
 
+    // The front-end sometimes rewrites a static-array-lhs to a slice, e.g.,
+    // when initializing a static array with an array literal.
+    // Use the static array as lhs in that case.
+    DValue *rewrittenLhsStaticArray = nullptr;
     if (e->e1->op == TOKslice) {
-      // Check if this is an initialization of a static array with an array
-      // literal that the frontend has foolishly rewritten into an
-      // assignment of a dynamic array literal to a slice.
-      Logger::println("performing static array literal assignment");
-      SliceExp *const se = static_cast<SliceExp *>(e->e1);
-      Type *const t2 = e->e2->type->toBasetype();
-      Type *const ta = se->e1->type->toBasetype();
-
-      if (se->lwr == nullptr && ta->ty == Tsarray &&
-          e->e2->op == TOKarrayliteral &&
-          e->op == TOKconstruct && // DMD Bugzilla 11238: avoid aliasing issue
-          t2->nextOf()->mutableOf()->implicitConvTo(ta->nextOf())) {
-        ArrayLiteralExp *const ale = static_cast<ArrayLiteralExp *>(e->e2);
-        initializeArrayLiteral(p, ale, DtoLVal(se->e1));
-        result = toElem(e->e1);
-        return;
-      }
+      SliceExp *se = static_cast<SliceExp *>(e->e1);
+      Type *sliceeBaseType = se->e1->type->toBasetype();
+      if (se->lwr == nullptr && sliceeBaseType->ty == Tsarray &&
+          se->type->toBasetype()->nextOf() == sliceeBaseType->nextOf())
+        rewrittenLhsStaticArray = toElem(se->e1, true);
     }
 
-    result = toElem(e->e1, true);
+    DValue *const lhs = (rewrittenLhsStaticArray ? rewrittenLhsStaticArray
+                                                 : toElem(e->e1, true));
+
+    // Set the result of the AssignExp to the lhs.
+    // Defer this to the end of this function, so that static arrays are
+    // rewritten (converted to a slice) after the assignment, primarily for a
+    // more intuitive IR order.
+    SCOPE_EXIT {
+      if (rewrittenLhsStaticArray) {
+        result =
+            new DSliceValue(e->e1->type, DtoArrayLen(rewrittenLhsStaticArray),
+                            DtoArrayPtr(rewrittenLhsStaticArray));
+      } else {
+        result = lhs;
+      }
+    };
 
     // try to construct the lhs in-place
-    if (result->isLVal() && e->op == TOKconstruct &&
-        toInPlaceConstruction(result->isLVal(), e->e2)) {
+    if (lhs->isLVal() && e->op == TOKconstruct &&
+        toInPlaceConstruction(lhs->isLVal(), e->e2)) {
       return;
     }
 
@@ -542,10 +550,11 @@ public:
     if (e->e1->type->toBasetype()->ty == Tstruct && e->e2->op == TOKint64) {
       Logger::println("performing aggregate zero initialization");
       assert(e->e2->toInteger() == 0);
-      DtoMemSetZero(DtoLVal(result));
+      LLValue *lval = DtoLVal(lhs);
+      DtoMemSetZero(lval);
       TypeStruct *ts = static_cast<TypeStruct *>(e->e1->type);
       if (ts->sym->isNested() && ts->sym->vthis)
-        DtoResolveNestedContext(e->loc, ts->sym, DtoLVal(result));
+        DtoResolveNestedContext(e->loc, ts->sym, lval);
       return;
     }
 
@@ -563,7 +572,7 @@ public:
 
     Logger::println("performing normal assignment (rhs has lvalue elems = %d)",
                     lvalueElem);
-    DtoAssign(e->loc, result, r, e->op, !lvalueElem);
+    DtoAssign(e->loc, lhs, r, e->op, !lvalueElem);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -729,7 +738,7 @@ public:
       LLValue* vthis = DtoIsInMemoryOnly(dve->e1->type)
                            ? DtoLVal(dve->e1)
                            : DtoRVal(dve->e1); // CALYPSO
-      fnval = new DFuncValue(fdecl, getIrFunc(fdecl)->func, vthis);
+      fnval = new DFuncValue(fdecl, DtoCallee(fdecl), vthis);
     } else {
       fnval = toElem(e->e1);
     }
@@ -745,7 +754,7 @@ public:
       // valid.
       if (global.params.warnings && checkPrintf) {
         if (fndecl->linkage == LINKc &&
-            strcmp(fndecl->ident->string, "printf") == 0) {
+            strcmp(fndecl->ident->toChars(), "printf") == 0) {
           warnInvalidPrintfCall(e->loc, (*e->arguments)[0], e->arguments->dim);
         }
       }
@@ -878,7 +887,7 @@ public:
       FuncDeclaration *fd = fv->func;
       assert(fd);
       DtoResolveFunction(fd);
-      result = new DFuncValue(fd, getIrFunc(fd)->func);
+      result = new DFuncValue(fd, DtoCallee(fd));
       return;
     }
     if (v->isIm()) {
@@ -989,7 +998,7 @@ public:
       if (nonFinal) {
         funcval = DtoVirtualFunctionPointer(DtoAggregateDValue(l->type, vthis), fdecl, e->toChars()); // CALYPSO
       } else {
-        funcval = getIrFunc(fdecl)->func;
+        funcval = DtoCallee(fdecl);
       }
       assert(funcval);
 
@@ -1510,7 +1519,7 @@ public:
       if (e->allocator) {
         // custom allocator
         DtoResolveFunction(e->allocator);
-        DFuncValue dfn(e->allocator, getIrFunc(e->allocator)->func);
+        DFuncValue dfn(e->allocator, DtoCallee(e->allocator));
         DValue *res = DtoCallFunction(e->loc, nullptr, &dfn, e->newargs);
         mem = DtoBitCast(DtoRVal(res), DtoType(ntype->pointerTo()),
                          ".newstruct_custom");
@@ -1539,7 +1548,7 @@ public:
           IF_LOG Logger::println("Calling constructor");
           assert(e->arguments != NULL);
           DtoResolveFunction(e->member);
-          DFuncValue dfn(e->member, getIrFunc(e->member)->func, mem);
+          DFuncValue dfn(e->member, DtoCallee(e->member), mem);
           DtoCallFunction(e->loc, ts, &dfn, e->arguments);
         }
       }
@@ -1727,7 +1736,7 @@ public:
                             ->sym->inv) != nullptr) {
       Logger::print("calling struct invariant");
       DtoResolveFunction(invdecl);
-      DFuncValue invfunc(invdecl, getIrFunc(invdecl)->func, DtoRVal(cond));
+      DFuncValue invfunc(invdecl, DtoCallee(invdecl), DtoRVal(cond));
       DtoCallFunction(e->loc, nullptr, &invfunc, nullptr);
     }
   }
@@ -1950,7 +1959,7 @@ public:
         }
       }
 
-      castfptr = getIrFunc(e->func)->func;
+      castfptr = DtoCallee(e->func);
     }
 
     castfptr = DtoBitCast(castfptr, dgty->getContainedType(1));
@@ -2199,7 +2208,7 @@ public:
       DtoDeclareFunction(fd);
       assert(!fd->isNested());
     }
-    assert(getIrFunc(fd)->func);
+    assert(DtoCallee(fd));
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -2243,12 +2252,12 @@ public:
       cval = DtoBitCast(cval, dgty->getContainedType(0));
 
       LLValue *castfptr =
-          DtoBitCast(getIrFunc(fd)->func, dgty->getContainedType(1));
+          DtoBitCast(DtoCallee(fd), dgty->getContainedType(1));
 
       result = new DImValue(e->type, DtoAggrPair(cval, castfptr, ".func"));
 
     } else {
-      result = new DFuncValue(e->type, fd, getIrFunc(fd)->func);
+      result = new DFuncValue(e->type, fd, DtoCallee(fd));
     }
   }
 
@@ -2574,17 +2583,6 @@ public:
     LOG_SCOPE;
 
     result = toGEP(e, 1);
-  }
-
-  //////////////////////////////////////////////////////////////////////////////
-
-  void visit(BoolExp *e) override {
-    IF_LOG Logger::print("BoolExp::toElem: %s @ %s\n", e->toChars(),
-                         e->type->toChars());
-    LOG_SCOPE;
-
-    result = new DImValue(e->type,
-                          DtoRVal(DtoCast(e->loc, toElem(e->e1), Type::tbool)));
   }
 
   //////////////////////////////////////////////////////////////////////////////

@@ -1,12 +1,12 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (c) 1999-2014 by Digital Mars
+ * Copyright (c) 1999-2016 by Digital Mars
  * All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
  * http://www.boost.org/LICENSE_1_0.txt
- * https://github.com/D-Programming-Language/dmd/blob/master/src/scope.h
+ * https://github.com/dlang/dmd/blob/master/src/scope.h
  */
 
 #ifndef DMD_SCOPE_H
@@ -106,7 +106,8 @@ struct Scope
     unsigned *fieldinit;
     size_t fieldinit_dim;
 
-    structalign_t structalign;  // alignment for struct members
+    AlignDeclaration *aligndecl;    // alignment for struct members
+
     LINK linkage;               // linkage for external functions
     CPPMANGLE cppmangle;        // C++ mangle type // CALYPSO DMD BUG missing in LDC 1.1, added later
     PINLINE inlining;            // inlining strategy for functions
@@ -115,7 +116,8 @@ struct Scope
     int explicitProtection;     // set if in an explicit protection attribute
 
     StorageClass stc;           // storage class
-    char *depmsg;               // customized deprecation message
+
+    DeprecatedDeclaration *depdecl; // customized deprecation message
 
     unsigned flags;
 
@@ -159,6 +161,8 @@ struct Scope
     ClassDeclaration *getClassScope();
     AggregateDeclaration *getStructClassScope();
     void setNoFree();
+
+    structalign_t alignment();
 
     // CALYPSO
     bool isD();

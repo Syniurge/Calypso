@@ -2,8 +2,8 @@
 
 // REQUIRES: target_X86
 
-// Explicitly use a Linux triple, so that llvm.used is used for moduleinfo globals.
-// RUN: %ldc -c -output-ll -O3 %S/inputs/module_ctor.d %s -of=%t.ll -mtriple=x86_64-pc-linux-gnu && FileCheck --check-prefix=LLVM %s < %t.ll
+// Explicitly use OS X triple, so that llvm.used is used for moduleinfo globals.
+// RUN: %ldc -c -output-ll -O3 %S/inputs/module_ctor.d %s -of=%t.ll -mtriple=x86_64-apple-macosx && FileCheck --check-prefix=LLVM %s < %t.ll
 
 // RUN: %ldc -O3 %S/inputs/module_ctor.d -run %s | FileCheck --check-prefix=EXECUTE %s
 

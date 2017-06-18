@@ -177,7 +177,6 @@ void CodeGenerator::finishLLModule(Module *m) {
                        *global.params.bitcodeFiles);
   }
 
-  m->deleteObjFile();
   writeAndFreeLLModule(m->objfile->name->str);
 }
 

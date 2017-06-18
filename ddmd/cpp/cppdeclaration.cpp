@@ -24,7 +24,7 @@ using llvm::dyn_cast;
 void MarkModuleForGenIfNeeded(Dsymbol *s)
 {
     assert(isCPP(s));
-    mangle(s);
+    calypso.mangle(s); // LDC 1.2 FIXME: query Clang directly?
 
     const clang::Decl* D;
     if (auto fd = s->isFuncDeclaration())
@@ -583,7 +583,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
                         STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
         sc2->protection = Prot(PROTpublic);
         sc2->explicitProtection = 0;
-        sc2->structalign = STRUCTALIGN_DEFAULT;
+        sc2->aligndecl = NULL;
         sc2->flags = sc->flags & ~SCOPEcontract;
         sc2->flags &= ~SCOPEcompile;
         sc2->tf = NULL;

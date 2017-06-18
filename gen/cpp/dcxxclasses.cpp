@@ -91,8 +91,11 @@ static inline llvm::GlobalVariable *getDCXXVTable(::ClassDeclaration *cd,
         VTArrayType = llvm::ArrayType::get(calypso.CGM->Int8PtrTy,
                 VTLayout->getNumVTableComponents());
 
+    OutBuffer mangledName;
+    mangleToBuffer(cd, &mangledName);
+
     std::string initname("_D");
-    initname.append(mangle(cd));
+    initname.append(mangledName.peekString());
     initname.append("9__VtblCXXZ");
     if (!BaseOffset.isZero())
         initname.append(std::to_string(BaseOffset.getQuantity()));
@@ -216,7 +219,6 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     auto idtmp = Identifier::generateId("__tmp");
     auto tmp = new_VarDeclaration(loc, Type::tvoidptr,
                              idtmp, new_VoidInitializer(loc));
-    tmp->noscope = 1;
     tmp->storage_class |= STCtemp | STCctfe;
     Expression *e = new_DeclarationExp(loc, tmp);
     Expression *ec = new_BlitExp(loc, new_VarExp(loc, tmp), new_ThisExp(loc));
@@ -407,7 +409,7 @@ struct DCXXVTableAdjuster
                 }
 
                 auto thunkFd = getDCXXThunk(md, NewThunk);
-                auto thunkLLFunc = getIrFunc(thunkFd)->func;
+                auto thunkLLFunc = getIrFunc(thunkFd)->getLLVMFunc();
                 Inits[I] = llvm::ConstantExpr::getBitCast(thunkLLFunc, CGM.Int8PtrTy);
             }
         }

@@ -109,7 +109,7 @@ public:
     DiagnosticPrinter *DiagClient;
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
     std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps;
-    
+
     ModuleMap *MMap = nullptr;
 
     void init(); // load the list of headers already cached in the PCH
@@ -218,7 +218,7 @@ public:
     bool toIsReturnInArg(CallExp* ce) override;
     LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, const char* name) override;
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
-                                   Expressions* arguments, llvm::Value *retvar) override;
+                                   const std::vector<DValue *> &argvals, llvm::Value *retvar) override;
 
     bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 
@@ -233,7 +233,7 @@ public:
     void toBeginCatch(IRState& irs, ::Catch *cj) override;
     void toEndCatch(IRState& irs, ::Catch *cj) override;
     llvm::GlobalVariable* toCatchScopeType(IRState& irs, Type *t) override;
-         
+
     // ==== ==== ====
     PCH pch;
     llvm::StringSet<> TargetFeatures;
@@ -295,7 +295,7 @@ public:
     clang::SourceManager &getSourceManager();
 
     std::string getCacheFilename(const char *suffix = nullptr);
-    
+
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly
 

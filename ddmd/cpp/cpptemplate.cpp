@@ -591,8 +591,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         ti = static_cast<cpp::TemplateInstance *>(tithis);
     else
     {
-        ti = new cpp::TemplateInstance(tithis->loc, tithis->name);
-        ti->tiargs = tithis->tiargs; // HACK avoid syntaxCopy, which is slow and would require many improvements to even work (they made a large part of the changes to the frontend before the switch to DDMD)
+        ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to even work (they made a large part of the changes to the frontend before the switch to DDMD)
         ti->semantictiargsdone = true;
         ti->tdtypes.setDim(tithis->tdtypes.dim);
         memcpy(ti->tdtypes.data, tithis->tdtypes.data, ti->tdtypes.dim * sizeof(void*));
@@ -736,18 +735,18 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
                             ->TempOrSpec->getCanonicalDecl() == RealTemp*/);
 }
 
-TemplateInstance::TemplateInstance(Loc loc, Identifier* temp_id)
+TemplateInstance::TemplateInstance(Loc loc, Identifier* ident, Objects *tiargs)
 {
-    construct_TemplateInstance(this, loc, temp_id);
+    construct_TemplateInstance(this, loc, ident, tiargs);
 }
 
-TemplateInstance::TemplateInstance(Loc loc, ::TemplateDeclaration *tempdecl, Objects *tiargs)
+TemplateInstance::TemplateInstance(Loc loc, ::TemplateDeclaration *td, Objects *tiargs)
 {
-    construct_TemplateInstance(this, loc, tempdecl, tiargs);
+    construct_TemplateInstance(this, loc, td, tiargs);
 }
 
 TemplateInstance::TemplateInstance(const TemplateInstance& o)
-    : TemplateInstance(o.loc, o.name)
+    : TemplateInstance(o.loc, o.name, o.tiargs)
 {
     Inst = o.Inst;
     isForeignInst = o.isForeignInst;
