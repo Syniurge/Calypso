@@ -5442,6 +5442,7 @@ extern (C++) final class TemplateThisParameter : TemplateTypeParameter
 extern (C++) final class TemplateValueParameter : TemplateParameter
 {
     Type valType;
+    Type nonDependentValType; // CALYPSO
     Expression specValue;
     Expression defaultValue;
 
@@ -5479,7 +5480,8 @@ extern (C++) final class TemplateValueParameter : TemplateParameter
 
     override bool semantic(Scope* sc, TemplateParameters* parameters)
     {
-        valType = valType.semantic(loc, sc);
+        if (!reliesOnTident(valType, parameters))
+            nonDependentValType = valType.semantic(loc, sc); // CALYPSO for C++ template value parameters with dependent types semantic'ing valType is too early
         version (none)
         {
             // defer semantic analysis to arg match
@@ -5674,10 +5676,11 @@ extern (C++) final class TemplateValueParameter : TemplateParameter
         Expression e = specValue;
         if (!e)
         {
+            assert(nonDependentValType !is null); // CALYPSO
             // Create a dummy value
-            Expression* pe = cast(Expression*)dmd_aaGet(&edummies, cast(void*)valType);
+            Expression* pe = cast(Expression*)dmd_aaGet(&edummies, cast(void*)nonDependentValType);
             if (!*pe)
-                *pe = valType.defaultInit();
+                *pe = nonDependentValType.defaultInit();
             e = *pe;
         }
         return cast(void*)e;

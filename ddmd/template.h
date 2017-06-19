@@ -224,6 +224,7 @@ class TemplateValueParameter : public TemplateParameter
 {
 public:
     Type *valType;
+    Type *nonDependentValType;
     Expression *specValue;
     Expression *defaultValue;
 
