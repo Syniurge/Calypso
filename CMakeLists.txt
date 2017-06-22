@@ -548,6 +548,11 @@ set_target_properties(
 
 ### CALYPSO ###
 
+find_program(NINJA_PROGRAM NAMES ninja-build ninja)
+if (NOT NINJA_PROGRAM)
+    message(FATAL_ERROR "Ninja not found!")
+endif()
+
 include(ExternalProject)
 
 set(CLANG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/clang)
@@ -593,7 +598,7 @@ ExternalProject_Add(clang
 			# - with MSBuild only one project can be specified and the build command fails
 			# - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG}
-    BUILD_COMMAND ninja ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
+    BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
 	BUILD_BYPRODUCTS ${CLANG_LIBS}
     INSTALL_COMMAND ""
     STEP_TARGETS rtcopy
