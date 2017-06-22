@@ -458,6 +458,7 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
     file(MAKE_DIRECTORY ${calypsort_cppdir})
     compile_calypsort("${d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc ${calypsort_cppdir})
 
+    if (NOT MSVC)
     set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
     add_custom_command(
         OUTPUT "${cpp_monolith_o}"
@@ -466,6 +467,7 @@ macro(build_runtime d_flags c_flags ld_flags lib_suffix path_suffix outlist_targ
                 -DMSVC=${MSVC} -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
         DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
     )
+    endif()
 
     add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} ${cpp_monolith_o})
     set_target_properties(
