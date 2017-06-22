@@ -616,6 +616,10 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc DESTINATION ${CMAKE_
 
 add_dependencies(${LDC_LIB} clang)
 
+if (MSVC)
+    append("-LVersion.lib" DDMD_LFLAGS)
+endif()
+
 ### CALYPSO ###
 
 # LDFLAGS should actually be in target property LINK_FLAGS, but this works, and gets around linking problems
