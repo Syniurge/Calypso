@@ -40,8 +40,6 @@
 #include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Sema/Lookup.h"
 
-extern llvm::cl::opt<bool> preservePaths;
-
 namespace cpp
 {
 
@@ -54,7 +52,7 @@ using llvm::isa;
 File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
 {
     const char *argobj;
-    if (preservePaths)
+    if (global.params.preservePaths)
         argobj = arg;
     else
         argobj = FileName::name(arg);

@@ -54,7 +54,7 @@
 #include <alloca.h>
 #endif
 
-llvm::cl::opt<bool, true> // CALYPSO made non-static
+static llvm::cl::opt<bool, true>
     preservePaths("op", llvm::cl::desc("Preserve source path for output files"),
                   llvm::cl::ZeroOrMore,
                   llvm::cl::location(global.params.preservePaths));
