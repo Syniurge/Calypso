@@ -3,9 +3,9 @@ sudo: false
 
 matrix:
   include:
-    - os: linux
-      d: ldc
-      env: LLVM_VERSION=4.0.0
+    #- os: linux
+      #d: ldc
+      #env: LLVM_VERSION=4.0.0
     - os: linux
       d: ldc
       env: LLVM_VERSION=3.9.1
