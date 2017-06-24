@@ -80,10 +80,10 @@ before_install:
 
     if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then
       llvm-spirv-$LLVM_VERSION/bin/llvm-config --version;
-      export LLVM_CONFIG="llvm-spirv-$LLVM_VERSION/bin/llvm-config";
+      export LLVM_CONFIG="$(pwd)/llvm-spirv-$LLVM_VERSION/bin/llvm-config";
     else
       llvm-$LLVM_VERSION/bin/llvm-config --version;
-      export LLVM_CONFIG="llvm-$LLVM_VERSION/bin/llvm-config";
+      export LLVM_CONFIG="$(pwd)/llvm-$LLVM_VERSION/bin/llvm-config";
     fi;
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9";
@@ -103,7 +103,7 @@ before_script:
 
 script:
   - cmake --version
-  - cmake -G Ninja -DCLANG_BUILD_FLAGS="-j2" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS .
+  - cmake -G Ninja -DCLANG_BUILD_FLAGS="-j2" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
   - ninja -j2
   # Outputs some environment info, plus makes sure we only run the test suite
   # if we could actually build the executable.
