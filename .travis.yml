@@ -103,8 +103,8 @@ before_script:
 
 script:
   - cmake --version
-  - cmake -G Ninja -DCLANG_BUILD_FLAGS="-j2" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
-  - ninja -j2
+  - cmake -DCLANG_BUILD_FLAGS="-j2" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
+  - make -j2
   # Outputs some environment info, plus makes sure we only run the test suite
   # if we could actually build the executable.
   - bin/ldc2 -version || exit 1
