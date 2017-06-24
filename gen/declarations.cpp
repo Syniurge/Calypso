@@ -32,86 +32,6 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-namespace {
-// from dmd/src/typinf.c
-bool isSpeculativeType(Type *t) {
-  class SpeculativeTypeVisitor : public Visitor {
-  public:
-    bool result;
-
-    SpeculativeTypeVisitor() : result(false) {}
-
-    using Visitor::visit;
-    void visit(Type *t) override {
-      Type *tb = t->toBasetype();
-      if (tb != t) {
-        tb->accept(this);
-      }
-    }
-    void visit(TypeNext *t) override {
-      if (t->next) {
-        t->next->accept(this);
-      }
-    }
-    void visit(TypeBasic *t) override {}
-    void visit(TypeVector *t) override { t->basetype->accept(this); }
-    void visit(TypeAArray *t) override {
-      t->index->accept(this);
-      visit((TypeNext *)t);
-    }
-    void visit(TypeFunction *t) override {
-      visit((TypeNext *)t);
-      // Currently TypeInfo_Function doesn't store parameter types.
-    }
-    void visit(TypeStruct *t) override {
-      StructDeclaration *sd = t->sym;
-      if (TemplateInstance *ti = sd->isInstantiated()) {
-        if (!ti->needsCodegen()) {
-          if (ti->minst || sd->requestTypeInfo) {
-            return;
-          }
-
-          /* Bugzilla 14425: TypeInfo_Struct would refer the members of
-           * struct (e.g. opEquals via xopEquals field), so if it's instantiated
-           * in speculative context, TypeInfo creation should also be
-           * stopped to avoid 'unresolved symbol' linker errors.
-           */
-          /* When -debug/-unittest is specified, all of non-root instances are
-           * automatically changed to speculative, and here is always reached
-           * from those instantiated non-root structs.
-           * Therefore, if the TypeInfo is not auctually requested,
-           * we have to elide its codegen.
-           */
-          result |= true;
-          return;
-        }
-      } else {
-        // assert(!sd->inNonRoot() || sd->requestTypeInfo);  // valid?
-      }
-    }
-    void visit(TypeClass *t) override {}
-    void visit(TypeTuple *t) override {
-      if (t->arguments) {
-        for (size_t i = 0; i < t->arguments->dim; i++) {
-          Type *tprm = (*t->arguments)[i]->type;
-          if (tprm) {
-            tprm->accept(this);
-          }
-          if (result) {
-            return;
-          }
-        }
-      }
-    }
-  };
-  SpeculativeTypeVisitor v;
-  t->accept(&v);
-  return v.result;
-}
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 class CodegenVisitor : public Visitor {
   IRState *irs;
 
@@ -148,6 +68,8 @@ public:
     IF_LOG Logger::println("InterfaceDeclaration::codegen: '%s'",
                            decl->toPrettyChars());
     LOG_SCOPE
+
+    assert(!irs->dcomputetarget);
 
     if (decl->ir->isDefined()) {
       return;
@@ -213,14 +135,18 @@ public:
     if (decl->langPlugin())  // CALYPSO
         return;
 
-    // Define the __initZ symbol.
-    IrAggr *ir = getIrAggr(decl);
-    llvm::GlobalVariable *initZ = ir->getInitSymbol();
-    initZ->setInitializer(ir->getDefaultInit());
-    setLinkage(decl, initZ);
+    // Skip __initZ and typeinfo for @compute device code.
+    // TODO: support global variables and thus __initZ
+    if (!irs->dcomputetarget) {
+      // Define the __initZ symbol.
+      IrAggr *ir = getIrAggr(decl);
+      llvm::GlobalVariable *initZ = ir->getInitSymbol();
+      initZ->setInitializer(ir->getDefaultInit());
+      setLinkage(decl, initZ);
 
-    // emit typeinfo
-    DtoTypeInfoOf(decl->type);
+      // emit typeinfo
+      DtoTypeInfoOf(decl->type);
+    }
 
     // Emit __xopEquals/__xopCmp/__xtoHash.
     if (decl->xeq && decl->xeq != decl->xerreq) {
@@ -240,6 +166,8 @@ public:
     IF_LOG Logger::println("ClassDeclaration::codegen: '%s'",
                            decl->toPrettyChars());
     LOG_SCOPE
+
+    assert(!irs->dcomputetarget);
 
     if (decl->ir->isDefined()) {
       return;
@@ -342,6 +270,7 @@ public:
 
       assert(!(decl->storage_class & STCmanifest) &&
              "manifest constant being codegen'd!");
+      assert(!irs->dcomputetarget);
 
       IrGlobal *irGlobal = getIrGlobal(decl);
       LLGlobalVariable *gvar = llvm::cast<LLGlobalVariable>(irGlobal->value);
@@ -513,7 +442,8 @@ public:
   void visit(PragmaDeclaration *decl) LLVM_OVERRIDE {
     if (decl->ident == Id::lib) {
       assert(decl->args && decl->args->dim == 1);
-
+      assert(!irs->dcomputetarget);
+        
       Expression *e = static_cast<Expression *>(decl->args->data[0]);
 
       assert(e->op == TOKstring);
@@ -574,7 +504,7 @@ public:
   //////////////////////////////////////////////////////////////////////////
 
   void visit(TypeInfoDeclaration *decl) LLVM_OVERRIDE {
-    if (isSpeculativeType(decl->tinfo)) {
+    if (irs->dcomputetarget || isSpeculativeType(decl->tinfo)) {
       return;
     }
     TypeInfoDeclaration_codegen(decl, irs);
@@ -583,7 +513,7 @@ public:
   //////////////////////////////////////////////////////////////////////////
 
   void visit(TypeInfoClassDeclaration *decl) LLVM_OVERRIDE {
-    if (isSpeculativeType(decl->tinfo)) {
+    if (irs->dcomputetarget || isSpeculativeType(decl->tinfo)) {
       return;
     }
     TypeInfoClassDeclaration_codegen(decl, irs);
@@ -593,8 +523,7 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 
 void Declaration_codegen(Dsymbol *decl) {
-  CodegenVisitor v(gIR);
-  decl->accept(&v);
+  Declaration_codegen(decl, gIR);
 }
 
 void Declaration_codegen(Dsymbol *decl, IRState *irs) {

@@ -9,6 +9,7 @@
 
 #include "gen/dibuilder.h"
 
+#include "driver/cl_options.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
 #include "gen/llvmhelpers.h"
@@ -82,7 +83,7 @@ bool ldc::DIBuilder::mustEmitFullDebugInfo() {
 
 bool ldc::DIBuilder::mustEmitLocationsDebugInfo() {
   // for -g -gc and -gline-tables-only
-  return global.params.symdebug > 0;
+  return (global.params.symdebug > 0) || global.params.outputSourceLocations;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -440,7 +441,7 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type) {
   // const/wrappers.
   LLType *T = DtoType(sd->type);
   if (sd->byRef()) // CALYPSO
-      T = llvm::cast<llvm::PointerType>(T)->getElementType();
+    T = llvm::cast<llvm::PointerType>(T)->getElementType();
   IrTypeAggr *ir = sd->type->ctype->isAggr();
   assert(ir);
 
@@ -722,7 +723,7 @@ ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type) {
     return CreateAArrayType(type);
   if (t->ty == Tstruct || t->ty == Tclass) {
     ldc::DIType ret = CreateCompositeType(type);
-    if (getAggregateSym(t)->byRef()) {
+    if (getAggregateSym(t)->byRef()) { // CALYPSO
       auto T = DtoType(t);
       ret = DBuilder.createPointerType(ret, getTypeAllocSize(T) * 8, getABITypeAlign(T) * 8,
 #if LDC_LLVM_VER >= 500
@@ -1184,11 +1185,9 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
     size_t argNo = 0;
     if (fd->vthis != vd) {
       assert(fd->parameters);
-      for (argNo = 0; argNo < fd->parameters->dim; argNo++) {
-        if ((*fd->parameters)[argNo] == vd)
-          break;
-      }
-      assert(argNo < fd->parameters->dim);
+      auto it = std::find(fd->parameters->begin(), fd->parameters->end(), vd);
+      assert(it != fd->parameters->end());
+      argNo = it - fd->parameters->begin();
       if (fd->vthis)
         argNo++;
     }
@@ -1251,7 +1250,7 @@ void ldc::DIBuilder::EmitGlobalVariable(llvm::GlobalVariable *llVar,
       mangleBuf.peekString(),                 // linkage name
       CreateFile(vd),                         // file
       vd->loc.linnum,                         // line num
-      CreateTypeDescription(vd->type), // type
+      CreateTypeDescription(vd->type),        // type
       vd->protection.kind == PROTprivate,     // is local to unit
 #if LDC_LLVM_VER >= 400
       nullptr // relative location of field

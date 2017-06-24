@@ -409,7 +409,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
             if (vd._init && vd._init.isVoidInitializer())
                 vx = null;
 
-            // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
+            // Find overlapped fields with the hole [vd.offset .. vd.offset.size()].
             foreach (j; 0 .. nfields)
             {
                 if (i == j)
@@ -574,7 +574,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                 if (vd._init && vd._init.isVoidInitializer())
                     vx = null;
 
-                // Find overlapped fields with the hole [vd->offset .. vd->offset->size()].
+                // Find overlapped fields with the hole [vd.offset .. vd.offset.size()].
                 size_t fieldi = i;
                 foreach (j; 0 .. nfields)
                 {
@@ -840,7 +840,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
             assert(!vthis);
             vthis = new ThisDeclaration(loc, t);
-            //vthis->storage_class |= STCref;
+            //vthis.storage_class |= STCref;
 
             // Emulate vthis.addMember()
             members.push(vthis);
@@ -883,7 +883,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
             s = null; // search() looks through ancestor classes
         if (s)
         {
-            // Finish all constructors semantics to determine this->noDefaultCtor.
+            // Finish all constructors semantics to determine this.noDefaultCtor.
             struct SearchCtor
             {
                 extern (C++) static int fp(Dsymbol s, void* ctxt)

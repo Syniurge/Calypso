@@ -93,7 +93,7 @@ enum PINLINE;
 #define STCreturn        0x100000000000LL // 'return ref' for function parameters
 #define STCautoref       0x200000000000LL // Mark for the already deduced 'auto ref' parameter
 #define STCinference     0x400000000000LL // do attribute inference
-#define STCimplicit     0x1000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCimplicit     0x2000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
@@ -197,7 +197,7 @@ class AliasDeclaration : public Declaration
 public:
     Dsymbol *aliassym;
     Dsymbol *overnext;          // next in overload list
-    Dsymbol *import;            // !=NULL if unresolved internal alias for selective import
+    Dsymbol *_import;           // !=NULL if unresolved internal alias for selective import
 
     virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
@@ -241,6 +241,7 @@ class VarDeclaration : public Declaration
 public:
     Initializer *_init;
     unsigned offset;
+    unsigned sequenceNumber;     // order the variables are declared
     FuncDeclarations nestedrefs; // referenced by these lexically nested functions
     bool isargptr;              // if parameter that _argptr points to
     structalign_t alignment;
@@ -249,6 +250,8 @@ public:
     bool mynew;                 // it is a class new'd with custom operator new
     int canassign;              // it can be assigned to
     bool overlapped;            // if it is a field and has overlapping
+    bool overlapUnsafe;         // if it is an overlapping field and the overlaps are unsafe
+    bool doNotInferScope;       // do not infer 'scope' for this variable
     unsigned char isdataseg;    // private data for isDataseg
     Dsymbol *aliassym;          // if redone as alias to another symbol
     VarDeclaration *lastVar;    // Linked list of variables for goto-skips-init detection
@@ -706,6 +709,7 @@ public:
 
     Dsymbol *syntaxCopy(Dsymbol *);
     bool isNested();
+    AggregateDeclaration *isThis();
     bool isVirtual();
     bool addPreInvariant();
     bool addPostInvariant();

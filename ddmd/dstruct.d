@@ -152,7 +152,7 @@ extern (C++) void semanticTypeInfo(Scope* sc, Type t)
             {
                 if (sd.inNonRoot())
                 {
-                    //printf("deferred sem3 for TypeInfo - sd = %s, inNonRoot = %d\n", sd->toChars(), sd->inNonRoot());
+                    //printf("deferred sem3 for TypeInfo - sd = %s, inNonRoot = %d\n", sd.toChars(), sd.inNonRoot());
                     Module.addDeferredSemantic3(sd);
                 }
             }
@@ -230,7 +230,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     extern (C++) static __gshared FuncDeclaration xerreq;   // object.xopEquals
     extern (C++) static __gshared FuncDeclaration xerrcmp;  // object.xopCmp
 
-    structalign_t alignment;    // alignment applied outside of the struct
     StructPOD ispod;            // if struct is POD
 
     // For 64 bit Efl function call/return ABI

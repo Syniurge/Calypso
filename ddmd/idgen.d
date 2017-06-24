@@ -289,6 +289,7 @@ Msgtable[] msgtable =
     { "DllMain" },
     { "tls_get_addr", "___tls_get_addr" },
     { "entrypoint", "__entrypoint" },
+    { "rt_init" },
 
     // varargs implementation
     { "va_start" },
@@ -398,6 +399,25 @@ Msgtable[] msgtable =
     // IN_LLVM: LDC-specific traits.
     { "targetCPU" },
     { "targetHasFeature" },
+    
+    // IN_LLVM: LDC-specific attributes
+    { "ldc" },
+    { "attributes" },
+    { "udaAllocSize", "allocSize" },
+    // fastmath is an AliasSeq of llvmAttr and llvmFastMathFlag
+    { "udaOptStrategy", "optStrategy" },
+    { "udaLLVMAttr", "llvmAttr" },
+    { "udaLLVMFastMathFlag", "llvmFastMathFlag" },
+    { "udaSection", "section" },
+    { "udaTarget", "target" },
+    { "udaWeak", "_weak" },
+    { "udaCompute", "compute" },
+    { "udaKernel", "_kernel" },
+    
+    // IN_LLVM: DCompute specific types and functionss
+    { "dcompute" },
+    { "dcPointer", "Pointer" },
+    { "dcReflect", "__dcompute_reflect" },
 ];
 
 

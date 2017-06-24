@@ -208,7 +208,7 @@ nothrow:
         immutable nbytes = (nlen + 7) / 8;
         // bt*() access memory in size_t chunks, so round up.
         ptr = cast(size_t*)mem.xrealloc(ptr,
-            (nbytes + (size_t.sizeof - 1)) & ~(size_t.sizeof - 1)); // CALYPSO backporting from LDC 1.3 to fix invalid writes that may be corrupting memory
+            (nbytes + (size_t.sizeof - 1)) & ~(size_t.sizeof - 1));
         if (nbytes > obytes)
             (cast(ubyte*)ptr)[obytes .. nbytes] = 0;
         len = nlen;

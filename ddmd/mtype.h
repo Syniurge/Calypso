@@ -114,6 +114,8 @@ typedef unsigned char TY;       // ENUMTY
 extern int Tsize_t;
 extern int Tptrdiff_t;
 
+#define SIZE_INVALID (~(d_uns64)0)   // error return from size() functions
+
 
 /**
  * type modifiers
@@ -256,7 +258,6 @@ public:
     virtual bool isTransitive() { return true; }
     void copyDeco(); // some semantic() overrides do not return merge() e.g TypeFunction, both deco and equivDeco need to be set
 
-    #define SIZE_INVALID (~(d_uns64)0)
     d_uns64 size();
     virtual d_uns64 size(Loc loc);
     virtual unsigned alignsize();
@@ -795,6 +796,7 @@ public:
     bool needsDestruction() /*const*/;
     bool needsNested();
     bool hasPointers();
+    bool hasVoidInitPointers();
     MATCH implicitConvTo(Type *to);
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
@@ -834,6 +836,7 @@ public:
     Expression *defaultInit(Loc loc);
     bool isZeroInit(Loc loc);
     bool hasPointers();
+    bool hasVoidInitPointers();
     Type *nextOf();
 
     void accept(Visitor *v) { v->visit(this); }
@@ -844,6 +847,7 @@ class TypeClass : public Type
 public:
     ClassDeclaration *sym;
     AliasThisRec att;
+    CPPMANGLE cppmangle;
 
     const char *kind() const;
     d_uns64 size(Loc loc) /*const*/;

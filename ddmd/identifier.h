@@ -32,6 +32,7 @@ public:
     int compare(RootObject *o);
     void print();
     const char *toChars();
+    int getValue() const;
     const char *toHChars2();
     size_t length() const; // CALYPSO
     int dyncast();

@@ -326,6 +326,9 @@ llvm::BasicBlock *CleanupScope::run(IRState &irs, llvm::BasicBlock *sourceBlock,
   if (!branchSelector) {
     // ... and have not created one yet, so do so now.
     branchSelector = new llvm::AllocaInst(llvm::Type::getInt32Ty(irs.context()),
+#if LDC_LLVM_VER >= 500
+                                          irs.module.getDataLayout().getAllocaAddrSpace(),
+#endif
                                           llvm::Twine("branchsel.") +
                                               beginBlock()->getName(),
                                           irs.topallocapoint());
@@ -637,10 +640,14 @@ TryCatchFinallyScopes::getLandingPadRef(CleanupCursor scope) {
 }
 
 namespace {
-llvm::LandingPadInst *createLandingPadInst(IRState &irs) {
-  LLType *retType =
+  llvm::LandingPadInst *createLandingPadInst(IRState &irs) {
+    LLType *retType =
       LLStructType::get(LLType::getInt8PtrTy(irs.context()),
-                        LLType::getInt32Ty(irs.context()), nullptr);
+        LLType::getInt32Ty(irs.context())
+#if LDC_LLVM_VER < 500
+        , nullptr
+#endif
+      );
 #if LDC_LLVM_VER >= 307
   if (!irs.func()->hasLLVMPersonalityFn()) {
     irs.func()->setLLVMPersonalityFn(

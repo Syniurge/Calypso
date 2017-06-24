@@ -159,8 +159,8 @@ public:
                          e->type->toChars());
     LOG_SCOPE;
 
-    Type * const t = e->type->toBasetype();
-    Type * const cty = t->nextOf()->toBasetype();
+    Type *const t = e->type->toBasetype();
+    Type *const cty = t->nextOf()->toBasetype();
 
     auto _init = buildStringLiteralConstant(e, t->ty != Tsarray);
 
@@ -201,7 +201,8 @@ public:
     if (t->ty == Tpointer) {
       result = arrptr;
     } else if (t->ty == Tarray) {
-      LLConstant *clen = LLConstantInt::get(DtoSize_t(), e->numberOfCodeUnits(), false);
+      LLConstant *clen =
+          LLConstantInt::get(DtoSize_t(), e->numberOfCodeUnits(), false);
       result = DtoConstSlice(clen, arrptr, e->type);
     } else {
       llvm_unreachable("Unknown type for StringExp.");
@@ -439,8 +440,8 @@ public:
       StructLiteralExp *se = static_cast<StructLiteralExp *>(e->e1);
 
       if (se->globalVar) {
-        IF_LOG Logger::cout() << "Returning existing global: " << *se->globalVar
-                              << '\n';
+        IF_LOG Logger::cout()
+            << "Returning existing global: " << *se->globalVar << '\n';
         result = se->globalVar;
         return;
       }
@@ -547,7 +548,8 @@ public:
         gIR->module, initval->getType(), canBeConst,
         llvm::GlobalValue::InternalLinkage, initval, ".dynarrayStorage");
 #if LDC_LLVM_VER >= 309
-    gvar->setUnnamedAddr(canBeConst ? llvm::GlobalValue::UnnamedAddr::Global : llvm::GlobalValue::UnnamedAddr::None);
+    gvar->setUnnamedAddr(canBeConst ? llvm::GlobalValue::UnnamedAddr::Global
+                                    : llvm::GlobalValue::UnnamedAddr::None);
 #else
     gvar->setUnnamedAddr(canBeConst);
 #endif
@@ -599,8 +601,8 @@ public:
       std::map<VarDeclaration *, llvm::Constant *> varInits;
       const size_t nexprs = e->elements->dim;
       for (size_t i = 0; i < nexprs; i++) {
-        if ((*e->elements)[i]) {
-          LLConstant *c = toConstElem((*e->elements)[i]);
+        if (auto elem = (*e->elements)[i]) {
+          LLConstant *c = toConstElem(elem);
           // extend i1 to i8
           if (c->getType() == LLType::getInt1Ty(p->context()))
             c = llvm::ConstantExpr::getZExt(c, LLType::getInt8Ty(p->context()));
@@ -624,8 +626,8 @@ public:
     StructLiteralExp *value = e->value;
 
     if (value->globalVar) {
-      IF_LOG Logger::cout() << "Using existing global: " << *value->globalVar
-                            << '\n';
+      IF_LOG Logger::cout()
+          << "Using existing global: " << *value->globalVar << '\n';
     } else {
       value->globalVar = new llvm::GlobalVariable(
           p->module, origClass->type->ctype->isClass()->getMemoryLLType(),
@@ -649,16 +651,18 @@ public:
           cur = classHierachy.top();
           classHierachy.pop();
           for (size_t j = 0; j < cur->fields.dim; ++j) {
-            if ((*value->elements)[i]) {
+            if (auto elem = (*value->elements)[i]) {
               VarDeclaration *field = cur->fields[j];
               IF_LOG Logger::println("Getting initializer for: %s",
                                      field->toChars());
               LOG_SCOPE;
-              varInits[field] = toConstElem((*value->elements)[i]);
+              varInits[field] = toConstElem(elem);
             }
             ++i;
           }
         }
+
+        (void)nexprs;
         assert(i == nexprs);
       }
 
@@ -710,20 +714,35 @@ public:
     TypeVector *tv = static_cast<TypeVector *>(e->to->toBasetype());
     assert(tv->ty == Tvector);
 
-    // The AST for
-    //   static immutable ubyte16 vec1 = 123;
-    // differs from
-    //    static immutable ubyte[16] vec1 = 123;
-    // In the vector case the AST contains an IntegerExp (of type int) and a
-    // CastExp to type ubyte. In the static array case the AST only contains an
-    // IntegerExp of type ubyte. Simply call optimize to get  rid of the cast.
-    // FIXME: Check DMD source to understand why two different ASTs are
-    //        constructed.
-    llvm::Constant *val = toConstElem(e->e1->optimize(WANTvalue));
-
-    dinteger_t elemCount =
+    const auto elemCount =
         static_cast<TypeSArray *>(tv->basetype)->dim->toInteger();
-    result = llvm::ConstantVector::getSplat(elemCount, val);
+
+    // Array literals are assigned element-for-element; other expressions splat
+    // across the whole vector.
+    if (e->e1->op == TOKarrayliteral) {
+      const auto ale = static_cast<ArrayLiteralExp *>(e->e1);
+
+      llvm::SmallVector<llvm::Constant *, 16> elements;
+      elements.reserve(elemCount);
+      for (size_t i = 0; i < elemCount; ++i) {
+        elements.push_back(toConstElem(indexArrayLiteral(ale, i)));
+      }
+
+      result = llvm::ConstantVector::get(elements);
+    } else {
+      // The AST for
+      //   static immutable ubyte16 vec1 = 123;
+      // differs from
+      //    static immutable ubyte[16] vec1 = 123;
+      // In the vector case the AST contains an IntegerExp (of type int) and a
+      // CastExp to type ubyte. In the static array case the AST only contains
+      // an IntegerExp of type ubyte. Simply call optimize to get rid of the
+      // cast.
+      // FIXME: Check DMD source to understand why two different ASTs are
+      //        constructed.
+      result = llvm::ConstantVector::getSplat(
+          elemCount, toConstElem(e->e1->optimize(WANTvalue)));
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////

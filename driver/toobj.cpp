@@ -16,7 +16,6 @@
 #include "gen/irstate.h"
 #include "gen/logger.h"
 #include "gen/optimizer.h"
-#include "gen/programs.h"
 #include "llvm/IR/AssemblyAnnotationWriter.h"
 #include "llvm/IR/Verifier.h"
 #if LDC_LLVM_VER >= 309
@@ -40,6 +39,9 @@
 #if LDC_LLVM_VER >= 307
 #include "llvm/Support/Path.h"
 #endif
+#ifdef LDC_LLVM_SUPPORTED_TARGET_SPIRV
+#include "llvm/Support/SPIRV.h"
+#endif
 #include "llvm/Target/TargetMachine.h"
 #if LDC_LLVM_VER >= 307
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -60,7 +62,8 @@ using LLErrorInfo = std::string;
 #endif
 
 static llvm::cl::opt<bool>
-    NoIntegratedAssembler("no-integrated-as", llvm::cl::Hidden,
+    NoIntegratedAssembler("no-integrated-as", llvm::cl::ZeroOrMore,
+                          llvm::cl::Hidden,
                           llvm::cl::desc("Disable integrated assembler"));
 
 // based on llc code, University of Illinois Open Source License
@@ -75,7 +78,19 @@ static void codegenModule(llvm::TargetMachine &Target, llvm::Module &m,
   legacy::
 #endif
       PassManager Passes;
+  ComputeBackend::Type cb = getComputeTargetType(&m);
 
+  if (cb == ComputeBackend::SPIRV) {
+#ifdef LDC_LLVM_SUPPORTED_TARGET_SPIRV
+    IF_LOG Logger::println("running createSPIRVWriterPass()");
+    llvm::createSPIRVWriterPass(out)->runOnModule(m);
+    IF_LOG Logger::println("Success.");
+#else
+    error(Loc(), "Trying to target SPIRV, but LDC is not built to do so!");
+#endif
+
+    return;
+  }
 #if LDC_LLVM_VER >= 307
 // The DataLayout is already set at the module (in module.cpp,
 // method Module::genLLVMModule())
@@ -107,7 +122,11 @@ static void codegenModule(llvm::TargetMachine &Target, llvm::Module &m,
 #else
                                  fout,
 #endif
-                                 fileType, codeGenOptLevel())) {
+        // Always generate assembly for ptx as it is an assembly format
+        // The PTX backend fails if we pass anything else.
+        (cb == ComputeBackend::NVPTX) ? llvm::TargetMachine::CGFT_AssemblyFile
+                                      : fileType,
+          codeGenOptLevel())) {
     llvm_unreachable("no support for asm output");
   }
 
@@ -164,8 +183,7 @@ static void assemble(const std::string &asmpath, const std::string &objpath) {
   }
 
   // Run the compiler to assembly the program.
-  std::string gcc(getGcc());
-  int R = executeToolAndWait(gcc, args, global.params.verbose);
+  int R = executeToolAndWait(getGcc(), args, global.params.verbose);
   if (R) {
     error(Loc(), "Error while invoking external assembler.");
     fatal();
@@ -227,7 +245,9 @@ class AssemblyAnnotator : public AssemblyAnnotationWriter {
     if (MDNode *N = FindSubprogram(F, Finder))
 #endif
     {
-#if LDC_LLVM_VER >= 307
+#if LDC_LLVM_VER >= 500
+      return N->getName();
+#elif LDC_LLVM_VER >= 307
       return N->getDisplayName();
 #else
       llvm::DISubprogram sub(N);
@@ -409,8 +429,7 @@ void writeModule(llvm::Module *m, const char *filename) {
   // Use cached object code if possible.
   // TODO: combine LDC's cache and LTO (the advantage is skipping the IR
   // optimization).
-  const bool useIR2ObjCache =
-      !opts::cacheDir.empty() && outputObj && !doLTO;
+  const bool useIR2ObjCache = !opts::cacheDir.empty() && outputObj && !doLTO;
   llvm::SmallString<32> moduleHash;
   if (useIR2ObjCache) {
     llvm::SmallString<128> cacheDir(opts::cacheDir.c_str());
@@ -484,15 +503,11 @@ void writeModule(llvm::Module *m, const char *filename) {
       auto &moduleSummaryIndex = indexBuilder.getIndex();
 #else
       llvm::ProfileSummaryInfo PSI(*m);
-      // Set PSIptr to nullptr when there is no PGO information available, such
-      // that LLVM will not try to find PGO information for each function inside
-      // `buildModuleSummaryIndex`. (micro-optimization)
-      auto PSIptr = m->getProfileSummary() ? &PSI : nullptr;
 
       // When the function freq info callback is set to nullptr, LLVM will
       // calculate it automatically for us.
       auto moduleSummaryIndex = buildModuleSummaryIndex(
-          *m, /* function freq callback */ nullptr, PSIptr);
+          *m, /* function freq callback */ nullptr, &PSI);
 #endif
 
       llvm::WriteBitcodeToFile(m, bos, true, &moduleSummaryIndex,

@@ -10,7 +10,6 @@
 #include "driver/configfile.h"
 #include "driver/exe_path.h"
 #include "mars.h"
-#include "libconfig.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -32,9 +31,9 @@ namespace sys = llvm::sys;
 
 // dummy only; needs to be parsed manually earlier as the switches contained in
 // the config file are injected into the command line options fed to the parser
-llvm::cl::opt<std::string>
+static llvm::cl::opt<std::string>
     clConf("conf", llvm::cl::desc("Use configuration file <filename>"),
-           llvm::cl::value_desc("filename"));
+           llvm::cl::value_desc("filename"), llvm::cl::ZeroOrMore);
 
 #if _WIN32
 std::string getUserHomeDirectory() {
@@ -57,21 +56,23 @@ static bool ReadPathFromRegistry(llvm::SmallString<128> &p) {
   HKEY hkey;
   bool res = false;
   // FIXME: Version number should be a define.
-  if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\ldc-developers\\LDC\\0.11.0"),
-                   NULL, KEY_QUERY_VALUE, &hkey) == ERROR_SUCCESS) {
+  if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                   _T("SOFTWARE\\ldc-developers\\LDC\\0.11.0"), NULL,
+                   KEY_QUERY_VALUE, &hkey) == ERROR_SUCCESS) {
     DWORD length;
-    if (RegGetValue(hkey, NULL, _T("Path"), RRF_RT_REG_SZ, NULL, NULL, &length) ==
-        ERROR_SUCCESS) {
+    if (RegGetValue(hkey, NULL, _T("Path"), RRF_RT_REG_SZ, NULL, NULL,
+                    &length) == ERROR_SUCCESS) {
       TCHAR *data = static_cast<TCHAR *>(_alloca(length * sizeof(TCHAR)));
-      if (RegGetValue(hkey, NULL, _T("Path"), RRF_RT_REG_SZ, NULL, data, &length) ==
-          ERROR_SUCCESS) {
+      if (RegGetValue(hkey, NULL, _T("Path"), RRF_RT_REG_SZ, NULL, data,
+                      &length) == ERROR_SUCCESS) {
 #if UNICODE
 #if LDC_LLVM_VER >= 400
         using UTF16 = llvm::UTF16;
 #endif
         std::string out;
         res = llvm::convertUTF16ToUTF8String(
-            llvm::ArrayRef<UTF16>(reinterpret_cast<UTF16 *>(data), length), out);
+            llvm::ArrayRef<UTF16>(reinterpret_cast<UTF16 *>(data), length),
+            out);
         p = out;
 #else
         p = std::string(data);
@@ -85,12 +86,7 @@ static bool ReadPathFromRegistry(llvm::SmallString<128> &p) {
 }
 #endif
 
-ConfigFile::ConfigFile() {
-  cfg = new config_t;
-  config_init(cfg);
-}
-
-bool ConfigFile::locate() {
+bool ConfigFile::locate(std::string &pathstr) {
   // temporary configuration
 
   llvm::SmallString<128> p;
@@ -174,7 +170,8 @@ bool ConfigFile::locate() {
   return false;
 }
 
-bool ConfigFile::read(const char *explicitConfFile, const char* section) {
+bool ConfigFile::read(const char *explicitConfFile, const char *section) {
+  std::string pathstr;
   // explicitly provided by user in command line?
   if (explicitConfFile) {
     const std::string clPath = explicitConfFile;
@@ -184,8 +181,9 @@ bool ConfigFile::read(const char *explicitConfFile, const char* section) {
       if (sys::fs::exists(clPath)) {
         pathstr = clPath;
       } else {
-        fprintf(stderr, "Warning: configuration file '%s' not found, falling "
-                        "back to default\n",
+        fprintf(stderr,
+                "Warning: configuration file '%s' not found, falling "
+                "back to default\n",
                 clPath.c_str());
       }
     }
@@ -193,56 +191,13 @@ bool ConfigFile::read(const char *explicitConfFile, const char* section) {
 
   // locate file automatically if path is not set yet
   if (pathstr.empty()) {
-    if (!locate()) {
+    if (!locate(pathstr)) {
       return false;
     }
   }
 
-  // read the cfg
-  if (!config_read_file(cfg, pathstr.c_str())) {
-    std::cerr << "error reading configuration file" << std::endl;
-    return false;
-  }
+  pathcstr = strdup(pathstr.c_str());
+  auto binpath = exe_path::getBinDir();
 
-  config_setting_t *root = nullptr;
-  if (section && *section)
-    root = config_lookup(cfg, section);
-
-  // make sure there's a default group
-  if (!root) {
-    section = "default";
-    root = config_lookup(cfg, section);
-  }
-  if (!root) {
-    std::cerr << "no default settings in configuration file" << std::endl;
-    return false;
-  }
-  if (!config_setting_is_group(root)) {
-    std::cerr << section << " is not a group" << std::endl;
-    return false;
-  }
-
-  // handle switches
-  if (config_setting_t *sw = config_setting_get_member(root, "switches")) {
-    // replace all %%ldcbinarypath%% occurrences by the path to the
-    // LDC bin directory (using forward slashes)
-    std::string binpathkey = "%%ldcbinarypath%%";
-
-    std::string binpath = exe_path::getBinDir();
-    std::replace(binpath.begin(), binpath.end(), '\\', '/');
-
-    int len = config_setting_length(sw);
-    for (int i = 0; i < len; i++) {
-      std::string v(config_setting_get_string(config_setting_get_elem(sw, i)));
-
-      size_t p;
-      while (std::string::npos != (p = v.find(binpathkey))) {
-        v.replace(p, binpathkey.size(), binpath);
-      }
-
-      switches.push_back(strdup(v.c_str()));
-    }
-  }
-
-  return true;
+  return readConfig(pathcstr, section, binpath.c_str());
 }

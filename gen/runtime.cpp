@@ -43,10 +43,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 static llvm::cl::opt<bool> nogc(
-    "nogc",
+    "nogc", llvm::cl::ZeroOrMore,
     llvm::cl::desc(
-        "Do not allow code that generates implicit garbage collector calls"),
-    llvm::cl::ZeroOrMore);
+        "Do not allow code that generates implicit garbage collector calls"));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -97,8 +96,9 @@ static void checkForImplicitGCCall(const Loc &loc, const char *name) {
 
     if (binary_search(&GCNAMES[0],
                       &GCNAMES[sizeof(GCNAMES) / sizeof(std::string)], name)) {
-      error(loc, "No implicit garbage collector calls allowed with -nogc "
-                 "option enabled: %s",
+      error(loc,
+            "No implicit garbage collector calls allowed with -nogc "
+            "option enabled: %s",
             name);
       fatal();
     }
@@ -132,22 +132,24 @@ llvm::Function *getRuntimeFunction(const Loc &loc, llvm::Module &target,
                                    const char *name) {
   checkForImplicitGCCall(loc, name);
 
-  if (!M) {
+  if (!M)
     initRuntime();
-  }
 
-  LLFunction *fn = target.getFunction(name);
-  if (fn) {
-    return fn;
-  }
-
-  fn = M->getFunction(name);
+  LLFunction *fn = M->getFunction(name);
   if (!fn) {
     error(loc, "Runtime function '%s' was not found", name);
     fatal();
   }
-
   LLFunctionType *fnty = fn->getFunctionType();
+
+  if (LLFunction *existing = target.getFunction(name)) {
+    if (existing->getFunctionType() != fnty) {
+      error(Loc(), "Incompatible declaration of runtime function '%s'", name);
+      fatal();
+    }
+    return existing;
+  }
+
   LLFunction *resfn =
       llvm::cast<llvm::Function>(target.getOrInsertFunction(name, fnty));
   resfn->setAttributes(fn->getAttributes());
@@ -304,8 +306,9 @@ static void buildRuntimeModule() {
   //////////////////////////////////////////////////////////////////////////////
 
   // Construct some attribute lists used below (possibly multiple times)
-  AttrSet NoAttrs, Attr_NoAlias(NoAttrs, LLAttributeSet::ReturnIndex,
-                                llvm::Attribute::NoAlias),
+  AttrSet NoAttrs,
+      Attr_NoAlias(NoAttrs, LLAttributeSet::ReturnIndex,
+                   llvm::Attribute::NoAlias),
       Attr_NoUnwind(NoAttrs, LLAttributeSet::FunctionIndex,
                     llvm::Attribute::NoUnwind),
       Attr_ReadOnly(NoAttrs, LLAttributeSet::FunctionIndex,
@@ -315,19 +318,29 @@ static void buildRuntimeModule() {
                          llvm::Attribute::NoReturn),
       Attr_ReadOnly_NoUnwind(Attr_ReadOnly, LLAttributeSet::FunctionIndex,
                              llvm::Attribute::NoUnwind),
-      Attr_ReadOnly_1_NoCapture(Attr_ReadOnly, 1, llvm::Attribute::NoCapture),
-      Attr_ReadOnly_1_3_NoCapture(Attr_ReadOnly_1_NoCapture, 3,
+      Attr_ReadOnly_1_NoCapture(Attr_ReadOnly, AttrSet::FirstArgIndex,
+                                llvm::Attribute::NoCapture),
+      Attr_ReadOnly_1_3_NoCapture(Attr_ReadOnly_1_NoCapture,
+                                  AttrSet::FirstArgIndex + 2,
                                   llvm::Attribute::NoCapture),
-      Attr_ReadOnly_NoUnwind_1_NoCapture(Attr_ReadOnly_1_NoCapture, ~0U,
+      Attr_ReadOnly_NoUnwind_1_NoCapture(Attr_ReadOnly_1_NoCapture,
+                                         LLAttributeSet::FunctionIndex,
                                          llvm::Attribute::NoUnwind),
       Attr_ReadOnly_NoUnwind_1_2_NoCapture(Attr_ReadOnly_NoUnwind_1_NoCapture,
-                                           2, llvm::Attribute::NoCapture),
-      Attr_ReadNone(NoAttrs, ~0U, llvm::Attribute::ReadNone),
-      Attr_1_NoCapture(NoAttrs, 1, llvm::Attribute::NoCapture),
-      Attr_NoAlias_1_NoCapture(Attr_1_NoCapture, 0, llvm::Attribute::NoAlias),
-      Attr_1_2_NoCapture(Attr_1_NoCapture, 2, llvm::Attribute::NoCapture),
-      Attr_1_3_NoCapture(Attr_1_NoCapture, 3, llvm::Attribute::NoCapture),
-      Attr_1_4_NoCapture(Attr_1_NoCapture, 4, llvm::Attribute::NoCapture);
+                                           AttrSet::FirstArgIndex + 1,
+                                           llvm::Attribute::NoCapture),
+      Attr_ReadNone(NoAttrs, LLAttributeSet::FunctionIndex,
+                    llvm::Attribute::ReadNone),
+      Attr_1_NoCapture(NoAttrs, AttrSet::FirstArgIndex,
+                       llvm::Attribute::NoCapture),
+      Attr_1_2_NoCapture(Attr_1_NoCapture, AttrSet::FirstArgIndex + 1,
+                         llvm::Attribute::NoCapture),
+      Attr_1_3_NoCapture(Attr_1_NoCapture, AttrSet::FirstArgIndex + 2,
+                         llvm::Attribute::NoCapture),
+      Attr_1_4_NoCapture(Attr_1_NoCapture, AttrSet::FirstArgIndex + 3,
+                         llvm::Attribute::NoCapture),
+      Attr_NoAlias_1_NoCapture(Attr_1_NoCapture, LLAttributeSet::ReturnIndex,
+                               llvm::Attribute::NoAlias);
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -694,29 +707,15 @@ static void buildRuntimeModule() {
   //////////////////////////////////////////////////////////////////////////////
 
   // void invariant._d_invariant(Object o)
-  createFwdDecl(
-      LINKd, voidTy,
-      {gABI->mangleFunctionForLLVM("_D9invariant12_d_invariantFC6ObjectZv", LINKd)},
-      {objectTy});
+  createFwdDecl(LINKd, voidTy,
+                {gABI->mangleFunctionForLLVM(
+                    "_D9invariant12_d_invariantFC6ObjectZv", LINKd)},
+                {objectTy});
 
-  // void _d_dso_registry(CompilerDSOData* data)
-  llvm::StringRef fname("_d_dso_registry");
-
-  LLType *LLvoidTy = LLType::getVoidTy(gIR->context());
-  LLType *LLvoidPtrPtrTy = getPtrToType(getPtrToType(LLvoidTy));
-  LLType *moduleInfoPtrPtrTy =
-      getPtrToType(getPtrToType(DtoType(Module::moduleinfo->type)));
-
-  llvm::StructType *dsoDataTy =
-      llvm::StructType::get(DtoSize_t(),        // version
-                            LLvoidPtrPtrTy,     // slot
-                            moduleInfoPtrPtrTy, // _minfo_beg
-                            moduleInfoPtrPtrTy, // _minfo_end
-                            NULL);
-
-  llvm::Type *types[] = {getPtrToType(dsoDataTy)};
-  llvm::FunctionType *fty = llvm::FunctionType::get(LLvoidTy, types, false);
-  llvm::Function::Create(fty, llvm::GlobalValue::ExternalLinkage, fname, M);
+  // void _d_dso_registry(void* data)
+  // (the argument is really a pointer to
+  // rt.sections_elf_shared.CompilerDSOData)
+  createFwdDecl(LINKc, voidTy, {"_d_dso_registry"}, {voidPtrTy});
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -734,9 +733,9 @@ static void buildRuntimeModule() {
 
     // The types of these functions don't really matter because they are always
     // bitcast to correct signature before calling.
-    Type* objectPtrTy = voidPtrTy;
-    Type* selectorPtrTy = voidPtrTy;
-    Type* realTy = Type::tfloat80;
+    Type *objectPtrTy = voidPtrTy;
+    Type *selectorPtrTy = voidPtrTy;
+    Type *realTy = Type::tfloat80;
 
     // id objc_msgSend(id self, SEL op, ...)
     // Function called early and/or often, so lazy binding isn't worthwhile.
@@ -749,13 +748,13 @@ static void buildRuntimeModule() {
       // creal objc_msgSend_fp2ret(id self, SEL op, ...)
       createFwdDecl(LINKc, Type::tcomplex80, {"objc_msgSend_fp2ret"},
                     {objectPtrTy, selectorPtrTy});
-      // fall-thru
+    // fall-thru
     case llvm::Triple::x86:
       // x86_64 real return only,  x86 float, double, real return
       // real objc_msgSend_fpret(id self, SEL op, ...)
       createFwdDecl(LINKc, realTy, {"objc_msgSend_fpret"},
                     {objectPtrTy, selectorPtrTy});
-      // fall-thru
+    // fall-thru
     case llvm::Triple::arm:
     case llvm::Triple::thumb:
       // used when return value is aggregate via a hidden sret arg

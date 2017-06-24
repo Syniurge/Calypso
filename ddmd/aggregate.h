@@ -121,6 +121,7 @@ public:
 
     virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     virtual Scope *newScope(Scope *sc);
+    void setScope(Scope *sc);
     void semantic2(Scope *sc);
     void semantic3(Scope *sc);
     virtual bool determineFields(); // CALYPSO
@@ -241,10 +242,8 @@ struct BaseClass
     // making up the vtbl[]
     FuncDeclarations vtbl;
 
-    size_t baseInterfaces_dim = 0;
-    // if BaseClass is an interface, these
-    // are a copy of the InterfaceDeclaration::interfaces
-    BaseClass *baseInterfaces = nullptr;
+    DArray<BaseClass> baseInterfaces;   // if BaseClass is an interface, these
+                                        // are a copy of the InterfaceDeclaration::interfaces
 
     BaseClass();
     BaseClass(Type *type) { this->type = type; } // CALYPSO
@@ -310,15 +309,17 @@ public:
     Scope *newScope(Scope *sc);
     void semantic(Scope *sc);
 
+    #define OFFSET_RUNTIME 0x76543210
+    #define OFFSET_FWDREF 0x76543211
+
     bool isBaseInfoComplete();
     Dsymbol *search(Loc, Identifier *ident, int flags = SearchLocalsOnly);
-    ClassDeclaration *searchBase(Loc, Identifier *ident);
+    ClassDeclaration *searchBase(Identifier *ident);
     virtual bool buildLayout(); // CALYPSO
     void finalizeSize();
     bool isFuncHidden(FuncDeclaration *fd);
     FuncDeclaration *findFunc(Identifier *ident, TypeFunction *tf);
     virtual void interfaceSemantic(Scope *sc);  // CALYPSO
-    unsigned setBaseInterfaceOffsets(unsigned baseOffset);
     bool isCOMclass() const;
     virtual bool isCOMinterface() const;
     bool isCPPclass() const;

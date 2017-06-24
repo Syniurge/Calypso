@@ -384,11 +384,20 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         return new ErrorExp();
     }
 
+    Expression True()
+    {
+        return new IntegerExp(e.loc, true, Type.tbool);
+    }
+
+    Expression False()
+    {
+        return new IntegerExp(e.loc, false, Type.tbool);
+    }
+
     Expression isX(T)(bool function(T) fp)
     {
-        int result = 0;
         if (!dim)
-            goto Lfalse;
+            return False();
         foreach (o; *e.args)
         {
             static if (is(T == Type))
@@ -398,7 +407,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             {
                 auto s = getDsymbol(o);
                 if (!s)
-                    goto Lfalse;
+                    return False();
             }
             static if (is(T == Dsymbol))
                 alias y = s;
@@ -408,12 +417,9 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                 auto y = s.isFuncDeclaration();
 
             if (!y || !fp(y))
-                goto Lfalse;
+                return False();
         }
-        result = 1;
-
-    Lfalse:
-        return new IntegerExp(e.loc, result, Type.tbool);
+        return True();
     }
 
     alias isTypeX = isX!Type;
@@ -486,12 +492,9 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         Type tb = t.baseElemOf();
         if (auto sd = tb.ty == Tstruct ? (cast(TypeStruct)tb).sym : null)
         {
-            if (sd.isPOD())
-                goto Ltrue;
-            else
-                goto Lfalse;
+            return sd.isPOD() ? True() : False();
         }
-        goto Ltrue;
+        return True();
     }
     if (e.ident == Id.isNested)
     {
@@ -505,17 +508,11 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         }
         else if (auto ad = s.isAggregateDeclaration())
         {
-            if (ad.isNested())
-                goto Ltrue;
-            else
-                goto Lfalse;
+            return ad.isNested() ? True() : False();
         }
         else if (auto fd = s.isFuncDeclaration())
         {
-            if (fd.isNested())
-                goto Ltrue;
-            else
-                goto Lfalse;
+            return fd.isNested() ? True() : False();
         }
 
         e.error("aggregate or function expected instead of '%s'", o.toChars());
@@ -718,16 +715,13 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             if (sym)
             {
                 if (auto sm = sym.search(e.loc, id))
-                    goto Ltrue;
+                    return True();
             }
 
             /* Take any errors as meaning it wasn't found
              */
             ex = ex.trySemantic(scx);
-            if (!ex)
-                goto Lfalse;
-            else
-                goto Ltrue;
+            return ex ? True() : False();
         }
         else if (e.ident == Id.getMember)
         {
@@ -743,7 +737,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             ex = ex.semantic(scx);
             if (errors < global.errors)
                 e.error("%s cannot be resolved", eorig.toChars());
-            //ex->print();
+            //ex.print();
 
             /* Create tuple of functions of ex
              */
@@ -863,7 +857,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             s = imp.mod;
         }
 
-        //printf("getAttributes %s, attrs = %p, scope = %p\n", s->toChars(), s->userAttribDecl, s->scope);
+        //printf("getAttributes %s, attrs = %p, scope = %p\n", s.toChars(), s.userAttribDecl, s.scope);
         auto udad = s.userAttribDecl;
         auto exps = udad ? udad.getAttributes() : new Expressions();
         auto tup = new TupleExp(e.loc, exps);
@@ -942,7 +936,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         {
             if (!sm)
                 return 1;
-            //printf("\t[%i] %s %s\n", i, sm->kind(), sm->toChars());
+            //printf("\t[%i] %s %s\n", i, sm.kind(), sm.toChars());
             if (sm.ident)
             {
                 const idx = sm.ident.toChars();
@@ -963,7 +957,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                 if (sm.isTypeInfoDeclaration()) // Bugzilla 15177
                     return 0;
 
-                //printf("\t%s\n", sm->ident->toChars());
+                //printf("\t%s\n", sm.ident.toChars());
 
                 /* Skip if already present in idents[]
                  */
@@ -1030,7 +1024,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
          * compile without error
          */
         if (!dim)
-            goto Lfalse;
+            return False();
 
         foreach (o; *e.args)
         {
@@ -1076,10 +1070,10 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
 
             if (global.endGagging(errors) || err)
             {
-                goto Lfalse;
+                return False();
             }
         }
-        goto Ltrue;
+        return True();
     }
     if (e.ident == Id.isSame)
     {
@@ -1095,7 +1089,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         auto o2 = (*e.args)[1];
         auto s1 = getDsymbol(o1);
         auto s2 = getDsymbol(o2);
-        //printf("isSame: %s, %s\n", o1->toChars(), o2->toChars());
+        //printf("isSame: %s, %s\n", o1.toChars(), o2.toChars());
         version (none)
         {
             printf("o1: %p\n", o1);
@@ -1106,7 +1100,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                     printf("%s\n", ea.toChars());
                 if (auto ta = isType(o1))
                     printf("%s\n", ta.toChars());
-                goto Lfalse;
+                return False();
             }
             else
                 printf("%s %s\n", s1.kind(), s1.toChars());
@@ -1118,11 +1112,11 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             if (ea1 && ea2)
             {
                 if (ea1.equals(ea2))
-                    goto Ltrue;
+                    return True();
             }
         }
         if (!s1 || !s2)
-            goto Lfalse;
+            return False();
         s1 = s1.toAlias();
         s2 = s2.toAlias();
 
@@ -1131,10 +1125,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         if (auto fa2 = s2.isFuncAliasDeclaration())
             s2 = fa2.toAliasFunc();
 
-        if (s1 == s2)
-            goto Ltrue;
-        else
-            goto Lfalse;
+        return (s1 == s2) ? True() : False();
     }
     if (e.ident == Id.getUnitTests)
     {
@@ -1244,10 +1235,4 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
     else
         e.error("unrecognized trait '%s'", e.ident.toChars());
     return new ErrorExp();
-
-Lfalse:
-    return new IntegerExp(e.loc, 0, Type.tbool);
-
-Ltrue:
-    return new IntegerExp(e.loc, 1, Type.tbool);
 }

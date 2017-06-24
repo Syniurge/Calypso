@@ -41,6 +41,7 @@ import ddmd.dstruct;
 import ddmd.dsymbol;
 import ddmd.dtemplate;
 import ddmd.errors;
+import ddmd.escape;
 import ddmd.func;
 import ddmd.globals;
 import ddmd.hdrgen;
@@ -99,13 +100,13 @@ void emplaceExp(T : UnionExp)(T* p, Expression e)
  */
 extern (C++) Expression getRightThis(Loc loc, Scope* sc, AggregateDeclaration ad, Expression e1, Declaration var, int flag = 0)
 {
-    //printf("\ngetRightThis(e1 = %s, ad = %s, var = %s)\n", e1->toChars(), ad->toChars(), var->toChars());
+    //printf("\ngetRightThis(e1 = %s, ad = %s, var = %s)\n", e1.toChars(), ad.toChars(), var.toChars());
     if (ad && ad.langPlugin()) // CALYPSO
         if (auto result = ad.langPlugin().getRightThis(loc, sc, ad, e1, var, flag))
             return result;
 L1:
     Type t = e1.type.toBasetype();
-    //printf("e1->type = %s, var->type = %s\n", e1->type->toChars(), var->type->toChars());
+    //printf("e1.type = %s, var.type = %s\n", e1.type.toChars(), var.type.toChars());
 
     /* If e1 is not the 'this' pointer for ad
      */
@@ -130,7 +131,7 @@ L1:
                 e1.type = tcd.vthis.type;
                 e1.type = e1.type.addMod(t.mod);
                 // Do not call checkNestedRef()
-                //e1 = e1->semantic(sc);
+                //e1 = e1.semantic(sc);
 
                 // Skip up over nested functions, and get the enclosing
                 // class type.
@@ -141,7 +142,7 @@ L1:
                     FuncDeclaration f = s.isFuncDeclaration();
                     if (f.vthis)
                     {
-                        //printf("rewriting e1 to %s's this\n", f->toChars());
+                        //printf("rewriting e1 to %s's this\n", f.toChars());
                         n++;
                         version(IN_LLVM)
                         {
@@ -194,7 +195,7 @@ extern (C++) FuncDeclaration hasThis(Scope* sc)
     while (p && p.isTemplateMixin())
         p = p.parent;
     FuncDeclaration fdthis = p ? p.isFuncDeclaration() : null;
-    //printf("fdthis = %p, '%s'\n", fdthis, fdthis ? fdthis->toChars() : "");
+    //printf("fdthis = %p, '%s'\n", fdthis, fdthis ? fdthis.toChars() : "");
 
     // Go upwards until we find the enclosing member function
     FuncDeclaration fd = fdthis;
@@ -223,7 +224,7 @@ extern (C++) FuncDeclaration hasThis(Scope* sc)
 
     if (!fd.isThis())
     {
-        //printf("test '%s'\n", fd->toChars());
+        //printf("test '%s'\n", fd.toChars());
         goto Lno;
     }
 
@@ -521,7 +522,7 @@ Leproplvalue:
 
 extern (C++) Expression resolveProperties(Scope* sc, Expression e)
 {
-    //printf("resolveProperties(%s)\n", e->toChars());
+    //printf("resolveProperties(%s)\n", e.toChars());
     e = resolvePropertiesX(sc, e);
     if (e.checkRightThis(sc))
         return new ErrorExp();
@@ -543,7 +544,7 @@ extern (C++) bool checkPropertyCall(Expression e, Expression emsg)
         if (ce.f)
         {
             tf = cast(TypeFunction)ce.f.type;
-            /* If a forward reference to ce->f, try to resolve it
+            /* If a forward reference to ce.f, try to resolve it
              */
             if (!tf.deco && ce.f._scope)
             {
@@ -568,7 +569,7 @@ extern (C++) bool checkPropertyCall(Expression e, Expression emsg)
  */
 extern (C++) Expression resolvePropertiesOnly(Scope* sc, Expression e1)
 {
-    //printf("e1 = %s %s\n", Token::toChars(e1->op), e1->toChars());
+    //printf("e1 = %s %s\n", Token::toChars(e1.op), e1.toChars());
     OverloadSet os;
     FuncDeclaration fd;
     TemplateDeclaration td;
@@ -1163,6 +1164,12 @@ extern (C++) bool arrayExpressionToCommonType(Scope* sc, Expressions* exps, Type
             t0 = Type.terror;
             continue;
         }
+        if (e.type.ty == Tvoid)
+        {
+            // void expressions do not concur to the determination of the common
+            // type.
+            continue;
+        }
         if (checkNonAssignmentArrayOp(e))
         {
             t0 = Type.terror;
@@ -1207,7 +1214,7 @@ extern (C++) bool arrayExpressionToCommonType(Scope* sc, Expressions* exps, Type
                 continue;
 
             e = e.implicitCastTo(sc, t0);
-            //assert(e->op != TOKerror);
+            //assert(e.op != TOKerror);
             if (e.op == TOKerror)
             {
                 /* Bugzilla 13024: a workaround for the bug in typeMerge -
@@ -1508,7 +1515,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
 
             if (tf.varargs == 2 && i + 1 == nparams)
             {
-                //printf("\t\tvarargs == 2, p->type = '%s'\n", p->type->toChars());
+                //printf("\t\tvarargs == 2, p.type = '%s'\n", p.type.toChars());
                 {
                     MATCH m;
                     if ((m = arg.implicitConvTo(p.type)) > MATCHnomatch)
@@ -1531,7 +1538,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 case Tsarray:
                 case Tarray:
                     {
-                        /* Create a static array variable v of type arg->type:
+                        /* Create a static array variable v of type arg.type:
                          *  T[dim] __arrayArg = [ arguments[i], ..., arguments[nargs-1] ];
                          *
                          * The array literal in the initializer of the hidden variable
@@ -1586,7 +1593,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                     break;
                 }
                 arg = arg.semantic(sc);
-                //printf("\targ = '%s'\n", arg->toChars());
+                //printf("\targ = '%s'\n", arg.toChars());
                 arguments.setDim(i + 1);
                 (*arguments)[i] = arg;
                 nargs = i + 1;
@@ -1603,7 +1610,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                         wildmatch = MODmerge(wildmatch, wm);
                     else
                         wildmatch = wm;
-                    //printf("[%d] p = %s, a = %s, wm = %d, wildmatch = %d\n", i, p->type->toChars(), arg->type->toChars(), wm, wildmatch);
+                    //printf("[%d] p = %s, a = %s, wm = %d, wildmatch = %d\n", i, p.type.toChars(), arg.type.toChars(), wm, wildmatch);
                 }
             }
         }
@@ -1670,7 +1677,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                     tprm = p.type.substWildTo(wildmatch);
                 if (!tprm.equals(arg.type))
                 {
-                    //printf("arg->type = %s, p->type = %s\n", arg->type->toChars(), p->type->toChars());
+                    //printf("arg.type = %s, p.type = %s\n", arg.type.toChars(), p.type.toChars());
                     if (arg.implicitConvTo(tprm) == MATCHnomatch) // CALYPSO
                     {
                         AggregateDeclaration toad = getAggregateSym(tprm);
@@ -1716,14 +1723,21 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 else
                     arg = toDelegate(arg, arg.type, sc);
             }
-            //printf("arg: %s\n", arg->toChars());
-            //printf("type: %s\n", arg->type->toChars());
+            //printf("arg: %s\n", arg.toChars());
+            //printf("type: %s\n", arg.type.toChars());
 
-            /* Look for arguments that cannot 'escape' from the called
-             * function.
-             */
-            if (!tf.parameterEscapes(p))
+            if (tf.parameterEscapes(p))
             {
+                /* Argument value can escape from the called function.
+                 * Check arg to see if it matters.
+                 */
+                if (global.params.vsafe)
+                    err |= checkParamArgumentEscape(sc, fd, p.ident, arg, false);
+            }
+            else
+            {
+                /* Argument value cannot escape from the called function.
+                 */
                 Expression a = arg;
                 if (a.op == TOKcast)
                     a = (cast(CastExp)a).e1;
@@ -1990,7 +2004,7 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
             (*arguments)[i] = arg;
         }
     }
-    //if (eprefix) printf("eprefix: %s\n", eprefix->toChars());
+    //if (eprefix) printf("eprefix: %s\n", eprefix.toChars());
 
     // If D linkage and variadic, add _arguments[] as first argument
     if (!IN_LLVM && tf.linkage == LINKd && tf.varargs == 1)
@@ -2013,8 +2027,8 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
     Type tret = tf.next;
     if (isCtorCall)
     {
-        //printf("[%s] fd = %s %s, %d %d %d\n", loc.toChars(), fd->toChars(), fd->type->toChars(),
-        //    wildmatch, tf->isWild(), fd->isolateReturn());
+        //printf("[%s] fd = %s %s, %d %d %d\n", loc.toChars(), fd.toChars(), fd.type.toChars(),
+        //    wildmatch, tf.isWild(), fd.isolateReturn());
         if (!tthis)
         {
             assert(sc.intypeof || global.errors);
@@ -2072,7 +2086,7 @@ struct UnionExp
     extern (C++) Expression copy()
     {
         Expression e = exp();
-        //if (e->size > sizeof(u)) printf("%s\n", Token::toChars(e->op));
+        //if (e.size > sizeof(u)) printf("%s\n", Token::toChars(e.op));
         assert(e.size <= u.sizeof);
         if (e.op == TOKcantexp)
             return CTFEExp.cantexp;
@@ -2140,7 +2154,7 @@ extern (C++) DotIdExp typeDotIdExp(Loc loc, Type type, Identifier ident)
  */
 extern (C++) int modifyFieldVar(Loc loc, Scope* sc, VarDeclaration var, Expression e1)
 {
-    //printf("modifyFieldVar(var = %s)\n", var->toChars());
+    //printf("modifyFieldVar(var = %s)\n", var.toChars());
     Dsymbol s = sc.func;
     while (1)
     {
@@ -2302,7 +2316,7 @@ extern (C++) Expression extractOpDollarSideEffect(Scope* sc, UnaExp ue)
 {
     Expression e0;
     Expression e1 = Expression.extractLast(ue.e1, &e0);
-    // Bugzilla 12585: Extract the side effect part if ue->e1 is comma.
+    // Bugzilla 12585: Extract the side effect part if ue.e1 is comma.
 
     if (!isTrivialExp(e1))
     {
@@ -2324,7 +2338,7 @@ extern (C++) Expression extractOpDollarSideEffect(Scope* sc, UnaExp ue)
 }
 
 /**************************************
- * Runs semantic on ae->arguments. Declares temporary variables
+ * Runs semantic on ae.arguments. Declares temporary variables
  * if '$' was used.
  */
 extern (C++) Expression resolveOpDollar(Scope* sc, ArrayExp ae, Expression* pe0)
@@ -2333,7 +2347,7 @@ extern (C++) Expression resolveOpDollar(Scope* sc, ArrayExp ae, Expression* pe0)
     *pe0 = null;
     AggregateDeclaration ad = isAggregate(ae.e1.type);
     Dsymbol slice = search_function(ad, Id.slice);
-    //printf("slice = %s %s\n", slice->kind(), slice->toChars());
+    //printf("slice = %s %s\n", slice.kind(), slice.toChars());
     for (size_t i = 0; i < ae.arguments.dim; i++)
     {
         if (i == 0)
@@ -2348,7 +2362,7 @@ extern (C++) Expression resolveOpDollar(Scope* sc, ArrayExp ae, Expression* pe0)
             ae.error("multi-dimensional slicing requires template opSlice");
             return new ErrorExp();
         }
-        //printf("[%d] e = %s\n", i, e->toChars());
+        //printf("[%d] e = %s\n", i, e.toChars());
 
         // Create scope for '$' variable for this dimension
         auto sym = new ArrayScopeSymbol(sc, ae);
@@ -2410,12 +2424,12 @@ extern (C++) Expression resolveOpDollar(Scope* sc, ArrayExp ae, Expression* pe0)
 }
 
 /**************************************
- * Runs semantic on se->lwr and se->upr. Declares a temporary variable
+ * Runs semantic on se.lwr and se.upr. Declares a temporary variable
  * if '$' was used.
  */
 extern (C++) Expression resolveOpDollar(Scope* sc, ArrayExp ae, IntervalExp ie, Expression* pe0)
 {
-    //assert(!ae->lengthVar);
+    //assert(!ae.lengthVar);
     if (!ie)
         return ae;
 
@@ -2795,7 +2809,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
 
     Expression modifiableLvalue(Scope* sc, Expression e)
     {
-        //printf("Expression::modifiableLvalue() %s, type = %s\n", toChars(), type->toChars());
+        //printf("Expression::modifiableLvalue() %s, type = %s\n", toChars(), type.toChars());
         // See if this expression is a modifiable lvalue (i.e. not const)
         if (checkModifiable(sc) == 1)
         {
@@ -2834,6 +2848,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
      */
     Expression resolveLoc(Loc loc, Scope* sc)
     {
+        this.loc = loc;
         return this;
     }
 
@@ -3029,7 +3044,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
      */
     final bool checkPurity(Scope* sc, VarDeclaration v)
     {
-        //printf("v = %s %s\n", v->type->toChars(), v->toChars());
+        //printf("v = %s %s\n", v.type.toChars(), v.toChars());
         /* Look for purity and safety violations when accessing variable v
          * from current function.
          */
@@ -3240,11 +3255,11 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
                     sd.error(loc, "is not copyable because it is annotated with @disable");
                     return true;
                 }
-                //checkDeprecated(sc, sd->postblit);        // necessary?
+                //checkDeprecated(sc, sd.postblit);        // necessary?
                 checkPurity(sc, sd.postblit);
                 checkSafety(sc, sd.postblit);
                 checkNogc(sc, sd.postblit);
-                //checkAccess(sd, loc, sc, sd->postblit);   // necessary?
+                //checkAccess(sd, loc, sc, sd.postblit);   // necessary?
                 return false;
             }
         }
@@ -3260,8 +3275,8 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
             VarExp ve = cast(VarExp)this;
             if (isNeedThisScope(sc, ve.var))
             {
-                //printf("checkRightThis sc->intypeof = %d, ad = %p, func = %p, fdthis = %p\n",
-                //        sc->intypeof, sc->getStructClassScope(), func, fdthis);
+                //printf("checkRightThis sc.intypeof = %d, ad = %p, func = %p, fdthis = %p\n",
+                //        sc.intypeof, sc.getStructClassScope(), func, fdthis);
                 error("need 'this' for '%s' of type '%s'", ve.var.toChars(), ve.var.type.toChars());
                 return true;
             }
@@ -3276,7 +3291,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
      */
     final bool checkReadModifyWrite(TOK rmwOp, Expression ex = null)
     {
-        //printf("Expression::checkReadModifyWrite() %s %s", toChars(), ex ? ex->toChars() : "");
+        //printf("Expression::checkReadModifyWrite() %s %s", toChars(), ex ? ex.toChars() : "");
         if (!type || !type.isShared())
             return false;
 
@@ -3308,7 +3323,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
      *      flag:   1: do not issue error message for invalid modification
      * Returns:
      *      0:      is not modifiable
-     *      1:      is modifiable in default == being related to type->isMutable()
+     *      1:      is modifiable in default == being related to type.isMutable()
      *      2:      is modifiable, because this is a part of initializing.
      */
     int checkModifiable(Scope* sc, int flag = 0)
@@ -3457,7 +3472,7 @@ extern (C++) final class IntegerExp : Expression
     extern (D) this(Loc loc, dinteger_t value, Type type)
     {
         super(loc, TOKint64, __traits(classInstanceSize, IntegerExp));
-        //printf("IntegerExp(value = %lld, type = '%s')\n", value, type ? type->toChars() : "");
+        //printf("IntegerExp(value = %lld, type = '%s')\n", value, type ? type.toChars() : "");
         assert(type);
         if (!type.isscalar())
         {
@@ -4353,7 +4368,7 @@ extern (C++) final class SuperExp : ThisExp
             s = s.toParent();
         assert(s);
         cd = s.isClassDeclaration();
-        //printf("parent is %s %s\n", fd->toParent()->kind(), fd->toParent()->toChars());
+        //printf("parent is %s %s\n", fd.toParent()->kind(), fd.toParent()->toChars());
         if (!cd)
             goto Lerr;
         if (!cd.baseClass)
@@ -4495,7 +4510,7 @@ extern (C++) final class StringExp : Expression
 
     override bool equals(RootObject o)
     {
-        //printf("StringExp::equals('%s') %s\n", o->toChars(), toChars());
+        //printf("StringExp::equals('%s') %s\n", o.toChars(), toChars());
         if (o && o.dyncast() == DYNCAST_EXPRESSION)
         {
             Expression e = cast(Expression)o;
@@ -4581,8 +4596,8 @@ extern (C++) final class StringExp : Expression
             break;
         }
         type = type.semantic(loc, sc);
-        //type = type->immutableOf();
-        //printf("type = %s\n", type->toChars());
+        //type = type.immutableOf();
+        //printf("type = %s\n", type.toChars());
 
         return this;
     }
@@ -4830,7 +4845,7 @@ extern (C++) final class StringExp : Expression
 
     override Expression toLvalue(Scope* sc, Expression e)
     {
-        //printf("StringExp::toLvalue(%s) type = %s\n", toChars(), type ? type->toChars() : NULL);
+        //printf("StringExp::toLvalue(%s) type = %s\n", toChars(), type ? type.toChars() : NULL);
         return (type && type.toBasetype().ty == Tsarray) ? this : Expression.toLvalue(sc, e);
     }
 
@@ -5507,7 +5522,7 @@ public:
     Expression getField(Type type, uint offset)
     {
         //printf("StructLiteralExp::getField(this = %s, type = %s, offset = %u)\n",
-        //  /*toChars()*/"", type->toChars(), offset);
+        //  /*toChars()*/"", type.toChars(), offset);
         Expression e = null;
         int i = getFieldIndex(type, offset);
 
@@ -5521,7 +5536,7 @@ public:
             e = (*elements)[i];
             if (e)
             {
-                //printf("e = %s, e->type = %s\n", e->toChars(), e->type->toChars());
+                //printf("e = %s, e.type = %s\n", e.toChars(), e.type.toChars());
 
                 /* If type is a static array, and e is an initializer for that array,
                  * then the field initializer should be an array literal of e.
@@ -5646,7 +5661,7 @@ extern (C++) final class TypeExp : Expression
     extern (D) this(Loc loc, Type type)
     {
         super(loc, TOKtype, __traits(classInstanceSize, TypeExp));
-        //printf("TypeExp::TypeExp(%s)\n", type->toChars());
+        //printf("TypeExp::TypeExp(%s)\n", type.toChars());
         this.type = type;
     }
 
@@ -5660,7 +5675,7 @@ extern (C++) final class TypeExp : Expression
         if (type.ty == Terror)
             return new ErrorExp();
 
-        //printf("TypeExp::semantic(%s)\n", type->toChars());
+        //printf("TypeExp::semantic(%s)\n", type.toChars());
         Expression e;
         Type t;
         Dsymbol s;
@@ -5668,18 +5683,18 @@ extern (C++) final class TypeExp : Expression
         type.resolve(loc, sc, &e, &t, &s, true);
         if (e)
         {
-            //printf("e = %s %s\n", Token::toChars(e->op), e->toChars());
+            //printf("e = %s %s\n", Token::toChars(e.op), e.toChars());
             e = e.semantic(sc);
         }
         else if (t)
         {
-            //printf("t = %d %s\n", t->ty, t->toChars());
+            //printf("t = %d %s\n", t.ty, t.toChars());
             type = t.semantic(loc, sc);
             e = this;
         }
         else if (s)
         {
-            //printf("s = %s %s\n", s->kind(), s->toChars());
+            //printf("s = %s %s\n", s.kind(), s.toChars());
             e = DsymbolExp.resolve(loc, sc, s, true);
         }
         else
@@ -5908,7 +5923,7 @@ extern (C++) final class TemplateExp : Expression
     extern (D) this(Loc loc, TemplateDeclaration td, FuncDeclaration fd = null)
     {
         super(loc, TOKtemplate, __traits(classInstanceSize, TemplateExp));
-        //printf("TemplateExp(): %s\n", td->toChars());
+        //printf("TemplateExp(): %s\n", td.toChars());
         this.td = td;
         this.fd = fd;
     }
@@ -6099,7 +6114,7 @@ extern (C++) final class NewExp : Expression
                 }
                 return new ErrorExp();
             }
-            // checkDeprecated() is already done in newtype->semantic().
+            // checkDeprecated() is already done in newtype.semantic().
 
             if (cd.isNested())
             {
@@ -6254,7 +6269,7 @@ extern (C++) final class NewExp : Expression
                 error("default construction is disabled for type %s", sd.type.toChars());
                 return new ErrorExp();
             }
-            // checkDeprecated() is already done in newtype->semantic().
+            // checkDeprecated() is already done in newtype.semantic().
 
             if (sd.aggNew)
             {
@@ -6397,7 +6412,7 @@ extern (C++) final class NewExp : Expression
             }
 
         //printf("NewExp: '%s'\n", toChars());
-        //printf("NewExp:type '%s'\n", type->toChars());
+        //printf("NewExp:type '%s'\n", type.toChars());
         semanticTypeInfo(sc, type);
 
         if (newprefix)
@@ -6441,7 +6456,7 @@ extern (C++) final class NewAnonClassExp : Expression
         {
             printf("NewAnonClassExp::semantic() %s\n", toChars());
             //printf("thisexp = %p\n", thisexp);
-            //printf("type: %s\n", type->toChars());
+            //printf("type: %s\n", type.toChars());
         }
 
         Expression d = new DeclarationExp(loc, cd);
@@ -6524,7 +6539,7 @@ extern (C++) final class SymOffExp : SymbolExp
         {
             printf("SymOffExp::semantic('%s')\n", toChars());
         }
-        //var->semantic(sc);
+        //var.semantic(sc);
         if (!type)
             type = var.type.pointerTo();
 
@@ -6573,8 +6588,8 @@ extern (C++) final class VarExp : SymbolExp
             hasOverloads = false;
 
         super(loc, TOKvar, __traits(classInstanceSize, VarExp), var, hasOverloads);
-        //printf("VarExp(this = %p, '%s', loc = %s)\n", this, var->toChars(), loc.toChars());
-        //if (strcmp(var->ident->toChars(), "func") == 0) assert(0);
+        //printf("VarExp(this = %p, '%s', loc = %s)\n", this, var.toChars(), loc.toChars());
+        //if (strcmp(var.ident.toChars(), "func") == 0) assert(0);
         this.type = var.type;
     }
 
@@ -6606,7 +6621,7 @@ extern (C++) final class VarExp : SymbolExp
         }
         if (auto fd = var.isFuncDeclaration())
         {
-            //printf("L%d fd = %s\n", __LINE__, f->toChars());
+            //printf("L%d fd = %s\n", __LINE__, f.toChars());
             if (!fd.functionSemantic())
                 return new ErrorExp();
         }
@@ -6700,7 +6715,7 @@ extern (C++) final class VarExp : SymbolExp
 
     override Expression modifiableLvalue(Scope* sc, Expression e)
     {
-        //printf("VarExp::modifiableLvalue('%s')\n", var->toChars());
+        //printf("VarExp::modifiableLvalue('%s')\n", var.toChars());
         if (var.storage_class & STCmanifest)
         {
             error("cannot modify manifest constant '%s'", toChars());
@@ -6726,7 +6741,7 @@ extern (C++) final class OverExp : Expression
     extern (D) this(Loc loc, OverloadSet s)
     {
         super(loc, TOKoverloadset, __traits(classInstanceSize, OverExp));
-        //printf("OverExp(this = %p, '%s')\n", this, var->toChars());
+        //printf("OverExp(this = %p, '%s')\n", this, var.toChars());
         vars = s;
         type = Type.tvoid;
     }
@@ -6857,13 +6872,13 @@ extern (C++) final class FuncExp : Expression
 
         if (!type || type == Type.tvoid)
         {
-            /* fd->treq might be incomplete type,
+            /* fd.treq might be incomplete type,
              * so should not semantic it.
              * void foo(T)(T delegate(int) dg){}
              * foo(a=>a); // in IFTI, treq == T delegate(int)
              */
-            //if (fd->treq)
-            //    fd->treq = fd->treq->semantic(loc, sc);
+            //if (fd.treq)
+            //    fd.treq = fd.treq.semantic(loc, sc);
 
             genIdent(sc);
 
@@ -6880,7 +6895,7 @@ extern (C++) final class FuncExp : Expression
                 }
             }
 
-            //printf("td = %p, treq = %p\n", td, fd->treq);
+            //printf("td = %p, treq = %p\n", td, fd.treq);
             if (td)
             {
                 assert(td.parameters && td.parameters.dim);
@@ -6926,7 +6941,7 @@ extern (C++) final class FuncExp : Expression
             {
                 type = new TypePointer(fd.type);
                 type = type.semantic(loc, sc);
-                //type = fd->type->pointerTo();
+                //type = fd.type.pointerTo();
 
                 /* A lambda expression deduced to function pointer might become
                  * to a delegate literal implicitly.
@@ -6934,7 +6949,7 @@ extern (C++) final class FuncExp : Expression
                  *   auto foo(void function() fp) { return 1; }
                  *   assert(foo({}) == 1);
                  *
-                 * So, should keep fd->tok == TOKreserve if fd->treq == NULL.
+                 * So, should keep fd.tok == TOKreserve if fd.treq == NULL.
                  */
                 if (fd.treq && fd.treq.ty == Tpointer)
                 {
@@ -7009,7 +7024,7 @@ extern (C++) final class FuncExp : Expression
 
     MATCH matchType(Type to, Scope* sc, FuncExp* presult, int flag = 0)
     {
-        //printf("FuncExp::matchType('%s'), to=%s\n", type ? type->toChars() : "null", to->toChars());
+        //printf("FuncExp::matchType('%s'), to=%s\n", type ? type.toChars() : "null", to.toChars());
         if (presult)
             *presult = null;
 
@@ -7048,8 +7063,8 @@ extern (C++) final class FuncExp : Expression
             // Parameter types inference from 'tof'
             assert(td._scope);
             TypeFunction tf = cast(TypeFunction)fd.type;
-            //printf("\ttof = %s\n", tof->toChars());
-            //printf("\ttf  = %s\n", tf->toChars());
+            //printf("\ttof = %s\n", tof.toChars());
+            //printf("\ttf  = %s\n", tf.toChars());
             size_t dim = Parameter.dim(tf.parameters);
 
             if (Parameter.dim(tof.parameters) != dim || tof.varargs != tf.varargs)
@@ -7138,7 +7153,7 @@ extern (C++) final class FuncExp : Expression
             assert(tok == TOKfunction || tok == TOKreserved && type.ty == Tpointer);
             tx = tfx.pointerTo();
         }
-        //printf("\ttx = %s, to = %s\n", tx->toChars(), to->toChars());
+        //printf("\ttx = %s, to = %s\n", tx.toChars(), to.toChars());
 
         MATCH m = tx.implicitConvTo(to);
         if (m > MATCHnomatch)
@@ -7265,7 +7280,7 @@ extern (C++) final class DeclarationExp : Expression
                     ad.langPlugin().markSymbolReferenced(ad);
         }
 
-        //printf("inserting '%s' %p into sc = %p\n", s->toChars(), s, sc);
+        //printf("inserting '%s' %p into sc = %p\n", s.toChars(), s, sc);
         // Insert into both local scope and function scope.
         // Must be unique in both.
         if (s.ident)
@@ -7533,7 +7548,7 @@ extern (C++) final class IsExp : Expression
         }
 
         Type tded = null;
-        Scope* sc2 = sc.copy(); // keep sc->flags
+        Scope* sc2 = sc.copy(); // keep sc.flags
         sc2.tinst = null;
         sc2.minst = null;
         sc2.flags |= SCOPEfullinst;
@@ -7712,8 +7727,8 @@ extern (C++) final class IsExp : Expression
              * is(targ : tspec)
              */
             tspec = tspec.semantic(loc, sc);
-            //printf("targ  = %s, %s\n", targ->toChars(), targ->deco);
-            //printf("tspec = %s, %s\n", tspec->toChars(), tspec->deco);
+            //printf("targ  = %s, %s\n", targ.toChars(), targ.deco);
+            //printf("tspec = %s, %s\n", tspec.toChars(), tspec.deco);
 
             if (tok == TOKcolon)
             {
@@ -7749,8 +7764,8 @@ extern (C++) final class IsExp : Expression
             dedtypes.zero();
 
             MATCH m = deduceType(targ, sc, tspec, parameters, &dedtypes);
-            //printf("targ: %s\n", targ->toChars());
-            //printf("tspec: %s\n", tspec->toChars());
+            //printf("targ: %s\n", targ.toChars());
+            //printf("tspec: %s\n", tspec.toChars());
             if (m <= MATCHnomatch || (m != MATCHexact && tok == TOKequal))
             {
                 goto Lno;
@@ -7993,7 +8008,7 @@ extern (C++) abstract class BinExp : Expression
 
         // T opAssign floating yields a floating. Prevent truncating conversions (float to int).
         // See issue 3841.
-        // Should we also prevent double to float (type->isfloating() && type->size() < t2 ->size()) ?
+        // Should we also prevent double to float (type.isfloating() && type.size() < t2 ->size()) ?
         if (op == TOKaddass || op == TOKminass ||
             op == TOKmulass || op == TOKdivass || op == TOKmodass ||
             op == TOKpowass)
@@ -8332,7 +8347,7 @@ extern (C++) class BinAssignExp : BinExp
 
     override final Expression modifiableLvalue(Scope* sc, Expression e)
     {
-        // should check e1->checkModifiable() ?
+        // should check e1.checkModifiable() ?
         return toLvalue(sc, this);
     }
 
@@ -8574,7 +8589,7 @@ extern (C++) final class DotIdExp : UnaExp
         static if (LOGSEMANTIC)
         {
             printf("DotIdExp::semantic(this = %p, '%s')\n", this, toChars());
-            //printf("e1->op = %d, '%s'\n", e1->op, Token::toChars(e1->op));
+            //printf("e1.op = %d, '%s'\n", e1.op, Token::toChars(e1.op));
         }
         Expression e = semanticY(sc, 1);
         if (e && isDotOpDispatch(e))
@@ -8675,7 +8690,7 @@ extern (C++) final class DotIdExp : UnaExp
                 e = new DotIdExp(e.loc, e, Id.offsetof);
                 (*exps)[i] = e;
             }
-            // Don't evaluate te->e0 in runtime
+            // Don't evaluate te.e0 in runtime
             Expression e = new TupleExp(loc, null, exps);
             e = e.semantic(sc);
             return e;
@@ -8683,7 +8698,7 @@ extern (C++) final class DotIdExp : UnaExp
         if (e1.op == TOKtuple && ident == Id.length)
         {
             TupleExp te = cast(TupleExp)e1;
-            // Don't evaluate te->e0 in runtime
+            // Don't evaluate te.e0 in runtime
             Expression e = new IntegerExp(loc, te.exps.dim, Type.tsize_t);
             return e;
         }
@@ -8795,7 +8810,7 @@ extern (C++) final class DotIdExp : UnaExp
                 VarDeclaration v = s.isVarDeclaration();
                 if (v)
                 {
-                    //printf("DotIdExp:: Identifier '%s' is a variable, type '%s'\n", toChars(), v->type->toChars());
+                    //printf("DotIdExp:: Identifier '%s' is a variable, type '%s'\n", toChars(), v.type.toChars());
                     if (!v.type ||
                         !v.type.deco && v.inuse)
                     {
@@ -8888,7 +8903,7 @@ extern (C++) final class DotIdExp : UnaExp
                 OverloadSet o = s.isOverloadSet();
                 if (o)
                 {
-                    //printf("'%s' is an overload set\n", o->toChars());
+                    //printf("'%s' is an overload set\n", o.toChars());
                     return new OverExp(loc, o);
                 }
 
@@ -8914,7 +8929,7 @@ extern (C++) final class DotIdExp : UnaExp
                 ScopeDsymbol sds = s.isScopeDsymbol();
                 if (sds)
                 {
-                    //printf("it's a ScopeDsymbol %s\n", ident->toChars());
+                    //printf("it's a ScopeDsymbol %s\n", ident.toChars());
                     e = new ScopeExp(loc, sds);
                     e = e.semantic(sc);
                     if (eleft)
@@ -9058,7 +9073,7 @@ extern (C++) final class DotVarExp : UnaExp
              *  tuple(e1.a, e1.b, e1.c)
              */
             Expression e0;
-            Expression ev = extractSideEffect(sc, "__tup", e0, e1);
+            Expression ev = sc.func ? extractSideEffect(sc, "__tup", e0, e1) : e1;
 
             auto exps = new Expressions();
             exps.reserve(tup.objects.dim);
@@ -9214,8 +9229,8 @@ extern (C++) final class DotVarExp : UnaExp
         version (none)
         {
             printf("DotVarExp::modifiableLvalue(%s)\n", toChars());
-            printf("e1->type = %s\n", e1.type.toChars());
-            printf("var->type = %s\n", var.type.toChars());
+            printf("e1.type = %s\n", e1.type.toChars());
+            printf("var.type = %s\n", var.type.toChars());
         }
 
         return Expression.modifiableLvalue(sc, e);
@@ -10088,6 +10103,11 @@ extern (C++) final class CallExp : UnaExp
                     return ue.e1;
                 ethis = ue.e1;
                 tthis = ue.e1.type;
+                if (!f.type.isscope())
+                {
+                    if (global.params.vsafe && checkParamArgumentEscape(sc, f, Id.This, ethis, false))
+                        return new ErrorExp();
+                }
             }
 
             /* Cannot call public functions from inside invariant
@@ -10127,11 +10147,11 @@ extern (C++) final class CallExp : UnaExp
                 }
                 version (none)
                 {
-                    printf("ue->e1 = %s\n", ue.e1.toChars());
+                    printf("ue.e1 = %s\n", ue.e1.toChars());
                     printf("f = %s\n", f.toChars());
                     printf("t = %s\n", t.toChars());
                     printf("e1 = %s\n", e1.toChars());
-                    printf("e1->type = %s\n", e1.type.toChars());
+                    printf("e1.type = %s\n", e1.type.toChars());
                 }
 
                 // See if we need to adjust the 'this' pointer
@@ -10357,7 +10377,7 @@ extern (C++) final class CallExp : UnaExp
                 if (tthis)
                     tthis.modToBuffer(&buf);
 
-                //printf("tf = %s, args = %s\n", tf->deco, (*arguments)[0]->type->deco);
+                //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0]->type.deco);
                 .error(loc, "%s %s %s is not callable using argument types %s", p, e1.toChars(), parametersTypeToChars(tf.parameters, tf.varargs), buf.peekString());
 
                 return new ErrorExp();
@@ -10426,7 +10446,7 @@ extern (C++) final class CallExp : UnaExp
                     argExpTypesToCBuffer(&buf, arguments);
                     buf.writeByte(')');
 
-                    //printf("tf = %s, args = %s\n", tf->deco, (*arguments)[0]->type->deco);
+                    //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0]->type.deco);
                     .error(loc, "%s %s is not callable using argument types %s", e1.toChars(), parametersTypeToChars(tf.parameters, tf.varargs), buf.peekString());
 
                     f = null;
@@ -10708,6 +10728,39 @@ extern (C++) final class AddrExp : UnaExp
 
         type = e1.type.pointerTo();
 
+        bool checkAddressVar(VarDeclaration v)
+        {
+            if (v)
+            {
+                if (!v.canTakeAddressOf())
+                {
+                    error("cannot take address of %s", e1.toChars());
+                    return false;
+                }
+                if (sc.func && !sc.intypeof && !v.isDataseg())
+                {
+                    const(char)* p = v.isParameter() ? "parameter" : "local";
+                    if (global.params.vsafe)
+                    {
+                        // Taking the address of v means it cannot be set to 'scope' later
+                        v.storage_class &= ~STCmaybescope;
+                        v.doNotInferScope = true;
+                        if (v.storage_class & STCscope && sc.func.setUnsafe())
+                        {
+                            error("cannot take address of scope %s %s in @safe function %s", p, v.toChars(), sc.func.toChars());
+                            return false;
+                        }
+                    }
+                    else if (sc.func.setUnsafe())
+                    {
+                        error("cannot take address of %s %s in @safe function %s", p, v.toChars(), sc.func.toChars());
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         // See if this should really be a delegate
         if (e1.op == TOKdotvar)
         {
@@ -10731,6 +10784,27 @@ extern (C++) final class AddrExp : UnaExp
             // Look for misaligned pointer in @safe mode
             if (checkUnsafeAccess(sc, dve, !type.isMutable(), true))
                 return new ErrorExp();
+
+            if (dve.e1.op == TOKvar && global.params.vsafe)
+            {
+                VarExp ve = cast(VarExp)dve.e1;
+                VarDeclaration v = ve.var.isVarDeclaration();
+                if (v)
+                {
+                    if (!checkAddressVar(v))
+                        return new ErrorExp();
+                }
+            }
+            else if ((dve.e1.op == TOKthis || dve.e1.op == TOKsuper) && global.params.vsafe)
+            {
+                ThisExp ve = cast(ThisExp)dve.e1;
+                VarDeclaration v = ve.var.isVarDeclaration();
+                if (v && v.storage_class & STCref)
+                {
+                    if (!checkAddressVar(v))
+                        return new ErrorExp();
+                }
+            }
         }
         else if (e1.op == TOKvar)
         {
@@ -10738,19 +10812,8 @@ extern (C++) final class AddrExp : UnaExp
             VarDeclaration v = ve.var.isVarDeclaration();
             if (v)
             {
-                if (!v.canTakeAddressOf())
-                {
-                    error("cannot take address of %s", e1.toChars());
+                if (!checkAddressVar(v))
                     return new ErrorExp();
-                }
-                if (sc.func && !sc.intypeof && !v.isDataseg())
-                {
-                    if (sc.func.setUnsafe())
-                    {
-                        const(char)* p = v.isParameter() ? "parameter" : "local";
-                        error("cannot take address of %s %s in @safe function %s", p, v.toChars(), sc.func.toChars());
-                    }
-                }
 
                 ve.checkPurity(sc, v);
             }
@@ -10810,6 +10873,16 @@ extern (C++) final class AddrExp : UnaExp
                 }
             }
         }
+        else if ((e1.op == TOKthis || e1.op == TOKsuper) && global.params.vsafe)
+        {
+            ThisExp ve = cast(ThisExp)e1;
+            VarDeclaration v = ve.var.isVarDeclaration();
+            if (v)
+            {
+                if (!checkAddressVar(v))
+                    return new ErrorExp();
+            }
+        }
         else if (e1.op == TOKcall)
         {
             CallExp ce = cast(CallExp)e1;
@@ -10820,6 +10893,28 @@ extern (C++) final class AddrExp : UnaExp
                 {
                     error("cannot take address of ref return of %s() in @safe function %s",
                         ce.e1.toChars(), sc.func.toChars());
+                }
+            }
+        }
+        else if (e1.op == TOKindex)
+        {
+            /* For:
+             *   int[3] a;
+             *   &a[i]
+             * check 'a' the same as for a regular variable
+             */
+            IndexExp ei = cast(IndexExp)e1;
+            Type tyi = ei.e1.type.toBasetype();
+            if (tyi.ty == Tsarray && ei.e1.op == TOKvar)
+            {
+                VarExp ve = cast(VarExp)ei.e1;
+                VarDeclaration v = ve.var.isVarDeclaration();
+                if (v)
+                {
+                    if (!checkAddressVar(v))
+                        return new ErrorExp();
+
+                    ve.checkPurity(sc, v);
                 }
             }
         }
@@ -10857,8 +10952,8 @@ extern (C++) final class PtrExp : UnaExp
     extern (D) this(Loc loc, Expression e)
     {
         super(loc, TOKstar, __traits(classInstanceSize, PtrExp), e);
-        //if (e->type)
-        //  type = ((TypePointer *)e->type)->next;
+        //if (e.type)
+        //  type = ((TypePointer *)e.type)->next;
     }
 
     extern (D) this(Loc loc, Expression e, Type t)
@@ -10935,7 +11030,7 @@ extern (C++) final class PtrExp : UnaExp
 
     override Expression modifiableLvalue(Scope* sc, Expression e)
     {
-        //printf("PtrExp::modifiableLvalue() %s, type %s\n", toChars(), type->toChars());
+        //printf("PtrExp::modifiableLvalue() %s, type %s\n", toChars(), type.toChars());
         return Expression.modifiableLvalue(sc, e);
     }
 
@@ -11464,7 +11559,7 @@ extern (C++) final class VectorExp : UnaExp
             }
         }
         else if (e1.type.ty == Tvoid)
-            result = checkElem(e1);
+            checkElem(e1);
 
         return result ? new ErrorExp() : this;
     }
@@ -11596,6 +11691,14 @@ extern (C++) final class SliceExp : UnaExp
                 error("need upper and lower bound to slice tuple");
                 return new ErrorExp();
             }
+        }
+        else if (t1b.ty == Tvector)
+        {
+            // Convert e1 to corresponding static array
+            TypeVector tv1 = cast(TypeVector)t1b;
+            t1b = tv1.basetype;
+            t1b = t1b.castMod(tv1.mod);
+            e1.type = t1b;
         }
         else
         {
@@ -11760,7 +11863,7 @@ extern (C++) final class SliceExp : UnaExp
 
     override Expression toLvalue(Scope* sc, Expression e)
     {
-        //printf("SliceExp::toLvalue(%s) type = %s\n", toChars(), type ? type->toChars() : NULL);
+        //printf("SliceExp::toLvalue(%s) type = %s\n", toChars(), type ? type.toChars() : NULL);
         return (type && type.toBasetype().ty == Tsarray) ? this : Expression.toLvalue(sc, e);
     }
 
@@ -12299,6 +12402,15 @@ extern (C++) final class IndexExp : BinExp
 
         Type t1b = e1.type.toBasetype();
 
+        if (t1b.ty == Tvector)
+        {
+            // Convert e1 to corresponding static array
+            TypeVector tv1 = cast(TypeVector)t1b;
+            t1b = tv1.basetype;
+            t1b = t1b.castMod(tv1.mod);
+            e1.type = t1b;
+        }
+
         /* Run semantic on e2
          */
         Scope* scx = sc;
@@ -12667,8 +12779,8 @@ extern (C++) class AssignExp : BinExp
         {
             printf("AssignExp::semantic('%s')\n", toChars());
         }
-        //printf("e1->op = %d, '%s'\n", e1->op, Token::toChars(e1->op));
-        //printf("e2->op = %d, '%s'\n", e2->op, Token::toChars(e2->op));
+        //printf("e1.op = %d, '%s'\n", e1.op, Token::toChars(e1.op));
+        //printf("e2.op = %d, '%s'\n", e2.op, Token::toChars(e2.op));
         if (type)
             return this;
 
@@ -12687,7 +12799,7 @@ extern (C++) class AssignExp : BinExp
         }
 
         /* Look for operator overloading of a[arguments] = e2.
-         * Do it before e1->semantic() otherwise the ArrayExp will have been
+         * Do it before e1.semantic() otherwise the ArrayExp will have been
          * converted to unary operator overloading already.
          */
         if (e1.op == TOKarray)
@@ -12803,7 +12915,7 @@ extern (C++) class AssignExp : BinExp
             ae.lengthVar = null;
         }
 
-        /* Run this->e1 semantic.
+        /* Run this.e1 semantic.
          */
         {
             Expression e1x = e1;
@@ -12857,7 +12969,7 @@ extern (C++) class AssignExp : BinExp
         }
         Type t1 = e1.type.toBasetype();
 
-        /* Run this->e2 semantic.
+        /* Run this.e2 semantic.
          * Different from other binary expressions, the analysis of e2
          * depends on the result of e1 in assignments.
          */
@@ -12910,7 +13022,7 @@ extern (C++) class AssignExp : BinExp
                 return e.semantic(sc);
             }
 
-            /* Look for form: e1 = e2->aliasthis.
+            /* Look for form: e1 = e2.aliasthis.
              */
             if (e1.op == TOKtuple)
             {
@@ -12932,9 +13044,9 @@ extern (C++) class AssignExp : BinExp
                     Expression e = (*iexps)[u];
 
                     Parameter arg = Parameter.getNth(tt.arguments, u);
-                    //printf("[%d] iexps->dim = %d, ", u, iexps->dim);
-                    //printf("e = (%s %s, %s), ", Token::tochars[e->op], e->toChars(), e->type->toChars());
-                    //printf("arg = (%s, %s)\n", arg->toChars(), arg->type->toChars());
+                    //printf("[%d] iexps.dim = %d, ", u, iexps.dim);
+                    //printf("e = (%s %s, %s), ", Token::tochars[e.op], e.toChars(), e.type.toChars());
+                    //printf("arg = (%s, %s)\n", arg.toChars(), arg.type.toChars());
 
                     if (!arg || !e.type.implicitConvTo(arg.type))
                     {
@@ -12952,7 +13064,7 @@ extern (C++) class AssignExp : BinExp
                 e2x = e2x.semantic(sc);
                 if (e2x.op == TOKerror)
                     return e2x;
-                // Do not need to overwrite this->e2
+                // Do not need to overwrite this.e2
                 goto Ltupleassign;
             }
         Lnomatch:
@@ -13603,7 +13715,9 @@ extern (C++) class AssignExp : BinExp
 
         type = e1.type;
         assert(type);
-        return op == TOKassign ? reorderSettingAAElem(sc) : this;
+        auto result = op == TOKassign ? reorderSettingAAElem(sc) : this;
+        checkAssignEscape(sc, result, false);
+        return result;
     }
 
     override final bool isLvalue()
@@ -14469,7 +14583,7 @@ extern (C++) final class CatExp : BinExp
         }
         else
         {
-            //printf("(%s) ~ (%s)\n", e1->toChars(), e2->toChars());
+            //printf("(%s) ~ (%s)\n", e1.toChars(), e2.toChars());
             return incompatibleTypes();
         }
 
@@ -15472,7 +15586,7 @@ extern (C++) final class CmpExp : BinExp
             return new ErrorExp();
         }
 
-        //printf("CmpExp: %s, type = %s\n", e->toChars(), e->type->toChars());
+        //printf("CmpExp: %s, type = %s\n", e.toChars(), e.type.toChars());
         return this;
     }
 
@@ -15523,8 +15637,7 @@ extern (C++) final class InExp : BinExp
                 break;
             }
         default:
-            error("rvalue of in expression must be an associative array, not %s", e2.type.toChars());
-            goto case Terror;
+            return incompatibleTypes();
         case Terror:
             return new ErrorExp();
         }
@@ -15770,11 +15883,17 @@ extern (C++) final class CondExp : BinExp
         if (f0 || f1 || f2)
             return new ErrorExp();
 
-        // If either operand is void, the result is void
         Type t1 = e1.type;
         Type t2 = e2.type;
+        // If either operand is void the result is void, we have to cast both
+        // the expression to void so that we explicitly discard the expression
+        // value if any (bugzilla 16598)
         if (t1.ty == Tvoid || t2.ty == Tvoid)
+        {
             type = Type.tvoid;
+            e1 = e1.castTo(sc, type);
+            e2 = e2.castTo(sc, type);
+        }
         else if (t1 == t2)
             type = t1;
         else
@@ -15823,8 +15942,8 @@ extern (C++) final class CondExp : BinExp
          * to:
          *      (auto __cond = cond) ? (... __tmp1) : (... __tmp2)
          * and replace edtors of __tmp1 and __tmp2 with:
-         *      __tmp1->edtor --> __cond && __tmp1.dtor()
-         *      __tmp2->edtor --> __cond || __tmp2.dtor()
+         *      __tmp1.edtor --> __cond && __tmp1.dtor()
+         *      __tmp2.edtor --> __cond || __tmp2.dtor()
          */
         hookDtors(sc);
 
@@ -15891,7 +16010,7 @@ extern (C++) final class CondExp : BinExp
 
             override void visit(Expression e)
             {
-                //printf("(e = %s)\n", e->toChars());
+                //printf("(e = %s)\n", e.toChars());
             }
 
             override void visit(DeclarationExp e)
@@ -15919,14 +16038,14 @@ extern (C++) final class CondExp : BinExp
                             ce.econd = Expression.combine(de, ve);
                         }
 
-                        //printf("\t++v = %s, v->edtor = %s\n", v->toChars(), v->edtor->toChars());
+                        //printf("\t++v = %s, v.edtor = %s\n", v.toChars(), v.edtor.toChars());
                         Expression ve = new VarExp(vcond.loc, vcond);
                         if (isThen)
                             v.edtor = new AndAndExp(v.edtor.loc, ve, v.edtor);
                         else
                             v.edtor = new OrOrExp(v.edtor.loc, ve, v.edtor);
                         v.edtor = v.edtor.semantic(sc);
-                        //printf("\t--v = %s, v->edtor = %s\n", v->toChars(), v->edtor->toChars());
+                        //printf("\t--v = %s, v.edtor = %s\n", v.toChars(), v.edtor.toChars());
                     }
                 }
             }
