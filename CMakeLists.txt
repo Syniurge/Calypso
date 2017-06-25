@@ -599,6 +599,16 @@ add_clang_lib(clangBasic)
 
 set(CLANG_STAMP_DIR ${CMAKE_CURRENT_BINARY_DIR}/clang-prefix/src/clang-stamp)
 
+set(CLANG_CMAKE_FLAGS "")
+if (MSVC)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" buildtype)
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+        set(CLANG_CMAKE_FLAGS ${CLANG_CMAKE_FLAGS} "-DLLVM_USE_CRT_${buildtype}=MTd")
+    else()
+        set(CLANG_CMAKE_FLAGS ${CLANG_CMAKE_FLAGS} "-DLLVM_USE_CRT_${buildtype}=MT")
+    endif()
+endif()
+
 set(CLANG_BUILD_FLAGS "" CACHE STRING "Clang build arguments")
 separate_arguments(CLANG_BUILD_ARGS UNIX_COMMAND "${CLANG_BUILD_FLAGS}")
 
@@ -606,12 +616,12 @@ ExternalProject_Add(clang
     SOURCE_DIR ${CLANG_SOURCE_DIR}
     BINARY_DIR ${CLANG_BINARY_DIR}
     STAMP_DIR ${CLANG_STAMP_DIR}
-	CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
-			# - with MSBuild only one project can be specified and the build command fails
-			# - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG}
+    CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
+            # - with MSBuild only one project can be specified and the build command fails
+            # - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG} ${CLANG_CMAKE_FLAGS}
     BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
-	BUILD_BYPRODUCTS ${CLANG_LIBS}
+    BUILD_BYPRODUCTS ${CLANG_LIBS}
     INSTALL_COMMAND ""
     STEP_TARGETS rtcopy
 )
