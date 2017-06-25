@@ -660,6 +660,7 @@ public:
 
     const char *kind() const;
     Type *syntaxCopy();
+    bool isTransitive() { return false; } // CALYPSO
     Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize() /*const*/;

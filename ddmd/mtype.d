@@ -7265,6 +7265,11 @@ extern (C++) final class TypeDelegate : TypeNext
         return t;
     }
 
+    override bool isTransitive() // CALYPSO
+    {
+        return false;
+    }
+
     override Type semantic(Loc loc, Scope* sc)
     {
         //printf("TypeDelegate::semantic() %s\n", toChars());
