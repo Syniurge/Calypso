@@ -2023,7 +2023,7 @@ extern (C++) UnionExp voidInitLiteral(Type t, VarDeclaration var)
     {
         TypeStruct ts = cast(TypeStruct)t;
         auto exps = new Expressions();
-        exps.setDim(ts.sym.fields.dim);
+        exps.setDim(ts.sym.fields.dim - ts.sym.isNested());
         for (size_t i = 0; i < ts.sym.fields.dim - ts.sym.isNested(); i++) // CALYPSO DMD BUG: missing -isNested()
         {
             (*exps)[i] = voidInitLiteral(ts.sym.fields[i].type, ts.sym.fields[i]).copy();
