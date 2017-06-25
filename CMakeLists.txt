@@ -593,7 +593,7 @@ add_clang_lib(clangEdit)
 add_clang_lib(clangAnalysis)
 add_clang_lib(clangAST)
 add_clang_lib(clangParse)
-add_clang_lib(clangSema)
+set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_clangSema_LIB})
 add_clang_lib(clangLex)
 add_clang_lib(clangBasic)
 
