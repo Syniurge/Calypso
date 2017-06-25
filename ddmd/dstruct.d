@@ -386,6 +386,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
             _scope = scx ? scx : sc.copy();
             _scope.setNoFree();
             _scope._module.addDeferredSemantic(this);
+            semanticRun = PASSsemantic;
             //printf("\tdeferring %s\n", toChars());
             return;
         }
