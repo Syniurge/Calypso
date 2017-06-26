@@ -2170,9 +2170,9 @@ extern (C++) class VarDeclaration : Declaration
         Expression e = null;
         // Destructors for structs and arrays of structs
         Type tv = type.baseElemOf();
-        if (tv.ty == Tstruct)
+        if (tv.isAggregateValue()) // CALYPSO
         {
-            StructDeclaration sd = (cast(TypeStruct)tv).sym;
+            auto sd = tv.getAggregateSym();
             if (!sd.dtor)
                 return null;
 
@@ -2181,7 +2181,7 @@ extern (C++) class VarDeclaration : Declaration
             if (!sz)
                 return null;
 
-            if (type.toBasetype().ty == Tstruct)
+            if (type.toBasetype().isAggregateValue()) // CALYPSO
             {
                 // v.__xdtor()
                 e = new VarExp(loc, this);
@@ -2197,6 +2197,8 @@ extern (C++) class VarDeclaration : Declaration
             }
             else
             {
+                assert(tv.ty != Tclass, "FIXME: Array dtor for an array of class values"); // CALYPSO
+
                 // _ArrayDtor(v[0 .. n])
                 e = new VarExp(loc, this);
 
