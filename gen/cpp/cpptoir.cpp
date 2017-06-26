@@ -616,7 +616,10 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         CGM->getCXXABI().EmitVirtualDestructorCall(*CGF(), Dtor, clang::Dtor_Complete,
                                         This, nullptr);
 
-        return new DImValue(nullptr, nullptr); // WARNING ldc never does that, it returns the instruction of the call site instead
+        // EmitVirtualDestructorCall doesn't return the call site instruction, and a non-null return value is
+        // expected but unused, so anything should work
+        return new DImValue(Type::tvoidptr,
+                            llvm::Constant::getNullValue(DtoType(Type::tvoidptr)));
     }
 
     // Push the this ptr.
