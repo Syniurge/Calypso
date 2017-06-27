@@ -450,9 +450,12 @@ extern (C++) TypeTuple toArgTypes(Type t)
             t.toBasetype().accept(this);
         }
 
-        override void visit(TypeClass)
+        override void visit(TypeClass t)
         {
-            result = new TypeTuple(Type.tvoidptr);
+            if (t.byRef()) // CALYPSO
+                result = new TypeTuple(Type.tvoidptr);
+            else
+                result = new TypeTuple(); // pass on stack (TODO: follow the struct ways..)
         }
     }
 

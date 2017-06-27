@@ -54,7 +54,7 @@ namespace dmd_abi {
 // needed.
 LLType *getAbiType(Type *ty) {
   // First, check if there's any need of a transformation:
-  if (!(ty->ty == Tcomplex32 || ty->ty == Tstruct || ty->ty == Tsarray)) {
+  if (!(ty->ty == Tcomplex32 || isAggregateValue(ty) || ty->ty == Tsarray)) { // CALYPSO
     return nullptr; // Nothing to do
   }
 
