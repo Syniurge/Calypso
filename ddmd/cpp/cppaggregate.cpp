@@ -407,6 +407,12 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     if (ad->dtors.empty())
         return nullptr; // forward reference
 
+    // On aggregate destruction the GC looks for a "__xdtor" member
+    auto _alias = new_AliasDeclaration(Loc(), Id::__xdtor, ad->dtors[0]);
+    _alias->semantic(sc);
+    ad->members->push(_alias);
+    _alias->addMember(sc, ad); // add to symbol table
+
     return ad->dtors[0];
 }
 
