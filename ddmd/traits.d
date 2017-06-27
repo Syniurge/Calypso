@@ -1210,6 +1210,10 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
     {
         return pointerBitmap(e);
     }
+    if (e.ident == Id.isAggregateValue) // CALYPSO
+    {
+        return isTypeX(t => t.isAggregateValue());
+    }
     if (Expression ret = semanticTraitsHook(e, sc))
     {
         return ret;

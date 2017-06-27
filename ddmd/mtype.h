@@ -951,5 +951,6 @@ AggregateDeclaration *getAggregateHandle(Type *t);
 TypeClass *isClassReference(Type *t);
 TypeClass *isClassValue(Type *t);
 TypeClass *isClassValueHandle(Type *t);
+bool isAggregateValue(Type *t);
 
 #endif /* DMD_MTYPE_H */

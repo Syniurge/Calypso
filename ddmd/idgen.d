@@ -358,6 +358,7 @@ Msgtable[] msgtable =
     { "getUnitTests" },
     { "getVirtualIndex" },
     { "getPointerBitmap" },
+    { "isAggregateValue" }, // CALYPSO
 
     // For C++ mangling
     { "allocator" },
