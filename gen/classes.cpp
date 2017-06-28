@@ -382,6 +382,9 @@ DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
   // Object _d_dynamic_cast(Object o, ClassInfo c)
 
   AggregateDeclaration* adfrom = getAggregateHandle(val->type);
+  AggregateDeclaration* adto = getAggregateHandle(_to->toBasetype());
+  if (auto lp = adto->langPlugin())
+      return lp->codegen()->toDynamicCast(loc, val, _to); // CALYPSO
   if (auto lp = adfrom->langPlugin())
       val = lp->codegen()->adjustForDynamicCast(loc, val, _to); // CALYPSO
 

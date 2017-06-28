@@ -226,6 +226,7 @@ public:
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
     void toInitClass(TypeClass* tc, LLValue* dst) override;
+    DValue *toDynamicCast(Loc &loc, DValue *val, Type *_to) override;
     DValue *adjustForDynamicCast(Loc &loc, DValue *val, Type *_to) override;
 
     void toPostNewClass(Loc& loc, TypeClass* tc, DValue* val) override;

@@ -514,12 +514,30 @@ void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
     DtoMemCpy(dst, initsym, DtoConstSize_t(dataBytes));
 }
 
+DValue *LangPlugin::toDynamicCast(Loc &loc, DValue *val, Type *_to)
+{
+    TypeMapper tymap;
+
+    auto SrcRecordTy = tymap.toType(loc, getAggregateHandle(val->type)->getType(), nullptr);
+    auto DestTy = tymap.toType(loc, _to, nullptr);
+    auto DestRecordTy = tymap.toType(loc, getAggregateHandle(_to)->getType(), nullptr);
+    clangCG::Address This(DtoRVal(val), clang::CharUnits::One());
+
+    assert(!DestTy->isReferenceType()); // makes sure that the CastEnd argument won't be used
+
+    updateCGFInsertPoint();
+    auto ret = CGM->getCXXABI().EmitDynamicCastCall(
+                            *CGF(), This, SrcRecordTy, DestTy, DestRecordTy, nullptr);
+
+    return new DImValue(_to, ret);
+}
+
 DValue *LangPlugin::adjustForDynamicCast(Loc &loc, DValue *val, Type *_to)
 {
     TypeClass *to = static_cast<TypeClass *>(_to->toBasetype());
     auto adfrom = getAggregateHandle(val->type);
     auto cdto = to->sym;
-    assert(!cdto->langPlugin() && "dynamic casts between C++ classes aren't supported yet");
+    assert(!cdto->langPlugin());
 
     // WARNING: this assumes that val is a pointer towards a C++ part of a DCXX class
     int offset;
