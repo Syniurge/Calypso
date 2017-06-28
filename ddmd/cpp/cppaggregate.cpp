@@ -39,6 +39,14 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         auto& S = calypso.getSema();
         S.MarkVTableUsed(D->getLocation(), D);
 
+        for (auto s: *ad->members)
+            if (s->isFuncDeclaration() && isCPP(s)) {
+                auto fd = static_cast<::FuncDeclaration*>(s);
+                if (auto MD = dyn_cast<clang::CXXMethodDecl>(getFD(fd)))
+                    if (MD->isVirtual())
+                        MarkFunctionReferenced(fd);
+            }
+
         markAggregateReferenced(ad);
     }
 }
