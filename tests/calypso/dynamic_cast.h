@@ -13,3 +13,9 @@ class C : public B {
         *abc = 'x';
     }
 };
+
+struct SB {
+};
+
+class SC : public SB {
+};

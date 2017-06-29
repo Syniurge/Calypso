@@ -491,8 +491,15 @@ DValue *DtoCastPtr(Loc &loc, DValue *val, Type *to) {
   AggregateDeclaration* adfrom = getAggregateSym(fromtype->nextOf());
   AggregateDeclaration* adto = getAggregateHandle(totype);
 
-  if (adfrom && adto && !adfrom->byRef() /*TODO: cast struct adfrom*/&& adfrom->isClassDeclaration())
-    return DtoCastClass(loc, val, to);  // CALYPSO WARNING: this brings C++-style pointer derived <-> base casts to D struct pointers so changes vanilla behavior slightly
+  if (adfrom && adto) {
+    if (!adfrom->byRef() && adfrom->isClassDeclaration())
+      return DtoCastClass(loc, val, to);  // CALYPSO WARNING: this brings C++-style pointer derived <-> base casts to D struct pointers so changes vanilla behavior slightly
+
+    auto lp = adfrom->langPlugin();
+    auto cdto = adto->isClassDeclaration();
+    if (lp && cdto && adfrom->isBaseOf2(cdto))
+      return lp->codegen()->toDynamicCast(loc, val, to);
+  }
 
   if (totype->ty == Tpointer || totype->ty == Tclass) {
     LLValue *src = DtoRVal(val);
