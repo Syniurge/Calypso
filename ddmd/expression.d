@@ -13290,7 +13290,6 @@ extern (C++) class AssignExp : BinExp
             }
             else if (op == TOKassign)
             {
-                e2 = e2x = e2x.addDtorHook(sc); // CALYPSO
                 if (e1x.op == TOKindex && (cast(IndexExp)e1x).e1.type.toBasetype().ty == Taarray)
                 {
                     /*
