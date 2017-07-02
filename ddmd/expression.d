@@ -1997,8 +1997,13 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                  * (or static arrays of them) if appropriate.
                  */
                 Type tv = arg.type.baseElemOf();
-                if (!isRef && tv.ty == Tstruct)
-                    arg = doCopyOrMove(sc, arg);
+                if (tv.isAggregateValue()) // CALYPSO
+                {
+                    if (!isRef)
+                        arg = doCopyOrMove(sc, arg);
+                    else if (!arg.isLvalue())
+                        arg = arg.addDtorHook(sc); // CALYPSO: for an rvalue passed to a scope ref aggregate parameter, the dtor has to get called afterwards
+                }
             }
 
             (*arguments)[i] = arg;
