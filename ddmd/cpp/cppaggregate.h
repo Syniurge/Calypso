@@ -81,8 +81,6 @@ public:
     void makeNested() override;
     void finalizeVtbl() override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
-
-    void buildCpCtor(Scope *sc);
 };
 
 class UnionDeclaration : public ::UnionDeclaration

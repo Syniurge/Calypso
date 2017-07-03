@@ -149,10 +149,6 @@ void ClassDeclaration::semantic(Scope *sc)
 
     ::ClassDeclaration::semantic(sc);
     const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
-
-//     // Build a copy ctor alias after scope setting and semantic'ing the C++ copy ctor during which its type is adjusted
-//     if (semanticRun >= PASSsemanticdone)
-//         buildCpCtor(sc);
 }
 
 void ClassDeclaration::semantic3(Scope *sc)
@@ -160,31 +156,6 @@ void ClassDeclaration::semantic3(Scope *sc)
     if (isUsed)
         MarkAggregateReferencedImpl(this);
     ::ClassDeclaration::semantic3(sc);
-}
-
-void ClassDeclaration::buildCpCtor(Scope *sc)
-{
-//     auto& S = calypso.getSema();
-//     auto _RD = const_cast<clang::CXXRecordDecl*>(RD);
-//
-//     auto CD = S.LookupCopyingConstructor(_RD, clang::Qualifiers::Const);
-//     if (!CD)
-//         CD = S.LookupCopyingConstructor(_RD, 0);
-//
-//     if (!CD)
-//         return;
-//
-//     auto cpctor = findMethod(this, CD);
-//     if (!cpctor)
-//         return; // could be deleted or invalid
-//
-//     auto fwdcpctor = new OverloadAliasDeclaration(loc, Identifier::idPool("__cpctor"),
-//                                     new TypeIdentifier(loc, Id::ctor), static_cast<TypeFunction*>(cpctor->type));
-//     members->push(fwdcpctor);
-//
-//     fwdcpctor->addMember(sc, this, 1);
-//     fwdcpctor->setScope(cpctor->_scope);
-//     fwdcpctor->semantic(cpctor->_scope);
 }
 
 bool ClassDeclaration::mayBeAnonymous()
