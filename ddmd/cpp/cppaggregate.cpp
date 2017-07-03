@@ -402,10 +402,60 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
     return e1;
 }
 
+::FuncDeclaration* hasCopyCtor(AggregateDeclaration* ad, Scope* sc)
+{
+    if (!ad->ctor)
+        return nullptr;
+
+    auto er = new_NullExp(ad->loc, ad->type);    // dummy rvalue
+    auto el = new_IdentifierExp(ad->loc, Id::p); // dummy lvalue
+    el->type = ad->type;
+    Expressions a;
+    a.setDim(1);
+    auto errors = global.startGagging();
+    sc = sc->push();
+    sc->tinst = nullptr;
+    sc->minst = nullptr;
+
+    a[0] = er;
+    auto f = resolveFuncCall(ad->loc, sc, ad->ctor, nullptr, ad->type, &a, 1|8);
+    if (!f)
+    {
+        a[0] = el;
+        f = resolveFuncCall(ad->loc, sc, ad->ctor, nullptr, ad->type, &a, 1|8);
+    }
+
+    sc = sc->pop();
+    global.endGagging(errors);
+    if (f)
+    {
+        if (f->errors)
+            return nullptr;
+        int varargs;
+        auto fparams = f->getParameters(&varargs);
+        if (fparams->dim >= 1)
+        {
+            auto fparam0 = Parameter::getNth(fparams, 0);
+            if (fparam0->type->toDsymbol(nullptr) != ad)
+                f = nullptr;
+        }
+    }
+    return f;
+}
+
 Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 {
-    // TODO
-    return nullptr;
+    Type* tv = e->type->baseElemOf();
+    assert(isAggregateValue(tv));
+    auto sym = getAggregateSym(tv);
+
+    if (!hasCopyCtor(sym, sc))
+        return nullptr;
+
+    auto arguments = new Expressions;
+    arguments->push(e);
+    e = new_CallExp(e->loc, new_TypeExp(e->loc, tv), arguments);
+    return e->semantic(sc);
 }
 
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)

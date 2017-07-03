@@ -1366,8 +1366,12 @@ extern (C++) bool checkDefCtor(Loc loc, Type t)
 extern (C++) Expression callCpCtor(Scope* sc, Expression e)
 {
     Type tv = e.type.baseElemOf();
-    if (tv.ty == Tstruct) // CALYPSO FIXME TODO: class values
+    if (tv.isAggregateValue) // CALYPSO
     {
+        if (auto lp = tv.getAggregateSym().langPlugin())
+            if (auto e2 = lp.callCpCtor(sc, e))
+                return e2;
+
         StructDeclaration sd = (cast(TypeStruct)tv).sym;
         if (sd.postblit)
         {
