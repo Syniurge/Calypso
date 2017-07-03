@@ -2000,7 +2000,11 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 if (tv.isAggregateValue()) // CALYPSO
                 {
                     if (!isRef)
+                    {
                         arg = doCopyOrMove(sc, arg);
+                        if (tv.getAggregateSym().langPlugin()) // CALYPSO HACK: dtors on value arguments are called in D by the callee, in C++ by the caller
+                            arg = arg.addDtorHook(sc);
+                    }
                     else if (!arg.isLvalue())
                         arg = arg.addDtorHook(sc); // CALYPSO: for an rvalue passed to a scope ref aggregate parameter, the dtor has to get called afterwards
                 }
