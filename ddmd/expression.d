@@ -13196,7 +13196,8 @@ extern (C++) class AssignExp : BinExp
                         e = e.semantic(sc);
                         return e;
                     }
-                    if (sd.isStructDeclaration() && (cast(StructDeclaration)sd).postblit) // CALYPSO (not pretty)
+                    if ((sd.isStructDeclaration() && (cast(StructDeclaration)sd).postblit)
+                            || sd.hasCopyCtor(sc)) // CALYPSO (not pretty)
                     {
                         /* We have a copy constructor for this
                          */
@@ -13214,6 +13215,13 @@ extern (C++) class AssignExp : BinExp
 
                         if (e2x.isLvalue())
                         {
+                            if (sd.hasCopyCtor(sc)) // CALYPSO
+                            {
+                                Expression e = callCpCtor(sc, e2x);
+                                e = new ConstructExp(loc, e1x, e);
+                                return e.semantic(sc);
+                            }
+
                             if (!e2x.type.implicitConvTo(e1x.type))
                             {
                                 error("conversion error from %s to %s",
