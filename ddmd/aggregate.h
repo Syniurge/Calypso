@@ -162,6 +162,7 @@ public:
     Expression *defaultInitLiteral(Loc loc);
     size_t literalElemDim(); // returns the total number of fields of an aggregate literal (TODO: better name?)
     CtorDeclaration* hasImplicitCtor(Expression* farg);
+    virtual CtorDeclaration* hasCopyCtor(Scope* sc) { return nullptr; }
     virtual Expression* buildVarInitializer(Scope* sc, VarDeclaration* vd, Expression* exp) { return NULL; }
 
     AggregateDeclaration *isAggregateDeclaration() { return this; }

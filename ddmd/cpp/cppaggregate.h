@@ -46,6 +46,7 @@ public:
     bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     bool disableDefaultCtor() override { return false; }
+    ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 };
 
@@ -80,6 +81,7 @@ public:
     bool allowInheritFromStruct() override { return true; }
     void makeNested() override;
     void finalizeVtbl() override;
+    ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 };
 
