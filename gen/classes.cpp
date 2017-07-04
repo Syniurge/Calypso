@@ -36,11 +36,13 @@
 // CALYPSO
 LLValue *DtoClassHandle(DValue *val)
 {
-    if (isClassValueHandle(val->type))
+    Type *t = val->type->toBasetype();
+
+    if (isClassValueHandle(t))
         return DtoRVal(val);
 
-    assert(val->type->ty == Tclass);
-    auto tc = static_cast<TypeClass*>(val->type);
+    assert(t->ty == Tclass);
+    auto tc = static_cast<TypeClass*>(t);
     if (tc->byRef())
         return DtoRVal(val);
     else
