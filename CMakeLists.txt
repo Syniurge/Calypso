@@ -580,6 +580,7 @@ set(CLANG_TARGETS "clang-headers")
 
 macro(add_clang_lib _libname_)
     set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(CLANG_BYPRODUCTS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
     set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
     set(CLANG_TARGETS ${CLANG_TARGETS} ${_libname_})
 endmacro(add_clang_lib)
@@ -621,7 +622,7 @@ ExternalProject_Add(clang
             # - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG} ${CLANG_CMAKE_FLAGS}
     BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
-    BUILD_BYPRODUCTS ${CLANG_LIBS}
+    BUILD_BYPRODUCTS ${CLANG_BYPRODUCTS}
     INSTALL_COMMAND ""
     STEP_TARGETS rtcopy
 )
