@@ -1,11 +1,20 @@
 #pragma once
 
-class B {};
+class B {
+public:
+    char xyz;
+    virtual ~B() {
+        xyz = 'a';
+    }
+};
 
-class C : B {
+class C : public B {
     int* keyhole;
     int val;
     C(int* keyhole, int val) : keyhole(keyhole), val(val) {}
-    virtual ~C() { *keyhole = val; }
+    ~C() {
+        if (keyhole)
+            *keyhole = val;
+        keyhole = 0;
+    }
 };
-

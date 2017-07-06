@@ -1,6 +1,6 @@
 modmap (C++) "classvalue_dtor.h";
 
-import (C++) C;
+import (C++) B, C;
 
 void foo(int* arg) {
     C c = C(arg, 987564);
@@ -20,8 +20,17 @@ void main()
     assert(n2 == 2314);
 
     int n3;
-    auto pc = new C(&n3, 48625);
-    destroy(*pc);
+    B* b = new C(&n3, 48625);
+    destroy(*b);
     assert(n3 == 48625);
-    pc.keyhole = &n3; // destroy() zerosets *pc but the dtor gets called a second time by the GC so .keyhole needs to be valid
+
+    version(none) // this doesn't even work with D structs
+    {
+    import core.memory;
+    int n4;
+    auto pc2 = new C(&n4, 55255);
+    pc2 = null;
+    GC.collect();
+    assert(n4 == 55255);
+    }
 }

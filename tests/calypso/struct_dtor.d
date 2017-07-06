@@ -6,6 +6,11 @@ void foo(int* arg) {
     S s = { arg, 987564 };
 }
 
+void bar(int* arg)
+{
+    new S(arg, 55255);
+}
+
 void main()
 {
     int n;
@@ -23,5 +28,13 @@ void main()
     auto ps = new S(&n3, 48625);
     destroy(*ps);
     assert(n3 == 48625);
-    ps.keyhole = &n3; // destroy() zerosets *ps but the dtor gets called a second time by the GC so .keyhole needs to be valid
+
+    version(none) // this doesn't even work with D structs
+    {
+    import core.memory;
+    int n4;
+    bar(&n4);
+    GC.collect();
+    assert(n4 == 55255);
+    }
 }
