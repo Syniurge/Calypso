@@ -1,3 +1,7 @@
+// RUN: mkdir %t.cache; \
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t
+
 /**
  * std::stack example.
  *

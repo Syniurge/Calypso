@@ -1,3 +1,7 @@
+// RUN: mkdir %t.cache; \
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t
+
 modmap (C++) "temp_dependentparams.h";
 
 import (C++) Slong, A;

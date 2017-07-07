@@ -1,3 +1,7 @@
+// RUN: mkdir %t.cache; \
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t
+
 modmap (C++) "dynamic_cast.h";
 
 import (C++) B, C, SB, SC;
