@@ -36,7 +36,6 @@ config.suffixes = ['.d',
 config.excludes = [
     'inputs',
     'd2',
-    'calypso',
     'CMakeLists.txt',
     'runlit.py',
 ]
