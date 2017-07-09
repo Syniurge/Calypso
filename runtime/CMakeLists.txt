@@ -395,7 +395,7 @@ endfunction()
 
 # Builds a copy of druntime/Phobos from the specified object (bitcode) files.
 # The names of the added library targets are appended to outlist_targets.
-macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc c_flags ld_flags
+macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o calypsort_bc calypsort_cppdir c_flags ld_flags
                          lib_suffix path_suffix is_shared outlist_targets)
     set(output_path ${CMAKE_BINARY_DIR}/lib${path_suffix})
 
@@ -460,12 +460,6 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc c_flags ld_
     endif()
 
     # CALYPSO
-    set(calypsort_o "")
-    set(calypsort_bc "")
-    set(calypsort_cppdir "${CMAKE_CURRENT_BINARY_DIR}/calypso-ldc${lib_suffix}-cpp")
-    file(MAKE_DIRECTORY ${calypsort_cppdir})
-    compile_calypsort("${d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc ${calypsort_cppdir})
-
     if (NOT MSVC)
     set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
     add_custom_command(
@@ -477,18 +471,17 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc c_flags ld_
     )
     endif()
 
-    add_library(calypso-ldc${target_suffix} ${D_LIBRARY_TYPE} ${calypsort_o} ${cpp_monolith_o})
+    add_library(calypso-ldc${target_suffix} ${library_type}
+        ${calypsort_o} ${cpp_monolith_o})
     set_target_properties(
         calypso-ldc${target_suffix} PROPERTIES
         OUTPUT_NAME                 calypso-ldc${lib_suffix}
-        VERSION                     ${DMDFE_VERSION}
-        SOVERSION                   ${DMDFE_PATCH_VERSION}
-        LINKER_LANGUAGE             C
         ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
         LIBRARY_OUTPUT_DIRECTORY    ${output_path}
         RUNTIME_OUTPUT_DIRECTORY    ${output_path}
         COMPILE_FLAGS               "${c_flags}"
         LINK_FLAGS                  "${ld_flags}"
+        LINKER_LANGUAGE             CXX
     )
     list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
 
@@ -540,6 +533,18 @@ macro(build_runtime_variant d_flags c_flags ld_flags lib_suffix path_suffix outl
     set(phobos2_common phobos2-ldc${target_suffix}-common)
     add_custom_target(${phobos2_common} DEPENDS ${phobos2_o} ${phobos2_bc})
 
+    # CALYPSO
+    set(calypsort_d_flags "${d_flags}")
+    if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
+        list(APPEND ${calypsort_d_flags} -relocation-model=pic)
+    endif()
+
+    set(calypsort_o "")
+    set(calypsort_bc "")
+    set(calypsort_cppdir "${CMAKE_CURRENT_BINARY_DIR}/calypso-ldc${lib_suffix}-cpp")
+    file(MAKE_DIRECTORY ${calypsort_cppdir})
+    compile_calypsort("${calypsort_d_flags}" "${lib_suffix}" "${path_suffix}" calypsort_o calypsort_bc ${calypsort_cppdir})
+
     # static druntime/Phobos
     if(NOT ${BUILD_SHARED_LIBS} STREQUAL "ON")
         set(druntime_o "")
@@ -547,6 +552,7 @@ macro(build_runtime_variant d_flags c_flags ld_flags lib_suffix path_suffix outl
         compile_druntime("${d_flags}" "${lib_suffix}" "${path_suffix}" druntime_o druntime_bc)
 
         build_runtime_libs("${druntime_o}" "${druntime_bc}" "${phobos2_o}" "${phobos2_bc}"
+                           "${calypsort_o}" "${calypsort_bc}" "${calypsort_cppdir}"
                            "${c_flags}" "${ld_flags}" "${lib_suffix}" "${path_suffix}" "OFF"
                            ${outlist_targets})
         add_dependencies(phobos2-ldc${target_suffix} ${phobos2_common})
@@ -558,6 +564,7 @@ macro(build_runtime_variant d_flags c_flags ld_flags lib_suffix path_suffix outl
         compile_druntime("${d_flags};-relocation-model=pic;-d-version=Shared" "${lib_suffix}${SHARED_LIB_SUFFIX}" "${path_suffix}" druntime_o druntime_bc)
 
         build_runtime_libs("${druntime_o}" "${druntime_bc}" "${phobos2_o}" "${phobos2_bc}"
+                           "${calypsort_o}" "${calypsort_bc}" "${calypsort_cppdir}"
                            "${c_flags}" "${ld_flags}" "${lib_suffix}${SHARED_LIB_SUFFIX}" "${path_suffix}" "ON"
                            ${outlist_targets})
         add_dependencies(phobos2-ldc${target_suffix} ${phobos2_common})
