@@ -36,6 +36,7 @@ cache:
     - llvm-4.0.0
     - llvm-3.9.1
     - llvm-3.9.0
+    - clang-calypso
 addons:
   apt:
     sources:
@@ -81,6 +82,13 @@ before_install:
       llvm-$LLVM_VERSION/bin/llvm-config --version;
       export LLVM_CONFIG="$(pwd)/llvm-$LLVM_VERSION/bin/llvm-config";
     fi;
+  -
+    if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
+      wget -O clang-calypso.tar.xz https://github.com/Syniurge/clang/releases/download/86c9f58/clang-86c9f58.tar.xz;
+      mkdir clang-calypso;
+      tar -xvf clang-calypso.tar.xz --strip 1 -C clang-calypso;
+      export CLANG_PREBUILT="$(pwd)/clang-calypso";
+    fi;
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9";
       CMAKE_URL="http://www.cmake.org/files/v3.6/cmake-3.6.2-Linux-x86_64.tar.gz";
@@ -99,7 +107,7 @@ before_script:
 
 script:
   - cmake --version
-  - cmake -DCLANG_BUILD_FLAGS="-j2" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
+  - cmake -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
   - make -j2
   # Outputs some environment info, plus makes sure we only run the test suite
   # if we could actually build the executable.
