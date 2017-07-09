@@ -58,11 +58,7 @@ addons:
 before_install:
   -
     if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
-      if [ "${LLVM_VERSION}" = "3.9.1" ]; then
-        export LLVM_ARCH="x86_64-linux-gnu-debian8";
-      else
-        export LLVM_ARCH="x86_64-linux-gnu-ubuntu-14.04";
-      fi;
+      export LLVM_ARCH="x86_64-linux-gnu-ubuntu-12.04";
     else
       export LLVM_ARCH="x86_64-apple-darwin";
     fi;
@@ -72,7 +68,7 @@ before_install:
         mkdir llvm-spirv-$LLVM_VERSION;
         tar -xjf llvm-spirv-$LLVM_VERSION.tar.bz2 --strip 1 -C llvm-spirv-$LLVM_VERSION;
       else
-        wget -O llvm-$LLVM_VERSION.tar.xz http://llvm.org/releases/$LLVM_VERSION/clang+llvm-$LLVM_VERSION-${LLVM_ARCH}.tar.xz;
+        wget -O llvm-$LLVM_VERSION.tar.xz https://github.com/Syniurge/llvm/releases/download/$LLVM_VERSION/llvm-$LLVM_VERSION-${LLVM_ARCH}.tar.xz;
         mkdir llvm-$LLVM_VERSION;
         tar -xvf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
       fi;
