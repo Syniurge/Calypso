@@ -570,8 +570,14 @@ endif()
 
 include(ExternalProject)
 
+set(CLANG_PREBUILT_DIR "" CACHE STRING "Pre-built Calypso Clang submodule to speed up builds (especially for Travis-CI)")
+
 set(CLANG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/clang)
-set(CLANG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/clang)
+if(NOT CLANG_PREBUILT_DIR)
+    set(CLANG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/clang)
+else()
+    set(CLANG_BINARY_DIR ${CLANG_PREBUILT_DIR})
+endif()
 
 include_directories(
     "${CLANG_BINARY_DIR}/include" 
@@ -616,32 +622,38 @@ endif()
 set(CLANG_BUILD_FLAGS "" CACHE STRING "Clang build arguments")
 separate_arguments(CLANG_BUILD_ARGS UNIX_COMMAND "${CLANG_BUILD_FLAGS}")
 
-ExternalProject_Add(clang
-    SOURCE_DIR ${CLANG_SOURCE_DIR}
-    BINARY_DIR ${CLANG_BINARY_DIR}
-    STAMP_DIR ${CLANG_STAMP_DIR}
-    CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
-            # - with MSBuild only one project can be specified and the build command fails
-            # - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG} ${CLANG_CMAKE_FLAGS}
-    BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
-    BUILD_BYPRODUCTS ${CLANG_BYPRODUCTS}
-    INSTALL_COMMAND ""
-    STEP_TARGETS rtcopy
-)
+if(NOT CLANG_PREBUILT_DIR)
+    ExternalProject_Add(clang
+        SOURCE_DIR ${CLANG_SOURCE_DIR}
+        BINARY_DIR ${CLANG_BINARY_DIR}
+        STAMP_DIR ${CLANG_STAMP_DIR}
+        CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
+                # - with MSBuild only one project can be specified and the build command fails
+                # - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG} ${CLANG_CMAKE_FLAGS}
+        BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
+        BUILD_BYPRODUCTS ${CLANG_BYPRODUCTS}
+        INSTALL_COMMAND ""
+        STEP_TARGETS rtcopy
+    )
 
-# Always trigger a rebuild of Clang in case there were changes.
-# NOTE: CMake 3.2 introduces BUILD_ALWAYS for this.
-ExternalProject_Add_Step(clang rebuild
-   COMMAND ${CMAKE_COMMAND} -E remove "${CLANG_STAMP_DIR}/clang-build"
-   DEPENDERS build
-   ALWAYS 1
-)
+    # Always trigger a rebuild of Clang in case there were changes.
+    # NOTE: CMake 3.2 introduces BUILD_ALWAYS for this.
+    ExternalProject_Add_Step(clang rebuild
+    COMMAND ${CMAKE_COMMAND} -E remove "${CLANG_STAMP_DIR}/clang-build"
+    DEPENDERS build
+    ALWAYS 1
+    )
 
-ExternalProject_Add_Step(clang rtcopy
-   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CLANG_BINARY_DIR}/lib/clang ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc
-   DEPENDEES build
-)
+    ExternalProject_Add_Step(clang rtcopy
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CLANG_BINARY_DIR}/lib/clang ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc
+    DEPENDEES build
+    )
+else()
+    add_custom_target(clang
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CLANG_BINARY_DIR}/lib/clang ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc
+    )
+endif()
 
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib/clang-ldc DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
 
