@@ -145,6 +145,14 @@ if(MSVC)
         if(MSVC_VERSION GREATER 1800) # VS 2015+
             append("-Llegacy_stdio_definitions.lib" DDMD_DFLAGS)
         endif()
+    elseif(${D_COMPILER_ID} STREQUAL "LDMD") # WORKAROUND (LDC 1.3 BUG?): shouldn't this be done in linker-msvc.cpp?
+        if(CMAKE_BUILD_TYPE MATCHES "Debug")
+            string(REGEX MATCH "\\(([0-9]+\\.[0-9]+)\\.[0-9]+\\)" D_COMPILER_VERSION_LDC ${D_COMPILER_VERSION_STRING})
+            set(D_COMPILER_VERSION_LDC "${CMAKE_MATCH_1}")
+            if(${D_COMPILER_VERSION_LDC} STREQUAL "1.3")
+                append("-mscrtlib=libcmtd" DDMD_DFLAGS)
+            endif()
+        endif()
     endif()
 
     # Link against the static MSVC runtime; CMake's C(++) flags apparently default to the dynamic one.
