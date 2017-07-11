@@ -715,13 +715,6 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
     llvm::sys::fs::remove(genListFilename, true);
 }
 
-// WORKAROUND Temporary visitor to deserialize the entire ASTContext
-class ASTDummyVisitor : public clang::RecursiveASTVisitor<ASTDummyVisitor>
-{
-public:
-    bool shouldVisitTemplateInstantiations() const { return true; }
-};
-
 void PCH::loadFromPCH(clang::driver::Compilation* C)
 {
     clang::FileSystemOptions FileSystemOpts;
@@ -762,11 +755,6 @@ void PCH::loadFromPCH(clang::driver::Compilation* C)
 
     if (!AST)
         fatal();
-
-    // WORKAROUND for https://llvm.org/bugs/show_bug.cgi?id=24420
-    // « RecordDecl::LoadFieldsFromExternalStorage() expels existing decls from the DeclContext linked list »
-    // This only concerns serialized declarations, new records aren't affected by this issue
-    ASTDummyVisitor().TraverseDecl(AST->getASTContext().getTranslationUnitDecl());
 }
 
 void PCH::update()
