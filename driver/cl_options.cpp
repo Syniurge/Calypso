@@ -523,7 +523,7 @@ cl::list<std::string> cppArgs("cpp-args",
 cl::opt<std::string> cppCacheDir("cpp-cachedir",
     cl::desc("Write Calypso cache files to <dir>"),
     cl::value_desc("dir"),
-    cl::Prefix);
+    cl::init(".calypso_cache"));
 
 cl::opt<bool> cppVerboseDiags("cpp-verbosediags",
     cl::desc("Keep Clang diagnostics enabled after the PCH generation. For the time being those are mostly spurious errors from failed instantiations that can be ignored."));

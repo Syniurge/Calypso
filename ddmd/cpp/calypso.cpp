@@ -1205,6 +1205,13 @@ void LangPlugin::_init()
 {
     executablePath = GetExecutablePath(Argv0);
 
+    if (!llvm::sys::fs::exists(opts::cppCacheDir))
+        llvm::sys::fs::create_directory(opts::cppCacheDir);
+    if (!llvm::sys::fs::is_directory(opts::cppCacheDir)) {
+        ::error(Loc(), "%s isn't a directory", opts::cppCacheDir.c_str());
+        fatal();
+    }
+
     id_cpp = idPool("cpp");
     id_core = idPool("core");
     id__ = idPool("_");
@@ -1274,7 +1281,7 @@ std::string LangPlugin::getCacheFilename(const char *suffix)
     using namespace llvm::sys::path;
 
     std::string fn(calypso.cachePrefix);
-    llvm::SmallString<128> fullpath(opts::cppCacheDir);
+    llvm::SmallString<64> fullpath(opts::cppCacheDir);
 
     if (suffix)
         fn += suffix;
