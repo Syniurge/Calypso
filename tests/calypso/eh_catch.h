@@ -11,6 +11,11 @@ public:
 
 namespace test
 {
-    void throwOoops();
-    void throwFloat();
+    void throwOoops() {
+        throw ooops();
+    }
+
+    void throwFloat() {
+        throw 20.16f;
+    }
 }

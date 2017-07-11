@@ -1,20 +1,17 @@
-/**
- * C++ catch basic examples.
- *
- * Build with :
- *   $ clang++ -c std_exception_cpp.cpp
- *   $ ldc2 std_exception_cpp.o -L-lstdc++ std_exception.d
- */
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
 
-modmap (C++) "std_exception_cpp.h";
+modmap (C++) "eh_catch.h";
 
 import (C++) std.exception, ooops;
 import (C++) test._;
-import std.stdio, std.conv, std.string;
+import std.stdio, std.conv;
 
 void main()
 {
     // We should be falling through to the last catch
+    // CHECK: Catching the ooops, e.what() == Ooops!
     try
     {
         writeln("Throwing an ooops exception");
@@ -32,10 +29,11 @@ void main()
     }
     catch (C++) (ref ooops e)
     {
-        writefln("Catching the ooops, e.what() == %s", to!string(e.what()));
+        writefln("Catching the ooops, e.what() == %s", e.what().to!string);
     }
 
     // This time with a std::exception catch handling any class derived from it
+    // CHECK: Catching the std::exception, e.what() == Ooops!
     try
     {
         writeln("\nThrowing another ooops exception");
@@ -52,10 +50,11 @@ void main()
     }
     catch (C++) (ref exception e) // std::exception
     {
-        writefln("Catching the std::exception, e.what() == %s", to!string(e.what()));
+        writefln("Catching the std::exception, e.what() == %s", e.what().to!string);
     }
 
     // Let's try throwing a basic type
+    // CHECK: Catching the float, f == 20.16
     try
     {
         writeln("\nNow throwing a float");
