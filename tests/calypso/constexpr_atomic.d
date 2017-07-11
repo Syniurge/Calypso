@@ -2,8 +2,6 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-module _atomic_;
-
 modmap (C++) "<atomic>";
 
 import std.stdio : writeln;
