@@ -46,6 +46,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Target/TargetMachine.h"
 
+#include <fstream>
+
 void codegenModules(Modules &modules, bool oneobj);
 
 namespace cpp
@@ -606,8 +608,6 @@ DiagMuter::~DiagMuter()
 
 /***********************/
 
-#define MAX_FILENAME_SIZE 4096
-
 void PCH::init()
 {
     clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(new clang::DiagnosticOptions);
@@ -618,24 +618,13 @@ void PCH::init()
                                          &*DiagOpts, DiagClient);
 
     auto headerList = calypso.getCacheFilename();
-
-    auto fheaderList = fopen(headerList.c_str(), "r"); // ordered list of headers
-        // currently cached as one big PCH (neither modules nor chained PCH can be
-        // used without modifying Clang).
+    std::ifstream fheaderList(headerList);
     if (!fheaderList)
         return;
 
-    char linebuf[MAX_FILENAME_SIZE];
-    while (fgets(linebuf, MAX_FILENAME_SIZE, fheaderList) != NULL)
-    {
-        linebuf[strcspn(linebuf, "\n")] = '\0';
-        if (linebuf[0] == '\0')
-            continue;
-
-        headers.push(strdup(linebuf));
-    }
-
-    fclose(fheaderList);
+    std::string line;
+    while (std::getline(fheaderList, line))
+        headers.push(strdup(line.c_str()));
 }
 
 void PCH::add(const char* header, ::Module *from)
@@ -710,17 +699,15 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
     /* Update the list of headers */
 
     auto headerList = calypso.getCacheFilename();
-    auto fheaderlist = fopen(headerList.c_str(), "w");
-    if (fheaderlist == NULL)
+    std::ofstream fheaderList(headerList);
+    if (!fheaderList)
     {
         ::error(Loc(), "C/C++ header list cache file couldn't be opened/created");
         fatal();
     }
 
     for (unsigned i = 0; i < headers.dim; ++i)
-        fprintf(fheaderlist, "%s\n", headers[i]);
-
-    fclose(fheaderlist);
+        fheaderList << headers[i] << "\n";
 
     /* Mark every C++ module object file dirty */
 
@@ -817,19 +804,21 @@ void PCH::update()
     if (needHeadersReload)
     {
         // Re-emit the source file with #include directives
-        auto fmono = fopen(pchHeader.c_str(), "w");
+        std::ofstream fmono(pchHeader);
         if (!fmono) {
             ::error(Loc(), "C++ monolithic header couldn't be created");
             fatal();
         }
 
-        for (unsigned i = 0; i < headers.dim; ++i) {
-            if (headers[i][0] == '<')
-                fprintf(fmono, "#include %s\n", headers[i]);
-            else
-                fprintf(fmono, "#include \"%s\"\n", headers[i]);
+        for (auto header: headers) {
+            fmono << "#include ";
+            if (header[0] != '<')
+                fmono << "\"";
+            fmono << header;
+            if (header[0] != '<')
+                fmono << "\"";
+            fmono << "\n";
         }
-        fclose(fmono);
     }
 
     // The driver doesn't do anything except computing the flags and informing us of the toolchain's C++ standard lib.
@@ -1054,25 +1043,17 @@ void LangPlugin::GenModSet::parse()
     if (!llvm::sys::fs::exists(genFilename))
         return;
 
-    auto fgenList = fopen(genFilename.c_str(), "r"); // ordered list of headers
+    std::ifstream fgenList(genFilename);
     if (!fgenList)
     {
         ::error(Loc(), "Reading .gen file failed");
         fatal();
     }
 
-    char linebuf[MAX_FILENAME_SIZE];
-    while (fgets(linebuf, sizeof(linebuf), fgenList) != NULL)
-    {
-        linebuf[strcspn(linebuf, "\n")] = '\0';
-        if (linebuf[0] == '\0')
-            continue;
-
-        if (llvm::sys::fs::exists(linebuf))
-            insert(strdup(linebuf));
-    }
-
-    fclose(fgenList);
+    std::string line;
+    while (std::getline(fgenList, line))
+        if (llvm::sys::fs::exists(line))
+            insert(strdup(line.c_str()));
 }
 
 void LangPlugin::GenModSet::add(::Module *m)
@@ -1083,15 +1064,14 @@ void LangPlugin::GenModSet::add(::Module *m)
         return;
 
     auto genFilename = calypso.getCacheFilename(".gen");
-    auto fgenList = fopen(genFilename.c_str(), "a");
+    std::ofstream fgenList(genFilename, std::ios_base::out | std::ios_base::app);
     if (!fgenList)
     {
         ::error(Loc(), "Writing .gen file failed");
         fatal();
     }
 
-    fprintf(fgenList, "%s\n", objName);
-    fclose(fgenList);
+    fgenList << objName << "\n";
 
     insert(objName);
 }
@@ -1140,8 +1120,6 @@ bool LangPlugin::needsCodegen(::Module *m)
     auto& objName = m->objfile->name->str;
     return c_m->needGen || !genModSet.count(objName);
 }
-
-#undef MAX_FILENAME_SIZE
 
 int LangPlugin::doesHandleImport(const char* tree)
 {
