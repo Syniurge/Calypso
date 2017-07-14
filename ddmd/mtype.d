@@ -9814,9 +9814,21 @@ extern (C++) final class TypeClass : Type
         return true;
     }
 
-    override bool hasPointers() const
+    override bool hasPointers()
     {
-        return true;
+        if (byRef())
+            return true;
+
+        // CALYPSO
+        ClassDeclaration s = sym;
+
+        sym.size(Loc()); // give error for forward references
+        foreach (VarDeclaration v; s.fields)
+        {
+            if (v.storage_class & STCref || v.hasPointers())
+                return true;
+        }
+        return false;
     }
 
     override void accept(Visitor v)
