@@ -121,6 +121,9 @@ bool StructDeclaration::mayBeAnonymous()
 
 bool StructDeclaration::determineFields()
 {
+    if (sizeok != SIZEOKnone)
+        return true;
+
     if (!buildAggLayout(this))
         return false;
 
@@ -352,6 +355,9 @@ void ClassDeclaration::finalizeVtbl()
 
 bool ClassDeclaration::determineFields()
 {
+    if (sizeok != SIZEOKnone)
+        return true;
+
     if (!buildAggLayout(this))
         return false;
 
@@ -373,6 +379,9 @@ bool UnionDeclaration::mayBeAnonymous()
 
 bool UnionDeclaration::determineFields()
 {
+    if (sizeok != SIZEOKnone)
+        return true;
+
     if (!buildAggLayout(this))
         return false;
 
