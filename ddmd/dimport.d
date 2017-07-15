@@ -158,7 +158,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
                 {
                     if (p.isPkgMod == PKGunknown)
                     {
-                        mod = loadModule(loc, packages, id); // CALYPSO
+                        mod = loadModule(sc); // CALYPSO
                         if (!mod)
                             p.isPkgMod = PKGpackage;
                         else
@@ -191,7 +191,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         if (!mod)
         {
             // Load module
-            mod = loadModule(loc, packages, id); // CALYPSO
+            mod = loadModule(sc); // CALYPSO
             if (mod)
             {
                 // id may be different from mod.ident, if so then insert alias
@@ -487,7 +487,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
     }
 
     // CALYPSO
-    Module loadModule(Loc loc, Identifiers *packages, Identifier id)
+    Module loadModule(Scope *sc)
     {
         return Module.load(loc, packages, id);
     }

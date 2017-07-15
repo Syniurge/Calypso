@@ -1657,7 +1657,7 @@ static void mapClangModule(DeclMapper &mapper,
     }
 }
 
-Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
+Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
 {
     if (!calypso.getASTUnit()) {
         ::error(loc, "Importing a C++ module without specifying C++ headers with modmap");
@@ -1719,6 +1719,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
     m->parent = pkg;
     m->loc = loc;
 
+    isTypedef = false;
+
     DeclMapper mapper(m);
 
     if (M)
@@ -1728,7 +1730,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
         m->rootKey.second = M;
         mapClangModule(mapper, D, M, m->members);
     }
-    else if (strcmp(id->toChars(), "_") == 0)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
+    else if (id == calypso.id__)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
     {
         m->rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
 
@@ -1780,17 +1782,29 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id)
             for (auto Match: R)
             {
                 if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
+                {
                     if (auto Tag = isAnonTagTypedef(Typedef))
                         Match = const_cast<clang::TagDecl*>(Tag);
+                    else if (!isSameNameTagTypedef(Typedef))
+                    {
+                        isTypedef = true;
+                        delete m;
+                        return nullptr; // a new attempt will be made by cpp::Import::loadModule after fixing its id
+                    }
+                }
 
                 if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
+                {
                     D = Match;
+                    break;
+                }
             }
         }
 
         if (!D)
         {
-            ::error(loc, "C++ modules have to be records (class/struct, template or not) or enums");
+            ::error(loc, "C++ modules have to be enums, records (class/struct, template or not), typedefs or _.\n"
+                            "Typedefs are included in _, and importing a typedef is equivalent to \"import (C++) _ : <typedef>;\"");
             fatal();
         }
 

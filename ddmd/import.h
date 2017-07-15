@@ -64,7 +64,7 @@ public:
     bool overloadInsert(Dsymbol *s);
 
     // CALYPSO
-    virtual Module *loadModule(Loc loc, Identifiers *packages, Identifier *id);
+    virtual Module *loadModule(Scope* sc);
 
     Import *isImport() { return this; }
     void accept(Visitor *v) { v->visit(this); }

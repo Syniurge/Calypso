@@ -22,7 +22,7 @@ public:
 
     Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 
-    ::Module *loadModule(Loc loc, Identifiers *packages, Identifier *id) override;
+    ::Module *loadModule(Scope* sc) override;
     void load(Scope *sc) override;
 };
 

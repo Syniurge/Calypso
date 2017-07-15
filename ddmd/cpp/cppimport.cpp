@@ -26,11 +26,35 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
         setSymIdent();
 }
 
-::Module* Import::loadModule(Loc loc, Identifiers* packages, Identifier* id)
+::Module* Import::loadModule(Scope* sc)
 {
     calypso.pch.update();
     
-    return Module::load(loc, packages, id);
+    bool isTypedef;
+    ::Module* m = Module::load(loc, packages, id, isTypedef);
+    if (isTypedef) {
+        if (!aliasId)
+            aliasId = id;
+        if (!isstatic && !names.dim) {
+            addAlias(id, nullptr);
+
+            // re-do either Import.addMember or visit(ImportStatement imps) (ugly code duplication, but minimally intrusive..)
+            auto tname = new_TypeIdentifier(loc, id);
+            auto ad = new_AliasDeclaration(loc, id, tname);
+            ad->_import = this;
+            aliasdecls.push(ad);
+            if (parent) {
+                ad->addMember(sc, static_cast<ScopeDsymbol*>(parent));
+                ad->setScope(sc);
+            } else {
+                sc->insert(ad);
+            }
+        }
+        id = calypso.id__;
+        load(sc);
+        m = mod;
+    }
+    return m;
 }
 
 void Import::load(Scope* sc)
