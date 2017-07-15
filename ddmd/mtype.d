@@ -9816,19 +9816,21 @@ extern (C++) final class TypeClass : Type
 
     override bool hasPointers()
     {
-        if (byRef())
+        // DMD BUG: enabling this causes bogus "forward reference"/"cannot be further field" errors
+        // See https://issues.dlang.org/show_bug.cgi?id=17194
+//         if (byRef())
             return true;
 
-        // CALYPSO
-        ClassDeclaration s = sym;
-
-        sym.size(Loc()); // give error for forward references
-        foreach (VarDeclaration v; s.fields)
-        {
-            if (v.storage_class & STCref || v.hasPointers())
-                return true;
-        }
-        return false;
+//         // CALYPSO
+//         ClassDeclaration s = sym;
+//
+//         sym.size(Loc()); // give error for forward references
+//         foreach (VarDeclaration v; s.fields)
+//         {
+//             if (v.storage_class & STCref || v.hasPointers())
+//                 return true;
+//         }
+//         return false;
     }
 
     override void accept(Visitor v)
