@@ -461,20 +461,6 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
         fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
                                      FunctionTemplate, tymap, expmap);
 
-    llvm::SmallVector<clang::Expr*, 4> Args;
-    if (fargs)
-        for (auto farg: *fargs) {
-            // toType won't take dynamic arrays, but anticipate implicit conversions
-            auto argty = farg->type;
-            if (argty->ty == Tarray)
-                argty = argty->nextOf()->pointerTo();
-
-            auto ArgTy = tymap.toType(ti->loc, argty, /*sc=*/ nullptr);
-            auto DummyExpr = new (Context) clang::OpaqueValueExpr(Loc, ArgTy,
-                                                                farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
-            Args.push_back(DummyExpr);
-        }
-
     clang::FunctionDecl *Specialization;
 
     if (isConversion)
@@ -490,8 +476,25 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
             return MATCHnomatch;
         Specialization = Conversion;
     }
-    else if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+    else  if (fargs) {
+        llvm::SmallVector<clang::Expr*, 4> Args;
+        for (auto farg: *fargs) {
+            // toType won't take dynamic arrays, but anticipate implicit conversions
+            auto argty = farg->type;
+            if (argty->ty == Tarray)
+                argty = argty->nextOf()->pointerTo();
+
+            auto ArgTy = tymap.toType(ti->loc, argty, /*sc=*/ nullptr);
+            auto DummyExpr = new (Context) clang::OpaqueValueExpr(Loc, ArgTy,
+                                                                farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
+            Args.push_back(DummyExpr);
+        }
+
+        if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
                     &ExplicitTemplateArgs, Args, Specialization, DedInfo))
+            return MATCHnomatch;
+    } else if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+                    &ExplicitTemplateArgs, Specialization, DedInfo))
         return MATCHnomatch;
 
     Inst = Specialization;
