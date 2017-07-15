@@ -974,9 +974,23 @@ void LangPlugin::toDefineClass(::ClassDeclaration* decl)
         return;
 
     if (c_cd->isUsed) {
+        auto& Context = getASTContext();
         auto& S = getSema();
+
+        const clang::FunctionDecl *keyDef = nullptr;
+        const clang::CXXMethodDecl *key =
+                    Context.getCurrentKeyFunction(c_cd->RD);
+        if (key && !c_cd->RD->hasAttr<clang::DLLImportAttr>())
+            key->hasBody(keyDef);
+
+        CGM->RecordBeingDefined = c_cd->RD;
+        if (c_cd->RD->isDynamicClass() && (!key || keyDef))
+            CGM->EmitVTable(const_cast<clang::CXXRecordDecl*>(c_cd->RD));
+
         EmitUnmappedRecordMethods(*CGM, S,
             const_cast<clang::CXXRecordDecl *>(c_cd->RD));
+
+        CGM->RecordBeingDefined = nullptr;
     }
 
     IrAggr *ir = getIrAggr(decl);
