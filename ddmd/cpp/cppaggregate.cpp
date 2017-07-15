@@ -107,9 +107,6 @@ void StructDeclaration::semantic3(Scope *sc)
 
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
-    if (!defaultCtor)
-        return ::StructDeclaration::defaultInit(loc);
-
     auto arguments = new Expressions;
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
 }
@@ -141,7 +138,9 @@ bool StructDeclaration::buildLayout()
 void StructDeclaration::finalizeSize()
 {
     ::StructDeclaration::finalizeSize();
-    if (defaultCtor)
+    if (!ctor)
+        ctor = searchCtor();
+    if (ctor)
         zeroInit = 0;
 }
 
