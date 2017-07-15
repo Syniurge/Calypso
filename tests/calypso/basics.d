@@ -1,3 +1,7 @@
+// RUN: %ldc -cpp-args -std=c++11 -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t > %t.out
+// R_N: FileCheck %s < %t.out
+
 /**
  * Basic tests for Calypso.
  *
@@ -7,6 +11,7 @@
  */
 
 modmap (C++) "basics.hpp";
+modmap (C++) "basics.cpp";
     // « modmap » is a new keyword introduced to specify the C++ headers.
     // It doesn't import anything, its only role is to tell Clang which C++ headers this module depends upon.
     //

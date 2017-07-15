@@ -13,8 +13,8 @@ namespace test {
     };
 
     // Global variables
-    extern double testDoubleVar;
-    extern testStruct testVar;
+//     extern double testDoubleVar;
+//     extern testStruct testVar;
     
     // Simple class with virtual functions
     class testClass
