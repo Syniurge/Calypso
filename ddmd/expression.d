@@ -6318,7 +6318,7 @@ extern (C++) final class NewExp : Expression
                 }
             }
 
-            if ((sd.ctor && nargs) || (sd.langPlugin() && sd.defaultCtor && !nargs)) // CALYPSO HACK FIXME
+            if (sd.ctor && (nargs || !sd.disableDefaultCtor())) // CALYPSO
             {
                 FuncDeclaration f = resolveFuncCall(loc, sc, sd.ctor, null, tb, arguments, 0);
                 if (!f || f.errors)
