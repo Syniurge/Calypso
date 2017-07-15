@@ -6,7 +6,7 @@ struct Point
     _Tp x;
     _Tp y;
 
-    Point(_Tp x, _Tp y) : x(x), y(y) {}
+    Point(_Tp x = 0, _Tp y = 0) : x(x), y(y) {}
 
     operator _Tp() const { return x*y; }
     template <typename _Tp2> operator Point<_Tp2>() const;
