@@ -624,16 +624,19 @@ const clang::Decl *getCanonicalDecl(const clang::Decl *D)
 {
     D = D->getCanonicalDecl();
 
-    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine() &&
-            isa<clang::FunctionDecl>(D))
+    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine())
     {
-        auto FD = cast<clang::FunctionDecl>(D);
-
-        // if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, prefer the latter to the former
+        // if the canonical decl is an out-of-line friend decl and the actual decl is declared, prefer the latter to the former
         // to ensure that it ends up in the proper module, not the friend decl parent's module
-        for (auto Redecl: FD->redecls())
-            if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
-                return Redecl;
+        if (auto FD = dyn_cast<clang::FunctionDecl>(D)) {
+            for (auto Redecl: FD->redecls())
+                if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
+                    return Redecl;
+        } else if (auto TD = dyn_cast<clang::RedeclarableTemplateDecl>(D)) {
+            for (auto Redecl: TD->redecls())
+                if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
+                    return Redecl;
+        }
     }
 
     return D;

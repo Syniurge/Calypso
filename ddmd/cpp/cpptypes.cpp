@@ -1912,8 +1912,7 @@ Module::RootKey TypeMapper::GetImplicitImportKeyForDecl(const clang::NamedDecl* 
 {
     D = cast<clang::NamedDecl>(getCanonicalDecl(D));
 
-    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine() &&
-            isa<clang::FunctionDecl>(D))
+    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine())
         return GetImplicitImportKeyForDecl(  // friend declarations which aren't redeclared in the semantic declctx are part of the record module
                 cast<clang::NamedDecl>(D->getLexicalDeclContext()));
 
