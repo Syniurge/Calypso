@@ -273,20 +273,35 @@ template <typename AggTy>
 {
     // We need to avoid useless temporaries that needlessly complicate codegen and result in added (wrong) dtor calls into AST
     // buildVarInitializer must be called before the initializer exp gets semantic'd(), or else addDtorHook will already have taken effect
-    if (exp->op != TOKcall || static_cast<CallExp*>(exp)->e1->op != TOKtype)
-        return nullptr;
+    CallExp* ce = nullptr;
 
-    // FIXME? sc->intypeof?
+    if (exp->op == TOKcall) {
+        auto ce2 = static_cast<CallExp*>(exp);
+        if (ce2->e1->op == TOKtype &&
+                    ad->getType() == static_cast<TypeExp*>(ce2->e1)->type->toBasetype())
+            ce = ce2; // rewrite T var = T(...) as T var; v.this(...); // FIXME fall back to operator= if there's no ctor
+    }
 
-    auto ce = static_cast<CallExp*>(exp);
+    // FIXME: sc->intypeof == 1?
+
     if (ad->ctor)
     {
         auto ve = new_VarExp(exp->loc, vd);
         assert(ad->ctor->isDeclaration());
-        ce->e1 = new_DotVarExp(exp->loc, ve, static_cast<Declaration*>(ad->ctor));
+
+        auto e1 = new_DotVarExp(exp->loc, ve, static_cast<Declaration*>(ad->ctor));
+
+        if (!ce) {
+            auto args = new Expressions;
+            args->push(exp);
+            exp = new_CallExp(exp->loc, e1, args);
+        } else
+            ce->e1 = e1;
     }
     else
     {
+        if (!ce || (ce->arguments && ce->arguments->dim > 0))
+            return nullptr;
         exp = new_StructLiteralExp(exp->loc, ad, ce->arguments, ad->getType());
     }
     return exp;
