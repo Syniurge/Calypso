@@ -565,9 +565,9 @@ Ldeclaration:
             if (!Decl || !Decl->isOutOfLine())
                 continue;
 
-            auto Func = dyn_cast<clang::FunctionDecl>(Decl);
-            if (!Func || Func->isDependentContext()) // HACK FIXME: map them as template decls using the tpl from the record
-                continue;
+            auto DeclCtx = dyn_cast<clang::DeclContext>(Decl);
+            if (DeclCtx && DeclCtx->isDependentContext()) // FIXME: map them as template decls using the tpl from the record
+                continue; // Later NOTE: dependent out-of-line free operators defined in a record as friend decl (ex. piecewise_linear_distribution::operator==) do not get added to the parent declcontext
 
             if (auto s = VisitDecl(Decl))
                 decldefs->append(s);

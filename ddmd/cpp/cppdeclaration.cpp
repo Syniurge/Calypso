@@ -317,21 +317,22 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     }
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
+    if (D->isOutOfLine() && D->getFriendObjectKind() != clang::Decl::FOK_None)
+    {
+        auto Pattern = Func;
+        if (Func)
+            if (auto MemberFunc = Func->getInstantiatedFromMemberFunction())
+                Pattern = MemberFunc;
+
+        auto DeclCtx = dyn_cast<clang::DeclContext>(D);
+        if (DeclCtx && DeclCtx->isDependentContext()) // FIXME
+            return true;
+    }
+
+
     auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
     if (Prim)
         D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
-
-    // HACK FIXME
-    if (Func && Func->isOutOfLine() &&
-            Func->getFriendObjectKind() != clang::Decl::FOK_None)
-    {
-        auto Pattern = Func;
-        if (auto MemberFunc = Func->getInstantiatedFromMemberFunction())
-            Pattern = MemberFunc;
-
-        if (Pattern->isDependentContext())
-            return true;
-    }
 
     auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
