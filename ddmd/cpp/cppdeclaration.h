@@ -226,7 +226,6 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool Reference(const clang::NamedDecl *D);
     bool Reference(const clang::Type *T);
-    void ReferenceTemplateArguments(const clang::NamedDecl *D);
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:

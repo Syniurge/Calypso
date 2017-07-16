@@ -282,7 +282,7 @@ ExprMapper DeclReferencer::expmap(mapper);
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 {
     this->loc = loc;
-    this->sc = sc;
+    this->sc = mapper.scSemImplicitImports = sc;
     TraverseStmt(S);
 }
 
@@ -315,18 +315,6 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         calypso.markSymbolReferenced(D->dsym);
         return true;
     }
-
-    // Although we try to add all the needed imports during importAll(), sometimes we miss a module so ensure it gets loaded
-    auto im = mapper.AddImplicitImportForDecl(loc, D, true);
-    im->isstatic = true;
-    auto dst = Package::resolve(im->packages, NULL, &im->pkg);
-    if (!dst->lookup(im->id))
-    {
-        im->semantic(sc);
-        im->semantic2(sc);
-    }
-
-    ReferenceTemplateArguments(D);
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
@@ -460,35 +448,6 @@ bool DeclReferencer::Reference(const clang::Type *T)
             Reference(TT->getDecl());
 
     return true;
-}
-
-void DeclReferencer::ReferenceTemplateArguments(const clang::NamedDecl *D)
-{
-    const clang::TemplateArgumentList *InstArgs = nullptr;
-
-    if (auto Func = dyn_cast<clang::FunctionDecl>(D))
-        InstArgs = Func->getTemplateSpecializationArgs();
-
-    if (!InstArgs)
-        return;
-
-    for (auto& Arg: InstArgs->asArray())
-    {
-        switch (Arg.getKind())
-        {
-            case clang::TemplateArgument::Expression:
-                TraverseStmt(Arg.getAsExpr());
-                break;
-            case clang::TemplateArgument::Type:
-                Reference(Arg.getAsType().getTypePtr());
-                break;
-            case clang::TemplateArgument::Template:
-                // TODO
-                break;
-            default:
-                break;
-        }
-    }
 }
 
 bool DeclReferencer::VisitCXXConstructExpr(const clang::CXXConstructExpr *E)

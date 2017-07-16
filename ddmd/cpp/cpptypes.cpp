@@ -1848,9 +1848,6 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
 // So we need to populate the beginning of our virtual module with imports for derived classes.
 cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake)
 {
-    if (!fake && !addImplicitDecls)
-        return nullptr;
-
     auto Key = GetImplicitImportKeyForDecl(D);
 
     if (mod && Key == mod->rootKey)
@@ -1896,8 +1893,16 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
     }
 
     if (!fake && !implicitImports[Key].added) {
-        mod->members->shift(im);
-        implicitImports[Key].added = true;
+        if (addImplicitDecls) {
+            mod->members->shift(im);
+            implicitImports[Key].added = true;
+        } else if (scSemImplicitImports) {
+            auto dst = Package::resolve(im->packages, nullptr, &im->pkg);
+            if (!dst->lookup(im->id)) {
+                im->semantic(scSemImplicitImports);
+                im->semantic2(scSemImplicitImports);
+            }
+        }
     }
 
     return im;

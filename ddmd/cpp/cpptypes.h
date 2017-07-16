@@ -69,6 +69,8 @@ public:
     bool addImplicitDecls = true;
     bool desugar = true;
 
+    Scope* scSemImplicitImports = nullptr; // if non-null AddImplicitImportForDecl will semantic the imports (e.g for DeclReferencer)
+
     unsigned volatileNumber = 0; // number of volatile qualifiers found, needs to be reset when mapping functions
 
     std::stack<const clang::Decl *> CXXScope;
