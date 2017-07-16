@@ -271,6 +271,8 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 template <typename AggTy>
  Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
+    Loc loc = exp->loc;
+
     // We need to avoid useless temporaries that needlessly complicate codegen and result in added (wrong) dtor calls into AST
     // buildVarInitializer must be called before the initializer exp gets semantic'd(), or else addDtorHook will already have taken effect
     CallExp* ce = nullptr;
@@ -279,30 +281,48 @@ template <typename AggTy>
         auto ce2 = static_cast<CallExp*>(exp);
         if (ce2->e1->op == TOKtype &&
                     ad->getType() == static_cast<TypeExp*>(ce2->e1)->type->toBasetype())
-            ce = ce2; // rewrite T var = T(...) as T var; v.this(...); // FIXME fall back to operator= if there's no ctor
+            ce = ce2; // rewrite T var = T(...) as T var; v.this(...);
     }
 
     // FIXME: sc->intypeof == 1?
 
+    auto ve = new_VarExp(loc, vd);
+
     if (ad->ctor)
     {
-        auto ve = new_VarExp(exp->loc, vd);
         assert(ad->ctor->isDeclaration());
-
-        auto e1 = new_DotVarExp(exp->loc, ve, static_cast<Declaration*>(ad->ctor));
+        auto e1 = new_DotVarExp(loc, ve, static_cast<Declaration*>(ad->ctor));
 
         if (!ce) {
+            exp = exp->semantic(sc);
+
             auto args = new Expressions;
             args->push(exp);
-            exp = new_CallExp(exp->loc, e1, args);
+
+            if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
+                args->pop(); // TODO: error if there'ss no default ctor
+
+            ce = new_CallExp(loc, e1, args);
+
+            if (args->dim == 0)
+                // rewrite to an assignment
+                exp = new_CommaExp(loc, ce,
+                                    new_AssignExp(loc, ve, exp));
+            else
+                exp = ce;
         } else
             ce->e1 = e1;
     }
     else
     {
-        if (!ce || (ce->arguments && ce->arguments->dim > 0))
-            return nullptr;
-        exp = new_StructLiteralExp(exp->loc, ad, ce->arguments, ad->getType());
+        Expression* init = ce
+                    ? new_StructLiteralExp(loc, ad, ce->arguments, ad->getType())
+                    : ad->getType()->defaultInitLiteral(loc);
+        auto ae = new_BlitExp(loc, ve, init);
+        if (ce)
+            exp = ae;
+        else
+            exp = new_AssignExp(loc, ae, exp);
     }
     return exp;
 }
