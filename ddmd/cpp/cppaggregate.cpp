@@ -271,7 +271,17 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 template <typename AggTy>
  Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
+    if (exp->op == TOKstructliteral)
+        return nullptr;
+
     Loc loc = exp->loc;
+    auto ve = new_VarExp(loc, vd);
+
+    if (vd->storage_class & STCtemp) {
+        // temporaries should never get constructed with ctor calls
+        exp = new_BlitExp(loc, ve, exp);
+        return exp;
+    }
 
     // We need to avoid useless temporaries that needlessly complicate codegen and result in added (wrong) dtor calls into AST
     // buildVarInitializer must be called before the initializer exp gets semantic'd(), or else addDtorHook will already have taken effect
@@ -285,8 +295,6 @@ template <typename AggTy>
     }
 
     // FIXME: sc->intypeof == 1?
-
-    auto ve = new_VarExp(loc, vd);
 
     if (ad->ctor)
     {
