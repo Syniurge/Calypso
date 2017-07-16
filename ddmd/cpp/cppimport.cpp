@@ -68,7 +68,6 @@ void Import::load(Scope* sc)
         im_cpp_core = new_Import(Loc(), packages, idPool("core"), nullptr, true);
         im_cpp_core->importAll(scx);
         scx->pop();
-        return;
     }
 
     ::Import::load(sc);
