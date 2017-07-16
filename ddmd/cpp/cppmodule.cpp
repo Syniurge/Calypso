@@ -1834,9 +1834,16 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
                     continue;
 
                 for (auto OverOp: Ctx->lookup(OpName))
-                    if (isOverloadedOperatorWithTagOperand(OverOp, D))
-                        if (auto s = mapper.VisitDecl(getCanonicalDecl(OverOp)))
-                            m->members->append(s);
+                {
+                    if (!isOverloadedOperatorWithTagOperand(OverOp, D))
+                        continue;
+
+                    if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
+                        continue; // friend out-of-line decls are already mapped in VisitRecordDecl
+
+                    if (auto s = mapper.VisitDecl(getCanonicalDecl(OverOp)))
+                        m->members->append(s);
+                }
             }
         }
 
