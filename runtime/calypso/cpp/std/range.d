@@ -18,7 +18,7 @@ struct STLInputRange(T)
     }
 
     void popFront() {
-        it++;
+        ++it;
     }
 }
 
