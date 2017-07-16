@@ -181,6 +181,9 @@ void EnumDeclaration::semantic(Scope *sc)
 {
     ::EnumDeclaration::semantic(sc);
     const_cast<clang::EnumDecl*>(ED)->dsym = this;
+
+    if (!defaultval && !members)
+        defaultval = memtype->defaultInit(); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
 }
 
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
