@@ -1,42 +1,44 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
-// RUN: %t
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
 
 /**
  * std::string example.
- *
- * Build with:
- *   $ ldc2 string.d
  */
 
 module _string_;
 
 modmap (C++) "<string>";
 
-import std.stdio, std.conv, std.string;
-import (C++) std.basic_string;
-import (C++) std._ : cppstring = string;
+import std.stdio, std.conv;
+import (C++) std.string : cppstring = string;
 
 void main()
 {
-    cppstring s; // basic_string!char would do too
+    cppstring s;
 
     immutable char[] charArray = "Haumea";
     s.reserve(charArray.length * 2);
     s.insert(0, charArray.ptr, charArray.length);
 
-    writeln(to!string(s.c_str));
+    writeln(s.c_str.to!string);
+    // CHECK: Haumea
     writeln("3rd and 5th characters: ", s[2], ", ", s[4]);
+    // CHECK: 3rd and 5th characters: u, e
     writeln("Size: ", s.size);
+    // CHECK: Size: 6
     writeln("Capacity: ", s.capacity);
+    // CHECK: Capacity: 15
 
     auto s2 = cppstring("Hi'iaka");
-    s.push_back(',');
+    s += ',';
     s.push_back(' ');
     s += s2;
 
     s.insert(0, "< ");
     s += " >".ptr;
-    writeln(to!string(s.c_str));
+    writeln(s.c_str.to!string);
+    // CHECK: < Haumea, Hi'iaka >
 
     s.clear();
 }

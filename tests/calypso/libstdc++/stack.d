@@ -1,11 +1,9 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
-// RUN: %t
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
 
 /**
  * std::stack example.
- *
- * Build with:
- *   $ ldc2 stack.d
  */
 
 module _stack_;
@@ -21,22 +19,26 @@ import (C++) std.deque;
 
 void main()
 {
-    auto dq = new deque!(int);
-    for (int i = 0;i<10; i++)
+    deque!int dq;
+    for (int i = 0; i < 10; i++)
       dq.push_back(i);
 
-    auto v = new vector!(int)(2,200);
+    auto v = vector!int(2, 200);
 
-    auto st1 = new stack!char;
-    auto dq2 = new stack!(int)(*dq);
+    stack!char st1;
+    auto dq2 = stack!int(dq);
     auto st2 = new stack!(int, vector!int);
 
-    writeln("empty stack size = ", st1.size());
-    writeln("10 element deque stack size = ", dq2.size());
+    writeln("empty stack size = ", st1.size);
+    // CHECK: empty stack size = 0
+    writeln("10 element deque stack size = ", dq2.size);
+    // CHECK: 10 element deque stack size = 10
 
-    for (int i = 0;i<10; i++)
-    {
-        writeln("popping the top of a stack of 10 elements from ordered deque = ", dq2.top());
+    while(!dq2.empty) {
+        writeln("popping the top of a stack of 10 elements from ordered deque = ", dq2.top);
         dq2.pop();
     }
+    // CHECK: popping the top of a stack of 10 elements from ordered deque = 9
+    // CHECK: popping the top of a stack of 10 elements from ordered deque = 5
+    // CHECK: popping the top of a stack of 10 elements from ordered deque = 1
 }

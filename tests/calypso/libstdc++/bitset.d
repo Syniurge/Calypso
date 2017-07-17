@@ -1,11 +1,9 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
-// RUN: %t
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
 
 /**
  * std::bitset example.
- *
- * Build with:
- *   $ ldc2 bitset.d
  */
 
 module _bitset_;
@@ -24,6 +22,7 @@ void main()
     usedColors.set(C, true);
 
     writeln("usedColors.len = ", numColors);
+    // CHECK: usedColors.len = 8
     write("usedColors = \t ");
     if (usedColors.any())
     {
@@ -34,21 +33,29 @@ void main()
                 write('0');
         write('\n');
     }
+    // CHECK: usedColors{{.*}}={{.*}}10100000
 
-    writeln("C bit = \t ", usedColors.test(C));      // should be true
-    writeln("count = \t ", usedColors.count());      // 2
-    writeln("as ulong = \t ", usedColors.to_ulong);  // 5 is correct
+    writeln("C bit = \t ", usedColors.test(C));
+    // CHECK: C bit{{.*}}={{.*}}true
+    writeln("count = \t ", usedColors.count());
+    // CHECK: count{{.*}}={{.*}}2
+    writeln("as ulong = \t ", usedColors.to_ulong);
+    // CHECK: as ulong{{.*}}={{.*}}5
 
     writeln("all = \t\t ", usedColors.all);
+    // CHECK: all{{.*}}={{.*}}false
     writeln("none = \t\t ", usedColors.none);
+    // CHECK: none{{.*}}={{.*}}false
     writeln("any = \t\t ", usedColors.any);
+    // CHECK: any{{.*}}={{.*}}true
 
     usedColors.flip(C);
-    writeln("C flipped = \t ", usedColors.test(C));  // false
+    writeln("C flipped = \t ", usedColors.test(C));
+    // CHECK: C flipped{{.*}}={{.*}}false
 
     write("b = \t\t ");
-    auto a = new bitset!(4u)(0b0110);
-    auto b = new bitset!(4u)(0b1101);
+    auto a = bitset!(4u)(0b0110);
+    auto b = bitset!(4u)(0b1101);
     for (int i = 0; i < b.size; i++)
     {
         if (b.test(i))
@@ -57,10 +64,10 @@ void main()
             write('0');
     }
     write('\n');
-    writeln("b as ulong = \t ", b.to_ulong); // '13' is correct
-    writeln("b = \t\t", b);
+    // CHECK: b{{.*}}={{.*}}1011
+    writeln("b as ulong = \t ", b.to_ulong);
+    // CHECK: b as ulong{{.*}}={{.*}}13
+    writeln("b =  \t\t", &b);
 
-// FAILURE on operators
-//    auto d = a&b;
-
+//    auto d = a & b; // TODO
 }

@@ -1,18 +1,22 @@
-/** * std::valarray example.  
-* 
-* Build with: 
-* $ ldc2 valarray.d
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
+
+/**
+* std::valarray example.
 */
 
 module _valarray_;
 
 modmap (C++) "<valarray>";
 
-import std.stdio, std.conv, std.string;
+import std.stdio;
 import (C++) std.valarray;
 
 void main()
 {
-    auto v = new valarray!(int)(24);
-    writeln("valarray");
+    // TODO
+    auto v = valarray!int(24);
+    writeln("valarray compiles");
+    // CHECK: valarray compiles
 }

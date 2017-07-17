@@ -1,11 +1,9 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
-// RUN: %t
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
 
 /**
  * std::map example.
- *
- * Build with:
- *   $ ldc2 map.d
  */
 
 module _map_;
@@ -13,7 +11,7 @@ module _map_;
 modmap (C++) "<map>";
 modmap (C++) "<string>";
 
-import std.stdio, std.conv, std.string;
+import std.stdio, std.conv;
 import (C++) std.map;
 import (C++) std._ : cppstring = string;
 
@@ -26,5 +24,6 @@ void main()
     m[a] = cppstring("Sedna");
     m[b] = "90377";
 
-    writeln(m[b].c_str.to!string, " ", m[a].c_str.to!string);
+    writeln(m['z'].c_str.to!string, " ", m['0'].c_str.to!string);
+    // CHECK: 90377 Sedna
 }

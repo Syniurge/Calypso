@@ -1,8 +1,9 @@
+// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %t > %t.out
+// RUN: FileCheck %s < %t.out
+
 /**
  * std::algorithm example.
- *
- * Build with:
- *   $ ldc2 algorithm.d
  */
 
 modmap (C++) "<algorithm>";
@@ -10,20 +11,13 @@ modmap (C++) "<vector>";
 
 import std.stdio;
 import cpp.std.range;
-import (C++) std._;
+import (C++) std._ : for_each;
 import (C++) std.vector;
-
-struct Sum
-{
-    int sum = 0;
-    void opCall(int n) { sum += n; }
-}
-
 
 void main()
 {
     vector!int nums;
-//     nums = [3, 4, 2, 8, 15, 267]; // TODO: std::initializer_list
+//     nums = [3, 4, 2, 8, 15, 267]; // TODO?
     foreach (n; [3, 4, 2, 8, 15, 267])
         nums.push_back(n);
 
@@ -31,17 +25,14 @@ void main()
     foreach (n; nums.irange)
         write(' ', n);
     write('\n');
+    // CHECK: before:{{.*}}3 4 2 8 15 267
 
     extern(C++) void Inc(ref scope int n) { n++; }
-    for_each(nums.begin, nums.end, &Inc); // TODO: function literals?
-
-    // calls Sum::operator() for each number
-    // FAILURE: Sum isn't a C++ struct
-//     Sum s = for_each(nums.begin(), nums.end(), *new Sum);
+    for_each(nums.begin, nums.end, &Inc);
 
     write("after: ");
     foreach (n; nums.irange)
         write(' ', n);
     write('\n');
-//     write("sum: ", s.sum, '\n');
+    // CHECK: after:{{.*}}4 5 3 9 16 268
 }
