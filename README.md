@@ -26,13 +26,32 @@ A Clang 3.9 fork makes its appearance as a submodule, it's therefore strongly re
 
 Please note that to build Calypso in ```Debug``` mode LLVM needs to be built in ```Debug``` mode as well.
 
-Specific flags and building the basic example
--------
+### Installing on OSX
+```
+brew install gcc
+gcc_D=$homebrew_D/Cellar/gcc/7.2.0/
+ccmake -D LLVM_CONFIG=$homebrew_D/Cellar/llvm@3.9/3.9.1_1/bin/llvm-config -D D_FLAGS="-cpp-args=-I$gcc_D/include/c++/7.2.0;-cpp-args=-I$gcc_D/include/c++/7.2.0/x86_64-apple-darwin17.2.0;-cpp-args=-I$gcc_D/lib/gcc/7/gcc/x86_64-apple-darwin17.2.0/7.2.0/include" ..
+make -j8
+```
+NOTE: you may encounter https://github.com/Syniurge/Calypso/issues/77, https://github.com/Syniurge/Calypso/issues/57
+
+### Installing on ubuntu 16.04
+covered in https://github.com/Syniurge/Calypso/issues/49
+
+## Specific flags and building the basic example
 
 Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11 while building [tests/calypso/basic/basics.d](tests/calypso/basic/basics.d):
 
     $ clang++ -std=c++11 -c basics.cpp -o basics.cpp.o
     $ ldc2 -cpp-args -std=c++11 basics.cpp.o -L-lstdc++ basics.d
+
+## missing features
+* Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)
+* Automatically call copy constructors on function arguments (WIP)
+* MSVC exception handling
+* `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok) https://github.com/Syniurge/Calypso/issues/74
+* C++ exception rethrowing
+* macros (constants and functions) are not mapped to D (as enums and templates) https://github.com/Syniurge/Calypso/issues/66
 
 LDC – the LLVM-based D Compiler
 ===============================
