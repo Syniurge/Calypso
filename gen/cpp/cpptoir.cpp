@@ -318,6 +318,13 @@ llvm::FunctionType *LangPlugin::toFunctionType(::FuncDeclaration *fdecl)
     return Resolved.Ty;
 }
 
+bool LangPlugin::passAggregateArgumentByRef(AggregateDeclaration* ad)
+{
+    auto RD = getRecordDecl(ad);
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(RD);
+    return CRD && CGM->getCXXABI().getRecordArgABI(CRD) == clangCG::CGCXXABI::RAA_Indirect;
+}
+
 llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but if we don't do this LLVM type comparisons will fail
 {
     if (sd->ident == id_cpp_member_ptr)

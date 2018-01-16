@@ -198,6 +198,7 @@ public:
 
     LLType *toType(Type *t) override;
     llvm::FunctionType *toFunctionType(::FuncDeclaration *fdecl) override;
+    bool passAggregateArgumentByRef(AggregateDeclaration* ad) override;
     llvm::Type *IrTypeStructHijack(::StructDeclaration *sd) override;
 
     llvm::Constant *createInitializerConstant(IrAggr *irAggr,
