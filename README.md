@@ -26,6 +26,15 @@ A Clang 3.9 fork makes its appearance as a submodule, it's therefore strongly re
 
 Please note that to build Calypso in ```Debug``` mode LLVM needs to be built in ```Debug``` mode as well.
 
+### Installing on OSX
+```
+brew install gcc
+gcc_D=$homebrew_D/Cellar/gcc/7.2.0/
+ccmake -D LLVM_CONFIG=$homebrew_D/Cellar/llvm@3.9/3.9.1_1/bin/llvm-config -D D_FLAGS="-cpp-args=-I$gcc_D/include/c++/7.2.0;-cpp-args=-I$gcc_D/include/c++/7.2.0/x86_64-apple-darwin17.2.0;-cpp-args=-I$gcc_D/lib/gcc/7/gcc/x86_64-apple-darwin17.2.0/7.2.0/include" ..
+make -j8
+# NOTE: you may encounter https://github.com/Syniurge/Calypso/issues/77, https://github.com/Syniurge/Calypso/issues/57
+```
+
 Specific flags and building the basic example
 -------
 
