@@ -25,6 +25,7 @@ public:
 
     virtual LLType *toType(Type *t) = 0;
     virtual llvm::FunctionType *toFunctionType(FuncDeclaration *fdecl) = 0;
+    virtual bool passAggregateArgumentByRef(AggregateDeclaration* ad) = 0;
     virtual llvm::Type *IrTypeStructHijack(StructDeclaration *sd) = 0; // UGLY HACK
 
     virtual llvm::Constant *createInitializerConstant(IrAggr *irAggr,

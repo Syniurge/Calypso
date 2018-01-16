@@ -152,6 +152,12 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     // Whether the parameter is passed by LLVM value or as a pointer to the
     // alloca/….
     bool passPointer = arg->storageClass & (STCref | STCout);
+    
+    if (!passPointer && isAggregateValue(arg->type)) {  // CALYPSO
+        auto ad = getAggregateSym(arg->type);
+        if (auto lp = ad->langPlugin())
+            passPointer = lp->codegen()->passAggregateArgumentByRef(ad);
+    }
 
     Type *loweredDType = arg->type;
     AttrBuilder attrs;
