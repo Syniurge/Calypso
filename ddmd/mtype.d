@@ -6346,6 +6346,12 @@ extern (C++) final class TypeFunction : TypeNext
                     errors = true;
                 }
 
+                if (t.isAggregateValue() && getAggregateSym(t).langPlugin())
+                {
+                    fparam.storageClass |= STCnodtor; // CALYPSO HACK: in D dtors on value arguments are called in by the callee, in C++ by the caller.
+                        // But in order to simplify the code and make calling D functions taking C++ struct or class arguments from C++ possible, D sticks to the C++ way, i.e C++ dtors always get called by the caller
+                }
+
                 if ((fparam.storageClass & (STCref | STCwild)) == (STCref | STCwild))
                 {
                     // 'ref inout' implies 'return'

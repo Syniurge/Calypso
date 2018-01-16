@@ -2006,7 +2006,8 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                     if (!isRef)
                     {
                         arg = doCopyOrMove(sc, arg);
-                        if (tv.getAggregateSym().langPlugin()) // CALYPSO HACK: dtors on value arguments are called in D by the callee, in C++ by the caller
+                        if (tv.getAggregateSym().langPlugin()) // CALYPSO NOTE: in D dtors on value arguments are called in by the callee, in C++ by the caller.
+                                                               // But in order to simplify the code and make calling D functions taking C++ struct or class arguments from C++ possible, D sticks to the C++ way, i.e C++ dtors always get called by the caller
                             arg = arg.addDtorHook(sc);
                     }
                     else if (!arg.isLvalue())
