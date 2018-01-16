@@ -427,8 +427,6 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
             set(dso_system_libs "m" "pthread" "rt" "dl")
         else()
             set(dso_system_libs "m" "pthread")
-        else()
-            set(dso_system_libs "m" "pthread" "rt" "dl")
         endif()
         target_link_libraries(druntime-ldc${target_suffix} ${dso_system_libs})
     endif()
