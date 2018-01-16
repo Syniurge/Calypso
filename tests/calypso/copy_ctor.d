@@ -5,6 +5,9 @@ modmap (C++) "copy_ctor.h";
 
 import (C++) StaticCount, StaticCountDerived;
 
+void fun(StaticCount a) {}
+void funDerived(StaticCountDerived a) {}
+
 void main()
 {
     StaticCount u1, u2;
@@ -30,6 +33,10 @@ void main()
     StaticCount u3 = u1;
     assert(StaticCount.copyctorcalls == 5);
     assert(StaticCount.dtorcalls == 4);
+
+    fun(u1);
+    assert(StaticCount.copyctorcalls == 6);
+    assert(StaticCount.dtorcalls == 5);
 
     assert(StaticCount.refs == 3);
     assert(StaticCount.assigns == 3);
@@ -62,6 +69,10 @@ void main()
     StaticCountDerived v3 = v1;
     assert(StaticCount.copyctorcalls == 5);
     assert(StaticCount.dtorcalls == 4);
+
+    funDerived(v1);
+    assert(StaticCount.copyctorcalls == 6);
+    assert(StaticCount.dtorcalls == 5);
 
     assert(StaticCount.refs == 3);
     assert(StaticCount.assigns == 3);

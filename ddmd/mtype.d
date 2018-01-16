@@ -6346,6 +6346,11 @@ extern (C++) final class TypeFunction : TypeNext
                     errors = true;
                 }
 
+                if (t.isAggregateValue() && getAggregateSym(t).langPlugin())
+                {
+                    fparam.storageClass |= STCnodtor; // CALYPSO see D20180120T151603
+                }
+
                 if ((fparam.storageClass & (STCref | STCwild)) == (STCref | STCwild))
                 {
                     // 'ref inout' implies 'return'
