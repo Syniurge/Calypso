@@ -35,13 +35,18 @@ make -j8
 ```
 NOTE: you may encounter https://github.com/Syniurge/Calypso/issues/77, https://github.com/Syniurge/Calypso/issues/57
 
-Specific flags and building the basic example
--------
+## Specific flags and building the basic example
 
 Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11 while building [tests/calypso/basic/basics.d](tests/calypso/basic/basics.d):
 
     $ clang++ -std=c++11 -c basics.cpp -o basics.cpp.o
     $ ldc2 -cpp-args -std=c++11 basics.cpp.o -L-lstdc++ basics.d
+
+## missing features
+* Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)
+* Automatically call copy constructors on function arguments (WIP)
+* MSVC exception handling
+* `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok)
 
 LDC – the LLVM-based D Compiler
 ===============================
