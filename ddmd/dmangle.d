@@ -855,6 +855,9 @@ public:
         case STClazy:
             buf.writeByte('L');
             break;
+        case STCmove:
+            buf.writeByte('R'); // CALYPSO: same as Treference, but STCmove only appears with 'K' so it should be easy to distinguish the two
+            break;
         default:
             debug
             {
