@@ -1502,6 +1502,17 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     return true;
 }
 
+void mapMacros(DeclMapper &mapper, clang::Module::Header* Header, Dsymbols *members)
+{
+    auto MacroMapEntry = calypso.MacroMap[Header];
+    if (!MacroMapEntry)
+        return;
+
+    for (auto& P: *MacroMapEntry)
+        if (auto s = mapper.VisitMacro(P.first, P.second))
+            members->push(s);   
+}
+
 static void mapNamespace(DeclMapper &mapper,
                              const clang::DeclContext *DC,
                              Dsymbols *members,
@@ -1540,6 +1551,9 @@ static void mapNamespace(DeclMapper &mapper,
         if (auto s = mapper.VisitDecl(*D))
             members->append(s);
     }
+    
+    if (DC->isTranslationUnit())
+        mapMacros(mapper, nullptr, members);
 }
 
 static void mapClangModule(DeclMapper &mapper,
@@ -1641,15 +1655,7 @@ static void mapClangModule(DeclMapper &mapper,
     {
         // Map the macros contained in the module headers (currently limited to numerical constants)
         for (auto& Header: M->Headers[clang::Module::HK_Normal])
-        {
-            auto MacroMapEntry = calypso.MacroMap[&Header];
-            if (!MacroMapEntry)
-                continue;
-
-            for (auto& P: *MacroMapEntry)
-                if (auto s = mapper.VisitMacro(P.first, P.second))
-                    members->push(s);
-        }
+            mapMacros(mapper, &Header, members);
 
         for (auto D: RegionDecls)
             if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
