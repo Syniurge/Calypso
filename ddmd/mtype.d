@@ -5975,6 +5975,11 @@ extern (C++) class TypeReference : TypeNext // CALYPSO (removed final)
         // BUG: what about references to static arrays?
     }
 
+    bool isRvalRef() const // CALYPSO
+    {
+        return false;
+    }
+
     override const(char)* kind() const
     {
         return "reference";
@@ -6098,6 +6103,7 @@ extern (C++) final class TypeFunction : TypeNext
     bool isnogc;                // true: is @nogc
     bool isproperty;            // can be called without parentheses
     bool isref;                 // true: returns a reference
+    bool ismove;                // true: returns a C++ rvalue reference // CALYPSO: DMD needs to be made aware of C++ rvalue references to never select C++ overloads with rval ref parameters unless explicitly requested
     bool isreturn;              // true: 'this' is returned by ref
     bool isscope;               // true: 'this' is scope
     LINK linkage;               // calling convention
@@ -6128,6 +6134,8 @@ extern (C++) final class TypeFunction : TypeNext
 
         if (stc & STCref)
             this.isref = true;
+        if (stc & STCmove)
+            this.ismove = true; // CALYPSO
         if (stc & STCreturn)
             this.isreturn = true;
         if (stc & STCscope)
@@ -6163,6 +6171,7 @@ extern (C++) final class TypeFunction : TypeNext
         t.purity = purity;
         t.isproperty = isproperty;
         t.isref = isref;
+        t.ismove = ismove; // CALYPSO
         t.isreturn = isreturn;
         t.isscope = isscope;
         t.iswild = iswild;
@@ -6212,6 +6221,8 @@ extern (C++) final class TypeFunction : TypeNext
             tf.isnogc = true;
         if (sc.stc & STCref)
             tf.isref = true;
+        if (sc.stc & STCmove)
+            tf.ismove = true; // CALYPSO
         if (sc.stc & STCreturn)
             tf.isreturn = true;
         if (sc.stc & STCscope)
@@ -6265,8 +6276,11 @@ extern (C++) final class TypeFunction : TypeNext
             // parameters while others use STCref.
             if (tf.next.ty == Treference)
             {
+                auto tr = cast(TypeReference)tf.next;
                 tf.next = tf.next.nextOf();
                 tf.isref = true;
+                if (tr.isRvalRef())
+                    tf.ismove = true;
             }
             sc = sc.pop();
             errors |= tf.checkRetType(loc);
@@ -6310,8 +6324,11 @@ extern (C++) final class TypeFunction : TypeNext
 
                 if (fparam.type.ty == Treference) // CALYPSO
                 {
+                    auto tr = cast(TypeReference)fparam.type;
                     fparam.type = fparam.type.nextOf();
                     fparam.storageClass |= STCscope | STCref;
+                    if (tr.isRvalRef())
+                        fparam.storageClass |= STCmove;
                 }
 
                 fparam.type = fparam.type.addStorageClass(fparam.storageClass);
@@ -7058,6 +7075,18 @@ extern (C++) final class TypeFunction : TypeNext
                             m = MATCHimplicitctor;
                             targ = toad.getType();
                         }
+                    }
+                    else if (m > MATCHnomatch && p.storageClass & STCmove) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
+                    {
+                        assert(p.storageClass & STCref);
+                        bool ismove = false;
+                        if (arg.op == TOKcall)
+                        {
+                            auto ce = cast(CallExp)arg;
+                            ismove = ce.f && (cast(TypeFunction)ce.f.type).ismove;
+                        }
+                        if (!ismove)
+                            m = MATCHnomatch;
                     }
                 }
 

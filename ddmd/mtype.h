@@ -566,6 +566,7 @@ class TypeReference : public TypeNext
 {
 public:
     virtual void _key(); // CALYPSO
+    virtual bool isRvalRef() const; // CALYPSO
     const char *kind() const;
     Type *syntaxCopy();
     Type *semantic(Loc loc, Scope *sc);

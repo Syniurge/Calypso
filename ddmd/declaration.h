@@ -93,13 +93,15 @@ enum PINLINE;
 #define STCreturn        0x100000000000LL // 'return ref' for function parameters
 #define STCautoref       0x200000000000LL // Mark for the already deduced 'auto ref' parameter
 #define STCinference     0x400000000000LL // do attribute inference
-#define STCimplicit     0x2000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCimplicit      0x2000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCmove          0x4000000000000LL // for C++ rvalue references // CALYPSO
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
     STCout | STCin |
     STCmanifest | STCimmutable | STCshared | STCwild | STCnothrow | STCnogc | STCpure | STCref | STCtls |
-    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable);
+    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable |
+    STCmove); // CALYPSO
 
 struct Match
 {

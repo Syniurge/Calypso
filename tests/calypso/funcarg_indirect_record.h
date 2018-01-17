@@ -11,7 +11,10 @@ struct B {
   // https://en.wikipedia.org/wiki/Rule_of_three_(C%2B%2B_programming)
   B(const B &a) : B(a.x) {}
 
-  B(B &&a) : B(a.x) { a.release(); }
+  B(B &&a) : B(a.x) {
+    a.release();
+    assert(false); // ensures that the test case isn't calling the move ctor
+  }
 
   B &operator=(const B &a) {
     initialize(a.x);

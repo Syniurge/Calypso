@@ -81,6 +81,7 @@ public:
         return t;
     }
 
+    bool isRvalRef() const override { return isRvalueRef; }
     bool isTransitive() override { return false; }
     bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
@@ -253,7 +254,7 @@ public:
         if (t->isTypeBasic())
         {
             buf->writeByte('#');
-            buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind()));
+            buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind())); // FIXME: needs a more durable solution
             buf->writeByte('#');
         }
         else if (t->ty == Treference)
@@ -1744,7 +1745,10 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         // Turn a TypeReference into « ref nextOf() » as early as possible as this helps function resolving
         if (at->ty == Treference)
         {
+            auto tref = static_cast<TypeReference*>(at);
             stc |= STCscope | STCref;
+            if (tref->isRvalRef())
+                stc |= STCmove;
             at = at->nextOf();
         }
 
@@ -1796,7 +1800,10 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
 
         if (rt->ty == Treference)
         {
+            auto tref = static_cast<TypeReference*>(rt);
             stc |= STCref;
+            if (tref->isRvalRef())
+                stc |= STCmove;
             rt = rt->nextOf();
         }
     }

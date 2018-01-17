@@ -2889,6 +2889,8 @@ public:
             buf.writestring("auto ");
         if (p.storageClass & STCreturn)
             buf.writestring("return ");
+        if (p.storageClass & STCmove)
+            buf.writestring("move "); // CALYPSO
         if (p.storageClass & STCout)
             buf.writestring("out ");
         else if (p.storageClass & STCref)
@@ -3071,6 +3073,7 @@ extern (C++) const(char)* stcToChars(ref StorageClass stc)
         SCstring(STCwild, TOKwild),
         SCstring(STCpure, TOKpure),
         SCstring(STCref, TOKref),
+        SCstring(STCmove, TOKat, "move"), // CALYPSO
         SCstring(STCtls),
         SCstring(STCgshared, TOKgshared),
         SCstring(STCnogc, TOKat, "@nogc"),

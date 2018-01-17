@@ -841,6 +841,8 @@ public:
         // 'return inout ref' is the same as 'inout ref'
         if ((p.storageClass & (STCreturn | STCwild)) == STCreturn)
             buf.writestring("Nk");
+        if (p.storageClass & STCmove)
+            buf.writestring("R"); // CALYPSO: same character as Treference, but STCmove only ever appears with STCref i.e 'K' so it should be easy to distinguish the two in demanglers
         switch (p.storageClass & (STCin | STCout | STCref | STClazy))
         {
         case 0:
