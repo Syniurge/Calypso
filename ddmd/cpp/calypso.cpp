@@ -468,8 +468,8 @@ Loc fromLoc(clang::SourceLocation L)
 
     auto S = SrcMgr.getFilename(L);
     loc.filename = S.data();
-    assert(*(S.data() + S.size()) == '\0'); // TEMPORARY assert to confirm that StringRef isn't needed anymore
-    loc.linnum = ast()->getSourceManager().getSpellingLineNumber(L);
+    assert(!S.data() || *(S.data() + S.size()) == '\0'); // TEMPORARY assert to confirm that StringRef isn't needed anymore
+    loc.linnum = SrcMgr.getSpellingLineNumber(L);
 
     return loc;
 }
@@ -956,9 +956,6 @@ void LangPlugin::buildMacroMap()
                 }
             if (FoundHeader) break;
         }
-
-        if (!FoundHeader)
-            continue;
 
         auto& MacroMapEntry = MacroMap[FoundHeader];
         if (!MacroMapEntry)
