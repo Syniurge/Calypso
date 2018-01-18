@@ -35,6 +35,9 @@ make -j8
 ```
 NOTE: you may encounter https://github.com/Syniurge/Calypso/issues/77, https://github.com/Syniurge/Calypso/issues/57
 
+### Installing on ubuntu 16.04
+covered in https://github.com/Syniurge/Calypso/issues/49
+
 ## Specific flags and building the basic example
 
 Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11 while building [tests/calypso/basic/basics.d](tests/calypso/basic/basics.d):
