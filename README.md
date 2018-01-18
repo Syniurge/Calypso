@@ -50,6 +50,7 @@ Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during head
 * Automatically call copy constructors on function arguments (WIP)
 * MSVC exception handling
 * `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok) https://github.com/Syniurge/Calypso/issues/74
+* C++ exception rethrowing
 * macros (constants and functions) are not mapped to D (as enums and templates) https://github.com/Syniurge/Calypso/issues/66
 
 LDC – the LLVM-based D Compiler
