@@ -78,18 +78,16 @@ enum CppImport custom = {
 };
 
 // NOTE: all pragma scopes can be used, cf D20180118T190059
-pragma(import, C++){
-	pragma(customize_import, custom)
-	import foo;
+pragma(customize_import, custom)
+import foo;
 
-	enum CppImport custom_rec = { modmaps: ["fun.h"], namespace_recursive:true };
-	pragma(customize_import, custom_rec)
-	static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
-}
+enum CppImport custom_rec = { modmaps: ["fun.h"], namespace_recursive:true };
+pragma(customize_import, custom_rec)
+static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
 
 void main(){
-	Bar bar;
-	ℂcpp.foo.Bar bar2;  // instead of ℂcpp.foo.Bar.Bar => more intuitive
+  Bar bar;
+  ℂcpp.foo.Bar bar2;  // instead of ℂcpp.foo.Bar.Bar => more intuitive
 }
 ```
 
