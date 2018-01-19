@@ -14,9 +14,8 @@
 * solves name clashes issues, especially with C libraries
 * allows the more natural `ℂcpp.foo.Bar` instead of `ℂcpp.foo.Bar.Bar` (no need to double the name for aggregates)
 
-### example
+### the CppImport option struct defined in module `cpp.core`:
 ```
-// in builtin module `cpp.core`
 struct CppImport{
 	// whether to recursively import namespaces, requires `static import` (and therefore fully qualified names) to avoid name clashes
 	bool namespace_recursive=false;
@@ -57,6 +56,7 @@ struct CppImport{
 }
 ```
 
+## example user code
 ```
 // fun.h:
 namespace foo{
