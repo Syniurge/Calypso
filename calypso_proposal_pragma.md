@@ -6,12 +6,13 @@
 
 ### benefits
 
-* D20180118T190059: automatically benefit from pragma syntax which supports applying pragma to one, all remaining, or a scope of statements.
+* D20180118T190059: automatically benefit from pragma syntax which supports applying pragma to one, all remaining, or a scope of statements, both for modmap and import statements.
 * non-calypso-aware compilers can still compile calypso code with proper `version(Calypso)`
-* exising parsers (libdparse, dscanner, sublime text syntax highlight, etc) understand calypso out of the box; 
-* will be hard to convince any of them to support calypso special syntax until calypso gets merged into LDC (and even then, calypso would likely only ever be LDC, not DMD or GDC so others might not care about supporting calypso) 
+* exising parsers (libdparse, dscanner, sublime text syntax highlight, etc) understand calypso out of the box; will be hard to convince any of them to support calypso special syntax until calypso gets merged into LDC (and even then, calypso would likely only ever be LDC, not DMD or GDC so others might not care about supporting calypso) 
 * allows arbitrarily customization of what symbols we import, add annotations/UDAs, and bulk-rename; not clear how to do without this proposal!
-* allows scoping what modmap applies to
+* allows 1 liner to import everything in a C++ library avoiding tedious imports for each type (great for debugging / exploration)
+* solves name clashes issues, especially with C libraries
+* allows the more natural ℂcpp.foo.Bar instead of ℂcpp.foo.Bar.Bar (no need to double the name for aggregates)
 
 ### example
 ```
