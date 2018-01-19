@@ -13,11 +13,7 @@
 * allows arbitrarily customization of what symbols we import, add annotations/UDAs, and bulk-rename; not clear how to do without this proposal!
 * allows scoping what modmap applies to
 
-### examples
-```
-```
-
-### Other options: modifiers
+### example
 ```
 // in builtin module `cpp.core`
 struct CppImport{
@@ -102,6 +98,6 @@ enum CppImport custom = {
 ```
 
 
-### other extensions that easily fit in same design:
+## other extensions that easily fit in same design:
 * add another field with a delegate that gets called when a C++ declaration is considered for import (eg could print the clang AST etc)
 * make CppImport a subclass of CustomImport, and add subclasses ObjectivecImport, etc (+ other languages supported by clang)
