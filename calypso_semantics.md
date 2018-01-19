@@ -107,6 +107,8 @@ void main(){
 should behave the same as in C++:
 When lvalue reference is cast in rvalue reference with std::move or other.
 
+// TODO: show examples to cover most cases; specify which calls can be optimized out depending on optimization levels
+
 ## traits
 ```d
 static assert(__traits(is_cxx_struct, A));  // doesn't care whether A is a C++ struct or class (almost same)
