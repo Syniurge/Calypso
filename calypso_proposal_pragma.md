@@ -6,8 +6,6 @@
 
 ### benefits
 
-HOW_ELSE: not clear how to do without this proposal!
-
 * D20180118T190059: automatically benefit from pragma syntax which supports applying pragma to one, all remaining, or a scope of statements.
 * non-calypso-aware compilers can still compile calypso code with proper `version(Calypso)`
 * exising parsers (libdparse, dscanner, sublime text syntax highlight, etc) understand calypso out of the box; 
