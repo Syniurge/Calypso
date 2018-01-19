@@ -1,6 +1,6 @@
 This documents potentially non-obvious behavior (or desired behavior in desired implementation) of calypso.
 
-## semantics for A.init, A()
+## A.init != A()
 
 ```
 // test.h:
@@ -23,6 +23,9 @@ struct B{
   A a;
 }
 
+class C : A{
+}
+
 void main(){
   A a1; // no ctor called, just A.init which is known at compile time
   auto a2=A.init; // ditto
@@ -36,11 +39,40 @@ void main(){
   
   auto a4=A(); // calls ctor A::A()
   assert(a4.x==42+1);
+  
+  A* a5=new A(); // calls ctor A::A() (allocates using GC)
 
-  A a5=void; // uninitialized (to whatever garbage on the stack)
+  A a6=void; // uninitialized (to whatever garbage on the stack)
   
   // likewise with DCXX B:
   B b1; // no ctor called, same with B.init
   auto b2=B();  // calls B's ctor, which in turn calls A::A()
+  
+  // 
 }
 ```
+
+## memory allocation
+```
+A a0; // allocates on the stack using compile time value A.init;
+A a1=A1(); // allocates on the stack using A::A()
+A* a1=new A(); // allocate on D GC
+A* a2=A.new(); // allocate on heap using C++::new (leaks without A.delete())
+// delete a1;// delete was deprecated in standard D
+a1.destroy; // calls A::~A()
+```
+
+## question
+void main(){
+  {
+    A a; // A::A() not called
+  } // upon exiting scope, is A::~A() called?
+}
+
+## traits
+```
+static assert(__traits(is_cxx_struct, A));  // doesn't care whether A is a C++ struct or class (almost same)
+static assert(__traits(is_dcxx_struct, B)); // for D struct embedding a is_cxx_struct or is_dcxx_struct struct
+static assert(__traits(is_dcxx_class, C)); // for D class inheriting a is_cxx_struct or is_dcxx_struct or is_dcxx_class
+```
+
