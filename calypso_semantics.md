@@ -3,6 +3,7 @@ This documents potentially non-obvious behavior (or desired behavior in desired 
 ## A.init != A()
 
 ```C++
+// fun.h
 struct Inner{
   Inner(){}
   ~Inner(){}
