@@ -128,6 +128,10 @@ struct A {
 };
 ```
 
+NOTE: if we make `A.init` be 0, this problem goes away, but that's not consistent with `.init` for D structs; this is a bigger even problem for a D struct that embeds `A`, eg: `struct B2{A a; int a=1;}` ; making `B.init is 0` true is surprising.
+
+NOTE: another option is to force `A.init` (and embeddings D structs) to have pointers set to non-zero values, eg in these case, `static assert(A.init.x0 is 0)`
+
 ### Option 2: `A.__dtor` doesn't get called if `a is A.init` (via `memcmp`)
 advantage:
 avoids calling `__dtor` if no `__ctor` was called (these are matching 1:1 except by "accident" when `A.__ctor` was called but is equal to `A.init` during deallocation time
