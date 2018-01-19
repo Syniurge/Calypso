@@ -38,6 +38,7 @@ void main(){
   enum a1=A.init; // // no ctor called, just A.init which is known at compile time
   auto a2=A.init; // ditto
   A a3=A.init; // ditto: `auto a=expr;` is identical to `A a=expr;` when typeof(expr)=A
+  // NOTE: calypso should guarantee that no copy ctor is called either; indeed, `A a3=A.init;` should be callable at CTFE.
 
   static assert(A.init.x==42); // not 0
   static assert(A.init.y==1.5); // not float.NaN
@@ -70,22 +71,22 @@ void main(){
 ```
 A a0=A.init; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack using A::A()
-A* a1=new A(); // allocate on D GC (GC's responsability to delete)
-A* a2=A.new(); // allocate on heap using C++::new (leaks without A.delete())
-// delete a1;// delete was deprecated in standard D
-a1.destroy; // no suprise, calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;` but doesn't deallocate A.sizeof bytes holding A itself
+A* a2=new A(); // allocate A.sizeof on D GC (and calls C++ placement new); GC will call a2.~A() and deallocate sizeof(A)  (if/when collection happens) so nothing to do in user code
+A* a3=A.new(); // allocate on heap using C++::new (leaks without a3.delete())
 
-a2.delete(); // calls C++::delete(a2) and sets a2 to null.
-a2.destroy; // TODO
+a1.destroy; // calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;` and memcpy A.init in a1; NOTE: when a1 goes out of scope, it'll call `A::~A()` again, potentially causing memory corruption (but same situation with standard D structs today)
+
+// TODO: how to force deallocation on a2? `destroy(*a2)` could lead to doubly calling A::~A() when GC collects a2
+a3.delete(); // calls C++::delete(a3) and sets a3 to null
+
+// for destroy on struct pointer, not yet clear, see http://forum.dlang.org/thread/uplymqtaxubgkxwzacrz@forum.dlang.org Calling destroy on struct pointer; should be consistent with how D treats struct pointers
 ```
 
-## tricky point: A::~A() called without A::A() called
-It matches D's behavior for structs (which cannot have parameterless `this()` ctor).
-Is that the best behavior for C++ structs?
+## question: how to avoid calling A::~A() on a stack allocated C++ struct? could we use a special value (eg A.init or 0) to check whether we can skip calling A::~A()?
 ```
 void main(){
-  A a; // A::A() not called
-  // upon exiting scope, A::~A() is called
+  A a=A.init; // ctor not called
+  // upon exiting scope, A::~A() is called (NOTE: same as behavior for D structs)
 }
 ```
 
