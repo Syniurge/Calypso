@@ -3,12 +3,18 @@ This documents potentially non-obvious behavior (or desired behavior in desired 
 ## A.init != A()
 
 ```
+struct Inner{
+  Inner(){}
+  ~Inner(){}
+};
+
 // test.h:
 struct A{
   int x=42;
   float y=1.5;
   double z;
   int* u;
+  Inner inner;
   A(){
     static int counter=0;
     // can call things at runtime
