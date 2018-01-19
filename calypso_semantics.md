@@ -72,6 +72,8 @@ void main(){
 A a0=A.init; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack using A::A()
 A* a2=new A(); // allocate A.sizeof on D GC (and calls C++ placement new); GC will call a2.~A() and deallocate sizeof(A)  (if/when collection happens) so nothing to do in user code
+
+// TODO: see cpp.memory:cppNew,cppDelete
 A* a3=A.new(); // allocate on heap using C++::new (leaks without a3.delete())
 
 a1.destroy; // calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;` and memcpy A.init in a1; NOTE: when a1 goes out of scope, it'll call `A::~A()` again, potentially causing memory corruption (but same situation with standard D structs today)
