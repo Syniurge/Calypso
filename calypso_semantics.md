@@ -23,7 +23,9 @@ struct A{
     delete u;
   }
 };
+```
 
+```d
 // main.d:
 import(C++) _.A;
 
