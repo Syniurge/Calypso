@@ -17,6 +17,10 @@
 ### the CppImport option struct defined in module `cpp.core`:
 ```
 struct CppImport{
+	// eg: ["opencv2.h"]
+	// perhaps controversial; could be keps as a separate `pragma(modmap, C++, "fun.h")`
+	string[] modmaps;
+
 	// whether to recursively import namespaces, requires `static import` (and therefore fully qualified names) to avoid name clashes
 	bool namespace_recursive=false;
 
@@ -37,8 +41,8 @@ struct CppImport{
 	// especially useful for importing C libraries, which lack namespaces
 	bool function(string) name_filter = null;
 
-  // optionally map symbols, eg: `name => "_cpp_"~name`
-  // especially useful for renaming C/C++ symbols that could cause name clashes
+        // optionally map symbols, eg: `name => "_cpp_"~name`
+        // especially useful for renaming C/C++ symbols that could cause name clashes
 	bool function(string) name_map = null;
 
 	// if non-null, will add a UDA named with that field containing C++ comment for that declaration
@@ -50,9 +54,8 @@ struct CppImport{
 	// ditto with line
 	string uda_cpp_line;
 
-	// eg: ["opencv2.h"]
-	// this one is controversial, could be keps as a `pragma(modmap, C++, "fun.h")` or not
-	string[] modmaps;
+        // controls codegen (eg if a user knows cv::Mat has internal pointers, set to false; cf https://github.com/Syniurge/Calypso/issues/70)
+	bool implicitly_movable=true;
 }
 ```
 
