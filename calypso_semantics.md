@@ -65,12 +65,13 @@ a2.delete(); //
 a2.destroy; // TODO
 ```
 
-## question
+## tricky point: A::~A() called without A::A() called
+It matches D's behavior for structs (which cannot have parameterless `this()` ctor).
+Is that the best behavior for C++ structs?
 ```
 void main(){
-  {
-    A a; // A::A() not called
-  } // upon exiting scope, is A::~A() called?
+  A a; // A::A() not called
+  // upon exiting scope, A::~A() is called
 }
 ```
 
