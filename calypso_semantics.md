@@ -1,3 +1,5 @@
+This documents potentially non-obvious behavior (or desired behavior in desired implementation) of calypso.
+
 ## semantics for A.init, A()
 
 ```
