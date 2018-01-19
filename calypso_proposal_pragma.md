@@ -82,12 +82,15 @@ pragma(customize_import, custom)
 import foo;
 
 enum CppImport custom_rec = { modmaps: ["fun.h"], namespace_recursive:true };
-pragma(customize_import, custom_rec)
-static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
+pragma(customize_import, custom_rec){
+  static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
+  public static import myfoo=foo; // avoids ℂcpp prefix
+}
 
 void main(){
   Bar bar;
   ℂcpp.foo.Bar bar2;  // instead of ℂcpp.foo.Bar.Bar => more intuitive
+  myfoo.Bar bar3;
 }
 ```
 
