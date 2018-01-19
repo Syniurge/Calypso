@@ -95,7 +95,7 @@ a3.delete(); // calls C++ `delete a3;` and sets `a3 = null;`
 // for destroy on struct pointer, not yet clear, see http://forum.dlang.org/thread/uplymqtaxubgkxwzacrz@forum.dlang.org Calling destroy on struct pointer; should be consistent with how D treats struct pointers
 ```
 
-## question: how to avoid calling A::~A() on a stack allocated C++ struct? could we use a special value (eg A.init or 0) to check whether we can skip calling A::~A()?
+## question: is it a problem that A.__dtor gets called on a stack allocated C++ struct intialized via A.init without A.__ctor? could we use a special value (eg A.init or 0) to check whether we can skip calling A.__dtor?
 ```d
 void main(){
   A a=A.init; // A.__ctor not called
