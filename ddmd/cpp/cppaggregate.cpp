@@ -278,8 +278,7 @@ template <typename AggTy>
     auto ve = new_VarExp(loc, vd);
 
     if (vd->storage_class & STCtemp) {
-        // temporaries should never get constructed with ctor calls
-        exp = new_BlitExp(loc, ve, exp);
+        exp = new_ConstructExp(loc, ve, exp);
         return exp;
     }
 

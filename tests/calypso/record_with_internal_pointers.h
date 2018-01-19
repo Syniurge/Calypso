@@ -48,3 +48,5 @@ struct B {
     assert(&x == y);
   }
 };
+
+B foo() { return B(84); }
