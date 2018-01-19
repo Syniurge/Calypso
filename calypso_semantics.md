@@ -8,16 +8,20 @@ struct A{
   int x=42;
   float y=1.5;
   double z;
+  int* u;
   A(){
     static int counter=0;
     // can call things at runtime
     x++;
+    u=new int(10);
+  }
+  ~A(){
+    delete u;
   }
 };
 
 // main.d:
 import(C++) _.A;
-
 
 struct B{
   A a;
@@ -34,6 +38,7 @@ void main(){
   static assert(A.init.x==42); // not 0
   static assert(A.init.y==1.5); // not float.NaN
   static assert(A.init.z==double.NaN);  // because no initializer in `A.z`
+  static assert(A.init.u==0);
   
   // `auto a=expr;` is identical to `A a=expr;` when typeof(expr)=A
   
