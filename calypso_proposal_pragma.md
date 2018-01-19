@@ -12,7 +12,7 @@
 * allows arbitrarily customization of what symbols we import, add annotations/UDAs, and bulk-rename; not clear how to do without this proposal!
 * allows 1 liner to import everything in a C++ library avoiding tedious imports for each type (great for debugging / exploration)
 * solves name clashes issues, especially with C libraries
-* allows the more natural ℂcpp.foo.Bar instead of ℂcpp.foo.Bar.Bar (no need to double the name for aggregates)
+* allows the more natural `ℂcpp.foo.Bar` instead of `ℂcpp.foo.Bar.Bar` (no need to double the name for aggregates)
 
 ### example
 ```
