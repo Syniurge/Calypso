@@ -63,11 +63,13 @@ a1.destroy; // calls A::~A()
 ```
 
 ## question
+```
 void main(){
   {
     A a; // A::A() not called
   } // upon exiting scope, is A::~A() called?
 }
+```
 
 ## traits
 ```
