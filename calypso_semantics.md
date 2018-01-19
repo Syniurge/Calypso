@@ -96,6 +96,7 @@ a3.delete(); // calls C++ `delete a3;` and sets `a3 = null;`
 ```
 
 ## question: is it a problem that A.__dtor gets called on a stack allocated C++ struct intialized via A.init without A.__ctor? could we use a special value (eg A.init or 0) to check whether we can skip calling A.__dtor?
+The problem doesn't appear (easily) in C++ code because there's no (non-contrived) equivalent of `A a=A.init;`
 ```d
 void main(){
   A a=A.init; // A.__ctor not called
