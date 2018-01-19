@@ -67,14 +67,15 @@ void main(){
 }
 ```
 
-## memory allocation: D vs C++ new, D vs C++ delete, D destroy
+## memory allocation: D vs C++ new, D vs C++ delete, D destroy, C++ new/delete vs malloc/free
 ```
 A a0=A.init; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack using A::A()
 A* a2=new A(); // allocate A.sizeof on D GC (and calls C++ placement new); GC will call a2.~A() and deallocate sizeof(A)  (if/when collection happens) so nothing to do in user code
 
-// TODO: see cpp.memory:cppNew,cppDelete
-A* a3=A.new(); // allocate on heap using C++::new (leaks without a3.delete())
+// defined in cpp.memory; we need both ways to allow both ways to interface with C++ libraries that expect allocation was done with malloc vs new
+A* a3=cppNew!A(); // allocate on heap using C++::new (leaks without cppDelete(a3))
+A* a4=cppMalloc!A();  // ditto (also calls ctor) but allocation part is done with malloc; (leaks without cppFree(a3))
 
 a1.destroy; // calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;` and memcpy A.init in a1; NOTE: when a1 goes out of scope, it'll call `A::~A()` again, potentially causing memory corruption (but same situation with standard D structs today)
 
@@ -93,7 +94,8 @@ void main(){
 ```
 
 ## when is C++ move assignment and move constructor used
-TODO
+should behave the same as in C++:
+When lvalue reference is cast in rvalue reference with std::move or other.
 
 ## traits
 ```
