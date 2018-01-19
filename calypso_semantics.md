@@ -34,31 +34,38 @@ struct B{
 class C : A{
 }
 
+/+
+NOTE:
+A.__ctor(...) calls Inner.__ctor then A::A(...);
+A.__dtor() calls A::~A(...) then Inner.__dtor // TODO: CHECK __dtor vs __xdtor etc
++/
+
 void main(){
-  enum a1=A.init; // // no ctor called, just A.init which is known at compile time
+  enum a1=A.init; // // A.__ctor not called (nor copy ctor or move ctor), just A.init which is known at compile time
   auto a2=A.init; // ditto
-  A a3=A.init; // ditto: `auto a=expr;` is identical to `A a=expr;` when typeof(expr)=A
-  // NOTE: calypso should guarantee that no copy ctor is called either; indeed, `A a3=A.init;` should be callable at CTFE.
+  A a3=A.init; // ditto: `auto a=expr;` is identical to `A a=expr;` when typeof(expr)=A; in particular, should be callable at CTFE.
 
   static assert(A.init.x==42); // not 0
   static assert(A.init.y==1.5); // not float.NaN
   static assert(A.init.z==double.NaN);  // because no initializer in `A.z`
   static assert(A.init.u==0);
   
-  auto a4=A(); // calls ctor A::A()
+  auto a4=A(); // calls A.__ctor
   assert(a4.x==42+1);
   assert(a4.u);
   
-  A* a5=new A(); // calls ctor A::A() (allocates using GC)
+  A* a5=new A(); // allocates A.sizeof using GC then calls a5.__ctor()
 
-  A a6=void; // uninitialized (to whatever garbage on the stack)
+  A a6=void; // uninitialized stack allocation (to whatever garbage on the stack)
   
   // likewise with B that embeds A:
-  enum b1=B.init; // no ctor called
-  auto b2=B();  // calls B's ctor, hence also A::A()
+  enum b1=B.init; // no __ctor called
+  auto b2=B();  // calls B.__ctor which calls A.__ctor
 
   A a7; // Should be identical to `A a7=A();`
+
   /+
+  NOTE:
   This one is controversial but probably the least worst option.
   If `A a7;` meant `A a7=A.init;`, it would give rise to surprising behavior, different from what one would expect using C++ type A; the constructor would not be called but the destructor A::~A() would be, leading to potential memory corruption if `~A()` deallocates things allocated in `A::A()`.
   
@@ -70,17 +77,17 @@ void main(){
 ## memory allocation: D vs C++ new, D vs C++ delete, D destroy, C++ new/delete vs malloc/free
 ```
 A a0=A.init; // allocates on the stack using compile time value A.init;
-A a1=A1(); // allocates on the stack using A::A()
-A* a2=new A(); // allocate A.sizeof on D GC (and calls C++ placement new); GC will call a2.~A() and deallocate sizeof(A)  (if/when collection happens) so nothing to do in user code
+A a1=A1(); // allocates on the stack then calls A.__ctor
+A* a2=new A(); // allocate A.sizeof on D GC (and calls a2.__ctor); GC will call a2.__dtor and deallocate A.sizeof (if/when collection happens) so nothing to do in user code
 
 // defined in cpp.memory; we need both ways to allow both ways to interface with C++ libraries that expect allocation was done with malloc vs new
 A* a3=cppNew!A(); // allocate on heap using C++::new (leaks without cppDelete(a3))
-A* a4=cppMalloc!A();  // ditto (also calls ctor) but allocation part is done with malloc; (leaks without cppFree(a3))
+A* a4=cppMalloc!A();  // ditto (also calls A.__ctor) but allocation part is done with malloc; (leaks without cppFree(a3))
 
-a1.destroy; // calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;` and memcpy A.init in a1; NOTE: when a1 goes out of scope, it'll call `A::~A()` again, potentially causing memory corruption (but same situation with standard D structs today)
+a1.destroy; // calls A.__dtor as it would with `struct D{~this(){}}; D d; d.destroy;` and memcpy A.init in a1; NOTE: when a1 goes out of scope, it'll call `A.__dtor` again, potentially causing memory corruption (but same situation with standard D structs today)
 
-// TODO: how to force deallocation on a2? `destroy(*a2)` could lead to doubly calling A::~A() when GC collects a2
-a3.delete(); // calls C++::delete(a3) and sets a3 to null
+// TODO: how to force deallocation on a2? `destroy(*a2)` could lead to doubly calling A.__dtor when GC collects a2
+a3.delete(); // calls C++ `delete a3;` and sets `a3 = null;`
 
 // for destroy on struct pointer, not yet clear, see http://forum.dlang.org/thread/uplymqtaxubgkxwzacrz@forum.dlang.org Calling destroy on struct pointer; should be consistent with how D treats struct pointers
 ```
@@ -88,8 +95,8 @@ a3.delete(); // calls C++::delete(a3) and sets a3 to null
 ## question: how to avoid calling A::~A() on a stack allocated C++ struct? could we use a special value (eg A.init or 0) to check whether we can skip calling A::~A()?
 ```
 void main(){
-  A a=A.init; // ctor not called
-  // upon exiting scope, A::~A() is called (NOTE: same as behavior for D structs)
+  A a=A.init; // A.__ctor not called
+  // upon exiting scope, A.__dtor is called (NOTE: same as behavior for D structs)
 }
 ```
 
