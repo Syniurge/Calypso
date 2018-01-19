@@ -77,7 +77,7 @@ void main(){
 ```
 
 ## memory allocation: D vs C++ new, D vs C++ delete, D destroy, C++ new/delete vs malloc/free
-```
+```d
 A a0=A.init; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack then calls A.__ctor
 A* a2=new A(); // allocate A.sizeof on D GC (and calls a2.__ctor); GC will call a2.__dtor and deallocate A.sizeof (if/when collection happens) so nothing to do in user code
@@ -95,7 +95,7 @@ a3.delete(); // calls C++ `delete a3;` and sets `a3 = null;`
 ```
 
 ## question: how to avoid calling A::~A() on a stack allocated C++ struct? could we use a special value (eg A.init or 0) to check whether we can skip calling A::~A()?
-```
+```d
 void main(){
   A a=A.init; // A.__ctor not called
   // upon exiting scope, A.__dtor is called (NOTE: same as behavior for D structs)
@@ -107,7 +107,7 @@ should behave the same as in C++:
 When lvalue reference is cast in rvalue reference with std::move or other.
 
 ## traits
-```
+```d
 static assert(__traits(is_cxx_struct, A));  // doesn't care whether A is a C++ struct or class (almost same)
 static assert(__traits(is_dcxx_struct, B)); // for D struct embedding a is_cxx_struct or is_dcxx_struct struct
 static assert(__traits(is_dcxx_class, C)); // for D class inheriting a is_cxx_struct or is_dcxx_struct or is_dcxx_class
