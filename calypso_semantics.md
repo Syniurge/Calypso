@@ -52,14 +52,17 @@ void main(){
 }
 ```
 
-## memory allocation
+## memory allocation: D vs C++ new, D vs C++ delete, D destroy
 ```
 A a0; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack using A::A()
-A* a1=new A(); // allocate on D GC
+A* a1=new A(); // allocate on D GC (GC's responsability to delete)
 A* a2=A.new(); // allocate on heap using C++::new (leaks without A.delete())
 // delete a1;// delete was deprecated in standard D
-a1.destroy; // calls A::~A()
+a1.destroy; // no suprise, calls A::~A() as it would with `struct D{~this(){}} D d; d.destroy;`
+
+a2.delete(); // 
+a2.destroy; // TODO
 ```
 
 ## question
