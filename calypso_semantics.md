@@ -40,7 +40,7 @@ class C : A{
 /+
 NOTE:
 A.__ctor(...) calls Inner.__ctor then A::A(...);
-A.__dtor() calls A::~A(...) then Inner.__dtor // TODO: CHECK __dtor vs __xdtor etc
+A.__dtor() calls A::~A(...) then Inner.__dtor // TODO: CHECK whether it should be __dtor or __xdtor
 +/
 
 void main(){
@@ -100,9 +100,43 @@ The problem doesn't appear (easily) in C++ code because there's no (non-contrive
 ```d
 void main(){
   A a=A.init; // A.__ctor not called
-  // upon exiting scope, A.__dtor is called (NOTE: same as behavior for D structs)
+  // upon exiting scope, should A.__dtor get called? NOTE: for D structs, it gets called.
 }
 ```
+
+### Option 1: `A.__dtor` gets called
+* advantage:
+consistent with D behavior for structs
+in typical cases, calling __dtor on a struct that was initialized to compile time value `A.init` should be harmless (eg, pointers would typically be 0. In this case, calling `destroy` repeatedly should also be harmless.
+
+* disadvantage:
+could cause memory corruption in corner cases, eg:
+```
+int x_global;
+struct A {
+    // either of these cause issues
+    int* x0=(int*)0xbaadf00d;
+    int* x1=&x_global;
+
+    A(){
+        x = new int;
+    }
+
+    ~A() {
+        delete x; // UB if `A()` wasn't called
+    }
+};
+```
+
+### Option 2: `A.__dtor` doesn't get called if `a is A.init` (via `memcmp`)
+advantage:
+avoids calling `__dtor` if no `__ctor` was called (these are matching 1:1 except by "accident" when `A.__ctor` was called but is equal to `A.init` during deallocation time
+allows calling `destroy(a)` multiple times safely (as in D), where a.destroy would mean: `memcp(&a, A.init)`
+
+disadvantage:
+not consistent with D behavior for structs
+extra call to `memcmp` (only in case of stack deallocation or in more cases?)
+could that skip legitimate calls to `A.__dtor` if `a` just happens to be `A.init` by "accident" ?
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
