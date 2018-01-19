@@ -2,7 +2,7 @@ This documents potentially non-obvious behavior (or desired behavior in desired 
 
 ## A.init != A()
 
-```
+```C++
 struct Inner{
   Inner(){}
   ~Inner(){}
