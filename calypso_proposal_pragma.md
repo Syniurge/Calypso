@@ -1,4 +1,4 @@
-## proposal: pragma(import, C++)
+## proposal: customizable imports with pragma and CppImport option struct
 
 ### summary
 * no new syntax required (no modmap(C++) or import(C++)); instead uses pragma + CppImport option struct
