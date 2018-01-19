@@ -103,6 +103,9 @@ enum CppImport custom = {
 ```
 
 
+## notes
+* need to discuss what happens when, for example, a function is imported twice with different CppImport values. We could either make it 2 different symbols or give an error.
+
 ## other extensions that easily fit in same design:
 * add another field with a delegate that gets called when a C++ declaration is considered for import (eg could print the clang AST etc)
 * make CppImport a subclass of CustomImport, and add subclasses ObjectivecImport, etc (+ other languages supported by clang)
