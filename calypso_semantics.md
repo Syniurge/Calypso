@@ -15,7 +15,7 @@ struct B{
 }
 
 void main(){
-  A a1; // no ctor called, just A.init
+  A a1; // no ctor called, just A.init which is known at compile time
   auto a2=A.init; // ditto
   enum a3=A.init // ditto
   
