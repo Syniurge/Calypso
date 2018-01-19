@@ -103,7 +103,8 @@ enum CppImport custom = {
 * add another field with a delegate that gets called when a C++ declaration is considered for import (eg could print the clang AST etc)
 * make CppImport a subclass of CustomImport, and add subclasses ObjectivecImport, etc (+ other languages supported by clang)
 
-## related discussions
+## related discussions (this design should subsume all use cases discussed below)
 * https://github.com/Syniurge/Calypso/commit/da8a9753687945910040ad12b6e49eb9b46f7185#commitcomment-26945885 (namespace for macros)
 * https://github.com/Syniurge/Calypso/issues/83 pragma(modmap, C++, "util.h")` vs `modmap(C++) "util.h"
 * https://github.com/Syniurge/Calypso/issues/78 allow a way to annotate C++ declarations with attributes (eg nothrow) and UDA's in D code #78
+* https://github.com/Syniurge/Calypso/issues/73 optionally attach UDA @loc and @cpp_comment to C++ declarations #73
