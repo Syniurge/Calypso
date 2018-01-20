@@ -170,7 +170,8 @@ struct A{
 
    // problem 2.2: skipping side effect affecting memory
    // assuming these are paired with corresponding entries in A::A() and leave no trace in non-static fields of A.
-   // TODO: evaluate how common this is? (probably not super common)
+   // TODO: evaluate how common this is in typical C++ libraries? 
+   // probably not super common; see in particular singleton pattern use cases
    global_variable->release();
    tls_variable->release();
    local_static_variable->release();
