@@ -206,6 +206,8 @@ NOTE: we shouldn't worry about `A.init` containing internal pointers, since it's
 
 NOTE: we can make `A.__dtor` a noop if `clang::CXXRecordDecl::hasTrivialDefaultConstructor(A)` (should only be used when for variables not referenced after that call, eg variables going out of scope; so going out of scope could introduce a call `A.__scopedtor` to distinguish from user-callable `A.__dtor`). 
 
+TODO: check that this would work with inheritance; eg if A is a subclass, make sure that CT value `A.init` would not be equal to an object constructed via `A.__cppctor`
+
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
 When lvalue reference is cast in rvalue reference with std::move or other.
