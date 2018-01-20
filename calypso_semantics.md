@@ -139,7 +139,7 @@ NOTE: if we make `A.init` be 0, problem 1.1 goes away (problem 1.2 stays), but t
 
 NOTE: another option is to force `A.init` (and embeddings D structs) to have pointers set to non-zero values, eg in these case, `static assert(A.init.x0 is 0)` ; this makes problem 1.1 go away but not problem 1.2.
 
-### Option 2: `A.__dtor` skips `A.__cppdtor` if `a is A.init` (via `memcmp`)
+### [Option 2: `A.__dtor` skips `A.__cppdtor` if `a is A.init` (via `memcmp`)](#problem-option-2)
 eg implementation:
 ```d
 void destroy(T)(ref A a){ // + type constraint
@@ -181,10 +181,10 @@ struct A{
 };
 ```
 
-NOTE:
+NOTE: My assumption is these corner cases will be rare.
 potentially, we could consider allowing controlling `A.__dtor` behavior in user code (on a per type basis).
 We could also control whether `A.init` is illegal for these user selected types.
-Can also be hacked around in D user code on a case by case basis with a check to see if `A.global_variable is null` if we have a simple way to customize `A.__dtor`. My assumption is these corner cases will be rare.
+Can also be hacked around in D user code on a case by case basis with a check to see if `A.global_variable is null` if we have a simple way to customize `A.__dtor`, or letting `A.init` be a special user defined (in D) value that is unlikely to happen by accident.
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
