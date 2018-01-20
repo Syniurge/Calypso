@@ -302,6 +302,7 @@ template <typename AggTy>
 
         if (!ce) {
             exp = exp->semantic(sc);
+            exp = resolveProperties(sc, exp);
 
             auto args = new Expressions;
             args->push(exp);
@@ -309,14 +310,20 @@ template <typename AggTy>
             if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
                 args->pop(); // TODO: error if there'ss no default ctor
 
-            ce = new_CallExp(loc, e1, args);
-
-            if (args->dim == 0)
-                // rewrite to an assignment
-                exp = new_CommaExp(loc, ce,
-                                    new_AssignExp(loc, ve, exp));
+            if (!args->dim && exp->type->constConv(ad->getType()) >= MATCHconst)
+                // there's no copy ctor, but the initializer has the same type
+                exp = new_ConstructExp(loc, ve, exp); // enables in-place construction
             else
-                exp = ce;
+            {
+                ce = new_CallExp(loc, e1, args);
+
+                if (args->dim == 0)
+                    // rewrite to an assignment
+                    exp = new_CommaExp(loc, ce,
+                                        new_AssignExp(loc, ve, exp));
+                else
+                    exp = ce;
+            }
         } else
             ce->e1 = e1;
     }
