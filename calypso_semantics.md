@@ -200,6 +200,7 @@ void cppMove(T)(ref T src, ref T dst){
 }
 ```
 
+NOTE: we shouldn't worry about `A.init` containing internal pointers, since it's a CT value.
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
