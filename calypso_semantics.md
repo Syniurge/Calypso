@@ -38,9 +38,11 @@ class C : A{
 }
 
 /+
-NOTE:
-A.__ctor(...) calls Inner.__ctor then A::A(...);
-A.__dtor() calls A::~A(...) then Inner.__dtor // TODO: CHECK whether it should be __dtor or __xdtor
+NOTE: in C++:
+A* aa=new(buf)A(); // calls Inner::Inner() then A::A(...); let's call the whole thing A.__ctor
+a->~A(); // calls A::~A() then Inner::~Inner(); let's call the whole thing A.__dtor
+
+TODO: CHECK whether it should be __dtor or __xdtor
 +/
 
 void main(){
@@ -70,7 +72,7 @@ void main(){
   /+
   NOTE:
   This one is controversial but probably the least worst option.
-  If `A a7;` meant `A a7=A.init;`, it would give rise to surprising behavior, different from what one would expect using C++ type A; the constructor would not be called but the destructor A::~A() would be, leading to potential memory corruption if `~A()` deallocates things allocated in `A::A()`.
+  If `A a7;` meant `A a7=A.init;`, it would give rise to surprising behavior, different from what one would expect using C++ type A; A.__ctor would not be called but the destructor A.__dtor would be, leading to potential memory corruption if `A.__dtor` deallocates things allocated in `A.__ctor`.
   
   The drawback of that is that existing D code makes no difference between `D d=D.init; D d=D(); D d;` ; so if we use existing D code with a C++ type `A` it could lead to different behavior depending on which variant the code uses. It could also lead to compile errors if an expression is expected to be known at CT, depending on which variant is used.
   +/
