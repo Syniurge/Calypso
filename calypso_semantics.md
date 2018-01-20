@@ -139,7 +139,7 @@ NOTE: if we make `A.init` be 0, problem 1.1 goes away (problem 1.2 stays), but t
 
 NOTE: another option is to force `A.init` (and embeddings D structs) to have pointers set to non-zero values, eg in these case, `static assert(A.init.x0 is 0)` ; this makes problem 1.1 go away but not problem 1.2.
 
-### [Option 2 (preffered): `A.__dtor` skips `A.__cppdtor` if `a is A.init` (via `memcmp`)](#problem-option-2)
+### [Option 2 (prefered): `A.__dtor` skips `A.__cppdtor` if `a is A.init` (via `memcmp`)](#problem-option-2)
 eg implementation:
 ```d
 void destroy(T)(ref A a){ // + type constraint
