@@ -219,3 +219,6 @@ static assert(__traits(is_dcxx_struct, B)); // for D struct embedding a is_cxx_s
 static assert(__traits(is_dcxx_class, C)); // for D class inheriting a is_cxx_struct or is_dcxx_struct or is_dcxx_class
 ```
 
+## links
+FORUM: How does rt_finalized function work exactly? (Fixing bugs regarding Destroy). 
+
