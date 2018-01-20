@@ -182,6 +182,7 @@ struct A{
 NOTE:
 potentially, we could consider allowing controlling `A.__dtor` behavior in user code (on a per type basis).
 We could also control whether `A.init` is illegal for these user selected types.
+Can also be hacked around in D user code on a case by case basis with a check to see if `A.global_variable is null` if we have a simple way to customize `A.__dtor`. My assumption is these corner cases will be rare.
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
