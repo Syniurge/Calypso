@@ -83,7 +83,9 @@ void main(){
 ```d
 A a0=A.init; // allocates on the stack using compile time value A.init;
 A a1=A1(); // allocates on the stack then calls A.__ctor
+
 A* a2=new A(); // allocate A.sizeof on D GC (and calls a2.__ctor); GC will call a2.__dtor and deallocate A.sizeof (if/when collection happens) so nothing to do in user code
+// TODO: how to implement that?
 
 // defined in cpp.memory; we need both ways to allow both ways to interface with C++ libraries that expect allocation was done with malloc vs new
 A* a3=cppNew!A(); // allocate on heap using C++::new (leaks without cppDelete(a3))
