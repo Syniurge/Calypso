@@ -97,7 +97,9 @@ a3.delete(); // calls C++ `delete a3;` and sets `a3 = null;`
 // for destroy on struct pointer, not yet clear, see http://forum.dlang.org/thread/uplymqtaxubgkxwzacrz@forum.dlang.org Calling destroy on struct pointer; should be consistent with how D treats struct pointers
 ```
 
-## question: is it a problem that A.__dtor gets called on a stack allocated C++ struct intialized via A.init without A.__ctor? could we use a special value (eg A.init or 0) to check whether we can skip calling A.__dtor?
+## [Technical issue: matching C++ ctor/dtor calls for stack allocated C++ struct](#problem-ctor-dtor)
+Problem: A.__dtor gets called on a stack allocated C++ struct intialized via `A.init` even though `A.__ctor` was not called.
+
 The problem doesn't appear (easily) in C++ code because there's no (non-contrived) equivalent of `A a=A.init;`
 ```d
 void main(){
