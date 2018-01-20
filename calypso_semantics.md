@@ -110,7 +110,7 @@ void main(){
 
 ### Option 1: `A.__dtor` gets called (calls `A.__cppdtor` directly)
 * advantage:
-consistent with D behavior for structs
+more similar to D behavior for structs
 in typical cases, calling __dtor on a struct that was initialized to compile time value `A.init` should be harmless (eg, pointers would typically be 0. In this case, calling `destroy` repeatedly should also be harmless.
 
 * disadvantage:
@@ -185,6 +185,21 @@ NOTE: My assumption is these corner cases will be rare.
 potentially, we could consider allowing controlling `A.__dtor` behavior in user code (on a per type basis).
 We could also control whether `A.init` is illegal for these user selected types.
 Can also be hacked around in D user code on a case by case basis with a check to see if `A.global_variable is null` if we have a simple way to customize `A.__dtor`, or letting `A.init` be a special user defined (in D) value that is unlikely to happen by accident in case `A.__ctor` would be called.
+
+NOTE: this also allows using C++ move constructor optimizations (and eliding some copy constructors), eg:
+
+```d
+A fun(A a){
+  return a;  // calls cppMove
+}
+
+// in cpp.memory ; TODO:CHECKME
+void cppMove(T)(ref T src, ref T dst){
+  dst.__cppmove(src);
+  dst=T.init;  // after that src.__dtor will be harmless
+}
+```
+
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
