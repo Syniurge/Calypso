@@ -40,7 +40,7 @@ class C : A{
 /+
 NOTE: in C++:
 A* aa=new(buf)A(); // calls Inner::Inner() then A::A(...); let's call the whole thing A.__ctor
-a->~A(); // calls A::~A() then Inner::~Inner(); let's call the whole thing A.__dtor
+a->~A(); // calls A::~A() then Inner::~Inner(); let's call the whole thing A.__cppdtor (it's called by A.__dtor)
 
 TODO: CHECK whether it should be __dtor or __xdtor
 +/
@@ -72,7 +72,7 @@ void main(){
   /+
   NOTE:
   This one is controversial but probably the least worst option.
-  If `A a7;` meant `A a7=A.init;`, it would give rise to surprising behavior, different from what one would expect using C++ type A; A.__ctor would not be called but the destructor A.__dtor would be, leading to potential memory corruption if `A.__dtor` deallocates things allocated in `A.__ctor`.
+  If `A a7;` meant `A a7=A.init;`, it would give rise to surprising behavior, different from what one would expect using C++ type A; A.__ctor would not be called but the destructor A.__dtor would be, leading to potential memory corruption depending on whether `A.__dtor` decides to skip `A.__cppdtor` (more on this later).
   
   The drawback of that is that existing D code makes no difference between `D d=D.init; D d=D(); D d;` ; so if we use existing D code with a C++ type `A` it could lead to different behavior depending on which variant the code uses. It could also lead to compile errors if an expression is expected to be known at CT, depending on which variant is used.
   +/
@@ -106,7 +106,7 @@ void main(){
 }
 ```
 
-### Option 1: `A.__dtor` gets called
+### Option 1: `A.__dtor` gets called (calls `A.__cppdtor` directly)
 * advantage:
 consistent with D behavior for structs
 in typical cases, calling __dtor on a struct that was initialized to compile time value `A.init` should be harmless (eg, pointers would typically be 0. In this case, calling `destroy` repeatedly should also be harmless.
@@ -125,24 +125,62 @@ struct A {
     }
 
     ~A() {
-        delete x; // UB if `A()` wasn't called
+        delete x; // problem 1.1: UB if `A()` wasn't called
+
+       some_field->release(); // problem 1.2: (more frequent); SEGFAULT if code doesn't specify `if(some_field)` guard
+       // NOTE: this happens in opencv, eg: `inline UMatDataAutoLock::~UMatDataAutoLock() { u->unlock(); }`
     }
 };
 ```
 
-NOTE: if we make `A.init` be 0, this problem goes away, but that's not consistent with `.init` for D structs; this is a bigger even problem for a D struct that embeds `A`, eg: `struct B2{A a; int a=1;}` ; making `B.init is 0` true is surprising.
+NOTE: if we make `A.init` be 0, problem 1.1 goes away (problem 1.2 stays), but that's not consistent with `.init` for D structs; this is a bigger even problem for a D struct that embeds `A`, eg: `struct B2{A a; int a=1;}` ; making `B.init is 0` true is surprising.
 
-NOTE: another option is to force `A.init` (and embeddings D structs) to have pointers set to non-zero values, eg in these case, `static assert(A.init.x0 is 0)`
+NOTE: another option is to force `A.init` (and embeddings D structs) to have pointers set to non-zero values, eg in these case, `static assert(A.init.x0 is 0)` ; this makes problem 1.1 go away but not problem 1.2.
 
-### Option 2: `A.__dtor` doesn't get called if `a is A.init` (via `memcmp`)
+### Option 2: `A.__dtor` skips `A.__cppdtor` if `a is A.init` (via `memcmp`)
+eg implementation:
+```d
+void destroy(T)(ref A a){ // + type constraint
+  if(a is A.init) return;
+  a.__cppdtor;
+  a=A.init;
+}
+
+// A.__dtor() just calls destroy(a)
+```
+
 advantage:
-avoids calling `__dtor` if no `__ctor` was called (these are matching 1:1 except by "accident" when `A.__ctor` was called but is equal to `A.init` during deallocation time
-allows calling `destroy(a)` multiple times safely (as in D), where a.destroy would mean: `memcp(&a, A.init)`
+allows calling `destroy(a)` multiple times safely (as in D)
+avoids calling `A.__cppdtor` if `A.__ctor` was not called (these are matching 1:1 except by "accident, see below)
 
 disadvantage:
-not consistent with D behavior for structs
-extra call to `memcmp` (only in case of stack deallocation or in more cases?)
-could that skip legitimate calls to `A.__dtor` if `a` just happens to be `A.init` by "accident" ?
+extra call to `memcmp` (NOTE: with proper implementation, should only affect case of stack allocated C++ structs)
+could skip legitimate calls to `A.__cppdtor` if `A.__ctor` was called (eg, via `A a=A();`) but `a is A.init` by "accident" at deallocation time.
+example:
+
+```c++
+struct A{
+  A(){ // asumming was called
+    printf("ctor\n");
+  }
+
+  ~A(){ // would be skipped
+    // problem 2.1 (perhaps minor): skipping side effect not affecting memory
+    printf("dtor\n");
+
+   // problem 2.2: skipping side effect affecting memory
+   // assuming these are paired with corresponding entries in A::A() and leave no trace in non-static fields of A.
+   // TODO: evaluate how common this is? (probably not super common)
+   global_variable->release();
+   tls_variable->release();
+   local_static_variable->release();
+  }
+};
+```
+
+NOTE:
+potentially, we could consider allowing controlling `A.__dtor` behavior in user code (on a per type basis).
+We could also control whether `A.init` is illegal for these user selected types.
 
 ## when is C++ move assignment and move constructor used
 should behave the same as in C++:
