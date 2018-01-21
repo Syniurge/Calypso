@@ -283,11 +283,12 @@ template <typename AggTy>
     }
 
     // We need to avoid useless temporaries that needlessly complicate codegen and result in added (wrong) dtor calls into AST
-    // buildVarInitializer must be called before the initializer exp gets semantic'd(), or else addDtorHook will already have taken effect
+    // NOTE: buildVarInitializer must be called before the initializer exp gets semantic'd()
     CallExp* ce = nullptr;
 
     if (exp->op == TOKcall) {
         auto ce2 = static_cast<CallExp*>(exp);
+        ce2->unaSemantic(sc);
         if (ce2->e1->op == TOKtype &&
                     ad->getType() == static_cast<TypeExp*>(ce2->e1)->type->toBasetype())
             ce = ce2; // rewrite T var = T(...) as T var; v.this(...);
@@ -303,18 +304,17 @@ template <typename AggTy>
         if (!ce) {
             exp = exp->semantic(sc);
             exp = resolveProperties(sc, exp);
-
-            auto args = new Expressions;
-            args->push(exp);
-
-            if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
-                args->pop(); // TODO: error if there'ss no default ctor
-
-            if (!args->dim && exp->type->constConv(ad->getType()) >= MATCHconst)
-                // there's no copy ctor, but the initializer has the same type
+            
+            if (exp->type->constConv(ad->getType()) >= MATCHconst)
                 exp = new_ConstructExp(loc, ve, exp); // enables in-place construction
             else
             {
+                auto args = new Expressions;
+                args->push(exp);
+
+                if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
+                    args->pop(); // TODO: error if there'ss no default ctor
+
                 ce = new_CallExp(loc, e1, args);
 
                 if (args->dim == 0)

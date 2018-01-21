@@ -1121,11 +1121,16 @@ extern (C++) class VarDeclaration : Declaration
         if (ad)
             storage_class |= ad.storage_class & STC_TYPECTOR;
 
+        Expression origInitExp; // CALYPSO HACK: save the original init exp for buildVarInitializer (this is to throw away the temporary created by inferType -> addDtorHook)
+
         /* If auto type inference, do the inference
          */
         int inferred = 0;
         if (!type)
         {
+            if (auto ei = _init.isExpInitializer())
+                origInitExp = ei.exp.copy(); // CALYPSO
+
             inuse++;
 
             // Infering the type requires running semantic,
@@ -1689,7 +1694,7 @@ extern (C++) class VarDeclaration : Declaration
                     Expression foreignExp; // CALYPSO
                     auto adty = getAggregateSym(type);
                     if (adty && adty.langPlugin())
-                        foreignExp = adty.buildVarInitializer(sc, this, exp);
+                        foreignExp = adty.buildVarInitializer(sc, this, origInitExp ? origInitExp : exp);
                     if (foreignExp)
                         exp = foreignExp;
                     else if (isBlit)

@@ -13549,6 +13549,9 @@ extern (C++) class AssignExp : BinExp
         Expression e2x = e2;
         Type t2 = e2x.type.toBasetype();
 
+        if (op != TOKconstruct && isAggregateValue(t2) && getAggregateSym(t2).langPlugin()) // CALYPSO HACK: (needs to be re-evaluated). In assignments DMD doesn't call addDtorHook, because if RHS is a struct with a dtor then it gets overloaded to opAssign, which calls the dtor itself on exit. But C++ record arguments are exempted of dtor calls by D callees (see D20180120T151603), and they may have a dtor but no operator=, so we have to call dtor on rvalues here
+            e2x = e2x.addDtorHook(sc);
+
         // If it is a array, get the element type. Note that it may be
         // multi-dimensional.
         Type telem = t1;

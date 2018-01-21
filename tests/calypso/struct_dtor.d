@@ -3,14 +3,13 @@
 
 modmap (C++) "struct_dtor.h";
 
-import (C++) S;
+import (C++) S, S2;
 
 void foo(int* arg) {
     S s = { arg, 987564 };
 }
 
-void bar(int* arg)
-{
+void bar(int* arg) {
     new S(arg, 55255);
 }
 
@@ -31,6 +30,18 @@ void main()
     auto ps = new S(&n3, 48625);
     destroy(*ps);
     assert(n3 == 48625);
+
+    {
+        void foo(S2 s) {}
+
+        S2 z;
+        z = S2.build;
+        auto z2 = S2();
+        S2 z3 = S2();
+        S2 z4 = S2.build();
+        foo(S2.build());
+    }
+    assert(S2.hasZeroRefs);
 
     version(none) // this doesn't even work with D structs
     {

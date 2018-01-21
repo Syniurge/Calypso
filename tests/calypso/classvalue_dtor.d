@@ -3,7 +3,7 @@
 
 modmap (C++) "classvalue_dtor.h";
 
-import (C++) B, C;
+import (C++) B, C, D;
 
 void foo(int* arg) {
     C c = C(arg, 987564);
@@ -26,6 +26,18 @@ void main()
     B* b = new C(&n3, 48625);
     destroy(*b);
     assert(n3 == 48625);
+
+    {
+        void foo(D s) {}
+
+        D z;
+        z = D.build;
+        auto z2 = D();
+        D z3 = D();
+        D z4 = D.build();
+        foo(D.build());
+    }
+    assert(D.hasZeroRefs);
 
     version(none) // this doesn't even work with D structs
     {

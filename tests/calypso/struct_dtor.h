@@ -16,3 +16,17 @@ struct S {
     }
 };
 
+struct S2 {
+    int n;
+
+    static unsigned refs;
+    static bool hasZeroRefs() { return !refs; }
+
+    S2() { refs++; }
+    S2(const S2&) { refs++; }
+    ~S2() { refs--; }
+
+    static inline S2 build() { return S2(); }
+};
+
+unsigned S2::refs = 0;
