@@ -85,7 +85,7 @@ A.init should use C++ rules for field initializations as much as possible.
 // util.h
 struct A{
 	int a;
-  int b=10;
+        int b=10;
 	double c;
 	A2(int a) { ...	}
 };
