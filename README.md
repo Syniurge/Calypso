@@ -40,10 +40,9 @@ covered in https://github.com/Syniurge/Calypso/issues/49
 
 ## Specific flags and building the basic example
 
-Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11 while building [tests/calypso/basic/basics.d](tests/calypso/basic/basics.d):
+Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11:
 
-    $ clang++ -std=c++11 -c basics.cpp -o basics.cpp.o
-    $ ldc2 -cpp-args -std=c++11 basics.cpp.o -L-lstdc++ basics.d
+    $ ldc2 -cpp-args -std=c++11 main.d
 
 ## missing features
 * Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)

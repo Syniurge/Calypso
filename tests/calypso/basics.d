@@ -6,8 +6,7 @@
  * Basic tests for Calypso.
  *
  * Build with:
- *   $ clang++ -std=c++11 -c basics.cpp -o basics.cpp.o
- *   $ ldc2 -cpp-args -std=c++11 basics.cpp.o -L-lstdc++ basics.d
+ *   $ ldc2 -cpp-args -std=c++11 basics.d
  */
 
 modmap (C++) "basics.hpp";
