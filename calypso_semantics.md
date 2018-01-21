@@ -79,6 +79,25 @@ void main(){
 }
 ```
 
+## [field initialization in A.init](#field-init)
+A.init should use C++ rules for field initializations as much as possible.
+```c++
+// util.h
+struct A{
+	int a;
+  int b=10;
+	double c;
+	A2(int a) { ...	}
+};
+```
+
+```d
+// main.d
+static assert(A.init.a==0); // no initializer => C++ default 
+static assert(A.init.b==10); // instead of 0
+static assert(A.init.c==0); // instead of isNaN(A.init.c)
+```
+
 ## memory allocation: D vs C++ new, D vs C++ delete, D destroy, C++ new/delete vs malloc/free
 ```d
 A a0=A.init; // allocates on the stack using compile time value A.init;
