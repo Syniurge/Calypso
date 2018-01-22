@@ -518,7 +518,7 @@ cl::list<std::string>
 
 // CALYPSO
 cl::list<std::string> cppArgs("cpp-args",
-    cl::desc("Clang arguments passed during PCH generation"));
+    cl::desc("Clang arguments (space separated) passed during PCH generation; if starts with '$', interpret as a single argument"));
 
 cl::opt<std::string> cppCacheDir("cpp-cachedir",
     cl::desc("Write Calypso cache files to <dir>"),
