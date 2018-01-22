@@ -823,7 +823,7 @@ void PCH::update()
     TheDriver.setTitle("Calypso");
 
     llvm::SmallVector<const char *, 16> Argv;
-    Argv.push_back("clang");
+    Argv.push_back(opts::cppCompiler.c_str());
     for (auto& cppArg: opts::cppArgs)
         Argv.push_back(cppArg.c_str());
     Argv.push_back("-c");

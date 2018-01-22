@@ -520,6 +520,11 @@ cl::list<std::string>
 cl::list<std::string> cppArgs("cpp-args",
     cl::desc("Clang arguments passed during PCH generation"));
 
+cl::opt<std::string> cppCompiler("cpp-compiler",
+    cl::desc("clang compiler to use for calypso"),
+    cl::value_desc("clang executable"),
+    cl::init("clang"));
+
 cl::opt<std::string> cppCacheDir("cpp-cachedir",
     cl::desc("Write Calypso cache files to <dir>"),
     cl::value_desc("dir"),
