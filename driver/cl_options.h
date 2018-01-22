@@ -101,6 +101,7 @@ extern cl::opt<bool> instrumentFunctions;
 
 // CALYPSO
 extern cl::list<std::string> cppArgs;
+extern cl::opt<std::string> cppCompiler;
 extern cl::opt<std::string> cppCacheDir;
 extern cl::opt<bool> cppVerboseDiags; // mostly diags from failed instantiations that can be ignored
 
