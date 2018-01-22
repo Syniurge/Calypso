@@ -504,6 +504,8 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
 MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc, ::FuncDeclaration *&fd,
                                                        Type *tthis, Expressions *fargs)
 {
+    auto& S = calypso.getSema();
+
     if (!isa<clang::RedeclarableTemplateDecl>(TempOrSpec))
         return MATCHnomatch; // only primary templates may be matched
 
@@ -526,6 +528,12 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     // HACK
     auto FuncInst = cast<clang::FunctionDecl>(Inst.get<clang::NamedDecl*>());
     auto FPT = FuncInst->getType()->castAs<clang::FunctionProtoType>();
+
+    if (auto AT = dyn_cast<clang::AutoType>(FPT->getReturnType()))
+        if (!AT->isSugared()) { // not sugared if undeduced
+            InstantiateFunctionDefinition(S, FuncInst);
+            FPT = FuncInst->getType()->castAs<clang::FunctionProtoType>();
+        }
 
     auto oldtf = (TypeFunction *) fd->type;
     fd->type = TypeMapper::FromType(tymap, ti->loc).fromTypeFunction(FPT, FuncInst);
