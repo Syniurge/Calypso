@@ -426,6 +426,7 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
         if(${CMAKE_SYSTEM} MATCHES "Linux")
             set(dso_system_libs "m" "pthread" "rt" "dl")
         else()
+            # avoid "ld: library not found for -lrt" on OSX
             set(dso_system_libs "m" "pthread")
         endif()
         target_link_libraries(druntime-ldc${target_suffix} ${dso_system_libs})
@@ -478,7 +479,9 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
         LIBRARY_OUTPUT_DIRECTORY    ${output_path}
         RUNTIME_OUTPUT_DIRECTORY    ${output_path}
         COMPILE_FLAGS               "${c_flags}"
-        LINK_FLAGS                  "${ld_flags}"
+        # fix for OSX
+        #LINK_FLAGS                  "${ld_flags}"
+        LINK_FLAGS                  "${ld_flags} -L../lib -ldruntime-ldc${lib_suffix}"
         LINKER_LANGUAGE             CXX
     )
     list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
