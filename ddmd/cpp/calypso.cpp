@@ -52,6 +52,12 @@
 
 void codegenModules(Modules &modules, bool oneobj);
 
+void log_verbose(const std::string& header, const std::string& msg){
+    // to look aligned with other -v printed lines
+    int prefix_width=9; // TODO: adjust upwards as needed
+    fprintf(global.stdmsg, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
+}
+
 namespace cpp
 {
 
@@ -826,6 +832,7 @@ void PCH::update()
 
     llvm::SmallVector<const char *, 16> Argv;
 
+    // Calypso doesn't call any clang executable, it embeds a clang executable into itself
     Argv.push_back("clang");
     
     // code below needs to push to args instead of directly to Argv otherwise char* pointers get invalidated
@@ -878,13 +885,14 @@ void PCH::update()
 
     llvm::opt::InputArgList ArgList(Argv.begin(), Argv.end());
 
-    // MODIF
     if (global.params.verbose){
-        std::string msg;
-        for(const auto& ai:Argv)
-            msg += "'" + ai + "' ";
-        // 3 spaces to look fine with other -v printed lines
-        fprintf(global.stdmsg, "calypso   clang command line args: %s\n", msg.c_str());
+        std::string msg="clang_args ";
+        for(const auto& ai:Argv){
+            msg += "'";
+            msg += ai;
+            msg += "' ";
+        }
+        log_verbose("calypso", msg);
     }
 
     cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(ArgList);
