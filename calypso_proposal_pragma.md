@@ -120,7 +120,7 @@ void main(){
 
 
 NOTE: current calypso behavior is achieved with:
-```
+```d
 enum CppImport custom = {
 	import_aggregates: false,
 };
