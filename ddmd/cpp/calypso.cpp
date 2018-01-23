@@ -860,14 +860,12 @@ void PCH::update()
                 }
             }
 
-            if(!arg.empty()){
+            if(!arg.empty())
                 args.push_back(arg);
-            }
         }
 
-        for(const auto& argi : args){
+        for(const auto& argi : args)
             Argv.push_back(argi.c_str());
-        }
     }
 
     Argv.push_back("-c");
@@ -880,13 +878,13 @@ void PCH::update()
 
     llvm::opt::InputArgList ArgList(Argv.begin(), Argv.end());
 
-    // TODO: is that the right flag to control this?
-    if (opts::cppVerboseDiags){
-        std::cout << "command line args: " << std::endl;
-        for(const auto& ai:Argv){
-            std::cout << " "<< ai << std::endl;
-        }
-        std::cout << std::endl;
+    // MODIF
+    if (global.params.verbose){
+        std::string msg;
+        for(const auto& ai:Argv)
+            msg += "'" + ai + "' ";
+        // 3 spaces to look fine with other -v printed lines
+        fprintf(global.stdmsg, "calypso   clang command line args: %s\n", msg.c_str());
     }
 
     cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(ArgList);
