@@ -11457,8 +11457,34 @@ extern (C++) final class CastExp : UnaExp
 
         if (!to.equals(e1.type) && mod == cast(ubyte)~0)
         {
-            if (Expression e = op_overload(sc))
-                return e.implicitCastTo(sc, to);
+            {
+                // CALYPSO
+                // Fix for https://github.com/Syniurge/Calypso/issues/65
+
+                // IMPROVE EXPOSE
+                bool is_cpp_class(Type t){
+                    // NOTE: this doesn't work:
+                    // if(auto cd = t.isClassHandle()) return cd.isCPPclass();
+
+                    Type tv = t.baseElemOf();
+                    if (!tv.isAggregateValue()) return false;
+                    if(!tv.getAggregateSym().langPlugin()) return false;
+                    return true;
+                }
+                if(!is_cpp_class(e1.type)) goto Handle_default;
+                if(!is_cpp_class(to)) goto Handle_default;
+
+                uint errors = global.startGagging();
+                Expression e = op_overload(sc);
+                if(global.endGagging(errors)) e=null;
+                if(e) return e.implicitCastTo(sc, to);
+                goto Handle_other;
+            }
+
+            Handle_default:
+                if (Expression e = op_overload(sc))
+                    return e.implicitCastTo(sc, to);
+            Handle_other:
         }
 
         Type t1b = e1.type.toBasetype();
