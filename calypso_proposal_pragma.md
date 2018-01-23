@@ -105,7 +105,7 @@ enum CppImport custom = {
 pragma(customize_import, custom)
 import foo;
 
-enum CppImport custom_rec = { headers: ["fun.h"], namespace_recursive:true };
+enum CppImport custom_rec = { headers: custom.headers, namespace_recursive:true };
 pragma(customize_import, custom_rec){
   static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
   public static import myfoo=foo; // avoids ℂcpp prefix
