@@ -15,11 +15,17 @@
 * allows the more natural `ℂcpp.foo.Bar` instead of `ℂcpp.foo.Bar.Bar` (no need to double the name for aggregates)
 
 ### the CppImport option struct defined in module `cpp.core`:
-```
+```d
 struct CppImport{
 	// eg: ["opencv2.h"]
 	// perhaps controversial; could be keps as a separate `pragma(modmap, C++, "fun.h")`
-	string[] modmaps;
+	string[] headers;
+	
+	// see Calypso/utils/modulemap/README.md; contents of modulemaps
+	string modulemap;
+
+        // if false, will use `modulemap`, else will use `getDefaultModuleMap`
+	bool use_default_modulemap=true;
 
 	// whether to recursively import namespaces, requires `static import` (and therefore fully qualified names) to avoid name clashes
 	bool namespace_recursive=false;
@@ -57,21 +63,39 @@ struct CppImport{
         // controls codegen (eg if a user knows cv::Mat has internal pointers, set to false; cf https://github.com/Syniurge/Calypso/issues/70)
 	bool implicitly_movable=true;
 }
+
+string getDefaultModuleMap(){
+  version (Posix){
+    /+
+    TODO:
+    requires `-JCalypso/utils/modulemap/`;
+    instead, better to write an enum in a D module (so no need for -J)
+    furthermore, could provide some facility to generate it from a set of headers automatically (that would also take care of renaming D keyworkds), eg:
+    assert(generate_modmap(`mqueue netdb dirent`) == `module dlfcn { header "dlfcn.h" export * } ... ");
+    +/
+    return import("posix.modulemap_d");
+  } else{
+    // TODO
+  }
+}
 ```
 
+
 ## example user code
-```
+```c++
 // fun.h:
 namespace foo{
   struct Bar{};
   namespace sub {}
 }
+```
 
+```d
 // in user code:
 import core.cpp; // or put it in object.d to make it implicit
 
 enum CppImport custom = {
-	modmaps: ["fun.h"],
+	headers: ["fun.h"],
 	namespace_macros: "foobar",
 	name_filter: a=>a.startsWith("fftw_"),
 	annotations: [`@nogc`, `nothrow`],
@@ -81,7 +105,7 @@ enum CppImport custom = {
 pragma(customize_import, custom)
 import foo;
 
-enum CppImport custom_rec = { modmaps: ["fun.h"], namespace_recursive:true };
+enum CppImport custom_rec = { headers: ["fun.h"], namespace_recursive:true };
 pragma(customize_import, custom_rec){
   static import foo; // static required with `namespace_recursive`; allows accessing ℂcpp.foo.sub
   public static import myfoo=foo; // avoids ℂcpp prefix
