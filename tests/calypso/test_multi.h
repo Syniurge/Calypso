@@ -9,7 +9,7 @@ see D20180122T194048
 namespace issue_65{
 	struct A {
 		int a;
-	  operator float() const;
+	  operator double() const {return 1.5;}
 	};
 
 	struct B : public A{

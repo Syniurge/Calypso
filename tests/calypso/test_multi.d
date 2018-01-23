@@ -15,7 +15,11 @@ void main() {
 		Error: template instance opCast!(A) does not match template declaration opCast(type : float)
 		+/
 		import (C++) issue_65.A, issue_65.B;
-		int a=B.init.a;
+		auto a=B.init.a;
+		static assert(is(typeof(a)==int));
+		{auto a2=cast(float)A.init;}
+		{auto a2=cast(double)A.init;}
+		static assert(!__traits(compiles, cast(int)A.init));
 	}
 }
 
