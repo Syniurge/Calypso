@@ -478,7 +478,8 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
         LIBRARY_OUTPUT_DIRECTORY    ${output_path}
         RUNTIME_OUTPUT_DIRECTORY    ${output_path}
         COMPILE_FLAGS               "${c_flags}"
-        LINK_FLAGS                  "${ld_flags}"
+        # on OSX at least, druntime needed to avoid link error
+        LINK_FLAGS                  "${ld_flags} -L../lib -ldruntime-ldc${lib_suffix} "
         LINKER_LANGUAGE             CXX
     )
     list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
