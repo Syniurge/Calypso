@@ -47,7 +47,6 @@
 #include "llvm/Target/TargetMachine.h"
 
 #include <fstream>
-#include <iostream>
 #include <string>
 
 void codegenModules(Modules &modules, bool oneobj);
@@ -847,25 +846,23 @@ void PCH::update()
 
             // NOTE: an alternative would be to use "foo\ bar" for escaping space, but it has other drawbacks, eg for windows, or for escaping '\' itself; also it adds complexity on user shell command. This seems simpler.
 
-            // TODO: is another character more standard and cross-platform?
+            // TODO: is another character more standard and cross-platform (and less susceptible to bash substitution)?
             char single_arg='$';
 
             if(line[0]==single_arg){
-                // TODO: what to do if line.size()=1 ?
-                args.push_back(line.substr(1));
+                if (line.size() > 1)
+                    args.push_back(line.substr(1));
                 continue;
             }
 
-            for(char c : line){
+            for(char c : line)
                 if(c==' '){
                     if(!arg.empty()){
                         args.push_back(arg);
                         arg.clear();
                     }
-                } else {
+                } else
                     arg.push_back(c);
-                }
-            }
 
             if(!arg.empty())
                 args.push_back(arg);
