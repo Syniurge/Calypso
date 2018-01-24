@@ -12,6 +12,7 @@
 #include "../gen/cgforeign.h"
 
 #include <memory>
+#include <string>
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/DataLayout.h"
 #include "clang/AST/ASTMutationListener.h"
@@ -316,5 +317,8 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 
 #define CALYPSO_LANGPLUGIN \
     ::LangPlugin *langPlugin() override { return &calypso; }
+
+// TODO: use this pattern for all global.params.verbose logging; MOVE to root/ddmd/
+void log_verbose(const std::string& header, const std::string& msg);
 
 #endif /* DMD_CPP_CALYPSO_H */

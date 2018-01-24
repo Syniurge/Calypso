@@ -47,8 +47,15 @@
 #include "llvm/Target/TargetMachine.h"
 
 #include <fstream>
+#include <string>
 
 void codegenModules(Modules &modules, bool oneobj);
+
+void log_verbose(const std::string& header, const std::string& msg){
+    // to look aligned with other -v printed lines
+    int prefix_width=9; // TODO: adjust upwards as needed
+    fprintf(global.stdmsg, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
+}
 
 namespace cpp
 {
@@ -823,9 +830,48 @@ void PCH::update()
     TheDriver.setTitle("Calypso");
 
     llvm::SmallVector<const char *, 16> Argv;
+
+    // Calypso doesn't call any clang executable, it embeds a clang executable into itself
     Argv.push_back("clang");
-    for (auto& cppArg: opts::cppArgs)
-        Argv.push_back(cppArg.c_str());
+    
+    // code below needs to push to args instead of directly to Argv otherwise char* pointers get invalidated
+    std::vector<std::string> args;
+
+    {
+        // eg: handle line=" -Ifoo -v " => "-Ifoo", "-v"
+        std::string arg;
+        for (auto& line: opts::cppArgs){
+            arg.clear();
+            if(line.empty()) continue;
+
+            // NOTE: an alternative would be to use "foo\ bar" for escaping space, but it has other drawbacks, eg for windows, or for escaping '\' itself; also it adds complexity on user shell command. This seems simpler.
+
+            // TODO: is another character more standard and cross-platform (and less susceptible to bash substitution)?
+            char single_arg='$';
+
+            if(line[0]==single_arg){
+                if (line.size() > 1)
+                    args.push_back(line.substr(1));
+                continue;
+            }
+
+            for(char c : line)
+                if(c==' '){
+                    if(!arg.empty()){
+                        args.push_back(arg);
+                        arg.clear();
+                    }
+                } else
+                    arg.push_back(c);
+
+            if(!arg.empty())
+                args.push_back(arg);
+        }
+
+        for(const auto& argi : args)
+            Argv.push_back(argi.c_str());
+    }
+
     Argv.push_back("-c");
     Argv.push_back("-x");
     Argv.push_back("c++-header");
@@ -835,6 +881,17 @@ void PCH::update()
     assert(C);
 
     llvm::opt::InputArgList ArgList(Argv.begin(), Argv.end());
+
+    if (global.params.verbose){
+        std::string msg="clang_args ";
+        for(const auto& ai:Argv){
+            msg += "'";
+            msg += ai;
+            msg += "' ";
+        }
+        log_verbose("calypso", msg);
+    }
+
     cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(ArgList);
 
     if (needHeadersReload)
