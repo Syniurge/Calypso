@@ -52,6 +52,7 @@
 #include <cctype>
 #include <cstring>
 
+extern llvm::cl::opt<bool> linkDebugLib;
 void codegenModules(Modules &modules, bool oneobj);
 
 void log_verbose(const std::string& header, const std::string& msg){
@@ -1125,27 +1126,28 @@ void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
     if (!getASTUnit())
         return;
 
-    std::string druntime_ldc = "-ldruntime-ldc",
-        druntime_ldc_debug = "-ldruntime-ldc-debug",
-        calypso_ldc = "-lcalypso-ldc",
-        calypso_ldc_debug = "-lcalypso-ldc-debug";
+    auto argsFindSubstr = [&] (const char* substr) {
+        return std::find_if(args.begin(), args.end(),
+                [&] (const std::string& str) { return str.find(substr) != std::string::npos; });
+    };
 
-    if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
-        druntime_ldc = druntime_ldc.substr(2) + ".lib";
-        druntime_ldc_debug = druntime_ldc_debug.substr(2) + ".lib";
-        calypso_ldc = calypso_ldc.substr(2) + ".lib";
-        calypso_ldc_debug = calypso_ldc_debug.substr(2) + ".lib";
-    }
+    if (argsFindSubstr("calypso-ldc") == args.end()) {
+        // Insert -lcalypso-ldc before -ldruntime-ldc if not already passed yet (e.g to link against the -shared version)
+        auto it_druntime = argsFindSubstr("druntime-ldc"); // FIXME: too heuristical
+        assert(it_druntime != args.end());
 
-    // Insert -lcalypso-ldc before -ldruntime-ldc
-    auto it_druntime = std::find(args.begin(), args.end(), druntime_ldc);
-    auto it_druntime_debug = std::find(args.begin(), args.end(), druntime_ldc_debug);
+        std::string calypso_ldc = "-lcalypso-ldc",
+            calypso_ldc_debug = "-lcalypso-ldc-debug";
 
-    if (it_druntime != args.end())
-        args.insert(it_druntime, calypso_ldc);
-    else {
-        assert(it_druntime_debug != args.end());
-        args.insert(it_druntime_debug, calypso_ldc_debug);
+        if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
+            calypso_ldc = calypso_ldc.substr(2) + ".lib";
+            calypso_ldc_debug = calypso_ldc_debug.substr(2) + ".lib";
+        }
+
+        if (linkDebugLib)
+            args.insert(it_druntime, calypso_ldc_debug);
+        else
+            args.insert(it_druntime, calypso_ldc);
     }
 
     if (global.params.targetTriple->isWindowsMSVCEnvironment()) {

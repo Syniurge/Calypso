@@ -103,7 +103,7 @@ static cl::opt<std::string> debugLib(
     "debuglib", cl::ZeroOrMore, cl::value_desc("lib1,lib2,..."),
     cl::desc("Debug versions of default libraries (overrides previous)"));
 
-static cl::opt<bool> linkDebugLib(
+cl::opt<bool> linkDebugLib( // CALYPSO
     "link-debuglib", cl::ZeroOrMore,
     cl::desc("Link with libraries specified in -debuglib, not -defaultlib"));
 
