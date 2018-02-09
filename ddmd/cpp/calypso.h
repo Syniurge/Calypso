@@ -34,7 +34,7 @@ class ASTUnit;
 class MacroInfo;
 class ModuleMap;
 class PCHContainerOperations;
-namespace driver { class Compilation; }
+namespace driver { class Compilation; class Driver; }
 }
 
 namespace cpp
@@ -124,8 +124,6 @@ public:
     std::string pchHeader;
     std::string pchFilename;
 //     std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
-
-    int cxxStdlibType;
 
 protected:
     void loadFromHeaders(clang::driver::Compilation* C);
@@ -271,7 +269,7 @@ public:
     Identifier* id___va_list_tag;
     Identifier* id___NSConstantString_tag;
 
-    std::string executablePath; // from argv[0] to locate Clang builtin headers
+    int cxxStdlibType;
 
     struct GenModSet : public llvm::StringSet<> // already compiled modules
     {
@@ -283,6 +281,10 @@ public:
 
     // settings
     const char *cachePrefix = "calypso_cache"; // prefix of cached files (list of headers, PCH)
+
+    llvm::SmallVector<const char*, 16> clangArgv;
+    std::unique_ptr<clang::driver::Driver> TheDriver;
+    clang::driver::Compilation* buildClangCompilation();
 
     std::unique_ptr<clangCG::CodeGenModule> CGM;  // selectively emit external C++ declarations, template instances, ...
 

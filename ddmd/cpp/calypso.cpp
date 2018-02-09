@@ -12,6 +12,7 @@
 #include "cpp/ddmdstructor.h"
 
 #include "aggregate.h"
+#include "cond.h"
 #include "declaration.h"
 #include "expression.h"
 #include "id.h"
@@ -48,6 +49,8 @@
 
 #include <fstream>
 #include <string>
+#include <cctype>
+#include <cstring>
 
 void codegenModules(Modules &modules, bool oneobj);
 
@@ -617,6 +620,9 @@ DiagMuter::~DiagMuter()
 
 void PCH::init()
 {
+    pchHeader = calypso.getCacheFilename(".h");
+    pchFilename = calypso.getCacheFilename(".h.pch");
+
     clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(new clang::DiagnosticOptions);
     clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> DiagID(new clang::DiagnosticIDs);
     DiagClient = new DiagnosticPrinter(llvm::errs(), &*DiagOpts);
@@ -775,26 +781,22 @@ void PCH::update()
     // FIXME
     assert(!(needHeadersReload && AST) && "Need AST merging FIXME");
 
-    auto AddSuffixThenCheck = [&] (const char *suffix, bool dirtyPCH = true) {
+    auto CheckCacheFile = [&] (std::string& fn) {
         using namespace llvm::sys::fs;
 
-        auto fn_var = calypso.getCacheFilename(suffix);
         file_status result;
-        status(fn_var, result);
+        status(fn, result);
         if (is_directory(result)) {
-            ::error(Loc(), "%s is a directory\n", fn_var.c_str());
+            ::error(Loc(), "%s is a directory\n", fn.c_str());
             fatal();
         }
 
-        if (dirtyPCH && !exists(result))
+        if (!exists(result))
             needHeadersReload = true;
-
-        return fn_var;
     };
 
-    pchHeader = AddSuffixThenCheck(".h");
-    pchFilename = AddSuffixThenCheck(".h.pch");
-//     pchFilenameNew = AddSuffixThenCheck(".new.pch", false);
+    CheckCacheFile(pchHeader);
+    CheckCacheFile(pchFilename);
 
     if (needHeadersReload)
     {
@@ -816,84 +818,7 @@ void PCH::update()
         }
     }
 
-    // The driver doesn't do anything except computing the flags and informing us of the toolchain's C++ standard lib.
-    std::string TripleStr = llvm::sys::getProcessTriple();
-    llvm::Triple T(TripleStr);
-
-    clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
-    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
-    auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
-    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
-                                        &*CC1DiagOpts, CC1DiagClient);
-
-    clang::driver::Driver TheDriver(calypso.executablePath, T.str(), *CC1Diags);
-    TheDriver.setTitle("Calypso");
-
-    llvm::SmallVector<const char *, 16> Argv;
-
-    // Calypso doesn't call any clang executable, it embeds a clang executable into itself
-    Argv.push_back("clang");
-    
-    // code below needs to push to args instead of directly to Argv otherwise char* pointers get invalidated
-    std::vector<std::string> args;
-
-    {
-        // eg: handle line=" -Ifoo -v " => "-Ifoo", "-v"
-        std::string arg;
-        for (auto& line: opts::cppArgs){
-            arg.clear();
-            if(line.empty()) continue;
-
-            // NOTE: an alternative would be to use "foo\ bar" for escaping space, but it has other drawbacks, eg for windows, or for escaping '\' itself; also it adds complexity on user shell command. This seems simpler.
-
-            // TODO: is another character more standard and cross-platform (and less susceptible to bash substitution)?
-            char single_arg='$';
-
-            if(line[0]==single_arg){
-                if (line.size() > 1)
-                    args.push_back(line.substr(1));
-                continue;
-            }
-
-            for(char c : line)
-                if(c==' '){
-                    if(!arg.empty()){
-                        args.push_back(arg);
-                        arg.clear();
-                    }
-                } else
-                    arg.push_back(c);
-
-            if(!arg.empty())
-                args.push_back(arg);
-        }
-
-        for(const auto& argi : args)
-            Argv.push_back(argi.c_str());
-    }
-
-    Argv.push_back("-c");
-    Argv.push_back("-x");
-    Argv.push_back("c++-header");
-    Argv.push_back(pchHeader.c_str());
-
-    std::unique_ptr<clang::driver::Compilation> C(TheDriver.BuildCompilation(Argv));
-    assert(C);
-
-    llvm::opt::InputArgList ArgList(Argv.begin(), Argv.end());
-
-    if (global.params.verbose){
-        std::string msg="clang_args ";
-        for(const auto& ai:Argv){
-            msg += "'";
-            msg += ai;
-            msg += "' ";
-        }
-        log_verbose("calypso", msg);
-    }
-
-    cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(ArgList);
-
+    std::unique_ptr<clang::driver::Compilation> C(calypso.buildClangCompilation());
     if (needHeadersReload)
     {
         // The PCH either doesn't exist or is obsolete, reparse the header files
@@ -1231,7 +1156,7 @@ void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
         // The right -D flags must also be manually passed: -cpp-args -D_DEBUG, -DMD(d), -DMT(d)
     } else {
         // Insert -lstdc++ or -lc++
-        const char* cxxstdlib = (pch.cxxStdlibType ==
+        const char* cxxstdlib = (cxxStdlibType ==
             clang::driver::ToolChain::CST_Libcxx) ? "-lc++" : "-lstdc++";
 
         auto it_pthread = std::find(args.begin(), args.end(), "-lpthread");
@@ -1258,8 +1183,6 @@ LangPlugin::LangPlugin()
 
 void LangPlugin::_init()
 {
-    executablePath = GetExecutablePath(Argv0);
-
     if (!llvm::sys::fs::exists(opts::cppCacheDir))
         llvm::sys::fs::create_directory(opts::cppCacheDir);
     if (!llvm::sys::fs::is_directory(opts::cppCacheDir)) {
@@ -1290,20 +1213,112 @@ void LangPlugin::_init()
     pch.init();
 
     auto TargetFS = gTargetMachine->getTargetFeatureString();
-    if (TargetFS.empty())
-        return; // always empty for MSVC 
+    if (!TargetFS.empty()) { // always empty for MSVC
+        llvm::SmallVector<StringRef, 1> AttrFeatures;
+        TargetFS.split(AttrFeatures, ",");
 
-    llvm::SmallVector<StringRef, 1> AttrFeatures;
-    TargetFS.split(AttrFeatures, ",");
+        for (auto &Feature : AttrFeatures) {
+            Feature = Feature.trim();
 
-    for (auto &Feature : AttrFeatures) {
-        Feature = Feature.trim();
+            if (Feature.startswith("-"))
+                continue;
 
-        if (Feature.startswith("-"))
+            TargetFeatures.insert(Feature);
+        }
+    }
+
+    // The driver doesn't do anything except computing the flags and informing us of the toolchain's C++ standard lib.
+    // NOTE: Calypso doesn't call any clang executable
+    clangArgv.push_back("clang");
+
+    // eg: handle line=" -Ifoo -v " => "-Ifoo", "-v"
+    static std::vector<std::string> args; // FIXME
+    for (auto& line: opts::cppArgs) {
+        std::string arg;
+        if (line.empty())
             continue;
 
-        TargetFeatures.insert(Feature);
+        // NOTE: an alternative would be to use "foo\ bar" for escaping space, but it has other drawbacks, eg for windows, or for escaping '\' itself; also it adds complexity on user shell command. This seems simpler.
+
+        // TODO: is another character more standard and cross-platform (and less susceptible to bash substitution)?
+        char single_arg='$';
+
+        if (line[0] == single_arg) {
+            if (line.size() > 1)
+                args.push_back(line.substr(1));
+            continue;
+        }
+
+        for (char c: line)
+            if (isspace(c)) {
+                if (!arg.empty()) {
+                    args.push_back(arg);
+                    arg.clear();
+                }
+            } else
+                arg.push_back(c);
+
+        if (!arg.empty())
+            args.push_back(arg);
     }
+    for (const auto& argi: args)
+        clangArgv.push_back(argi.c_str());
+
+    clangArgv.push_back("-c");
+    clangArgv.push_back("-x");
+    clangArgv.push_back("c++-header");
+    clangArgv.push_back("-");
+
+    // Build a dummy compilation to extract the standard library type
+    std::unique_ptr<clang::driver::Compilation> C(buildClangCompilation());
+    cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(C->getArgs());
+
+    switch (cxxStdlibType)
+    {
+        case clang::driver::ToolChain::CST_Libcxx:
+            VersionCondition::addPredefinedGlobalIdent("CppStdLib_libcxx");
+            break;
+        case clang::driver::ToolChain::CST_Libstdcxx:
+            VersionCondition::addPredefinedGlobalIdent("CppStdLib_libstdcxx");
+            break;
+        default:
+            break;
+    }
+
+    clangArgv.pop_back();
+    clangArgv.push_back(pch.pchHeader.c_str());
+
+    if (global.params.verbose) {
+        std::string msg = "driver args: ";
+        for (std::string arg : clangArgv) {
+            for (auto i = std::find(arg.begin(), arg.end(), ' '); i != arg.end();
+                        i = std::find(i, arg.end(), ' '))
+                i = ++++arg.insert(i, '\\');
+            msg += arg;
+            msg += " ";
+        }
+        log_verbose("calypso", msg);
+    }
+}
+
+clang::driver::Compilation* LangPlugin::buildClangCompilation()
+{
+    std::string TripleStr = llvm::sys::getProcessTriple();
+    llvm::Triple T(TripleStr);
+
+    clang::IntrusiveRefCntPtr<clang::DiagnosticOptions> CC1DiagOpts(new clang::DiagnosticOptions);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> CC1DiagID(new clang::DiagnosticIDs);
+    auto CC1DiagClient = new clang::TextDiagnosticPrinter(llvm::errs(), &*CC1DiagOpts);
+    clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> CC1Diags = new clang::DiagnosticsEngine(CC1DiagID,
+                                        &*CC1DiagOpts, CC1DiagClient);
+
+    // FIXME Clang 4+: We currently reconstruct a Driver every time we want a new compilation because things break if we don't, but this shoudn't be so
+    TheDriver.reset(new clang::driver::Driver(GetExecutablePath(Argv0), T.str(), *CC1Diags));
+    TheDriver->setTitle("Calypso");
+
+    auto C = TheDriver->BuildCompilation(clangArgv);
+    assert(C);
+    return C;
 }
 
 clang::ASTContext& LangPlugin::getASTContext()
