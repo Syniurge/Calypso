@@ -481,6 +481,13 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
         LINK_FLAGS                  "${ld_flags}"
         LINKER_LANGUAGE             CXX
     )
+    set_common_library_properties(calypso-ldc${target_suffix})
+
+    if("${is_shared}" STREQUAL "ON")
+        target_link_libraries(calypso-ldc${target_suffix}
+            druntime-ldc${target_suffix} ${dso_system_libs})
+    endif()
+
     list(APPEND ${outlist_targets} "calypso-ldc${target_suffix}")
 
     if(BUILD_BC_LIBS)
