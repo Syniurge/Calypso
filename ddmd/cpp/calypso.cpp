@@ -1018,7 +1018,7 @@ void LangPlugin::buildMacroMap()
         if (!MacroMapEntry)
             MacroMapEntry = new MacroMapEntryTy;
 
-        clang::Expr* Expr;
+        clang::Expr* Expr = nullptr;
 
         if (MInfo->getNumTokens() == 0) {
             unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
@@ -1030,11 +1030,12 @@ void LangPlugin::buildMacroMap()
                 continue;
 
             auto ResultExpr = Sema.ActOnNumericConstant(Tok);
-            assert(!ResultExpr.isInvalid());
-            Expr = ResultExpr.get();
+            if (!ResultExpr.isInvalid())
+                Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
         }
 
-        MacroMapEntry->emplace_back(II, Expr);
+        if (Expr)
+            MacroMapEntry->emplace_back(II, Expr);
     }
 }
 
