@@ -458,15 +458,21 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
     endif()
 
     # CALYPSO
-    if (NOT MSVC)
-    set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
-    add_custom_command(
-        OUTPUT "${cpp_monolith_o}"
-        COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir=${calypsort_cppdir} -Dcpp_monolith_o=${cpp_monolith_o}
-                -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
-                -DMSVC=${MSVC} -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-        DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
-    )
+    if (NOT MSVC) # temporary
+    if (NOT APPLE)
+        set(cpp_monolith_o "${calypsort_cppdir}/__cpp_monolith${target_suffix}.o")
+        add_custom_command(
+            OUTPUT "${cpp_monolith_o}"
+            COMMAND ${CMAKE_COMMAND} -Dcalypsort_cppdir=${calypsort_cppdir} -Dcpp_monolith_o=${cpp_monolith_o}
+                    -DCMAKE_LINKER="${CMAKE_LINKER}" -DCMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+                    -DMSVC=${MSVC} -P "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+            DEPENDS ${calypsort_o} "${CMAKE_CURRENT_SOURCE_DIR}/link_autogen_cpp.cmake"
+        )
+    else()
+        # BUG WORKAROUND on OS X/MacOS: Incremental linking into a Mach-O object file with ld results in duplicate ldc.register_dso and ldc.dso_initialized symbols
+        # Not sure if this is really a ld BUG, but the simplest workaround is to skip it
+        set(calypso_extra_link_flags "${calypsort_cppdir}/__cpp-__cxxabiv1-libcxx-__cxa_dependent_exception.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libcxx-__cxa_exception.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libcxx-_.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libcxx-type_info.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libstdcxx-__cxa_dependent_exception.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libstdcxx-__cxa_exception.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libstdcxx-_.o ${calypsort_cppdir}/__cpp-__cxxabiv1-libstdcxx-type_info.o ${calypsort_cppdir}/__cpp-__cxxabiv1-_type_info_common.o ${calypsort_cppdir}/__cpp-_Unwind_Exception.o ${calypsort_cppdir}/__cpp-_Unwind_Reason_Code.o")
+    endif()
     endif()
 
     add_library(calypso-ldc${target_suffix} ${library_type}
@@ -478,7 +484,8 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
         LIBRARY_OUTPUT_DIRECTORY    ${output_path}
         RUNTIME_OUTPUT_DIRECTORY    ${output_path}
         COMPILE_FLAGS               "${c_flags}"
-        LINK_FLAGS                  "${ld_flags}"
+        LINK_FLAGS                  "${ld_flags} ${calypso_extra_link_flags}"
+        STATIC_LIBRARY_FLAGS        "${calypso_extra_link_flags}"
         LINKER_LANGUAGE             CXX
     )
     set_common_library_properties(calypso-ldc${target_suffix})
