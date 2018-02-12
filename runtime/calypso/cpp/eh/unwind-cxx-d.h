@@ -3,18 +3,64 @@
 
 #pragma once
 
-#include "unwind.h"
+#include <stdint.h>
 
 typedef __SIZE_TYPE__ size_t;
 typedef int _Atomic_word;
 
-// _Unwind_Ptr and _Unwind_Exception_Class aren't defined in some OS X variants of unwind.h
-#ifndef _Unwind_Ptr
+typedef uintptr_t _Unwind_Word;
 typedef uintptr_t _Unwind_Ptr;
-#endif
-
-#ifndef _Unwind_Exception_Class
 typedef uint64_t _Unwind_Exception_Class;
+
+struct _Unwind_Context;
+struct _Unwind_Exception;
+typedef enum {
+  _URC_NO_REASON = 0,
+#if defined(__arm__) && !defined(__USING_SJLJ_EXCEPTIONS__) && \
+    !defined(__ARM_DWARF_EH__)
+  _URC_OK = 0, /* used by ARM EHABI */
+#endif
+  _URC_FOREIGN_EXCEPTION_CAUGHT = 1,
+
+  _URC_FATAL_PHASE2_ERROR = 2,
+  _URC_FATAL_PHASE1_ERROR = 3,
+  _URC_NORMAL_STOP = 4,
+
+  _URC_END_OF_STACK = 5,
+  _URC_HANDLER_FOUND = 6,
+  _URC_INSTALL_CONTEXT = 7,
+  _URC_CONTINUE_UNWIND = 8,
+#if defined(__arm__) && !defined(__USING_SJLJ_EXCEPTIONS__) && \
+    !defined(__ARM_DWARF_EH__)
+  _URC_FAILURE = 9 /* used by ARM EHABI */
+#endif
+} _Unwind_Reason_Code;
+
+typedef enum {
+  _UA_SEARCH_PHASE = 1,
+  _UA_CLEANUP_PHASE = 2,
+
+  _UA_HANDLER_FRAME = 4,
+  _UA_FORCE_UNWIND = 8,
+  _UA_END_OF_STACK = 16 /* gcc extension to C++ ABI */
+} _Unwind_Action;
+
+typedef void (*_Unwind_Exception_Cleanup_Fn)(_Unwind_Reason_Code,
+                                             struct _Unwind_Exception *);
+
+struct _Unwind_Exception {
+  _Unwind_Exception_Class exception_class;
+  _Unwind_Exception_Cleanup_Fn exception_cleanup;
+  _Unwind_Word private_1;
+  _Unwind_Word private_2;
+  /* The Itanium ABI requires that _Unwind_Exception objects are "double-word
+   * aligned".  GCC has interpreted this to mean "use the maximum useful
+   * alignment for the target"; so do we. */
+#if !defined(__APPLE__)
+} __attribute__((__aligned__));
+#else // defined(APPLE)
+}; // CALYPSO NOTE: on Apple OSes, libc++abi is built against an unwind.h header that preserves default alignment for _Unwind_Exception.
+   //  This results in a curious mismatch with the unwind.h header that comes with Clang, and a different layout for __cxa_exception.
 #endif
 
 namespace __cxxabiv1 {
