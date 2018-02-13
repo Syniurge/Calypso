@@ -1,5 +1,5 @@
 // Compiler implementation of the D programming language
-// Copyright (c) 1999-2016 by Digital Mars
+// Copyright (c) 1999-2017 by Digital Mars
 // All Rights Reserved
 // written by Walter Bright
 // http://www.digitalmars.com
@@ -95,11 +95,28 @@ extern (C++) struct CTFloat
         return memcmp(&a, &b, sz) == 0;
     }
 
+    static size_t hash(real_t a)
+    {
+        import ddmd.root.hash : calcHash;
+
+        if (isNaN(a))
+            a = real_t.nan;
+        enum sz = (real_t.mant_dig == 64) ? 10 : real_t.sizeof;
+        return calcHash(cast(ubyte*) &a, sz);
+    }
+
     static bool isNaN(real_t r)
     {
         return !(r == r);
     }
 
+  version(IN_LLVM)
+  {
+    // LDC doesn't need isSNaN(). The upstream implementation is tailored for
+    // DMD/x86 and only supports double-precision and x87 real_t types.
+  }
+  else
+  {
     static bool isSNaN(real_t r)
     {
         static if (real_t.sizeof == 8)
@@ -111,12 +128,12 @@ extern (C++) struct CTFloat
     // the implementation of longdouble for MSVC is a struct, so mangling
     //  doesn't match with the C++ header.
     // add a wrapper just for isSNaN as this is the only function called from C++
-    // IN_LLVM replaced: version(CRuntime_Microsoft)
-    version(none)
+    version(CRuntime_Microsoft)
         static bool isSNaN(longdouble ld)
         {
             return isSNaN(ld.r);
         }
+  }
 
     static bool isInfinity(real_t r)
     {
@@ -182,6 +199,13 @@ else
     static __gshared real_t one = real_t(1);
     static __gshared real_t minusone = real_t(-1);
     static __gshared real_t half = real_t(0.5);
+  version(IN_LLVM)
+  {
+    // Initialized via LLVM in C++.
+    static __gshared real_t initVal;
+    static __gshared real_t nan;
+    static __gshared real_t infinity;
+  }
 }
 
 version (IN_LLVM)

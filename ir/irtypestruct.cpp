@@ -53,7 +53,7 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
           // what about default_fields
   else
     for (auto lp: langPlugins)
-      if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // CALYPSO wonderful HACK for __cpp_member_ptr
+      if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // Delightful HACK for __cpp_member_ptr
         t->type = Ty;
 
   auto StructTy = llvm::cast<LLStructType>(t->type);
@@ -62,13 +62,9 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
     t->packed = StructTy->isPacked();
     return t;
   }
+  // end of CALYPSO insertions
 
-  t->packed = sd->alignment == 1;
-  if (!t->packed) {
-    // Unfortunately, the previous check is not enough in case the struct
-    // contains an align declaration. See issue 726.
-    t->packed = isPacked(sd);
-  }
+  t->packed = isPacked(sd);
 
   // For ldc.dcomptetypes.Pointer!(uint n,T),
   // emit { T addrspace(gIR->dcomputetarget->mapping[n])* }

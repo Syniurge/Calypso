@@ -35,7 +35,7 @@ public:
     int getValue() const;
     const char *toHChars2();
     size_t length() const; // CALYPSO
-    int dyncast();
+    int dyncast() const;
 
     static StringTable stringtable;
     static Identifier *generateId(const char *prefix);

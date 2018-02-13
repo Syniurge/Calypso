@@ -322,10 +322,10 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     if (D->isOutOfLine() && D->getFriendObjectKind() != clang::Decl::FOK_None)
     {
-        auto Pattern = Func;
-        if (Func)
-            if (auto MemberFunc = Func->getInstantiatedFromMemberFunction())
-                Pattern = MemberFunc;
+//         auto Pattern = Func;
+//         if (Func)
+//             if (auto MemberFunc = Func->getInstantiatedFromMemberFunction())
+//                 Pattern = MemberFunc;
 
         auto DeclCtx = dyn_cast<clang::DeclContext>(D);
         if (DeclCtx && DeclCtx->isDependentContext()) // FIXME

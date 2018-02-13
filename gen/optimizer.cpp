@@ -8,29 +8,25 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/optimizer.h"
+
 #include "errors.h"
 #include "gen/cl_helpers.h"
 #include "gen/logger.h"
 #include "gen/passes/Passes.h"
+#include "driver/cl_options.h"
+#include "driver/cl_options_sanitizers.h"
 #include "driver/targetmachine.h"
 #include "llvm/LinkAllPasses.h"
-#if LDC_LLVM_VER >= 307
 #include "llvm/IR/LegacyPassManager.h"
-#else
-#include "llvm/PassManager.h"
-#endif
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/ADT/Triple.h"
-#if LDC_LLVM_VER >= 307
+#if LDC_LLVM_VER >= 400
+#include "llvm/Analysis/InlineCost.h"
+#endif
 #include "llvm/Analysis/TargetTransformInfo.h"
-#endif
 #include "llvm/IR/Verifier.h"
-#if LDC_LLVM_VER >= 307
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#else
-#include "llvm/Target/TargetLibraryInfo.h"
-#endif
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/LegacyPassNameParser.h"
@@ -87,8 +83,7 @@ static cl::opt<cl::boolOrDefault, false, opts::FlagParser<cl::boolOrDefault>>
 static cl::opt<cl::boolOrDefault, false, opts::FlagParser<cl::boolOrDefault>>
     enableCrossModuleInlining(
         "cross-module-inlining", cl::ZeroOrMore, cl::Hidden,
-        cl::desc("(*) Enable cross-module function inlining (default disabled) "
-                 "(LLVM >= 3.7)"));
+        cl::desc("(*) Enable cross-module function inlining (default disabled)"));
 
 static cl::opt<bool> unitAtATime("unit-at-a-time", cl::desc("Enable basic IPO"),
                                  cl::ZeroOrMore, cl::init(true));
@@ -96,14 +91,6 @@ static cl::opt<bool> unitAtATime("unit-at-a-time", cl::desc("Enable basic IPO"),
 static cl::opt<bool> stripDebug(
     "strip-debug", cl::ZeroOrMore,
     cl::desc("Strip symbolic debug information before optimization"));
-
-cl::opt<opts::SanitizerCheck> opts::sanitize(
-    "sanitize", cl::desc("Enable runtime instrumentation for bug detection"),
-    cl::init(opts::None),
-    clEnumValues(clEnumValN(opts::AddressSanitizer, "address", "Memory errors"),
-                 clEnumValN(opts::MemorySanitizer, "memory", "Memory errors"),
-                 clEnumValN(opts::ThreadSanitizer, "thread",
-                            "Race detection")));
 
 static cl::opt<bool> disableLoopUnrolling(
     "disable-loop-unrolling", cl::ZeroOrMore,
@@ -130,15 +117,7 @@ bool willInline() {
 }
 
 bool willCrossModuleInline() {
-#if LDC_LLVM_VER >= 307
   return enableCrossModuleInlining == llvm::cl::BOU_TRUE;
-#else
-  // Cross-module inlining is disabled for <3.7 because we don't emit symbols in
-  // COMDAT any groups pre-LLVM3.7. With cross-module inlining enabled, without
-  // COMDAT any there are multiple-def linker errors when linking druntime.
-  // See supportsCOMDAT().
-  return false;
-#endif
 }
 
 bool isOptimizationEnabled() { return optimizeLevel != 0; }
@@ -212,6 +191,14 @@ static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
   PM.add(createThreadSanitizerPass());
 }
 
+static void addSanitizerCoveragePass(const PassManagerBuilder &Builder,
+                                     legacy::PassManagerBase &PM) {
+#ifdef ENABLE_COVERAGE_SANITIZER
+  PM.add(
+      createSanitizerCoverageModulePass(opts::getSanitizerCoverageOptions()));
+#endif
+}
+
 // Adds PGO instrumentation generation and use passes.
 static void addPGOPasses(legacy::PassManagerBase &mpm, unsigned optLevel) {
 #if LDC_WITH_PGO
@@ -245,13 +232,8 @@ static void addPGOPasses(legacy::PassManagerBase &mpm, unsigned optLevel) {
  * The selection mirrors Clang behavior and is based on LLVM's
  * PassManagerBuilder.
  */
-#if LDC_LLVM_VER >= 307
 static void addOptimizationPasses(legacy::PassManagerBase &mpm,
                                   legacy::FunctionPassManager &fpm,
-#else
-static void addOptimizationPasses(PassManagerBase &mpm,
-                                  FunctionPassManager &fpm,
-#endif
                                   unsigned optLevel, unsigned sizeLevel) {
   if (!noVerify) {
     fpm.add(createVerifierPass());
@@ -260,18 +242,18 @@ static void addOptimizationPasses(PassManagerBase &mpm,
   PassManagerBuilder builder;
   builder.OptLevel = optLevel;
   builder.SizeLevel = sizeLevel;
+#if LDC_LLVM_VER >= 309
+  builder.PrepareForLTO = opts::isUsingLTO();
+  builder.PrepareForThinLTO = opts::isUsingThinLTO();
+#endif
 
   if (willInline()) {
-    unsigned threshold = 225;
-    if (sizeLevel == 1) { // -Os
-      threshold = 75;
-    } else if (sizeLevel == 2) { // -Oz
-      threshold = 25;
-    }
-    if (optLevel > 2) {
-      threshold = 275;
-    }
-    builder.Inliner = createFunctionInliningPass(threshold);
+#if LDC_LLVM_VER >= 400
+    auto params = llvm::getInlineParams(optLevel, sizeLevel);
+    builder.Inliner = createFunctionInliningPass(params);
+#else
+    builder.Inliner = createFunctionInliningPass(optLevel, sizeLevel);
+#endif
   } else {
 #if LDC_LLVM_VER >= 400
     builder.Inliner = createAlwaysInlinerLegacyPass();
@@ -298,25 +280,32 @@ static void addOptimizationPasses(PassManagerBase &mpm,
   builder.SLPVectorize =
       disableSLPVectorization ? false : optLevel > 1 && sizeLevel < 2;
 
-  if (opts::sanitize == opts::AddressSanitizer) {
+  if (opts::isSanitizerEnabled(opts::AddressSanitizer)) {
     builder.addExtension(PassManagerBuilder::EP_OptimizerLast,
                          addAddressSanitizerPasses);
     builder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
                          addAddressSanitizerPasses);
   }
 
-  if (opts::sanitize == opts::MemorySanitizer) {
+  if (opts::isSanitizerEnabled(opts::MemorySanitizer)) {
     builder.addExtension(PassManagerBuilder::EP_OptimizerLast,
                          addMemorySanitizerPass);
     builder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
                          addMemorySanitizerPass);
   }
 
-  if (opts::sanitize == opts::ThreadSanitizer) {
+  if (opts::isSanitizerEnabled(opts::ThreadSanitizer)) {
     builder.addExtension(PassManagerBuilder::EP_OptimizerLast,
                          addThreadSanitizerPass);
     builder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
                          addThreadSanitizerPass);
+  }
+
+  if (opts::isSanitizerEnabled(opts::CoverageSanitizer)) {
+    builder.addExtension(PassManagerBuilder::EP_OptimizerLast,
+                         addSanitizerCoveragePass);
+    builder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                         addSanitizerCoveragePass);
   }
 
   if (!disableLangSpecificPasses) {
@@ -345,12 +334,9 @@ static void addOptimizationPasses(PassManagerBase &mpm,
 // This function runs optimization passes based on command line arguments.
 // Returns true if any optimization passes were invoked.
 bool ldc_optimize_module(llvm::Module *M) {
-// Create a PassManager to hold and optimize the collection of
-// per-module passes we are about to build.
-#if LDC_LLVM_VER >= 307
-  legacy::
-#endif
-      PassManager mpm;
+  // Create a PassManager to hold and optimize the collection of
+  // per-module passes we are about to build.
+  legacy::PassManager mpm;
 
   // Dont optimise spirv modules because turning GEPs into extracts triggers
   // asserts in the IR -> SPIR-V translation pass. SPIRV doesn't have a target
@@ -362,7 +348,6 @@ bool ldc_optimize_module(llvm::Module *M) {
   if (getComputeTargetType(M) == ComputeBackend::SPIRV)
     return false;
 
-#if LDC_LLVM_VER >= 307
   // Add an appropriate TargetLibraryInfo pass for the module's triple.
   TargetLibraryInfoImpl *tlii =
       new TargetLibraryInfoImpl(Triple(M->getTargetTriple()));
@@ -372,59 +357,22 @@ bool ldc_optimize_module(llvm::Module *M) {
     tlii->disableAllFunctions();
 
   mpm.add(new TargetLibraryInfoWrapperPass(*tlii));
-#else
-  // Add an appropriate TargetLibraryInfo pass for the module's triple.
-  TargetLibraryInfo *tli = new TargetLibraryInfo(Triple(M->getTargetTriple()));
 
-  // The -disable-simplify-libcalls flag actually disables all builtin optzns.
-  if (disableSimplifyLibCalls) {
-    tli->disableAllFunctions();
-  }
+  // The DataLayout is already set at the module (in module.cpp,
+  // method Module::genLLVMModule())
+  // FIXME: Introduce new command line switch default-data-layout to
+  // override the module data layout
 
-  mpm.add(tli);
-#endif
-
-// Add an appropriate DataLayout instance for this module.
-#if LDC_LLVM_VER >= 307
-// The DataLayout is already set at the module (in module.cpp,
-// method Module::genLLVMModule())
-// FIXME: Introduce new command line switch default-data-layout to
-// override the module data layout
-#elif LDC_LLVM_VER == 306
-  mpm.add(new DataLayoutPass());
-#else
-                                    const DataLayout *DL = M->getDataLayout();
-                                    assert(DL &&
-                                           "DataLayout not set at module");
-                                    mpm.add(new DataLayoutPass(*DL));
-#endif
-
-#if LDC_LLVM_VER >= 307
   // Add internal analysis passes from the target machine.
   mpm.add(createTargetTransformInfoWrapperPass(
       gTargetMachine->getTargetIRAnalysis()));
-#else
-  // Add internal analysis passes from the target machine.
-  gTargetMachine->addAnalysisPasses(mpm);
-#endif
 
-// Also set up a manager for the per-function passes.
-#if LDC_LLVM_VER >= 307
-  legacy::
-#endif
-      FunctionPassManager fpm(M);
+  // Also set up a manager for the per-function passes.
+  legacy::FunctionPassManager fpm(M);
 
-#if LDC_LLVM_VER >= 307
   // Add internal analysis passes from the target machine.
   fpm.add(createTargetTransformInfoWrapperPass(
       gTargetMachine->getTargetIRAnalysis()));
-#elif LDC_LLVM_VER >= 306
-  fpm.add(new DataLayoutPass());
-  gTargetMachine->addAnalysisPasses(fpm);
-#else
-                                    fpm.add(new DataLayoutPass(M));
-                                    gTargetMachine->addAnalysisPasses(fpm);
-#endif
 
   // If the -strip-debug command line option was specified, add it before
   // anything else.
@@ -478,7 +426,6 @@ void outputOptimizationSettings(llvm::raw_ostream &hash_os) {
   hash_os << disableGCToStack;
   hash_os << unitAtATime;
   hash_os << stripDebug;
-  hash_os << opts::sanitize;
   hash_os << disableLoopUnrolling;
   hash_os << disableLoopVectorization;
   hash_os << disableSLPVectorization;

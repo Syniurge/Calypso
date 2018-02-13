@@ -1,3 +1,4 @@
+dist: trusty
 language: d
 sudo: false
 
@@ -5,25 +6,22 @@ matrix:
   include:
     #- os: linux
       #d: ldc
-      #env: LLVM_VERSION=4.0.0
+      #env: LLVM_VERSION=5.0.0 OPTS="-DLIB_SUFFIX=64 -DLDC_WITH_LLD=OFF"
     - os: linux
       d: ldc
-      env: LLVM_VERSION=3.9.1
+      env: LLVM_VERSION=3.9.1 OPTS="-DLIB_SUFFIX=64"
     - os: linux
       d: ldc-beta
-      env: LLVM_VERSION=3.9.1
-    - os: linux
-      d: ldc
-      env: LLVM_VERSION=3.9.1 OPTS="-DMULTILIB=ON -DBUILD_SHARED_LIBS=OFF -DLIB_SUFFIX=64"
-    - os: linux
-      d: ldc-0.17.2
       env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON"
     - os: linux
+      d: ldc-0.17.2
+      env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=OFF -DLIB_SUFFIX=64"
+    - os: linux
       d: dmd
-      env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=OFF -DTEST_COVERAGE=ON"
+      env: LLVM_VERSION=3.9.1 OPTS="-DTEST_COVERAGE=ON"
     #- os: osx
       #d: ldc-beta
-      #env: LLVM_VERSION=5.0.0 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
+      #env: LLVM_VERSION=6.0.0-2 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
     - os: osx
       d: ldc
       env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON"
@@ -32,46 +30,44 @@ matrix:
 
 cache:
   directories:
-    - llvm-spirv-5.0.0
+    - llvm-spirv-6.0.0-2
+    - llvm-5.0.0
+    - llvm-4.0.1
     - llvm-4.0.0
     - llvm-3.9.1
-    - llvm-3.9.0
     - clang-calypso
+    - llvm-3.8.1
+    - llvm-3.7.1
 addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
-    - george-edison55-precise-backports # more recent CMake
     packages:
-    - gdb
-    - gcc-4.9
     - g++-4.9
-    - gcc-4.9-multilib
-    - g++-4.9-multilib
-    - gcc-multilib
-    - g++-multilib
-    - libedit2
-    - libedit-dev
-    - libcurl3:i386
-    #- cmake
-    #- cmake-data
+    - gdb
     - ninja-build
 before_install:
   -
     if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
-      export LLVM_ARCH="x86_64-linux-gnu-ubuntu-12.04";
+      if [ "${LLVM_VERSION}" = "5.0.0" ]; then
+        export LLVM_ARCH="linux-x86_64-ubuntu14.04";
+      elif [ "${LLVM_VERSION}" = "4.0.1" ]; then
+        export LLVM_ARCH="x86_64-linux-gnu-debian8";
+      else
+        export LLVM_ARCH="x86_64-linux-gnu-ubuntu-14.04";
+      fi;
     else
       export LLVM_ARCH="x86_64-apple-darwin";
     fi;
     if [ -z "$(ls -A llvm-$LLVM_VERSION)" ]; then
       if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then
-        wget -O llvm-spirv-$LLVM_VERSION.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-5.0.0svn-Darwin.tar.bz2;
+        wget -O llvm-spirv-$LLVM_VERSION.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0svn-Darwin.tar.bz2;
         mkdir llvm-spirv-$LLVM_VERSION;
         tar -xjf llvm-spirv-$LLVM_VERSION.tar.bz2 --strip 1 -C llvm-spirv-$LLVM_VERSION;
       else
         wget -O llvm-$LLVM_VERSION.tar.xz https://github.com/Syniurge/llvm/releases/download/$LLVM_VERSION/llvm-$LLVM_VERSION-${LLVM_ARCH}.tar.xz;
         mkdir llvm-$LLVM_VERSION;
-        tar -xvf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
+        tar -xf llvm-$LLVM_VERSION.tar.xz --strip 1 -C llvm-$LLVM_VERSION;
       fi;
     fi;
 
@@ -89,45 +85,41 @@ before_install:
       tar -xvf clang-calypso.tar.xz --strip 1 -C clang-calypso;
       export CLANG_PREBUILT="$(pwd)/clang-calypso";
     fi;
+
 install:
-  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9";
-      CMAKE_URL="http://www.cmake.org/files/v3.6/cmake-3.6.2-Linux-x86_64.tar.gz";
-      mkdir cmake-bin && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake-bin;
-      export PATH="$(pwd)/cmake-bin/bin:${PATH}";
+  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
+  -
+    if [ "${TRAVIS_OS_NAME}" = "osx" ]; then
+      wget -O ninja-mac.zip https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-mac.zip;
+      mkdir ninja;
+      tar -xf ninja-mac.zip -C ninja;
+      export PATH="$PWD/ninja:$PATH";
     fi
-  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then brew update; brew install ninja; fi;
-  - eval "${DC} --version"
   - pip install --user lit
+  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then ld --version; gdb --version; fi
+  - cmake --version
+  - ninja --version
   - python -c "import lit; lit.main();" --version | head -n 1
-  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then gdb --version; fi
+  - eval "${DC} --version"
 
 before_script:
   - mkdir build
   - cd build
 
 script:
-  - cmake --version
-  - cmake -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) $OPTS ..
-  - make -j2
-  # Outputs some environment info, plus makes sure we only run the test suite
+  - cmake -G Ninja -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" $OPTS ..
+  # Build LDC and stdlib unittest runners.
+  - ninja -j3 all all-test-runners
+  # Output some environment info, plus make sure we only run the test suite
   # if we could actually build the executable.
   - bin/ldc2 -version || exit 1
-  # Build Phobos & druntime unittest modules.
-  -
-    if [[ "${OPTS}" == *-DMULTILIB?ON* ]]; then
-      make -j2 phobos2-ldc-unittest-debug phobos2-ldc-unittest phobos2-ldc-unittest-debug_32 phobos2-ldc-unittest_32;
-      make -j3 druntime-ldc-unittest-debug druntime-ldc-unittest druntime-ldc-unittest-debug_32 druntime-ldc-unittest_32;
-    else
-      make -j2 phobos2-ldc-unittest-debug phobos2-ldc-unittest;
-      make -j3 druntime-ldc-unittest-debug druntime-ldc-unittest;
-    fi
-  # Run dmd-testsuite.
-  - CC="" DMD_TESTSUITE_MAKE_ARGS=-j3 ctest -V -R "dmd-testsuite"
-  # Run lit testsuite.
-  - ctest -V -R "lit-tests"
   # Build and run LDC D unittests.
   - ctest --output-on-failure -R "ldc2-unittest"
-  # Link and run Phobos & druntime unittest runners.
+  # Run LIT testsuite.
+  - ctest -V -R "lit-tests"
+  # Run DMD testsuite.
+  - DMD_TESTSUITE_MAKE_ARGS=-j3 ctest -V -R "dmd-testsuite"
+  # Run stdlib unittests.
   - ctest -j3 --output-on-failure -E "dmd-testsuite|lit-tests|ldc2-unittest"
 
 after_success:

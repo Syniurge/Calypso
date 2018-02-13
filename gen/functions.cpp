@@ -20,6 +20,7 @@
 #include "statement.h"
 #include "template.h"
 #include "driver/cl_options.h"
+#include "driver/cl_options_sanitizers.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
 #include "gen/cgforeign.h"
@@ -473,9 +474,6 @@ void applyTargetMachineAttributes(llvm::Function &func,
                  lessPreciseFPMADOption ? "true" : "false");
   func.addFnAttr("no-infs-fp-math", TO.NoInfsFPMath ? "true" : "false");
   func.addFnAttr("no-nans-fp-math", TO.NoNaNsFPMath ? "true" : "false");
-#if LDC_LLVM_VER < 307
-  func.addFnAttr("use-soft-float", TO.UseSoftFloat ? "true" : "false");
-#endif
 
   // Frame pointer elimination
   func.addFnAttr("no-frame-pointer-elim",
@@ -787,8 +785,14 @@ void defineParameters(IrFuncTy &irFty, VarDeclarations &parameters) {
       ++llArgIdx;
     }
 
-    if (global.params.symdebug)
-      gIR->DBuilder.EmitLocalVariable(irparam->value, vd, paramType);
+    // The debuginfos for captured params are handled later by
+    // DtoCreateNestedContext().
+    if (global.params.symdebug && vd->nestedrefs.dim == 0) {
+      // Reference (ref/out) parameters have no storage themselves as they are
+      // constant pointers, so pass the reference rvalue to EmitLocalVariable().
+      gIR->DBuilder.EmitLocalVariable(irparam->value, vd, paramType, false,
+                                      false, /*isRefRVal=*/true);
+    }
   }
 }
 
@@ -852,6 +856,17 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
         fd->toChars());
     fd->ir->setDefined();
     return;
+  }
+
+  if (gIR->dcomputetarget) {
+    auto id = fd->ident;
+    if (id == Id::xopEquals || id == Id::xopCmp || id == Id::xtoHash) {
+      IF_LOG Logger::println(
+          "No code generation for typeinfo member %s in @compute code",
+          fd->toChars());
+      fd->ir->setDefined();
+      return;
+    }
   }
 
   if (!linkageAvailableExternally && !alreadyOrWillBeDefined(*fd)) {
@@ -967,17 +982,18 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   if (gABI->needsUnwindTables()) {
     func->addFnAttr(LLAttribute::UWTable);
   }
-  if (opts::sanitize != opts::None) {
+  if (opts::isAnySanitizerEnabled() &&
+      !opts::functionIsInSanitizerBlacklist(fd)) {
     // Set the required sanitizer attribute.
-    if (opts::sanitize == opts::AddressSanitizer) {
+    if (opts::isSanitizerEnabled(opts::AddressSanitizer)) {
       func->addFnAttr(LLAttribute::SanitizeAddress);
     }
 
-    if (opts::sanitize == opts::MemorySanitizer) {
+    if (opts::isSanitizerEnabled(opts::MemorySanitizer)) {
       func->addFnAttr(LLAttribute::SanitizeMemory);
     }
 
-    if (opts::sanitize == opts::ThreadSanitizer) {
+    if (opts::isSanitizerEnabled(opts::ThreadSanitizer)) {
       func->addFnAttr(LLAttribute::SanitizeThread);
     }
   }
@@ -1010,17 +1026,20 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
 
   emitInstrumentationFnEnter(fd);
 
-  // this hack makes sure the frame pointer elimination optimization is
-  // disabled.
-  // this this eliminates a bunch of inline asm related issues.
+  // disable frame-pointer-elimination for functions with inline asm
   if (fd->hasReturnExp & 8) // has inline asm
   {
-    // emit a call to llvm_eh_unwind_init
-    LLFunction *hack = GET_INTRINSIC_DECL(eh_unwind_init);
-#if LDC_LLVM_VER >= 307
-    gIR->ir->CreateCall(hack, {});
+#if LDC_LLVM_VER >= 309
+    func->addAttribute(
+        LLAttributeSet::FunctionIndex,
+        llvm::Attribute::get(gIR->context(), "no-frame-pointer-elim", "true"));
+    func->addAttribute(
+        LLAttributeSet::FunctionIndex,
+        llvm::Attribute::get(gIR->context(), "no-frame-pointer-elim-non-leaf"));
 #else
-    gIR->ir->CreateCall(hack, "");
+    // hack: emit a call to llvm_eh_unwind_init
+    LLFunction *hack = GET_INTRINSIC_DECL(eh_unwind_init);
+    gIR->ir->CreateCall(hack, {});
 #endif
   }
 

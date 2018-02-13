@@ -37,7 +37,7 @@ public:
     Identifier *id;             // module Identifier
     Identifier *aliasId;
     int isstatic;               // !=0 if static import
-    Prot protection; // CALYPSO DMD BUG .d/.h mismatch
+    Prot protection;
 
     // Pairs of alias=name to bind into current namespace
     Identifiers names;
@@ -60,6 +60,7 @@ public:
     void semantic2(Scope *sc);
     Dsymbol *toAlias();
     void addMember(Scope *sc, ScopeDsymbol *sds);
+    void setScope(Scope* sc);
     Dsymbol *search(Loc loc, Identifier *ident, int flags = SearchLocalsOnly);
     bool overloadInsert(Dsymbol *s);
 
@@ -77,6 +78,7 @@ public:
 
 //     Modmap(Loc loc, StringExp *arg);
     virtual void _key(); // CALYPSO
+    void setScope(Scope* sc);
 };
 
 struct InterState;

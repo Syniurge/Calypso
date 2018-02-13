@@ -43,7 +43,6 @@ extern const llvm::DataLayout *gDataLayout;
 namespace ldc {
 
 // Define some basic types
-#if LDC_LLVM_VER >= 307
 typedef llvm::DIType *DIType;
 typedef llvm::DIFile *DIFile;
 typedef llvm::DIGlobalVariable *DIGlobalVariable;
@@ -54,39 +53,17 @@ typedef llvm::DIScope *DIScope;
 typedef llvm::DISubroutineType *DISubroutineType;
 typedef llvm::DISubprogram *DISubprogram;
 typedef llvm::DICompileUnit *DICompileUnit;
-#else
-typedef llvm::DIType DIType;
-typedef llvm::DIFile DIFile;
-typedef llvm::DIGlobalVariable DIGlobalVariable;
-typedef llvm::DIVariable DILocalVariable;
-typedef llvm::DILexicalBlock DILexicalBlock;
-typedef llvm::DIDescriptor DIScope;
-typedef llvm::DICompositeType DISubroutineType;
-typedef llvm::DISubprogram DISubprogram;
-typedef llvm::DICompileUnit DICompileUnit;
-#if LDC_LLVM_VER == 306
-typedef llvm::DIExpression DIExpression;
-#endif
-#endif
 
 class DIBuilder {
   IRState *const IR;
   llvm::DIBuilder DBuilder;
 
-#if LDC_LLVM_VER >= 307
   DICompileUnit CUNode;
-#else
-  const llvm::MDNode *CUNode;
-#endif
 
   const bool isTargetMSVCx64;
 
   DICompileUnit GetCU() {
-#if LDC_LLVM_VER >= 307
     return CUNode;
-#else
-    return llvm::DICompileUnit(CUNode);
-#endif
   }
 
   Loc currentLoc;
@@ -138,22 +115,23 @@ public:
 
   /// \brief Emits all things necessary for making debug info for a local
   /// variable vd.
-  /// \param ll       LL lvalue of the variable.
+  /// \param ll       LL value which, in combination with `addr`, yields the
+  /// storage/lvalue of the variable. For special-ref loop variables, specify
+  /// the storage/lvalue of the reference/pointer.
   /// \param vd       Variable declaration to emit debug info for.
   /// \param type     Type of variable if different from vd->type
   /// \param isThisPtr Variable is hidden this pointer
   /// \param forceAsLocal Emit as local even if the variable is a parameter
-  /// \param addr     An array of complex address operations.
+  /// \param isRefRVal Only relevant for ref/out parameters: indicates whether
+  /// ll & addr specify the reference's rvalue, i.e., the lvalue of the original
+  /// variable, instead of the reference's lvalue.
+  /// \param addr     An array of complex address operations encoding a DWARF
+  /// expression.
   void
   EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd, Type *type = nullptr,
                     bool isThisPtr = false, bool forceAsLocal = false,
-#if LDC_LLVM_VER >= 306
-                    llvm::ArrayRef<int64_t> addr = llvm::ArrayRef<int64_t>()
-#else
-                    llvm::ArrayRef<llvm::Value *> addr =
-                        llvm::ArrayRef<llvm::Value *>()
-#endif
-                        );
+                    bool isRefRVal = false,
+                    llvm::ArrayRef<int64_t> addr = llvm::ArrayRef<int64_t>());
 
   /// \brief Emits all things necessary for making debug info for a global
   /// variable vd.
@@ -168,19 +146,12 @@ private:
   llvm::LLVMContext &getContext();
   Module *getDefinedModule(Dsymbol *s);
   DIScope GetCurrentScope();
-  void Declare(const Loc &loc, llvm::Value *var, ldc::DILocalVariable divar
-#if LDC_LLVM_VER >= 306
-               ,
-               ldc::DIExpression diexpr
-#endif
-               );
+  void Declare(const Loc &loc, llvm::Value *storage, ldc::DILocalVariable divar,
+               ldc::DIExpression diexpr);
+  void SetValue(const Loc &loc, llvm::Value *value, ldc::DILocalVariable divar,
+                ldc::DIExpression diexpr);
   void AddFields(AggregateDeclaration *sd, ldc::DIFile file,
-#if LDC_LLVM_VER >= 306
-                 llvm::SmallVector<llvm::Metadata *, 16> &elems
-#else
-                 llvm::SmallVector<llvm::Value *, 16> &elems
-#endif
-                 );
+                 llvm::SmallVector<llvm::Metadata *, 16> &elems);
   DIFile CreateFile(Loc &loc);
   DIFile CreateFile();
   DIFile CreateFile(Dsymbol* decl);
@@ -212,14 +183,8 @@ public:
 
     uint64_t offset =
         gDataLayout->getStructLayout(type)->getElementOffset(index);
-#if LDC_LLVM_VER >= 306
     addr.push_back(llvm::dwarf::DW_OP_plus);
     addr.push_back(offset);
-#else
-    llvm::Type *int64Ty = llvm::Type::getInt64Ty(getContext());
-    addr.push_back(llvm::ConstantInt::get(int64Ty, llvm::DIBuilder::OpPlus));
-    addr.push_back(llvm::ConstantInt::get(int64Ty, offset));
-#endif
   }
 
   template <typename T> void OpOffset(T &addr, llvm::Value *val, int index) {
@@ -237,12 +202,7 @@ public:
       return;
     }
 
-#if LDC_LLVM_VER >= 306
     addr.push_back(llvm::dwarf::DW_OP_deref);
-#else
-    llvm::Type *int64Ty = llvm::Type::getInt64Ty(getContext());
-    addr.push_back(llvm::ConstantInt::get(int64Ty, llvm::DIBuilder::OpDeref));
-#endif
   }
 };
 

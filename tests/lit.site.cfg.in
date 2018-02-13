@@ -13,6 +13,8 @@ config.ldc2_bin            = "@LDC2_BIN@"
 config.ldcprofdata_bin     = "@LDCPROFDATA_BIN@"
 config.ldcprunecache_bin   = "@LDCPRUNECACHE_BIN@"
 config.ldc2_bin_dir        = "@LDC2_BIN_DIR@"
+config.ldc2_lib_dir        = "@LDC2_LIB_DIR@"
+config.ldc2_runtime_dir    = "@RUNTIME_DIR@"
 config.test_source_root    = "@TESTS_IR_DIR@"
 config.llvm_tools_dir      = "@LLVM_TOOLS_DIR@"
 config.llvm_version        = @LDC_LLVM_VER@
@@ -44,16 +46,20 @@ config.excludes = [
 if not config.with_PGO:
     config.excludes.append('PGO')
 
+# Explicit forwarding of environment variables
+env_cc = os.environ.get('CC', '')
+if env_cc:
+    config.environment['CC'] = env_cc
 
 # Define available features so that we can disable tests depending on LLVM version
 config.available_features.add("llvm%d" % config.llvm_version)
-# LLVM version history: 3.8, 3.9, 4.0, ...
-# config.llvm_version: 308, 309, 400, ...
-# plusoneable_llvmversion: 38, 39, 40, ...
+# LLVM version history: 3.8, 3.9, 4.0, 5.0, ...
+# config.llvm_version: 308, 309, 400, 500, ...
+# plusoneable_llvmversion: 38, 39, 40, 50, ...
 plusoneable_llvmversion = config.llvm_version // 10  + config.llvm_version%10
-for version in range(35, plusoneable_llvmversion+1):
+for version in range(37, plusoneable_llvmversion+1):
     config.available_features.add("atleast_llvm%d0%d" % (version//10, version%10))
-for version in range(plusoneable_llvmversion, 41):
+for version in range(plusoneable_llvmversion, 91):
     config.available_features.add("atmost_llvm%d0%d" % (version//10, version%10))
 
 # Define OS as available feature (Windows, Darwin, Linux)
@@ -70,7 +76,8 @@ if (platform.system() == 'Windows') and (config.default_target_bits == 32):
 if (platform.system() == 'Windows') and (config.default_target_bits == 64):
     config.available_features.add('Windows_x64')
 
-# Add "LTO" feature if linker support is available (LTO is supported from LLVM 3.9)
+# Add "LTO" feature if linker support and LTO plugin are available
+# (LTO is supported from LLVM 3.9)
 canDoLTO = False
 if (config.llvm_version >= 309):
     if (platform.system() == 'Darwin'):
@@ -78,14 +85,14 @@ if (config.llvm_version >= 309):
         p = subprocess.Popen(command, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, universal_newlines=True)
         text = p.stderr.read()
-        if "LTO support" in text:
+        if ("LTO support" in text and os.path.isfile(config.ldc2_lib_dir + '/libLTO-ldc.dylib')):
             canDoLTO = True
     elif (platform.system() == 'Linux'):
         command = ['ld', '-plugin']
         p = subprocess.Popen(command, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, universal_newlines=True)
         text = p.stderr.read()
-        if "plugin: missing argument" in text:
+        if ("plugin: missing argument" in text and os.path.isfile(config.ldc2_lib_dir + '/LLVMgold-ldc.so')):
             canDoLTO = True
 if canDoLTO:
     config.available_features.add('LTO')
@@ -94,10 +101,6 @@ config.target_triple = '(unused)'
 
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.dirname(__file__)
-
-# add LLVM tools bin dir to the path
-path = os.path.pathsep.join( (config.llvm_tools_dir, config.environment['PATH']) )
-config.environment['PATH'] = path
 
 # add test root dir to the path (FileCheck might sit there)
 path = os.path.pathsep.join( (config.test_source_root, config.environment['PATH']) )
@@ -112,6 +115,8 @@ config.environment['PATH'] = path
 config.substitutions.append( ('%ldc', config.ldc2_bin) )
 config.substitutions.append( ('%profdata', config.ldcprofdata_bin) )
 config.substitutions.append( ('%prunecache', config.ldcprunecache_bin) )
+config.substitutions.append( ('%llvm-spirv', os.path.join(config.llvm_tools_dir, 'llvm-spirv')) )
+config.substitutions.append( ('%runtimedir', config.ldc2_runtime_dir ) )
 
 # Add platform-dependent file extension substitutions
 if (platform.system() == 'Windows'):

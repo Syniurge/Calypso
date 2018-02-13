@@ -63,8 +63,13 @@ createAndSetDiagnosticsOutputFile(IRState &irs, llvm::LLVMContext &ctx,
         llvm::make_unique<llvm::yaml::Output>(diagnosticsOutputFile->os()));
 
     // If there is instrumentation data available, also output function hotness
-    if (!global.params.genInstrProf && global.params.datafileInstrProf)
+    if (!global.params.genInstrProf && global.params.datafileInstrProf) {
+#if LDC_LLVM_VER >= 500
+      ctx.setDiagnosticsHotnessRequested(true);
+#else
       ctx.setDiagnosticHotnessRequested(true);
+#endif
+    }
   }
 #endif
 
@@ -75,7 +80,8 @@ createAndSetDiagnosticsOutputFile(IRState &irs, llvm::LLVMContext &ctx,
 
 namespace {
 
-/// Add the linker options metadata flag.
+#if LDC_LLVM_VER < 500
+/// Add the Linker Options module flag.
 /// If the flag is already present, merge it with the new data.
 void emitLinkerOptions(IRState &irs, llvm::Module &M, llvm::LLVMContext &ctx) {
   if (!M.getModuleFlag("Linker Options")) {
@@ -85,11 +91,6 @@ void emitLinkerOptions(IRState &irs, llvm::Module &M, llvm::LLVMContext &ctx) {
     // Merge the Linker Options with the pre-existing one
     // (this can happen when passing a .bc file on the commandline)
 
-#if LDC_LLVM_VER < 306
-    // Passing a bitcode file on the commandline is not supported for LLVM 3.5.
-    llvm_unreachable(
-        "Merging of Linker Options is not implemented for LLVM 3.5");
-#else
     auto *moduleFlags = M.getModuleFlagsMetadata();
     for (unsigned i = 0, e = moduleFlags->getNumOperands(); i < e; ++i) {
       auto *flag = moduleFlags->getOperand(i);
@@ -118,9 +119,33 @@ void emitLinkerOptions(IRState &irs, llvm::Module &M, llvm::LLVMContext &ctx) {
 
       break;
     }
-#endif
   }
 }
+#else
+/// Add the "llvm.linker.options" metadata.
+/// If the metadata is already present, merge it with the new data.
+void emitLinkerOptions(IRState &irs, llvm::Module &M, llvm::LLVMContext &ctx) {
+  auto *linkerOptionsMD = M.getOrInsertNamedMetadata("llvm.linker.options");
+
+  // Add the new operands in front of the existing ones, such that linker
+  // options of .bc files passed on the cmdline are put _after_ the compiled .d
+  // file.
+
+  // Temporarily store metadata nodes that are already present
+  llvm::SmallVector<llvm::MDNode *, 5> oldMDNodes;
+  for (auto *MD : linkerOptionsMD->operands())
+    oldMDNodes.push_back(MD);
+
+  // Clear the list and add the new metadata nodes.
+  linkerOptionsMD->clearOperands();
+  for (auto *MD : irs.LinkerMetadataArgs)
+    linkerOptionsMD->addOperand(MD);
+
+  // Re-add metadata nodes that were already present
+  for (auto *MD : oldMDNodes)
+    linkerOptionsMD->addOperand(MD);
+}
+#endif
 
 void emitLLVMUsedArray(IRState &irs) {
   if (irs.usedArray.empty()) {
@@ -227,6 +252,10 @@ void CodeGenerator::finishLLModule(Module *m) {
 }
 
 void CodeGenerator::writeAndFreeLLModule(const char *filename) {
+  // Issue #1829: make sure all replaced global variables are replaced
+  // everywhere.
+  ir_->replaceGlobals();
+
   ir_->DBuilder.Finalize();
 
   emitLLVMUsedArray(*ir_);
@@ -237,12 +266,7 @@ void CodeGenerator::writeAndFreeLLModule(const char *filename) {
       ir_->module.getOrInsertNamedMetadata("llvm.ident");
   std::string Version("ldc version ");
   Version.append(global.ldc_version);
-#if LDC_LLVM_VER >= 306
-  llvm::Metadata *IdentNode[] =
-#else
-  llvm::Value *IdentNode[] =
-#endif
-      {llvm::MDString::get(ir_->context(), Version)};
+  llvm::Metadata *IdentNode[] = {llvm::MDString::get(ir_->context(), Version)};
   IdentMetadata->addOperand(llvm::MDNode::get(ir_->context(), IdentNode));
 
   std::unique_ptr<llvm::tool_output_file> diagnosticsOutputFile =

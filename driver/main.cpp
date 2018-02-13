@@ -23,6 +23,7 @@
 #include "cpp/calypso.h"
 #include "cpp/cppmodule.h"
 #include "driver/cl_options.h"
+#include "driver/cl_options_sanitizers.h"
 #include "driver/codegenerator.h"
 #include "driver/configfile.h"
 #include "driver/dcomputecodegenerator.h"
@@ -57,9 +58,7 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
-#if LDC_LLVM_VER >= 306
 #include "llvm/Target/TargetSubtargetInfo.h"
-#endif
 #include "llvm/LinkAllIR.h"
 #include "llvm/IR/LLVMContext.h"
 #include <assert.h>
@@ -119,32 +118,44 @@ static inline llvm::Optional<llvm::Reloc::Model> getRelocModel() {
 static inline llvm::Reloc::Model getRelocModel() { return mRelocModel; }
 #endif
 
-void printVersion() {
-  printf("LDC - the LLVM D compiler (%s):\n", global.ldc_version);
-  printf("  based on DMD %s and LLVM %s\n", global.version,
-         global.llvm_version);
-  printf("  built with %s\n", ldc::built_with_Dcompiler_version);
+// This function exits the program.
+void printVersion(llvm::raw_ostream &OS) {
+  OS << "LDC - the LLVM D compiler (" << global.ldc_version << "):\n";
+  OS << "  based on DMD " << global.version << " and LLVM " << global.llvm_version << "\n";
+  OS << "  built with " << ldc::built_with_Dcompiler_version << "\n";
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
-  printf("  compiled with address sanitizer enabled\n");
+  OS << "  compiled with address sanitizer enabled\n";
 #endif
 #endif
-  printf("  Default target: %s\n", llvm::sys::getDefaultTargetTriple().c_str());
+  OS << "  Default target: " << llvm::sys::getDefaultTargetTriple() << "\n";
   std::string CPU = llvm::sys::getHostCPUName();
   if (CPU == "generic") {
     CPU = "(unknown)";
   }
-  printf("  Host CPU: %s\n", CPU.c_str());
-  printf("  http://dlang.org - http://wiki.dlang.org/LDC\n");
-  printf("\n");
+  OS << "  Host CPU: " << CPU << "\n";
+  OS << "  http://dlang.org - http://wiki.dlang.org/LDC\n";
+  OS << "\n";
 
   // Without explicitly flushing here, only the target list is visible when
   // redirecting stdout to a file.
-  fflush(stdout);
+  OS.flush();
 
-  llvm::TargetRegistry::printRegisteredTargetsForVersion();
+  llvm::TargetRegistry::printRegisteredTargetsForVersion(
+#if LDC_LLVM_VER >= 600
+    OS
+#endif
+    );
+
   exit(EXIT_SUCCESS);
 }
+
+// This function exits the program.
+void printVersionStdout() {
+  printVersion(llvm::outs());
+  assert(false);
+}
+
 
 namespace {
 
@@ -345,14 +356,16 @@ void parseCommandLine(int argc, char **argv, Strings &sourceFiles,
   // just ignore errors for now, they are still printed
   cfg_file.read(explicitConfFile, cfg_triple.c_str());
 
-  // insert switches from config file before all explicit ones
-  allArguments.insert(allArguments.begin() + 1, cfg_file.switches_begin(),
-                      cfg_file.switches_end());
+  cfg_file.extendCommandLine(allArguments);
 
   // finalize by expanding response files specified in config file
   expandResponseFiles(allocator, allArguments);
 
+#if LDC_LLVM_VER >= 600
   cl::SetVersionPrinter(&printVersion);
+#else
+  cl::SetVersionPrinter(&printVersionStdout);
+#endif
 
   opts::hideLLVMOptions();
   opts::createClashingOptions();
@@ -385,7 +398,7 @@ void parseCommandLine(int argc, char **argv, Strings &sourceFiles,
     fprintf(global.stdmsg, "binary    %s\n", exe_path::getExePath().c_str());
     fprintf(global.stdmsg, "version   %s (DMD %s, LLVM %s)\n",
             global.ldc_version, global.version, global.llvm_version);
-    const std::string &path = cfg_file.path();
+    const std::string path = cfg_file.path();
     if (!path.empty()) {
       fprintf(global.stdmsg, "config    %s (%s)\n", path.c_str(),
               cfg_triple.c_str());
@@ -459,6 +472,8 @@ void parseCommandLine(int argc, char **argv, Strings &sourceFiles,
     initFromPathString(global.params.datafileInstrProf, usefileInstrProf);
   }
 #endif
+
+  initializeSanitizerOptionsFromCmdline();
 
   processVersions(debugArgs, "debug", DebugCondition::setGlobalLevel,
                   DebugCondition::addGlobalIdent);
@@ -621,20 +636,15 @@ void initializePasses() {
   initializeTarget(Registry);
 
 // Initialize passes not included above
-#if LDC_LLVM_VER < 306
-  initializeDebugIRPass(Registry);
-#endif
 #if LDC_LLVM_VER < 308
   initializeIPA(Registry);
 #endif
 #if LDC_LLVM_VER >= 400
   initializeRewriteSymbolsLegacyPassPass(Registry);
-#elif LDC_LLVM_VER >= 306
+#else
   initializeRewriteSymbolsPass(Registry);
 #endif
-#if LDC_LLVM_VER >= 307
   initializeSjLjEHPreparePass(Registry);
-#endif
 }
 
 /// Register the MIPS ABI.
@@ -661,13 +671,9 @@ static void registerMipsABI() {
 /// Also defines D_HardFloat or D_SoftFloat depending if FPU should be used
 void registerPredefinedFloatABI(const char *soft, const char *hard,
                                 const char *softfp = nullptr) {
-// Use target floating point unit instead of s/w float routines
-#if LDC_LLVM_VER >= 307
+  // Use target floating point unit instead of s/w float routines
   // FIXME: This is a semantic change!
   bool useFPU = gTargetMachine->Options.FloatABIType == llvm::FloatABI::Hard;
-#else
-  bool useFPU = !gTargetMachine->Options.UseSoftFloat;
-#endif
   VersionCondition::addPredefinedGlobalIdent(useFPU ? "D_HardFloat"
                                                     : "D_SoftFloat");
 
@@ -729,10 +735,6 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("ARM_Thumb");
     registerPredefinedFloatABI("ARM_SoftFloat", "ARM_HardFloat", "ARM_SoftFP");
     break;
-#if LDC_LLVM_VER == 305
-  case llvm::Triple::arm64:
-  case llvm::Triple::arm64_be:
-#endif
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_be:
     VersionCondition::addPredefinedGlobalIdent("AArch64");
@@ -749,6 +751,9 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("MIPS64");
     registerPredefinedFloatABI("MIPS_SoftFloat", "MIPS_HardFloat");
     registerMipsABI();
+    break;
+  case llvm::Triple::msp430:
+    VersionCondition::addPredefinedGlobalIdent("MSP430");
     break;
 #if defined RISCV_LLVM_DEV || LDC_LLVM_VER >= 400
 #if defined RISCV_LLVM_DEV
@@ -798,9 +803,11 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("BigEndian");
   }
 
-  // a generic 64bit version
+  // Set versions for arch bitwidth
   if (global.params.isLP64) {
     VersionCondition::addPredefinedGlobalIdent("D_LP64");
+  } else if (global.params.targetTriple->isArch16Bit()) {
+    VersionCondition::addPredefinedGlobalIdent("D_P16");
   }
 
   if (gTargetMachine->getRelocationModel() == llvm::Reloc::PIC_) {
@@ -883,6 +890,10 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("AIX");
     VersionCondition::addPredefinedGlobalIdent("Posix");
     break;
+  case llvm::Triple::UnknownOS:
+    if (arch == llvm::Triple::msp430)
+      break;
+    // fallthrough
   default:
     switch (global.params.targetTriple->getEnvironment()) {
     case llvm::Triple::Android:
@@ -902,8 +913,11 @@ void registerPredefinedVersions() {
   VersionCondition::addPredefinedGlobalIdent("LDC");
   VersionCondition::addPredefinedGlobalIdent("all");
   VersionCondition::addPredefinedGlobalIdent("D_Version2");
+
 #if LDC_LLVM_SUPPORTED_TARGET_SPIRV || LDC_LLVM_SUPPORTED_TARGET_NVPTX
-  VersionCondition::addPredefinedGlobalIdent("LDC_DCompute");
+  if (dcomputeTargets.size() != 0) {
+    VersionCondition::addPredefinedGlobalIdent("LDC_DCompute");
+  }
 #endif
 
   if (global.params.doDocComments) {
@@ -932,16 +946,17 @@ void registerPredefinedVersions() {
     VersionCondition::addPredefinedGlobalIdent("D_ObjectiveC");
   }
 
-  // Pass sanitizer arguments to linker. Requires clang.
-  if (opts::sanitize == opts::AddressSanitizer) {
+  // Define sanitizer versions.
+  if (opts::isSanitizerEnabled(opts::AddressSanitizer)) {
     VersionCondition::addPredefinedGlobalIdent("LDC_AddressSanitizer");
   }
-
-  if (opts::sanitize == opts::MemorySanitizer) {
+  if (opts::isSanitizerEnabled(opts::CoverageSanitizer)) {
+    VersionCondition::addPredefinedGlobalIdent("LDC_CoverageSanitizer");
+  }
+  if (opts::isSanitizerEnabled(opts::MemorySanitizer)) {
     VersionCondition::addPredefinedGlobalIdent("LDC_MemorySanitizer");
   }
-
-  if (opts::sanitize == opts::ThreadSanitizer) {
+  if (opts::isSanitizerEnabled(opts::ThreadSanitizer)) {
     VersionCondition::addPredefinedGlobalIdent("LDC_ThreadSanitizer");
   }
 
@@ -1022,10 +1037,6 @@ int cppmain(int argc, char **argv) {
 #if LDC_LLVM_VER >= 308
   static llvm::DataLayout DL = gTargetMachine->createDataLayout();
   gDataLayout = &DL;
-#elif LDC_LLVM_VER >= 307
-  gDataLayout = gTargetMachine->getDataLayout();
-#elif LDC_LLVM_VER >= 306
-  gDataLayout = gTargetMachine->getSubtargetImpl()->getDataLayout();
 #else
   gDataLayout = gTargetMachine->getDataLayout();
 #endif
@@ -1095,9 +1106,19 @@ void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
       {
         cg.emit(m);
       }
-      if (atCompute != DComputeCompileFor::hostOnly)
+      if (atCompute != DComputeCompileFor::hostOnly) {
         computeModules.push_back(m);
-
+        if (atCompute == DComputeCompileFor::deviceOnly) {
+          // Remove m's object file from list of object files
+          auto s = m->objfile->name->str;
+          for (size_t j = 0; j < global.params.objfiles->dim; j++) {
+            if (s == (*global.params.objfiles)[j]) {
+              global.params.objfiles->remove(j);
+              break;
+            }
+          }
+        }
+      }
       if (global.errors)
         fatal();
     }
@@ -1108,6 +1129,10 @@ void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
 
       dccg.writeModules();
     }
+    // We may have removed all object files, if so don't link.
+    if (global.params.objfiles->dim == 0)
+      global.params.link = false;
+
   }
 }
 

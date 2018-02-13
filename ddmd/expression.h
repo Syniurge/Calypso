@@ -43,17 +43,24 @@ class TemplateInstance;
 class TemplateDeclaration;
 class ClassDeclaration;
 class BinExp;
-struct Symbol;          // back end symbol
 class OverloadSet;
 class Initializer;
 class StringExp;
 class ArrayExp;
 class SliceExp;
 struct UnionExp;
+#ifdef IN_GCC
+typedef union tree_node Symbol;
+#else
+struct Symbol;          // back end symbol
+#endif
+
+void initPrecedence();
+
 #if IN_LLVM
 class SymbolDeclaration;
 namespace llvm {
-    class GlobalVariable;
+    class Constant;
     class Value;
 }
 #endif
@@ -63,6 +70,7 @@ void initPrecedence();
 Expression *resolveProperties(Scope *sc, Expression *e);
 Expression *resolvePropertiesOnly(Scope *sc, Expression *e1);
 bool checkAccess(Loc loc, Scope *sc, Expression *e, Declaration *d);
+bool checkAccess(Loc loc, Scope *sc, Package *p);
 Expression *build_overload(Loc loc, Scope *sc, Expression *ethis, Expression *earg, Dsymbol *d);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 void expandTuples(Expressions *exps);
@@ -142,7 +150,7 @@ public:
     Expression *trySemantic(Scope *sc);
 
     // kludge for template.isExpression()
-    int dyncast() { return DYNCAST_EXPRESSION; }
+    int dyncast() const { return DYNCAST_EXPRESSION; }
 
     void print();
     const char *toChars();
@@ -468,7 +476,7 @@ public:
 
     // A global variable for taking the address of this struct literal constant,
     // if it already exists. Used to resolve self-references.
-    llvm::GlobalVariable *globalVar;
+    llvm::Constant *globalVar;
 #endif
 
     bool useStaticInit;         // if this is true, use the StructDeclaration's init symbol
@@ -803,6 +811,8 @@ class DotIdExp : public UnaExp
 {
 public:
     Identifier *ident;
+    bool noderef;       // true if the result of the expression will never be dereferenced
+    bool wantsym;       // do not replace Symbol with its initializer during semantic()
 
     static DotIdExp *create(Loc loc, Expression *e, Identifier *ident);
     Expression *semantic(Scope *sc);
@@ -1017,6 +1027,7 @@ public:
     Expression *semantic(Scope *sc);
     bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
+    Expression *modifiableLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -1026,6 +1037,7 @@ public:
     Expression *semantic(Scope *sc);
     bool isLvalue();
     Expression *toLvalue(Scope *sc, Expression *e);
+    Expression *modifiableLvalue(Scope *sc, Expression *e);
     void accept(Visitor *v) { v->visit(this); }
 };
 

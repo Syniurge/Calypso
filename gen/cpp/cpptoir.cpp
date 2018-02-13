@@ -953,9 +953,11 @@ void LangPlugin::toDefineStruct(::StructDeclaration* decl)
 
     // Define the __initZ symbol.
     IrAggr *ir = getIrAggr(decl);
-    llvm::GlobalVariable *initZ = ir->getInitSymbol();
-    initZ->setInitializer(ir->getDefaultInit());
-    setLinkage(decl, initZ);
+    auto &initZ = ir->getInitSymbol();
+    auto initGlobal = llvm::cast<LLGlobalVariable>(initZ);
+    assert(initGlobal);
+    setLinkage(decl, initGlobal);
+    initZ = gIR->setGlobalVarInitializer(initGlobal, ir->getDefaultInit());
 
     // emit typeinfo
     DtoTypeInfoOf(decl->type);
@@ -1003,9 +1005,11 @@ void LangPlugin::toDefineClass(::ClassDeclaration* decl)
     IrAggr *ir = getIrAggr(decl);
     const auto lwc = DtoLinkage(decl);
 
-    llvm::GlobalVariable *initZ = ir->getInitSymbol();
-    initZ->setInitializer(ir->getDefaultInit());
-    setLinkage(lwc, initZ);
+    auto &initZ = ir->getInitSymbol();
+    auto initGlobal = llvm::cast<LLGlobalVariable>(initZ);
+    assert(initGlobal);
+    setLinkage(lwc, initGlobal);
+    initZ = gIR->setGlobalVarInitializer(initGlobal, ir->getDefaultInit());
 
 //     llvm::GlobalVariable *vtbl = ir->getVtblSymbol();
 //     vtbl->setInitializer(ir->getVtblInit());

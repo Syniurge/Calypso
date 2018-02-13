@@ -404,7 +404,7 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     assert(isForeignInstance(ti));
     auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
 
-    DeclMapper m(static_cast<cpp::Module*>(_scope->module));
+    DeclMapper m(static_cast<cpp::Module*>(_scope->_module));
     m.addImplicitDecls = false;
 
     auto Inst = c_ti->Inst.get<clang::NamedDecl*>();

@@ -75,9 +75,7 @@ extern cl::opt<bool> m64bits;
 extern cl::opt<std::string> mCPU;
 extern cl::list<std::string> mAttrs;
 extern cl::opt<std::string> mTargetTriple;
-#if LDC_LLVM_VER >= 307
 extern cl::opt<std::string> mABI;
-#endif
 extern cl::opt<llvm::Reloc::Model> mRelocModel;
 extern cl::opt<llvm::CodeModel::Model> mCodeModel;
 extern cl::opt<bool> disableFpElim;
@@ -131,6 +129,7 @@ extern cl::opt<std::string> saveOptimizationRecord;
 #endif
 #if LDC_LLVM_SUPPORTED_TARGET_SPIRV || LDC_LLVM_SUPPORTED_TARGET_NVPTX
 extern cl::list<std::string> dcomputeTargets;
+extern cl::opt<std::string> dcomputeFilePrefix;
 #endif
 }
 #endif

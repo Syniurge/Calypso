@@ -81,7 +81,7 @@ Modmap::Modmap(Loc loc, StringExp *arg)
 void Modmap::importAll(Scope *sc)
 {
     assert(arg->sz == 1); // FIXME
-    calypso.pch.add(arg->toPtr(), sc->module);
+    calypso.pch.add(arg->toPtr(), sc->_module);
 }
 
 void Modmap::semantic(Scope* sc)

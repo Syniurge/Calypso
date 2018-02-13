@@ -55,7 +55,10 @@ Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during head
 LDC – the LLVM-based D Compiler
 ===============================
 
+[![Build Status](https://circleci.com/gh/ldc-developers/ldc/tree/master.svg?style=svg)][6]
+[![Build Status](https://semaphoreci.com/api/v1/ldc-developers/ldc/branches/master/shields_badge.svg)][4]
 [![Build Status](https://travis-ci.org/ldc-developers/ldc.png?branch=master)][1]
+[![Build Status](https://ci.appveyor.com/api/projects/status/2cfhvg79782n4nth/branch/master?svg=true)][5]
 [![Bountysource](https://www.bountysource.com/badge/tracker?tracker_id=283332)][3]
 
 The LDC project aims to provide a portable D programming language
@@ -116,7 +119,7 @@ libraries is available on the project wiki for
 [Linux and OS X](http://wiki.dlang.org/Building_LDC_from_source) and
 [Windows](http://wiki.dlang.org/Building_and_hacking_LDC_on_Windows_using_MSVC).
 
-If you have a working C++ build environment, CMake, and a current LLVM (≥ 3.5)
+If you have a working C++ build environment, CMake, and a current LLVM (≥ 3.7)
 available, there should be no big surprises.
 Building LDC also requires a working D compiler, DMD and LDC are supported.
 (LDC 0.17 is the last version that does not need a D compiler,
@@ -142,6 +145,9 @@ the D wiki: http://wiki.dlang.org/LDC
 Feedback of any kind is very much appreciated!
 
 
-[1]: https://travis-ci.org/ldc-developers/ldc "Build Status"
+[1]: https://travis-ci.org/ldc-developers/ldc "Travis CI Build Status"
 [2]: https://coveralls.io/r/ldc-developers/ldc "Test Coverage"
 [3]: https://www.bountysource.com/trackers/283332-ldc?utm_source=283332&utm_medium=shield&utm_campaign=TRACKER_BADGE "Bountysource"
+[4]: https://semaphoreci.com/ldc-developers/ldc "Semaphore CI Build Status"
+[5]: https://ci.appveyor.com/project/kinke/ldc/history "AppVeyor CI Build Status"
+[6]: https://circleci.com/gh/ldc-developers/ldc/tree/master "Circle CI Build Status"
