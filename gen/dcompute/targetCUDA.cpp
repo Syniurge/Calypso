@@ -7,12 +7,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if LDC_LLVM_SUPPORTED_TARGET_NVPTX
+
 #include "gen/dcompute/target.h"
 #include "gen/dcompute/druntime.h"
 #include "gen/metadata.h"
 #include "gen/abi-nvptx.h"
 #include "gen/logger.h"
 #include "gen/optimizer.h"
+#include "gen/to_string.h"
 #include "llvm/Transforms/Scalar.h"
 #include "driver/targetmachine.h"
 #include <cstring>
@@ -47,20 +50,17 @@ public:
     // sm version?
   }
   void setGTargetMachine() override {
-    char buf[8];
-    bool is64 = global.params.is64bit;
-    snprintf(buf, sizeof(buf), "sm_%d", tversion / 10);
+    const bool is64 = global.params.is64bit;
+
     gTargetMachine = createTargetMachine(
         is64 ? "nvptx64-nvidia-cuda" : "nvptx-nvidia-cuda",
-        is64 ? "nvptx64" : "nvptx", buf, {},
+        is64 ? "nvptx64" : "nvptx", "sm_" + ldc::to_string(tversion / 10), {},
         is64 ? ExplicitBitness::M64 : ExplicitBitness::M32, ::FloatABI::Hard,
         llvm::Reloc::Static, llvm::CodeModel::Medium, codeGenOptLevel(), false,
         false);
   }
 
   void addKernelMetadata(FuncDeclaration *df, llvm::Function *llf) override {
-// Fix 3.5.2 build failures. Remove when dropping 3.5 support.
-#if LDC_LLVM_VER >= 306
     // TODO: Handle Function attibutes
     llvm::NamedMDNode *na =
         _ir->module.getOrInsertNamedMetadata("nvvm.annotations");
@@ -72,7 +72,6 @@ public:
     llvm::Metadata *arr[] = {fn, kstr, one};
     llvm::MDNode *tup = llvm::MDTuple::get(ctx, arr);
     na->addOperand(tup);
-#endif
   }
 };
 } // anonymous namespace.
@@ -80,3 +79,5 @@ public:
 DComputeTarget *createCUDATarget(llvm::LLVMContext &c, int sm) {
   return new TargetCUDA(c, sm);
 };
+
+#endif // LDC_LLVM_SUPPORTED_TARGET_NVPTX

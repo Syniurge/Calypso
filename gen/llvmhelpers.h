@@ -25,11 +25,7 @@
 struct IRState;
 
 // An arrayreference type with initializer_list support (C++11):
-#if LDC_LLVM_VER >= 307
 template <class T> using ArrayParam = llvm::ArrayRef<T>;
-#else
-template <class T> using ArrayParam = std::vector<T>;
-#endif
 
 llvm::LLVMContext& getGlobalContext();
 
@@ -130,9 +126,6 @@ LLConstant *DtoTypeInfoOf(Type *ty, bool base = true);
 
 // target stuff
 void findDefaultTarget();
-
-/// Returns true if there is any unaligned type inside the aggregate.
-bool hasUnalignedFields(Type *t);
 
 /// Returns a pointer to the given member field of an aggregate.
 ///

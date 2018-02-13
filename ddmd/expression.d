@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (c) 1999-2016 by Digital Mars, All Rights Reserved
+ * Copyright:   Copyright (c) 1999-2017 by Digital Mars, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(DMDSRC _expression.d)
@@ -917,6 +917,9 @@ extern (C++) Expression resolveUFCSProperties(Scope* sc, Expression e1, Expressi
         e = searchUFCS(sc, dti, dti.ti.name);
     }
     else
+        return null;
+
+    if (e is null)
         return null;
 
     // Rewrite
@@ -2623,9 +2626,9 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
     }
 
     // kludge for template.isExpression()
-    override final int dyncast()
+    override final DYNCAST dyncast() const
     {
-        return DYNCAST_EXPRESSION;
+        return DYNCAST.expression;
     }
 
     override final void print()
@@ -2830,6 +2833,21 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
             assert(type);
             if (!type.isMutable())
             {
+                if (op == TOKdotvar)
+                {
+                    if (isNeedThisScope(sc, (cast(DotVarExp) this).var))
+                        for (Dsymbol s = sc.func; s; s = s.toParent2())
+                    {
+                        FuncDeclaration ff = s.isFuncDeclaration();
+                        if (!ff)
+                            break;
+                        if (!ff.type.isMutable)
+                        {
+                            error("cannot modify %s in %s function", toChars(), MODtoChars(type.mod));
+                            return new ErrorExp();
+                        }
+                    }
+                }
                 error("cannot modify %s expression %s", MODtoChars(type.mod), toChars());
                 return new ErrorExp();
             }
@@ -3957,6 +3975,30 @@ extern (C++) class IdentifierExp : Expression
             return e;
         }
 
+        // If we've reached this point and are inside a with() scope then we may
+        // try one last attempt by checking whether the 'wthis' object supports
+        // dynamic dispatching via opDispatch.
+        // This is done by rewriting this expression as wthis.ident.
+        for (Scope* sc2 = sc; sc2; sc2 = sc2.enclosing)
+        {
+            if (!sc2.scopesym)
+                continue;
+
+            if (auto ss = sc2.scopesym.isWithScopeSymbol())
+            {
+                if (ss.withstate.wthis)
+                {
+                    Expression e;
+                    e = new VarExp(loc, ss.withstate.wthis);
+                    e = new DotIdExp(loc, e, ident);
+                    e = e.trySemantic(sc);
+                    if (e)
+                        return e;
+                }
+                break;
+            }
+        }
+
         const(char)* n = importHint(ident.toChars());
         if (n)
             error("'%s' is not defined, perhaps you need to import %s; ?", ident.toChars(), n);
@@ -4382,7 +4424,7 @@ extern (C++) final class SuperExp : ThisExp
             s = s.toParent();
         assert(s);
         cd = s.isClassDeclaration();
-        //printf("parent is %s %s\n", fd.toParent()->kind(), fd.toParent()->toChars());
+        //printf("parent is %s %s\n", fd.toParent().kind(), fd.toParent().toChars());
         if (!cd)
             goto Lerr;
         if (!cd.baseClass)
@@ -4430,7 +4472,7 @@ extern (C++) final class NullExp : Expression
 
     override bool equals(RootObject o)
     {
-        if (o && o.dyncast() == DYNCAST_EXPRESSION)
+        if (o && o.dyncast() == DYNCAST.expression)
         {
             Expression e = cast(Expression)o;
             if (e.op == TOKnull && type.equals(e.type))
@@ -4525,7 +4567,7 @@ extern (C++) final class StringExp : Expression
     override bool equals(RootObject o)
     {
         //printf("StringExp::equals('%s') %s\n", o.toChars(), toChars());
-        if (o && o.dyncast() == DYNCAST_EXPRESSION)
+        if (o && o.dyncast() == DYNCAST.expression)
         {
             Expression e = cast(Expression)o;
             if (e.op == TOKstring)
@@ -4963,13 +5005,13 @@ extern (C++) final class TupleExp : Expression
                 Expression e = new DsymbolExp(loc, s);
                 this.exps.push(e);
             }
-            else if (o.dyncast() == DYNCAST_EXPRESSION)
+            else if (o.dyncast() == DYNCAST.expression)
             {
                 auto e = (cast(Expression)o).copy();
                 e.loc = loc;    // Bugzilla 15669
                 this.exps.push(e);
             }
-            else if (o.dyncast() == DYNCAST_TYPE)
+            else if (o.dyncast() == DYNCAST.type)
             {
                 Type t = cast(Type)o;
                 Expression e = new TypeExp(loc, t);
@@ -5100,7 +5142,7 @@ extern (C++) final class ArrayLiteralExp : Expression
     {
         if (this == o)
             return true;
-        if (o && o.dyncast() == DYNCAST_EXPRESSION && (cast(Expression)o).op == TOKarrayliteral)
+        if (o && o.dyncast() == DYNCAST.expression && (cast(Expression)o).op == TOKarrayliteral)
         {
             ArrayLiteralExp ae = cast(ArrayLiteralExp)o;
             if (elements.dim != ae.elements.dim)
@@ -5306,7 +5348,7 @@ extern (C++) final class AssocArrayLiteralExp : Expression
     {
         if (this == o)
             return true;
-        if (o && o.dyncast() == DYNCAST_EXPRESSION && (cast(Expression)o).op == TOKassocarrayliteral)
+        if (o && o.dyncast() == DYNCAST.expression && (cast(Expression)o).op == TOKassocarrayliteral)
         {
             AssocArrayLiteralExp ae = cast(AssocArrayLiteralExp)o;
             if (keys.dim != ae.keys.dim)
@@ -5413,7 +5455,7 @@ public:
 
         // A global variable for taking the address of this struct literal constant,
         // if it already exists. Used to resolve self-references.
-        void* globalVar; // llvm::GlobalVariable*
+        void* globalVar; // llvm::Constant*
     }
 
     bool useStaticInit;     /// if this is true, use the StructDeclaration's init symbol
@@ -5461,7 +5503,7 @@ public:
     {
         if (this == o)
             return true;
-        if (o && o.dyncast() == DYNCAST_EXPRESSION && (cast(Expression)o).op == TOKstructliteral)
+        if (o && o.dyncast() == DYNCAST.expression && (cast(Expression)o).op == TOKstructliteral)
         {
             StructLiteralExp se = cast(StructLiteralExp)o;
             if (!type.equals(se.type))
@@ -6804,7 +6846,7 @@ extern (C++) final class FuncExp : Expression
     {
         if (this == o)
             return true;
-        if (o.dyncast() != DYNCAST_EXPRESSION)
+        if (o.dyncast() != DYNCAST.expression)
             return false;
         if ((cast(Expression)o).op == TOKfunction)
         {
@@ -7729,6 +7771,12 @@ extern (C++) final class IsExp : Expression
                 // not valid for a parameter
                 break;
 
+            case TOKvector:
+                if (targ.ty != Tvector)
+                    goto Lno;
+                tded = (cast(TypeVector)targ).basetype;
+                break;
+
             default:
                 assert(0);
             }
@@ -8022,7 +8070,7 @@ extern (C++) abstract class BinExp : Expression
 
         // T opAssign floating yields a floating. Prevent truncating conversions (float to int).
         // See issue 3841.
-        // Should we also prevent double to float (type.isfloating() && type.size() < t2 ->size()) ?
+        // Should we also prevent double to float (type.isfloating() && type.size() < t2.size()) ?
         if (op == TOKaddass || op == TOKminass ||
             op == TOKmulass || op == TOKdivass || op == TOKmodass ||
             op == TOKpowass)
@@ -8586,6 +8634,7 @@ extern (C++) final class DotIdExp : UnaExp
 {
     Identifier ident;
     bool noderef;       // true if the result of the expression will never be dereferenced
+    bool wantsym;       // do not replace Symbol with its initializer during semantic()
 
     extern (D) this(Loc loc, Expression e, Identifier ident)
     {
@@ -8837,8 +8886,12 @@ extern (C++) final class DotIdExp : UnaExp
                     if (v.type.ty == Terror)
                         return new ErrorExp();
 
-                    if ((v.storage_class & STCmanifest) && v._init)
+                    if ((v.storage_class & STCmanifest) && v._init && !wantsym)
                     {
+                        /* Normally, the replacement of a symbol with its initializer is supposed to be in semantic2().
+                         * Introduced by https://github.com/dlang/dmd/pull/5588 which should probably
+                         * be reverted. `wantsym` is the hack to work around the problem.
+                         */
                         if (v.inuse)
                         {
                             .error(loc, "circular initialization of %s '%s'", v.kind(), v.toPrettyChars());
@@ -9010,7 +9063,7 @@ extern (C++) final class DotIdExp : UnaExp
             if (e1.op == TOKtype || e1.op == TOKtemplate)
                 flag = 0;
             e = e1.type.dotExp(sc, e1, ident, flag | (noderef ? Type.DotExpFlag.noDeref : 0));
-            if (!flag || e)
+            if (e)
                 e = e.semantic(sc);
             return e;
         }
@@ -9095,7 +9148,7 @@ extern (C++) final class DotVarExp : UnaExp
             {
                 RootObject o = (*tup.objects)[i];
                 Expression e;
-                if (o.dyncast() == DYNCAST_EXPRESSION)
+                if (o.dyncast() == DYNCAST.expression)
                 {
                     e = cast(Expression)o;
                     if (e.op == TOKdsymbol)
@@ -9104,11 +9157,11 @@ extern (C++) final class DotVarExp : UnaExp
                         e = new DotVarExp(loc, ev, s.isDeclaration());
                     }
                 }
-                else if (o.dyncast() == DYNCAST_DSYMBOL)
+                else if (o.dyncast() == DYNCAST.dsymbol)
                 {
                     e = new DsymbolExp(loc, cast(Dsymbol)o);
                 }
-                else if (o.dyncast() == DYNCAST_TYPE)
+                else if (o.dyncast() == DYNCAST.type)
                 {
                     e = new TypeExp(loc, cast(Type)o);
                 }
@@ -10009,7 +10062,14 @@ extern (C++) final class CallExp : UnaExp
             else if (e1.op == TOKtype && t1.isscalar())
             {
                 Expression e;
-                t1 = e1.type; // CALYPSO workaround for DMD BUG, in enumA fail = enumA() rhs has an int type
+
+                // Make sure to use the the enum type itself rather than its
+                // base type (see bugzilla 16346)
+                if (e1.type.ty == Tenum)
+                {
+                    t1 = e1.type;
+                }
+
                 if (!arguments || arguments.dim == 0)
                 {
                     e = t1.defaultInitLiteral(loc);
@@ -10117,7 +10177,7 @@ extern (C++) final class CallExp : UnaExp
                     return ue.e1;
                 ethis = ue.e1;
                 tthis = ue.e1.type;
-                if (!f.type.isscope())
+                if (!(f.type.ty == Tfunction && (cast(TypeFunction)f.type).isscope))
                 {
                     if (global.params.vsafe && checkParamArgumentEscape(sc, f, Id.This, ethis, false))
                         return new ErrorExp();
@@ -10189,6 +10249,14 @@ extern (C++) final class CallExp : UnaExp
                         ue.e1 = ue.e1.semantic(sc);
                     }
                 }
+            }
+            // If we've got a pointer to a function then deference it
+            // https://issues.dlang.org/show_bug.cgi?id=16483
+            if (e1.type.ty == Tpointer && e1.type.nextOf().ty == Tfunction)
+            {
+                Expression e = new PtrExp(loc, e1);
+                e.type = e1.type.nextOf();
+                e1 = e;
             }
             t1 = e1.type;
         }
@@ -10391,7 +10459,7 @@ extern (C++) final class CallExp : UnaExp
                 if (tthis)
                     tthis.modToBuffer(&buf);
 
-                //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0]->type.deco);
+                //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0].type.deco);
                 .error(loc, "%s %s %s is not callable using argument types %s", p, e1.toChars(), parametersTypeToChars(tf.parameters, tf.varargs), buf.peekString());
 
                 return new ErrorExp();
@@ -10460,7 +10528,7 @@ extern (C++) final class CallExp : UnaExp
                     argExpTypesToCBuffer(&buf, arguments);
                     buf.writeByte(')');
 
-                    //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0]->type.deco);
+                    //printf("tf = %s, args = %s\n", tf.deco, (*arguments)[0].type.deco);
                     .error(loc, "%s %s is not callable using argument types %s", e1.toChars(), parametersTypeToChars(tf.parameters, tf.varargs), buf.peekString());
 
                     f = null;
@@ -10596,7 +10664,7 @@ extern (C++) final class CallExp : UnaExp
                 auto tmp = copyToTemp(0, "__tmpfordtor", this);
                 auto de = new DeclarationExp(loc, tmp);
                 auto ve = new VarExp(loc, tmp);
-                Expression e = new CommaExp(loc, de, new VarExp(loc, tmp));
+                Expression e = new CommaExp(loc, de, ve);
                 e = e.semantic(sc);
                 return e;
             }
@@ -10967,7 +11035,7 @@ extern (C++) final class PtrExp : UnaExp
     {
         super(loc, TOKstar, __traits(classInstanceSize, PtrExp), e);
         //if (e.type)
-        //  type = ((TypePointer *)e.type)->next;
+        //  type = ((TypePointer *)e.type).next;
     }
 
     extern (D) this(Loc loc, Expression e, Type t)
@@ -12237,16 +12305,6 @@ extern (C++) final class IntervalExp : Expression
 
         type = Type.tvoid;
         return this;
-    }
-
-    override Expression modifiableLvalue(Scope* sc, Expression e)
-    {
-        if (sc.func.setUnsafe())
-        {
-            error("cannot modify delegate pointer in @safe code %s", toChars());
-            return new ErrorExp();
-        }
-        return Expression.modifiableLvalue(sc, e);
     }
 
     override void accept(Visitor v)
@@ -15498,6 +15556,7 @@ extern (C++) final class CmpExp : BinExp
         type = Type.tbool;
 
         // Special handling for array comparisons
+        Expression arrayLowering = null;
         t1 = e1.type.toBasetype();
         t2 = e2.type.toBasetype();
         if ((t1.ty == Tarray || t1.ty == Tsarray || t1.ty == Tpointer) && (t2.ty == Tarray || t2.ty == Tsarray || t2.ty == Tpointer))
@@ -15511,7 +15570,20 @@ extern (C++) final class CmpExp : BinExp
             }
             if ((t1.ty == Tarray || t1.ty == Tsarray) && (t2.ty == Tarray || t2.ty == Tsarray))
             {
-                semanticTypeInfo(sc, t1.nextOf());
+                // Lower to object.__cmp(e1, e2)
+                Expression al = new IdentifierExp(loc, Id.empty);
+                al = new DotIdExp(loc, al, Id.object);
+                al = new DotIdExp(loc, al, Id.__cmp);
+                al = al.semantic(sc);
+
+                auto arguments = new Expressions();
+                arguments.push(e1);
+                arguments.push(e2);
+
+                al = new CallExp(loc, al, arguments);
+                al = new CmpExp(op, loc, al, new IntegerExp(0));
+
+                arrayLowering = al;
             }
         }
         else if (t1.ty == Tstruct || t2.ty == Tstruct || (t1.ty == Tclass && t2.ty == Tclass))
@@ -15611,6 +15683,11 @@ extern (C++) final class CmpExp : BinExp
         }
 
         //printf("CmpExp: %s, type = %s\n", e.toChars(), e.type.toChars());
+        if (arrayLowering)
+        {
+            arrayLowering = arrayLowering.semantic(sc);
+            return arrayLowering;
+        }
         return this;
     }
 
@@ -15823,8 +15900,8 @@ extern (C++) final class IdentityExp : BinExp
         if (e1.type.toBasetype().ty == Tsarray ||
             e2.type.toBasetype().ty == Tsarray)
             deprecation("identity comparison of static arrays "
-                "implicitly coerces them to slices, "
-                "which are compared by reference");
+                ~ "implicitly coerces them to slices, "
+                ~ "which are compared by reference");
 
         return this;
     }

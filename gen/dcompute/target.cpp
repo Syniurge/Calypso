@@ -7,20 +7,21 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if LDC_LLVM_SUPPORTED_TARGET_SPIRV || LDC_LLVM_SUPPORTED_TARGET_NVPTX
+
 #include "ddmd/dsymbol.h"
-#include "ddmd/module.h"
 #include "ddmd/mars.h"
 #include "ddmd/module.h"
 #include "ddmd/scope.h"
 #include "driver/linker.h"
 #include "driver/toobj.h"
+#include "driver/cl_options.h"
 #include "gen/dcompute/target.h"
 #include "gen/llvmhelpers.h"
 #include "gen/runtime.h"
 #include <string>
 
 void DComputeTarget::doCodeGen(Module *m) {
-
   // process module members
   for (unsigned k = 0; k < m->members->dim; k++) {
     Dsymbol *dsym = (*m->members)[k];
@@ -44,14 +45,18 @@ void DComputeTarget::emit(Module *m) {
 void DComputeTarget::writeModule() {
   addMetadata();
 
-  char tmp[32];
-  const char *fmt = "kernels_%s%d_%d.%s";
-  int len = sprintf(tmp, fmt, short_name, tversion,
-                    global.params.is64bit ? 64 : 32, binSuffix);
-  tmp[len] = '\0';
+  std::string filename;
+  llvm::raw_string_ostream os(filename);
+  os << opts::dcomputeFilePrefix << '_' << short_name << tversion << '_'
+     << (global.params.is64bit ? 64 : 32) << '.' << binSuffix;
+
+  const char *path = FileName::combine(global.params.objdir, os.str().c_str());
+
   setGTargetMachine();
-  ::writeModule(&_ir->module, tmp);
+  ::writeModule(&_ir->module, path);
 
   delete _ir;
   _ir = nullptr;
 }
+
+#endif

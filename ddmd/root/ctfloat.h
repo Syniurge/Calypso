@@ -4,7 +4,7 @@
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt)
- * https://github.com/D-Programming-Language/dmd/blob/master/src/root/port.h
+ * https://github.com/dlang/dmd/blob/master/src/root/ctfloat.h
  */
 
 #ifndef CTFLOAT_H
@@ -52,6 +52,7 @@ struct CTFloat
     // implemented in gen/ctfloat.cpp
     static void _init();
     static void toAPFloat(real_t src, llvm::APFloat &dst);
+    static real_t fromAPFloat(const llvm::APFloat &src);
 
     static bool isFloat32LiteralOutOfRange(const char *literal);
     static bool isFloat64LiteralOutOfRange(const char *literal);
@@ -59,7 +60,9 @@ struct CTFloat
 
     static bool isIdentical(real_t a, real_t b);
     static bool isNaN(real_t r);
+#if !IN_LLVM
     static bool isSNaN(real_t r);
+#endif
     static bool isInfinity(real_t r);
 
     static real_t parse(const char *literal, bool *isOutOfRange = NULL);
@@ -70,6 +73,11 @@ struct CTFloat
     static real_t one;
     static real_t minusone;
     static real_t half;
+#if IN_LLVM
+    static real_t initVal;
+    static real_t nan;
+    static real_t infinity;
+#endif
 };
 
 #endif

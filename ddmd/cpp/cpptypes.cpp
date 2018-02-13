@@ -370,9 +370,9 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
     else if (auto AT = dyn_cast<clang::AdjustedType>(T))
         return fromType(AT->desugar());
 
-	// MSVC-specific
-	if (auto AttrT = dyn_cast<clang::AttributedType>(T))
-		return fromType(AttrT->getEquivalentType());
+    // MSVC-specific
+    if (auto AttrT = dyn_cast<clang::AttributedType>(T))
+        return fromType(AttrT->getEquivalentType());
 
 #define TYPEMAP(Ty) \
     if (auto Ty##T = dyn_cast<clang::Ty##Type>(T)) \

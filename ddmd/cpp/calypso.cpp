@@ -870,7 +870,7 @@ void PCH::update()
                 if (MMap->parseModuleMapFile(MMapFile, false, Dir))
                 {
                     ::error(Loc(), "Clang module map '%s/%s' file parsing failed",
-                                    MMapFile->getDir(), MMapFile->getName());
+                                    MMapFile->getDir()->getName(), MMapFile->getName());
                     fatal();
                 }
             }

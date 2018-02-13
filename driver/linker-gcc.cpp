@@ -1,6 +1,6 @@
 //===-- linker-gcc.cpp ----------------------------------------------------===//
 //
-//                         LDC – the LLVM D compiler
+//                         LDC - the LLVM D compiler
 //
 // This file is distributed under the BSD-style LDC license. See the LICENSE
 // file for details.
@@ -10,6 +10,7 @@
 #include "errors.h"
 #include "import.h"
 #include "driver/cl_options.h"
+#include "driver/cl_options_sanitizers.h"
 #include "driver/exe_path.h"
 #include "driver/tool.h"
 #include "gen/irstate.h"
@@ -17,6 +18,7 @@
 #include "gen/optimizer.h"
 #include "llvm/ProfileData/InstrProf.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -27,6 +29,10 @@ static llvm::cl::opt<std::string>
                llvm::cl::desc("Set the linker LTO plugin library file (e.g. "
                               "LLVMgold.so (Unixes) or libLTO.dylib (Darwin))"),
                llvm::cl::value_desc("file"));
+
+static llvm::cl::opt<bool> linkNoCpp(
+    "link-no-cpp", llvm::cl::ZeroOrMore, llvm::cl::Hidden,
+    llvm::cl::desc("Disable automatic linking with the C++ standard library."));
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -43,9 +49,13 @@ public:
 
 private:
   virtual void addSanitizers();
+  virtual void addASanLinkFlags();
+  virtual void addFuzzLinkFlags();
+  virtual void addCppStdlibLinkFlags();
+
   virtual void addUserSwitches();
   void addDefaultLibs();
-  virtual void addArch();
+  virtual void addTargetFlags();
 
 #if LDC_LLVM_VER >= 309
   void addLTOGoldPluginFlags();
@@ -171,6 +181,145 @@ void ArgsBuilder::addLTOLinkFlags() {
 
 //////////////////////////////////////////////////////////////////////////////
 
+// Returns the arch name as used in the compiler_rt libs.
+// FIXME: implement correctly for non-x86 platforms (e.g. ARM)
+llvm::StringRef getCompilerRTArchName() {
+  return global.params.targetTriple->getArchName();
+}
+
+// Returns the libname as full path and with arch suffix and extension.
+// For example, with name="libldc_rt.fuzzer", the returned string is
+// "libldc_rt.fuzzer_osx.a" on Darwin.
+std::string getFullCompilerRTLibPath(llvm::StringRef name,
+                                     bool sharedLibrary = false) {
+  if (global.params.targetTriple->isOSDarwin()) {
+    return exe_path::prependLibDir(
+        name + (sharedLibrary ? "_osx_dynamic.dylib" : "_osx.a"));
+  } else {
+    return exe_path::prependLibDir(name + "-" + getCompilerRTArchName() +
+                                   (sharedLibrary ? ".so" : ".a"));
+  }
+}
+
+void ArgsBuilder::addASanLinkFlags() {
+  // Examples: "libclang_rt.asan-x86_64.a" or "libclang_rt.asan-arm.a" and
+  // "libclang_rt.asan-x86_64.so"
+
+  // TODO: let user choose to link with shared lib.
+  // In case of shared ASan, I think we also need to statically link with
+  // libclang_rt.asan-preinit-<arch>.a on Linux. On Darwin, the only option is
+  // to use the shared library.
+  bool linkSharedASan = global.params.targetTriple->isOSDarwin();
+  std::string searchPaths[] = {
+      getFullCompilerRTLibPath("libldc_rt.asan", linkSharedASan),
+      getFullCompilerRTLibPath("libclang_rt.asan", linkSharedASan),
+  };
+
+  for (const auto &filepath : searchPaths) {
+    if (llvm::sys::fs::exists(filepath)) {
+      args.push_back(filepath);
+
+      if (linkSharedASan) {
+        // Add @executable_path to rpath to support having the shared lib copied
+        // with the executable.
+        args.push_back("-rpath");
+        args.push_back("@executable_path");
+
+        // Add the path to the resource dir to rpath to support using the shared
+        // lib from the default location without copying.
+        args.push_back("-rpath");
+        args.push_back(llvm::sys::path::parent_path(filepath));
+      }
+
+      return;
+    }
+  }
+
+  // When we reach here, we did not find the ASan library.
+  // Fallback, requires Clang. The asan library contains a versioned symbol
+  // name and a linker error will happen when the LDC-LLVM and Clang-LLVM
+  // versions don't match.
+  args.push_back("-fsanitize=address");
+}
+
+// Adds all required link flags for -fsanitize=fuzzer when libFuzzer library is
+// found.
+void ArgsBuilder::addFuzzLinkFlags() {
+  std::string searchPaths[] = {
+#if LDC_LLVM_VER >= 600
+    getFullCompilerRTLibPath("libldc_rt.fuzzer"),
+    getFullCompilerRTLibPath("libclang_rt.fuzzer"),
+#else
+    exe_path::prependLibDir("libFuzzer.a"),
+    exe_path::prependLibDir("libLLVMFuzzer.a"),
+#endif
+  };
+
+  for (const auto &filepath : searchPaths) {
+    if (llvm::sys::fs::exists(filepath)) {
+      args.push_back(filepath);
+
+      // libFuzzer requires the C++ std library, but only add the link flags
+      // when libFuzzer was found.
+      addCppStdlibLinkFlags();
+      return;
+    }
+  }
+}
+
+void ArgsBuilder::addCppStdlibLinkFlags() {
+  if (linkNoCpp)
+    return;
+
+  switch (global.params.targetTriple->getOS()) {
+  case llvm::Triple::Linux:
+    if (global.params.targetTriple->getEnvironment() == llvm::Triple::Android) {
+      args.push_back("-lc++");
+    } else {
+      args.push_back("-lstdc++");
+    }
+    break;
+  case llvm::Triple::Solaris:
+  case llvm::Triple::NetBSD:
+  case llvm::Triple::OpenBSD:
+  case llvm::Triple::DragonFly:
+    args.push_back("-lstdc++");
+    break;
+  case llvm::Triple::Darwin:
+  case llvm::Triple::MacOSX:
+  case llvm::Triple::FreeBSD:
+    args.push_back("-lc++");
+    break;
+  default:
+    // Don't know: do nothing so the user can step in
+    break;
+  }
+}
+
+void ArgsBuilder::addSanitizers() {
+  if (opts::isSanitizerEnabled(opts::AddressSanitizer)) {
+    addASanLinkFlags();
+  }
+
+  if (opts::isSanitizerEnabled(opts::FuzzSanitizer)) {
+    addFuzzLinkFlags();
+  }
+
+  // TODO: instead of this, we should link with our own sanitizer libraries
+  // because LDC's LLVM version could be different from the system clang.
+  if (opts::isSanitizerEnabled(opts::MemorySanitizer)) {
+    args.push_back("-fsanitize=memory");
+  }
+
+  // TODO: instead of this, we should link with our own sanitizer libraries
+  // because LDC's LLVM version could be different from the system clang.
+  if (opts::isSanitizerEnabled(opts::ThreadSanitizer)) {
+    args.push_back("-fsanitize=thread");
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 void ArgsBuilder::build(llvm::StringRef outputPath,
                         llvm::cl::boolOrDefault fullyStaticFlag) {
   // object files
@@ -236,22 +385,7 @@ void ArgsBuilder::build(llvm::StringRef outputPath,
 
   addDefaultLibs();
 
-  addArch();
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-// Requires clang.
-void ArgsBuilder::addSanitizers() {
-  if (opts::sanitize == opts::AddressSanitizer) {
-    args.push_back("-fsanitize=address");
-  }
-  if (opts::sanitize == opts::MemorySanitizer) {
-    args.push_back("-fsanitize=memory");
-  }
-  if (opts::sanitize == opts::ThreadSanitizer) {
-    args.push_back("-fsanitize=thread");
-  }
+  addTargetFlags();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -345,54 +479,8 @@ void ArgsBuilder::addDefaultLibs() {
 
 //////////////////////////////////////////////////////////////////////////////
 
-void ArgsBuilder::addArch() {
-  // Only specify -m32/-m64 for architectures where the two variants actually
-  // exist (as e.g. the GCC ARM toolchain doesn't recognize the switches).
-  // MIPS does not have -m32/-m64 but requires -mabi=.
-  if (global.params.targetTriple->get64BitArchVariant().getArch() !=
-          llvm::Triple::UnknownArch &&
-      global.params.targetTriple->get32BitArchVariant().getArch() !=
-          llvm::Triple::UnknownArch) {
-    if (global.params.targetTriple->get64BitArchVariant().getArch() ==
-            llvm::Triple::mips64 ||
-        global.params.targetTriple->get64BitArchVariant().getArch() ==
-            llvm::Triple::mips64el) {
-      switch (getMipsABI()) {
-      case MipsABI::EABI:
-        args.push_back("-mabi=eabi");
-        break;
-      case MipsABI::O32:
-        args.push_back("-mabi=32");
-        break;
-      case MipsABI::N32:
-        args.push_back("-mabi=n32");
-        break;
-      case MipsABI::N64:
-        args.push_back("-mabi=64");
-        break;
-      case MipsABI::Unknown:
-        break;
-      }
-    } else {
-      switch (global.params.targetTriple->getArch()) {
-      case llvm::Triple::arm:
-      case llvm::Triple::armeb:
-      case llvm::Triple::aarch64:
-      case llvm::Triple::aarch64_be:
-#if LDC_LLVM_VER == 305
-      case llvm::Triple::arm64:
-      case llvm::Triple::arm64_be:
-#endif
-        break;
-      default:
-        if (global.params.is64bit) {
-          args.push_back("-m64");
-        } else {
-          args.push_back("-m32");
-        }
-      }
-    }
-  }
+void ArgsBuilder::addTargetFlags() {
+  appendTargetArgsForGcc(args);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -410,7 +498,7 @@ class LdArgsBuilder : public ArgsBuilder {
                 opts::linkerSwitches.end());
   }
 
-  void addArch() override {}
+  void addTargetFlags() override {}
 
   void addLdFlag(const llvm::Twine &flag) override {
     args.push_back(flag.str());

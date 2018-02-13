@@ -1,6 +1,7 @@
 // Test passing of LLVM bitcode file with Linker Options set
 
-// REQUIRES: atleast_llvm306
+// LLVM >= 5.0 uses llvm.linker.options instead. See link_bitcode_libs_500.d.
+// REQUIRES: atmost_llvm400
 
 // Linker Options are currently only set on Windows platform, so we must (cross-)compile to Windows
 // REQUIRES: target_X86
