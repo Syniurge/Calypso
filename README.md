@@ -44,12 +44,16 @@ Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during head
     $ ldc2 -cpp-args -std=c++11 main.d
 
 ## missing features
-* Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)
-* Automatically call copy constructors on function arguments (WIP)
-* MSVC exception handling
-* `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok) https://github.com/Syniurge/Calypso/issues/74
+
+### exception handling
 * C++ exception rethrowing
-* macros (constants and functions) are not mapped to D (as enums and templates) https://github.com/Syniurge/Calypso/issues/66
+* `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok) https://github.com/Syniurge/Calypso/issues/74
+* MSVC exception handling
+
+### other
+* upgrade to more recent LDC, clang
+* Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)
+* macro functions are not mapped to D (as enums and templates) https://github.com/Syniurge/Calypso/issues/66
 
 LDC – the LLVM-based D Compiler
 ===============================
