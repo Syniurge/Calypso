@@ -27,17 +27,23 @@
 #include "llvm/Support/YAMLTraits.h"
 
 /// The module with the frontend-generated C main() definition.
-extern Module *g_entrypointModule;
+extern Module *entrypoint; // defined in ddmd/mars.d
 
 /// The module that contains the actual D main() (_Dmain) definition.
-extern Module *g_dMainModule;
+extern Module *rootHasMain; // defined in ddmd/mars.d
+
+#if LDC_LLVM_VER < 600
+namespace llvm {
+  using ToolOutputFile = tool_output_file;
+}
+#endif
 
 namespace {
 
-std::unique_ptr<llvm::tool_output_file>
+std::unique_ptr<llvm::ToolOutputFile>
 createAndSetDiagnosticsOutputFile(IRState &irs, llvm::LLVMContext &ctx,
                                   llvm::StringRef filename) {
-  std::unique_ptr<llvm::tool_output_file> diagnosticsOutputFile;
+  std::unique_ptr<llvm::ToolOutputFile> diagnosticsOutputFile;
 
 #if LDC_LLVM_VER >= 400
   // Set LLVM Diagnostics outputfile if requested
@@ -51,7 +57,7 @@ createAndSetDiagnosticsOutputFile(IRState &irs, llvm::LLVMContext &ctx,
     }
 
     std::error_code EC;
-    diagnosticsOutputFile = llvm::make_unique<llvm::tool_output_file>(
+    diagnosticsOutputFile = llvm::make_unique<llvm::ToolOutputFile>(
         diagnosticsFilename, EC, llvm::sys::fs::F_None);
     if (EC) {
       irs.dmodule->error("Could not create file %s: %s",
@@ -172,7 +178,7 @@ namespace ldc {
 CodeGenerator::CodeGenerator(llvm::LLVMContext &context, bool singleObj)
     : context_(context), moduleCount_(0), singleObj_(singleObj), ir_(nullptr) {
   if (!ClassDeclaration::object) {
-    error(Loc(), "declaration for class Object not found; druntime not "
+    error(Loc(), "declaration for class `Object` not found; druntime not "
                  "configured properly");
     fatal();
   }
@@ -252,6 +258,8 @@ void CodeGenerator::finishLLModule(Module *m) {
 }
 
 void CodeGenerator::writeAndFreeLLModule(const char *filename) {
+  ir_->objc.finalize();
+
   // Issue #1829: make sure all replaced global variables are replaced
   // everywhere.
   ir_->replaceGlobals();
@@ -269,7 +277,7 @@ void CodeGenerator::writeAndFreeLLModule(const char *filename) {
   llvm::Metadata *IdentNode[] = {llvm::MDString::get(ir_->context(), Version)};
   IdentMetadata->addOperand(llvm::MDNode::get(ir_->context(), IdentNode));
 
-  std::unique_ptr<llvm::tool_output_file> diagnosticsOutputFile =
+  std::unique_ptr<llvm::ToolOutputFile> diagnosticsOutputFile =
       createAndSetDiagnosticsOutputFile(*ir_, context_, filename);
 
   writeModule(&ir_->module, filename);
@@ -319,8 +327,8 @@ void CodeGenerator::emit(Module *m) {
   prepareLLModule(m);
 
   codegenModule(ir_, m);
-  if (m == g_dMainModule) {
-    codegenModule(ir_, g_entrypointModule);
+  if (m == rootHasMain) {
+    codegenModule(ir_, entrypoint);
 
     if (global.params.targetTriple->getEnvironment() == llvm::Triple::Android) {
       // On Android, bracket TLS data with the symbols _tlsstart and _tlsend, as

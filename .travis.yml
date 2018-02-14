@@ -10,6 +10,9 @@ matrix:
     - os: linux
       d: ldc
       env: LLVM_VERSION=3.9.1 OPTS="-DLIB_SUFFIX=64"
+    #- os: linux
+      #d: ldc
+      #env: LLVM_VERSION=4.0.1 OPTS="-DLIB_SUFFIX=64"
     - os: linux
       d: ldc-beta
       env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON"
@@ -21,7 +24,7 @@ matrix:
       env: LLVM_VERSION=3.9.1 OPTS="-DTEST_COVERAGE=ON"
     #- os: osx
       #d: ldc-beta
-      #env: LLVM_VERSION=6.0.0-2 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
+      #env: LLVM_VERSION=6.0.0-4 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
     - os: osx
       d: ldc
       env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON"
@@ -30,7 +33,7 @@ matrix:
 
 cache:
   directories:
-    - llvm-spirv-6.0.0-2
+    - llvm-spirv-6.0.0-4
     - llvm-5.0.0
     - llvm-4.0.1
     - llvm-4.0.0
@@ -61,7 +64,7 @@ before_install:
     fi;
     if [ -z "$(ls -A llvm-$LLVM_VERSION)" ]; then
       if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then
-        wget -O llvm-spirv-$LLVM_VERSION.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0svn-Darwin.tar.bz2;
+        wget -O llvm-spirv-$LLVM_VERSION.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0svn-Darwin-2.tar.bz2;
         mkdir llvm-spirv-$LLVM_VERSION;
         tar -xjf llvm-spirv-$LLVM_VERSION.tar.bz2 --strip 1 -C llvm-spirv-$LLVM_VERSION;
       else
@@ -107,6 +110,9 @@ before_script:
   - cd build
 
 script:
+  # Invoke CMake with MULTILIB=ON just to make sure the Makefiles can be generated.
+  - mkdir multilibCMakeTest && cd multilibCMakeTest && cmake -DMULTILIB=ON -DLLVM_CONFIG=$(which ../${LLVM_CONFIG}) $OPTS .. && cd ..
+  # Invoke CMake again for the actual build.
   - cmake -G Ninja -DLLVM_CONFIG=$(which ${LLVM_CONFIG}) -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" $OPTS ..
   # Build LDC and stdlib unittest runners.
   - ninja -j3 all all-test-runners

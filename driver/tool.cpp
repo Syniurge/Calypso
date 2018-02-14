@@ -22,6 +22,12 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
+namespace opts {
+llvm::cl::opt<std::string>
+    linker("linker", llvm::cl::ZeroOrMore, llvm::cl::desc("Linker to use"),
+           llvm::cl::value_desc("lld-link|lld|gold|bfd|..."));
+}
+
 static llvm::cl::opt<std::string>
     gcc("gcc", llvm::cl::desc("GCC to use for assembling and linking"),
         llvm::cl::Hidden, llvm::cl::ZeroOrMore);
@@ -171,7 +177,12 @@ int executeToolAndWait(const std::string &tool_,
   // Execute tool.
   std::string errstr;
   if (int status = llvm::sys::ExecuteAndWait(tool, &realargs[0], nullptr,
-                                             nullptr, 0, 0, &errstr)) {
+#if LDC_LLVM_VER >= 600
+                                             {},
+#else
+                                             nullptr,
+#endif
+                                             0, 0, &errstr)) {
     error(Loc(), "%s failed with status: %d", tool.c_str(), status);
     if (!errstr.empty()) {
       error(Loc(), "message: %s", errstr.c_str());
@@ -315,7 +326,7 @@ bool setupMsvcEnvironmentImpl() {
 
   const int exitCode = executeAndWait(commandLine.c_str());
   if (exitCode != 0) {
-    error(Loc(), "`%s` failed with status: %d", commandLine.c_str(), exitCode);
+    error(Loc(), "'%s' failed with status: %d", commandLine.c_str(), exitCode);
     llvm::sys::fs::remove(tmpFilePath);
     return false;
   }

@@ -1,5 +1,5 @@
 // CALYPSO: To avoid depending on libc++ and/or libstdc++, the parts used by Calypso were copied here
-// and are now self-contained, they only require any unwind.h. Benefits outweigh the cons (future ABI changes).
+// and are now self-contained. Benefits outweigh the cons (future ABI changes).
 
 #pragma once
 

@@ -58,7 +58,7 @@ jobs:
             export HOST_LDMD=$PWD/ldc2-$HOST_LDC_VERSION-linux-x86_64/bin/ldmd2
             mkdir bootstrap
             cd bootstrap
-            cmake -G Ninja -DLDC_WITH_LLD=OFF -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DBUILD_SHARED_LIBS=OFF -DD_COMPILER=$HOST_LDMD ..
+            cmake -G Ninja -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DBUILD_SHARED_LIBS=OFF -DD_COMPILER=$HOST_LDMD ..
             ninja -j3
             bin/ldc2 -version
             cd ..
@@ -68,7 +68,7 @@ jobs:
             export HOST_LDMD=$PWD/bootstrap/bin/ldmd2
             mkdir build
             cd build
-            cmake -G Ninja -DLDC_WITH_LLD=OFF -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DLDC_INSTALL_LTOPLUGIN=ON -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DD_COMPILER=$HOST_LDMD ..
+            cmake -G Ninja -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DLDC_INSTALL_LTOPLUGIN=ON -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DD_COMPILER=$HOST_LDMD ..
             ninja -j3 all all-test-runners
             bin/ldc2 -version
             cd ..
@@ -86,5 +86,8 @@ jobs:
           when: always
       - run:
           name: Run stdlib unittests
-          command: cd build && ctest -j3 --output-on-failure -E "dmd-testsuite|ldc2-unittest|lit-tests"
+          # FIXME: Exclude std.process unittests for now.
+          # CircleCI doesn't throw an expected ProcessException when spawning a
+          # process in a working dir with 0400 permissions (no search permissions).
+          command: cd build && ctest -j3 --output-on-failure -E "std\.process|dmd-testsuite|ldc2-unittest|lit-tests"
           when: always

@@ -102,8 +102,7 @@ struct BaseClass
             assert(ifd);
 
             // Find corresponding function in this class
-            tf = (ifd.type.ty == Tfunction) ? cast(TypeFunction)ifd.type : null;
-            assert(tf); // should always be non-null
+            tf = ifd.type.toTypeFunction();
             fd = cd.findFunc(ifd.ident, tf);
             if (fd && !fd.isAbstract())
             {
@@ -227,12 +226,11 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
     bool com;           // true if this is a COM class (meaning it derives from IUnknown)
     bool cpp;           // true if this is a C++ interface
+    bool isobjc;        // true if this is an Objective-C class/interface
     bool isscope;       // true if this is a scope class
     Abstract isabstract;
     int inuse;          // to prevent recursive attempts
     Baseok baseok;      // set the progress of base classes resolving
-
-    Objc_ClassDeclaration objc;
 
     Symbol* cpp_type_info_ptr_sym;      // cached instance of class Id.cpp_type_info_ptr
 
@@ -434,15 +432,10 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         auto sc2 = super.newScope(sc);
         if (isCOMclass())
         {
-            if (global.params.isWindows)
-                sc2.linkage = LINKwindows;
-            else
-            {
-                /* This enables us to use COM objects under Linux and
-                 * work with things like XPCOM
-                 */
-                sc2.linkage = LINKc;
-            }
+            /* This enables us to use COM objects under Linux and
+             * work with things like XPCOM
+             */
+            sc2.linkage = Target.systemLinkage();
         }
         return sc2;
     }
@@ -509,7 +502,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             if (sc.linkage == LINKcpp && !langPlugin()) // CALYPSO
                 cpp = true;
             if (sc.linkage == LINKobjc)
-                objc_ClassDeclaration_semantic_PASSinit_LINKobjc(this);
+                objc.setObjc(this);
         }
         else if (symtab && !scx)
         {
@@ -520,7 +513,9 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
         if (baseok < BASEOKdone)
         {
-            /* Bugzilla 12078, 12143 and 15733:
+            /* https://issues.dlang.org/show_bug.cgi?id=12078
+             * https://issues.dlang.org/show_bug.cgi?id=12143
+             * https://issues.dlang.org/show_bug.cgi?id=15733
              * While resolving base classes and interfaces, a base may refer
              * the member of this derived class. In that time, if all bases of
              * this class can  be determined, we can go forward the semantc process
@@ -618,7 +613,8 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                     }
                 }
 
-                /* Bugzilla 11034: Essentially, class inheritance hierarchy
+                /* https://issues.dlang.org/show_bug.cgi?id=11034
+                 * Class inheritance hierarchy
                  * and instance size of each classes are orthogonal information.
                  * Therefore, even if sym.sizeof == SIZEOKnone,
                  * we need to set baseClass field for class covariance check.
@@ -626,7 +622,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                 baseClass = sym;
                 b.sym = baseClass;
 
-                if (sym._scope && (!bcd || bcd.baseok < BASEOKdone)) // CALYPSO NOTE: is it necessary to do it for a Struct base? this is how it was done in pre-DDMD Calypso, so for now
+                if (!bcd || bcd.baseok < BASEOKdone) // CALYPSO NOTE: is it necessary to do it for a Struct base? this is how it was done in pre-DDMD Calypso, so for now
                     resolveBase(sym.semantic(null)); // Try to resolve forward reference
                 if (bcd && bcd.baseok < BASEOKdone)
                 {
@@ -679,7 +675,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                 b.sym = sym;
 
                 auto bcd = isClassDeclarationOrNull(sym); // CALYPSO
-                if (sym._scope && (!bcd || bcd.baseok < BASEOKdone))
+                if (!bcd || bcd.baseok < BASEOKdone)
                     resolveBase(sym.semantic(null)); // Try to resolve forward reference
                 if (bcd && bcd.baseok < BASEOKdone)
                 {
@@ -772,7 +768,8 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         {
             symtab = new DsymbolTable();
 
-            /* Bugzilla 12152: The semantic analysis of base classes should be finished
+            /* https://issues.dlang.org/show_bug.cgi?id=12152
+             * The semantic analysis of base classes should be finished
              * before the members semantic analysis of this class, in order to determine
              * vtbl in this class. However if a base class refers the member of this class,
              * it can be resolved as a normal forward reference.
@@ -929,7 +926,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             if (fd && !fd.errors)
             {
                 //printf("Creating default this(){} for class %s\n", toChars());
-                auto btf = cast(TypeFunction)fd.type;
+                auto btf = fd.type.toTypeFunction();
                 auto tf = new TypeFunction(null, null, 0, LINKd, fd.storage_class);
                 tf.mod       = btf.mod;
                 tf.purity    = btf.purity;
@@ -971,6 +968,18 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
         sc2.pop();
 
+        if (type.ty == Tclass && (cast(TypeClass)type).sym != this)
+        {
+            // https://issues.dlang.org/show_bug.cgi?id=17492
+            ClassDeclaration cd = (cast(TypeClass)type).sym;
+            version (none)
+            {
+                printf("this = %p %s\n", this, this.toPrettyChars());
+                printf("type = %d sym = %p, %s\n", type.ty, cd, cd.toPrettyChars());
+            }
+            error("already exists at %s. Perhaps in another function with the same name?", cd.loc.toChars());
+        }
+
         if (global.errors != errors)
         {
             // The type is no good.
@@ -1004,15 +1013,6 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         if (!langPlugin())
             markAggregateReferenced(this);
 
-        version (none)
-        {
-            if (type.ty == Tclass && (cast(TypeClass)type).sym != this)
-            {
-                printf("this = %p %s\n", this, this.toChars());
-                printf("type = %d sym = %p\n", type.ty, (cast(TypeClass)type).sym);
-            }
-        }
-        assert(type.ty != Tclass || (cast(TypeClass)type).sym == this);
         //printf("-ClassDeclaration.semantic(%s), type = %p, sizeok = %d, this = %p\n", toChars(), type, sizeok, this);
     }
 
@@ -1100,7 +1100,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         foreach (b; *baseclasses)
         {
             auto cdb = b.type.isClassHandle();
-            if (!cdb) // Bugzilla 10616
+            if (!cdb) // https://issues.dlang.org/show_bug.cgi?id=10616
                 return null;
             if (cdb.ident.equals(ident))
                 return cdb;
@@ -1234,7 +1234,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
     final bool isFuncHidden(FuncDeclaration fd)
     {
-        //printf("ClassDeclaration.isFuncHidden(class = %s, fd = %s)\n", toChars(), fd.toChars());
+        //printf("ClassDeclaration.isFuncHidden(class = %s, fd = %s)\n", toChars(), fd.toPrettyChars());
         Dsymbol s = search(Loc(), fd.ident, IgnoreAmbiguous | IgnoreErrors);
         if (!s)
         {
@@ -1301,7 +1301,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                         goto Lfdmatch;
 
                     {
-                    // Function type matcing: exact > covariant
+                    // Function type matching: exact > covariant
                     MATCH m1 = tf.equals(fd.type) ? MATCHexact : MATCHnomatch;
                     MATCH m2 = tf.equals(fdmatch.type) ? MATCHexact : MATCHnomatch;
                     if (m1 > m2)
@@ -1397,7 +1397,8 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         if (isabstract != ABSfwdref)
             return isabstract == ABSyes;
 
-        /* Bugzilla 11169: Resolve forward references to all class member functions,
+        /* https://issues.dlang.org/show_bug.cgi?id=11169
+         * Resolve forward references to all class member functions,
          * and determine whether this class is abstract.
          */
         extern (C++) static int func(Dsymbol s, void* param)
@@ -1587,7 +1588,7 @@ extern (C++) final class InterfaceDeclaration : ClassDeclaration
             sc2.linkage = LINKwindows;
         else if (cpp)
             sc2.linkage = LINKcpp;
-        else if (objc.isInterface())
+        else if (isobjc)
             sc2.linkage = LINKobjc;
         return sc2;
     }
@@ -1709,7 +1710,8 @@ extern (C++) final class InterfaceDeclaration : ClassDeclaration
             if (!baseclasses.dim && sc.linkage == LINKcpp)
                 cpp = true;
 
-            objc_InterfaceDeclaration_semantic_objcExtern(this, sc);
+            if (sc.linkage == LINKobjc)
+                objc.setObjc(this);
 
             // Check for errors, handle forward references
             for (size_t i = 0; i < baseclasses.dim;)
@@ -1754,7 +1756,7 @@ extern (C++) final class InterfaceDeclaration : ClassDeclaration
 
                 b.sym = tc.sym;
 
-                if (tc.sym._scope && tc.sym.baseok < BASEOKdone)
+                if (tc.sym.baseok < BASEOKdone)
                     resolveBase(tc.sym.semantic(null)); // Try to resolve forward reference
                 if (tc.sym.baseok < BASEOKdone)
                 {
@@ -1931,9 +1933,11 @@ extern (C++) final class InterfaceDeclaration : ClassDeclaration
             //printf("\tX base %s\n", b.sym.toChars());
             if (this == b.sym)
             {
+                //printf("\tfound at offset %d\n", b.offset);
                 if (poffset)
                 {
-                    // don't return incorrect offsets https://issues.dlang.org/show_bug.cgi?id=16980
+                    // don't return incorrect offsets
+                    // https://issues.dlang.org/show_bug.cgi?id=16980
                     *poffset = cd.sizeok == SIZEOKdone ? b.offset : OFFSET_FWDREF;
                 }
                 // printf("\tfound at offset %d\n", b.offset);

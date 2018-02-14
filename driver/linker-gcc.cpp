@@ -53,6 +53,7 @@ private:
   virtual void addFuzzLinkFlags();
   virtual void addCppStdlibLinkFlags();
 
+  virtual void addLinker();
   virtual void addUserSwitches();
   void addDefaultLibs();
   virtual void addTargetFlags();
@@ -119,8 +120,9 @@ void ArgsBuilder::addLTOGoldPluginFlags() {
   if (opts::isUsingThinLTO())
     addLdFlag("-plugin-opt=thinlto");
 
-  if (!opts::mCPU.empty())
-    addLdFlag(llvm::Twine("-plugin-opt=mcpu=") + opts::mCPU);
+  const auto cpu = gTargetMachine->getTargetCPU();
+  if (!cpu.empty())
+    addLdFlag(llvm::Twine("-plugin-opt=mcpu=") + cpu);
 
   // Use the O-level passed to LDC as the O-level for LTO, but restrict it to
   // the [0, 3] range that can be passed to the linker plugin.
@@ -366,6 +368,7 @@ void ArgsBuilder::build(llvm::StringRef outputPath,
     addLTOLinkFlags();
 #endif
 
+  addLinker();
   addUserSwitches();
 
   // libs added via pragma(lib, libname)
@@ -386,6 +389,13 @@ void ArgsBuilder::build(llvm::StringRef outputPath,
   addDefaultLibs();
 
   addTargetFlags();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void ArgsBuilder::addLinker() {
+  if (!opts::linker.empty())
+    args.push_back("-fuse-ld=" + opts::linker);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -488,6 +498,8 @@ void ArgsBuilder::addTargetFlags() {
 
 class LdArgsBuilder : public ArgsBuilder {
   void addSanitizers() override {}
+
+  void addLinker() override {}
 
   void addUserSwitches() override {
     if (!opts::ccSwitches.empty()) {

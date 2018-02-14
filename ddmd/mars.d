@@ -22,10 +22,12 @@ import core.stdc.stdio;
 import core.stdc.stdlib;
 import core.stdc.string;
 import ddmd.arraytypes;
+import ddmd.astcodegen;
 import ddmd.gluelayer;
 import ddmd.builtin;
 import ddmd.cond;
 import ddmd.dimport;
+import ddmd.console;
 import ddmd.dinifile;
 import ddmd.dinterpret;
 import ddmd.dmodule;
@@ -65,7 +67,6 @@ version(IN_LLVM)
     import gen.semantic : extraLDCSpecificSemanticAnalysis;
     extern (C++):
 
-    void genCmain(Scope* sc);
     // in driver/main.cpp
     void addDefaultVersionIdentifiers();
     void codegenModules(ref Modules modules, bool oneobj);
@@ -153,7 +154,6 @@ Where:
   -dip25           implement http://wiki.dlang.org/DIP25 (experimental)
   -dip1000         implement http://wiki.dlang.org/DIP1000 (experimental)
   -g               add symbolic debug info
-  -gc              add symbolic debug info, optimize for non D debuggers
   -gs              always emit stack frame
   -gx              add stack stomp code
   -H               generate 'header' file
@@ -205,6 +205,8 @@ Where:
 ", FileName.canonicalName(global.inifilename), fpic, m32mscoff, mscrtlib);
 }
 
+} // !IN_LLVM
+
 /// DMD-generated module `__entrypoint` where the C main resides
 extern (C++) __gshared Module entrypoint = null;
 /// Module in which the D main is
@@ -232,22 +234,43 @@ extern (C++) void genCmain(Scope* sc)
     /* The D code to be generated is provided as D source code in the form of a string.
      * Note that Solaris, for unknown reasons, requires both a main() and an _main()
      */
-    immutable cmaincode =
-    q{
-        extern(C)
-        {
-            int _d_run_main(int argc, char **argv, void* mainFunc);
-            int _Dmain(char[][] args);
-            int main(int argc, char **argv)
+    version(IN_LLVM)
+    {
+        immutable cmaincode =
+        q{
+            pragma(LDC_profile_instr, false):
+            extern(C)
             {
-                return _d_run_main(argc, argv, &_Dmain);
+                int _d_run_main(int argc, char **argv, void* mainFunc);
+                int _Dmain(char[][] args);
+                int main(int argc, char **argv)
+                {
+                    return _d_run_main(argc, argv, &_Dmain);
+                }
+                version (Solaris) int _main(int argc, char** argv) { return main(argc, argv); }
             }
-            version (Solaris) int _main(int argc, char** argv) { return main(argc, argv); }
-        }
-    };
+            pragma(LDC_no_moduleinfo);
+        };
+    }
+    else
+    {
+        immutable cmaincode =
+        q{
+            extern(C)
+            {
+                int _d_run_main(int argc, char **argv, void* mainFunc);
+                int _Dmain(char[][] args);
+                int main(int argc, char **argv)
+                {
+                    return _d_run_main(argc, argv, &_Dmain);
+                }
+                version (Solaris) int _main(int argc, char** argv) { return main(argc, argv); }
+            }
+        };
+    }
     Identifier id = Id.entrypoint;
     auto m = new Module("__entrypoint.d", id, 0, 0);
-    scope Parser p = new Parser(m, cmaincode, false);
+    scope p = new Parser!ASTCodegen(m, cmaincode, false);
     p.scanloc = Loc();
     p.nextToken();
     m.members = p.parseModule();
@@ -265,6 +288,8 @@ extern (C++) void genCmain(Scope* sc)
     rootHasMain = sc._module;
 }
 
+version(IN_LLVM) {} else
+{
 
 /**
  * DMD's real entry point
@@ -311,7 +336,7 @@ private int tryMain(size_t argc, const(char)** argv)
     files.reserve(arguments.dim - 1);
     // Set default values
     global.params.argv0 = arguments[0];
-    global.params.color = isConsoleColorSupported();
+    global.params.color = true;
     global.params.link = true;
     global.params.useAssert = true;
     global.params.useInvariants = true;
@@ -485,7 +510,11 @@ private int tryMain(size_t argc, const(char)** argv)
             else if (strcmp(p + 1, "g") == 0)
                 global.params.symdebug = 1;
             else if (strcmp(p + 1, "gc") == 0)
+            {
+                Loc loc;
+                deprecation(loc, "use -g instead of -gc");
                 global.params.symdebug = 2;
+            }
             else if (strcmp(p + 1, "gs") == 0)
                 global.params.alwaysframe = true;
             else if (strcmp(p + 1, "gx") == 0)
@@ -1067,6 +1096,10 @@ Language changes listed by -transition=id:
             files.push(p);
         }
     }
+
+    if (global.params.color)
+        global.console = Console.create(core.stdc.stdio.stderr);
+
     global.params.cpu = setTargetCPU(global.params.cpu);
     if (global.params.is64bit != is64bit)
         error(Loc(), "the architecture must not be changed in the %s section of %s", envsection.ptr, global.inifilename);
@@ -1137,6 +1170,12 @@ Language changes listed by -transition=id:
 
 extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
 {
+    version(IN_LLVM)
+    {
+        if (global.params.color)
+            global.console = Console.create(core.stdc.stdio.stderr);
+    }
+
     if (global.params.link)
     {
         global.params.exefile = global.params.objname;
@@ -1185,10 +1224,9 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
 
     // Predefined version identifiers
     addDefaultVersionIdentifiers();
+
   version (IN_LLVM) {} else
   {
-    objc_tryMain_dObjc();
-
     setDefaultLibrary();
   }
 
@@ -1198,7 +1236,7 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     Module._init();
     Target._init();
     Expression._init();
-    objc_tryMain_init();
+    Objc._init();
     builtin_init();
 
     foreach (lp; langPlugins)
@@ -1646,6 +1684,9 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     // So deps file generation should be moved after the inlinig stage.
     if (global.params.moduleDeps)
     {
+        foreach (i; 1 .. modules[0].aimports.dim)
+            semantic3OnDependencies(modules[0].aimports[i]);
+
         OutBuffer* ob = global.params.moduleDeps;
         if (global.params.moduleDepsFile)
         {
@@ -1731,11 +1772,11 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
         import ddmd.hdrgen;
         foreach (mod; modules)
         {
-            auto buf = new OutBuffer;
+            auto buf = OutBuffer();
             buf.doindent = 1;
             scope HdrGenState hgs;
             hgs.fullDump = 1;
-            scope PrettyPrintVisitor ppv = new PrettyPrintVisitor(buf, &hgs);
+            scope PrettyPrintVisitor ppv = new PrettyPrintVisitor(&buf, &hgs);
             mod.accept(ppv);
 
             // write the output to $(filename).cg
@@ -1746,6 +1787,7 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
             cgFilename[modFilenameLength .. modFilenameLength + 4] = ".cg\0";
             auto cgFile = File(cgFilename);
             cgFile.setbuffer(buf.data, buf.offset);
+            cgFile._ref = 1;
             cgFile.write();
         }
     }
@@ -1901,9 +1943,9 @@ int main()
             return path;
         }
         version (Windows)
-            enum sourcePath = dirName(__FILE_FULL_PATH__, `\`);
+            enum sourcePath = dirName(dirName(__FILE_FULL_PATH__, `\`), `\`);
         else
-            enum sourcePath = dirName(__FILE_FULL_PATH__, '/');
+            enum sourcePath = dirName(dirName(__FILE_FULL_PATH__, '/'), '/');
 
         dmd_coverSourcePath(sourcePath);
         dmd_coverDestPath(sourcePath);
@@ -2052,41 +2094,6 @@ private const(char)* parse_conf_arg(Strings* args)
     return conf;
 }
 
-
-/**
- * Helper function used by the glue layer
- *
- * Returns:
- *   A new array of Dsymbol
- */
-extern (C++) Dsymbols* Dsymbols_create()
-{
-    return new Dsymbols();
-}
-
-
-/**
- * Helper function used by the glue layer
- *
- * Returns:
- *   A new array of VarDeclaration
- */
-extern (C++) VarDeclarations* VarDeclarations_create()
-{
-    return new VarDeclarations();
-}
-
-
-/**
- * Helper function used by the glue layer
- *
- * Returns:
- *   A new array of Expression
- */
-extern (C++) Expressions* Expressions_create()
-{
-    return new Expressions();
-}
 
 /**
  * Set the default and debug libraries to link against, if not already set

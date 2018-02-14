@@ -24,7 +24,6 @@
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/nested.h"
-#include "gen/objcgen.h"
 #include "gen/tollvm.h"
 #include "gen/runtime.h"
 #include "ir/irfunction.h"
@@ -262,7 +261,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // va_start instruction
   if (fndecl->llvmInternal == LLVMva_start) {
     if (e->arguments->dim < 1 || e->arguments->dim > 2) {
-      e->error("va_start instruction expects 1 (or 2) arguments");
+      e->error("`va_start` instruction expects 1 (or 2) arguments");
       fatal();
     }
     DLValue *ap = toElem((*e->arguments)[0])->isLVal(); // va_list
@@ -281,7 +280,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // va_copy instruction
   if (fndecl->llvmInternal == LLVMva_copy) {
     if (e->arguments->dim != 2) {
-      e->error("va_copy instruction expects 2 arguments");
+      e->error("`va_copy` instruction expects 2 arguments");
       fatal();
     }
     DLValue *dest = toElem((*e->arguments)[0])->isLVal(); // va_list
@@ -295,11 +294,11 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // va_arg instruction
   if (fndecl->llvmInternal == LLVMva_arg) {
     if (e->arguments->dim != 1) {
-      e->error("va_arg instruction expects 1 argument");
+      e->error("`va_arg` instruction expects 1 argument");
       fatal();
     }
     if (DtoIsInMemoryOnly(e->type)) {
-      e->error("va_arg instruction does not support structs and static arrays");
+      e->error("`va_arg` instruction does not support structs and static arrays");
       fatal();
     }
     DLValue *ap = toElem((*e->arguments)[0])->isLVal(); // va_list
@@ -313,7 +312,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // C alloca
   if (fndecl->llvmInternal == LLVMalloca) {
     if (e->arguments->dim != 1) {
-      e->error("alloca expects 1 arguments");
+      e->error("`alloca` expects 1 argument");
       fatal();
     }
     Expression *exp = (*e->arguments)[0];
@@ -330,7 +329,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // fence instruction
   if (fndecl->llvmInternal == LLVMfence) {
     if (e->arguments->dim < 1 || e->arguments->dim > 2) {
-      e->error("fence instruction expects 1 (or 2) arguments");
+      e->error("`fence` instruction expects 1 (or 2) arguments");
       fatal();
     }
     auto atomicOrdering =
@@ -386,7 +385,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
         }
       } else {
       errorStore:
-        e->error("atomic store only supports integer types, not '%s'",
+        e->error("atomic store only supports integer types, not `%s`",
                  exp1->type->toChars());
         fatal();
       }
@@ -430,7 +429,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
         }
       } else {
       errorLoad:
-        e->error("atomic load only supports integer types, not '%s'",
+        e->error("atomic load only supports integer types, not `%s`",
                  retType->toChars());
         fatal();
       }
@@ -452,7 +451,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // cmpxchg instruction
   if (fndecl->llvmInternal == LLVMatomic_cmp_xchg) {
     if (e->arguments->dim != 4) {
-      e->error("cmpxchg instruction expects 4 arguments");
+      e->error("`cmpxchg` instruction expects 4 arguments");
       fatal();
     }
     Expression *exp1 = (*e->arguments)[0];
@@ -486,7 +485,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
         }
       } else {
       errorCmpxchg:
-        e->error("cmpxchg only supports integer types, not '%s'",
+        e->error("`cmpxchg` only supports integer types, not `%s`",
                  exp2->type->toChars());
         fatal();
       }
@@ -511,7 +510,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   // atomicrmw instruction
   if (fndecl->llvmInternal == LLVMatomic_rmw) {
     if (e->arguments->dim != 3) {
-      e->error("atomic_rmw instruction expects 3 arguments");
+      e->error("`atomic_rmw` instruction expects 3 arguments");
       fatal();
     }
 
@@ -522,7 +521,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
     int op = 0;
     for (;; ++op) {
       if (ops[op] == nullptr) {
-        e->error("unknown atomic_rmw operation %s",
+        e->error("unknown atomic_rmw operation `%s`",
                  fndecl->intrinsicName);
         fatal();
       }
@@ -604,7 +603,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
 
   if (fndecl->llvmInternal == LLVMbitop_vld) {
     if (e->arguments->dim != 1) {
-      e->error("bitop.vld intrinsic expects 1 argument");
+      e->error("`bitop.vld` intrinsic expects 1 argument");
       fatal();
     }
     // TODO: Check types
@@ -617,7 +616,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
 
   if (fndecl->llvmInternal == LLVMbitop_vst) {
     if (e->arguments->dim != 2) {
-      e->error("bitop.vst intrinsic expects 2 arguments");
+      e->error("`bitop.vst` intrinsic expects 2 arguments");
       fatal();
     }
     // TODO: Check types
@@ -637,8 +636,6 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
 
 class ImplicitArgumentsBuilder {
 public:
-  bool hasObjcSelector = false;
-
   ImplicitArgumentsBuilder(std::vector<LLValue *> &args, AttrSet &attrs,
                            Loc &loc, DValue *fnval,
                            LLFunctionType *llCalleeType,
@@ -774,12 +771,12 @@ private:
       attrs.addToParam(index, irFty.arg_nest->attrs);
     }
 
-    if (irFty.arg_objcSelector && dfnval) {
-      if (auto sel = dfnval->func->objc.selector) {
-        LLGlobalVariable *selptr = objc_getMethVarRef(*sel);
-        args.push_back(DtoBitCast(DtoLoad(selptr), getVoidPtrType()));
-        hasObjcSelector = true;
-      }
+    if (irFty.arg_objcSelector) {
+      assert(dfnval);
+      const auto selector = dfnval->func->selector;
+      assert(selector);
+      LLGlobalVariable *selptr = gIR->objc.getMethVarRef(*selector);
+      args.push_back(DtoBitCast(DtoLoad(selptr), getVoidPtrType()));
     }
   }
 
@@ -831,8 +828,9 @@ DValue *DtoCallFunctionImpl(Loc &loc, Type *resulttype, DValue *fnval,
   LLFunctionType *const callableTy =
       DtoExtractFunctionType(callable->getType());
   assert(callableTy);
-  const auto callconv = gABI->callingConv(callableTy, tf->linkage,
-                                          dfnval ? dfnval->func : nullptr);
+
+  const auto callconv =
+      gABI->callingConv(tf->linkage, tf, dfnval ? dfnval->func : nullptr);
 
   //     IF_LOG Logger::cout() << "callable: " << *callable << '\n';
 
@@ -868,7 +866,7 @@ DValue *DtoCallFunctionImpl(Loc &loc, Type *resulttype, DValue *fnval,
   addExplicitArguments(args, attrs, irFty, callableTy, argvals,
                        numFormalParams);
 
-  if (iab.hasObjcSelector) {
+  if (irFty.arg_objcSelector) {
     // Use runtime msgSend function bitcasted as original call
     const char *msgSend = gABI->objcMsgSendFunc(resulttype, irFty);
     LLType *t = callable->getType();

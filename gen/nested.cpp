@@ -46,7 +46,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     fd = getParentFunc(fd);
   }
   if (!fd) {
-    error(loc, "function %s cannot access frame of function %s",
+    error(loc, "function `%s` cannot access frame of function `%s`",
           irfunc->decl->toPrettyChars(), vdparent->toPrettyChars());
     return new DLValue(astype, llvm::UndefValue::get(DtoPtrToType(astype)));
   }
@@ -241,9 +241,10 @@ LLValue *DtoNestedContext(Loc &loc, Dsymbol *sym) {
       // and we cannot provide one. Thus, it's invalid code that is
       // unfortunately not caught in the frontend (e.g. a function literal
       // tries to call a nested function from the parent scope).
-      error(loc,
-            "function %s is a nested function and cannot be accessed from %s",
-            sym->toPrettyChars(), irFunc.decl->toPrettyChars());
+      error(
+          loc,
+          "function `%s` is a nested function and cannot be accessed from `%s`",
+          sym->toPrettyChars(), irFunc.decl->toPrettyChars());
       fatal();
     }
     return llvm::ConstantPointerNull::get(getVoidPtrType());
@@ -383,12 +384,19 @@ static void DtoCreateNestedContextType(FuncDeclaration *fd) {
     irLocal.nestedDepth = depth;
 
     LLType *t = nullptr;
-    if (vd->isRef() || vd->isOut())
+    if (vd->isRef() || vd->isOut()) {
       t = DtoType(vd->type->pointerTo());
-    else if (vd->isParameter() && (vd->storage_class & STClazy))
-      t = getIrParameter(vd)->value->getType()->getContainedType(0);
-    else
+    } else if (vd->isParameter() && (vd->storage_class & STClazy)) {
+      // The LL type is a delegate (LL struct).
+      // Depending on the used TargetABI, the LL parameter is either a struct or
+      // a pointer to a struct (`byval` attribute, ExplicitByvalRewrite).
+      t = getIrParameter(vd)->value->getType();
+      if (t->isPointerTy())
+        t = t->getPointerElementType();
+      assert(t->isStructTy());
+    } else {
       t = DtoMemType(vd->type);
+    }
 
     builder.addType(t, getTypeAllocSize(t));
 
@@ -476,7 +484,6 @@ void DtoCreateNestedContext(FuncGenState &funcGen) {
 
       IrLocal *irLocal = getIrLocal(vd);
       LLValue *gep = DtoGEPi(frame, 0, irLocal->nestedIndex, vd->toChars());
-      LLSmallVector<int64_t, 2> dwarfAddrOps;
       if (vd->isParameter()) {
         IF_LOG Logger::println("nested param: %s", vd->toChars());
         LOG_SCOPE
@@ -504,6 +511,7 @@ void DtoCreateNestedContext(FuncGenState &funcGen) {
       }
 
       if (global.params.symdebug) {
+        LLSmallVector<int64_t, 1> dwarfAddrOps;
 #if LDC_LLVM_VER < 500
         // Because we are passing a GEP instead of an alloca to
         // llvm.dbg.declare, we have to make the address dereference explicit.

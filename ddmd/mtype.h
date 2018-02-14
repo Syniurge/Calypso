@@ -247,7 +247,7 @@ public:
     bool equivalent(Type *t);
     // kludge for template.isType()
     int dyncast() const { return DYNCAST_TYPE; }
-    int covariant(Type *t, StorageClass *pstc = NULL);
+    int covariant(Type *t, StorageClass *pstc = NULL, bool fix17349 = true);
     const char *toChars();
     char *toPrettyChars(bool QualifyTypes = false);
     static void _init();
@@ -625,6 +625,7 @@ public:
     bool isref;         // true: returns a reference
     bool isreturn;      // true: 'this' is returned by ref
     bool isscope;       // true: 'this' is scope
+    bool isscopeinferred; // true: 'this' is scope from inference
     LINK linkage;  // calling convention
     TRUST trust;   // level of trust
     PURE purity;   // PURExxxx
@@ -665,6 +666,7 @@ public:
     Type *syntaxCopy();
     bool isTransitive() { return false; } // CALYPSO
     Type *semantic(Loc loc, Scope *sc);
+    Type *addStorageClass(StorageClass stc);
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize() /*const*/;
     MATCH implicitConvTo(Type *to);
@@ -937,7 +939,8 @@ public:
     static size_t dim(Parameters *parameters);
     static Parameter *getNth(Parameters *parameters, d_size_t nth, d_size_t *pn = NULL);
     const char *toChars();
-    bool isCovariant(const Parameter *p) const;
+    bool isCovariant(bool returnByRef, const Parameter *p) const;
+    static bool isCovariantScope(bool returnByRef, StorageClass from, StorageClass to);
 };
 
 bool arrayTypeCompatible(Loc loc, Type *t1, Type *t2);

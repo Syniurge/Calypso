@@ -31,6 +31,7 @@ class ExpInitializer;
 class StructDeclaration;
 struct InterState;
 struct CompiledCtfeFunction;
+struct ObjcSelector;
 #if IN_LLVM
 struct Symbol;
 #endif
@@ -95,8 +96,9 @@ enum PINLINE;
 #define STCinference     0x400000000000LL // do attribute inference
 #define STCexptemp       0x800000000000LL // temporary variable that has lifetime restricted to an expression
 #define STCmaybescope    0x1000000000000LL // parameter might be 'scope'
-#define STCimplicit      0x2000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
-#define STCmove          0x4000000000000LL // for C++ rvalue references // CALYPSO
+#define STCscopeinferred 0x2000000000000LL // 'scope' has been inferred and should not be part of mangling
+#define STCimplicit      0x4000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCmove          0x8000000000000LL // for C++ rvalue references // CALYPSO
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
@@ -266,10 +268,6 @@ public:
     // When interpreting, these point to the value (NULL if value not determinable)
     // The index of this variable on the CTFE stack, -1 if not allocated
     int ctfeAdrOnStack;
-    // if !NULL, rundtor is tested at runtime to see
-    // if the destructor should be run. Used to prevent
-    // dtor calls on postblitted vars
-    VarDeclaration *rundtor;
     Expression *edtor;          // if !=NULL, does the destruction of the variable
     IntRange *range;            // if !NULL, the variable is known to be within the range
 
@@ -542,7 +540,7 @@ public:
     DsymbolTable *localsymtab;
     VarDeclaration *vthis;              // 'this' parameter (member and nested)
     VarDeclaration *v_arguments;        // '_arguments' parameter
-    Objc_FuncDeclaration objc;
+    ObjcSelector* selector;             // Objective-C method selector (member function only)
     VarDeclaration *v_argptr;           // '_argptr' variable
     VarDeclarations *parameters;        // Array of VarDeclaration's for parameters
     DsymbolTable *labtab;               // statement label symbol table
@@ -578,6 +576,7 @@ public:
     // 2 if there's a throw statement
     // 4 if there's an assert(0)
     // 8 if there's inline asm
+    // 16 if there are multiple return statements
     int hasReturnExp;
 
     // Support for NRVO (named return value optimization)
@@ -618,7 +617,7 @@ public:
     bool equals(RootObject *o);
 
     int overrides(FuncDeclaration *fd);
-    int findVtblIndex(Dsymbols *vtbl, int dim);
+    int findVtblIndex(Dsymbols *vtbl, int dim, bool fix17349 = true);
     BaseClass *overrideInterface();
     bool overloadInsert(Dsymbol *s);
     FuncDeclaration *overloadExactMatch(Type *t);

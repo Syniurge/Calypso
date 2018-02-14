@@ -70,18 +70,15 @@ public:
     }
 
     if (TypeInfoDeclaration *ti = e->var->isTypeInfoDeclaration()) {
-      LLType *vartype = DtoType(e->type);
       result = DtoTypeInfoOf(ti->tinfo, false);
-      if (result->getType() != getPtrToType(vartype)) {
-        result = llvm::ConstantExpr::getBitCast(result, vartype);
-      }
+      result = DtoBitCast(result, DtoType(e->type));
       return;
     }
 
     VarDeclaration *vd = e->var->isVarDeclaration();
     if (vd && vd->isConst() && vd->_init) {
       if (vd->inuse) {
-        e->error("recursive reference %s", e->toChars());
+        e->error("recursive reference `%s`", e->toChars());
         result = llvm::UndefValue::get(DtoType(e->type));
       } else {
         vd->inuse++;
@@ -92,7 +89,7 @@ public:
     }
     // fail
     else {
-      e->error("non-constant expression %s", e->toChars());
+      e->error("non-constant expression `%s`", e->toChars());
       result = llvm::UndefValue::get(DtoType(e->type));
     }
   }
@@ -220,7 +217,7 @@ public:
       result = llvm::ConstantExpr::getGetElementPtr(
           isaPointer(ptr)->getElementType(), ptr, DtoConstSize_t(idx));
     } else {
-      e->error("expression '%s' is not a constant", e->toChars());
+      e->error("expression `%s` is not a constant", e->toChars());
       if (!global.gag) {
         fatal();
       }
@@ -242,7 +239,7 @@ public:
       result = llvm::ConstantExpr::getGetElementPtr(
           isaPointer(ptr)->getElementType(), ptr, negIdx);
     } else {
-      e->error("expression '%s' is not a constant", e->toChars());
+      e->error("expression `%s` is not a constant", e->toChars());
       if (!global.gag) {
         fatal();
       }
@@ -273,7 +270,7 @@ public:
             }
             size_t arrlen = datalen / eltype->size();
 #endif
-      e->error("ct cast of string to dynamic array not fully implemented");
+      e->error("ct cast of `string` to dynamic array not fully implemented");
       result = toConstElem(e->e1);
     }
     // pointer to pointer
@@ -322,7 +319,7 @@ public:
     return;
 
   Lerr:
-    e->error("cannot cast %s to %s at compile time", e->e1->type->toChars(),
+    e->error("cannot cast `%s` to `%s` at compile time", e->e1->type->toChars(),
              e->type->toChars());
     if (!global.gag) {
       fatal();
@@ -431,7 +428,7 @@ public:
 
       result = se->globalVar;
     } else if (e->e1->op == TOKslice) {
-      e->error("non-constant expression '%s'", e->toChars());
+      e->error("non-constant expression `%s`", e->toChars());
       if (!global.gag) {
         fatal();
       }
@@ -439,7 +436,7 @@ public:
     }
     // not yet supported
     else {
-      e->error("constant expression '%s' not yet implemented", e->toChars());
+      e->error("constant expression `%s` not yet implemented", e->toChars());
       fatal();
     }
   }
@@ -465,7 +462,7 @@ public:
 
     if (fd->tok != TOKfunction) {
       assert(fd->tok == TOKdelegate || fd->tok == TOKreserved);
-      e->error("non-constant nested delegate literal expression %s",
+      e->error("non-constant nested delegate literal expression `%s`",
                e->toChars());
       if (!global.gag) {
         fatal();
@@ -717,12 +714,13 @@ public:
       TypeInfoDeclaration_codegen(tid, p);
     }
     result = llvm::cast<llvm::GlobalVariable>(getIrGlobal(tid)->value);
+    result = DtoBitCast(result, DtoType(e->type));
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
   void visit(Expression *e) override {
-    if (e->op == TOKcall) {  // CALYPSO ugly HACK FIXME for C++ ctor call inits (emit a null constant and assume that the ctor gets called at some point)
+    if (e->op == TOKcall) {  // LDC 1.5 YUCK! // CALYPSO ugly HACK FIXME for C++ ctor call inits (emit a null constant and assume that the ctor gets called at some point)
       auto ce = static_cast<CallExp*>(e);
       if (auto tsym = ce->e1->type->toDsymbol(nullptr))
         if (auto lp = tsym->langPlugin())
@@ -732,7 +730,7 @@ public:
           }
     }
 
-    e->error("expression '%s' is not a constant", e->toChars());
+    e->error("expression `%s` is not a constant", e->toChars());
     if (!global.gag) {
       fatal();
     }

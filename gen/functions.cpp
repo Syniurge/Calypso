@@ -303,10 +303,10 @@ llvm::FunctionType *DtoFunctionType(FuncDeclaration *fdecl) {
   }
 
   if (fdecl->linkage == LINKobjc && dthis) {
-    if (fdecl->objc.selector) {
+    if (fdecl->selector) {
       hasSel = true;
     } else if (fdecl->parent->isClassDeclaration()) {
-      fdecl->error("Objective-C @selector is missing");
+      fdecl->error("Objective-C `@selector` is missing");
     }
   }
 
@@ -389,7 +389,7 @@ void DtoResolveFunction(FuncDeclaration *fdecl) {
           TypeFunction *tf = static_cast<TypeFunction *>(fdecl->type);
           if (tf->varargs != 1 ||
               (fdecl->parameters && fdecl->parameters->dim != 0)) {
-            tempdecl->error("invalid __asm declaration, must be a D style "
+            tempdecl->error("invalid `__asm` declaration, must be a D style "
                             "variadic with no explicit parameters");
             fatal();
           }
@@ -477,7 +477,7 @@ void applyTargetMachineAttributes(llvm::Function &func,
 
   // Frame pointer elimination
   func.addFnAttr("no-frame-pointer-elim",
-                 opts::disableFpElim ? "true" : "false");
+                 opts::disableFPElim() ? "true" : "false");
 }
 
 } // anonymous namespace
@@ -539,25 +539,25 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
   const auto link = forceC ? LINKc : f->linkage;
 
   // mangled name
-  std::string mangledName = getMangledName(fdecl, link);
+  const auto irMangle = getIRMangledName(fdecl, link);
 
   // construct function
   LLFunctionType *functype = DtoFunctionType(fdecl);
-  LLFunction *func = vafunc ? vafunc : gIR->module.getFunction(mangledName);
+  LLFunction *func = vafunc ? vafunc : gIR->module.getFunction(irMangle);
   if (!func) {
     // All function declarations are "external" - any other linkage type
     // is set when actually defining the function.
     func = LLFunction::Create(functype, llvm::GlobalValue::ExternalLinkage,
-                              mangledName, &gIR->module);
+                              irMangle, &gIR->module);
   } else if (func->getFunctionType() != functype) {
     error(fdecl->loc,
           "Function type does not match previously declared "
-          "function with the same mangled name: %s",
+          "function with the same mangled name: `%s`",
           mangleExact(fdecl));
     fatal();
   }
 
-  func->setCallingConv(gABI->callingConv(func->getFunctionType(), link, fdecl));
+  func->setCallingConv(gABI->callingConv(link, f, fdecl));
 
   if (global.params.isWindows && fdecl->isExport()) {
     func->setDLLStorageClass(fdecl->isImportedSymbol()
@@ -588,7 +588,7 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
     // Detect multiple main functions, which is disallowed. DMD checks this
     // in the glue code, so we need to do it here as well.
     if (gIR->mainFunc) {
-      error(fdecl->loc, "only one main function allowed");
+      error(fdecl->loc, "only one `main` function allowed");
     }
     gIR->mainFunc = func;
   }
@@ -649,16 +649,14 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
     ++iarg;
   }
 
-  // TODO: do we need this?
-  if (irFty.arg_objcSelector) {
-    iarg->setName(".objcSelector_arg");
-    irFunc->thisArg = &(*iarg);
-    ++iarg;
-  }
-
   if (passThisBeforeSret) {
     iarg->setName(".sret_arg");
     irFunc->sretArg = &(*iarg);
+    ++iarg;
+  }
+
+  if (irFty.arg_objcSelector) {
+    iarg->setName(".objcSelector_arg");
     ++iarg;
   }
 
@@ -835,7 +833,7 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     // the codegen expect irFunc to be set for defined functions.
     error(fd->loc,
           "Internal Compiler Error: function not fully analyzed; "
-          "previous unreported errors compiling %s?",
+          "previous unreported errors compiling `%s`?",
           fd->toPrettyChars());
     fatal();
   }
@@ -913,7 +911,7 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   if (fd->semanticRun != PASSsemantic3done) {
     error(fd->loc,
           "Internal Compiler Error: function not fully analyzed; "
-          "previous unreported errors compiling %s?",
+          "previous unreported errors compiling `%s`?",
           fd->toPrettyChars());
     fatal();
   }
@@ -943,14 +941,23 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     return;
   }
 
-  IrFunction *irFunc = getIrFunc(fd);
-
-  // debug info
-  irFunc->diSubprogram = gIR->DBuilder.EmitSubProgram(fd);
-
   if (!fd->fbody) {
     return;
   }
+
+  IrFunction *const irFunc = getIrFunc(fd);
+  llvm::Function *const func = irFunc->getLLVMFunc();
+
+  if (!func->empty()) {
+    warning(fd->loc,
+            "skipping definition of function `%s` due to previous definition "
+            "for the same mangled name: %s",
+            fd->toPrettyChars(), mangleExact(fd));
+    return;
+  }
+
+  // debug info
+  irFunc->diSubprogram = gIR->DBuilder.EmitSubProgram(fd);
 
   IF_LOG Logger::println("Doing function body for: %s", fd->toChars());
   gIR->funcGenStates.emplace_back(new FuncGenState(*irFunc, *gIR));
@@ -962,7 +969,6 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
 
   const auto f = static_cast<TypeFunction *>(fd->type->toBasetype());
   IrFuncTy &irFty = irFunc->irFty;
-  llvm::Function *func = irFunc->getLLVMFunc();
 
   const auto lwc = lowerFuncLinkage(fd);
   if (linkageAvailableExternally) {
@@ -1085,8 +1091,9 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
 
   DtoCreateNestedContext(funcGen);
 
-  if (fd->vresult && !fd->vresult->nestedrefs.dim) // FIXME: not sure here :/
-  {
+  // Declare the special __result variable. If it's captured, it has already
+  // been allocated by DtoCreateNestedContext().
+  if (fd->vresult) {
     DtoVarDeclaration(fd->vresult);
   }
 

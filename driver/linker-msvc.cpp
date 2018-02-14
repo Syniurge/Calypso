@@ -63,8 +63,6 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
   windows::setupMsvcEnvironment();
 #endif
 
-  const std::string tool = "link.exe";
-
   // build arguments
   std::vector<std::string> args;
 
@@ -184,5 +182,9 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
 #endif
 
   // try to call linker
-  return executeToolAndWait(tool, args, global.params.verbose);
+  std::string linker = opts::linker;
+  if (linker.empty())
+    linker = "link.exe";
+
+  return executeToolAndWait(linker, args, global.params.verbose);
 }

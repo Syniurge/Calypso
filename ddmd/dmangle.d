@@ -28,6 +28,7 @@ import ddmd.id;
 import ddmd.mtype;
 import ddmd.root.ctfloat;
 import ddmd.root.outbuffer;
+import ddmd.target;
 import ddmd.utf;
 import ddmd.visitor;
 
@@ -290,7 +291,7 @@ public:
                 buf.writestring("Ni");
             if (ta.isreturn)
                 buf.writestring("Nj");
-            if (ta.isscope && !ta.isreturn)
+            if (ta.isscope && !ta.isreturn && !ta.isscopeinferred)
                 buf.writestring("Nl");
             switch (ta.trust)
             {
@@ -455,7 +456,7 @@ public:
                 buf.writestring(d.ident.toChars());
                 return;
             case LINKcpp:
-                buf.writestring(toCppMangle(d));
+                buf.writestring(Target.toCppMangle(d));
                 return;
             case LINKdefault:
                 d.error("forward declaration");
@@ -836,7 +837,7 @@ public:
 
     override void visit(Parameter p)
     {
-        if (p.storageClass & STCscope && p.type.hasPointers() /* CALYPSO */)
+        if (p.storageClass & STCscope && !(p.storageClass & STCscopeinferred) && p.type.hasPointers()) // CALYPSO see D20180213T205916
             buf.writeByte('M');
         // 'return inout ref' is the same as 'inout ref'
         if ((p.storageClass & (STCreturn | STCwild)) == STCreturn)

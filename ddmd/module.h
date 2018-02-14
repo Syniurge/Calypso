@@ -183,10 +183,6 @@ public:
 
     Symbol *sfilename;          // symbol for filename
 
-    Symbol *massert;            // module assert function
-    Symbol *munittest;          // module unittest failure function
-    Symbol *marray;             // module array bounds function
-
 #if IN_LLVM
     // LDC
     llvm::Module* genLLVMModule(llvm::LLVMContext& context);

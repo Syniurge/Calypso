@@ -107,7 +107,13 @@ char *concat(const char *a, int b) {
  */
 int execute(const std::string &exePath, const char **args) {
   std::string errorMsg;
-  int rc = ls::ExecuteAndWait(exePath, args, nullptr, nullptr, 0, 0, &errorMsg);
+  int rc = ls::ExecuteAndWait(exePath, args, nullptr,
+#if LDC_LLVM_VER >= 600
+                              {},
+#else
+                              nullptr,
+#endif
+                              0, 0, &errorMsg);
   if (!errorMsg.empty()) {
     error("Error executing %s: %s", exePath.c_str(), errorMsg.c_str());
   }
@@ -161,7 +167,6 @@ Where:\n\
   -dip25           implement http://wiki.dlang.org/DIP25 (experimental)\n\
   -dip1000         implement http://wiki.dlang.org/DIP1000 (experimental)\n\
   -g               add symbolic debug info\n\
-  -gc              add symbolic debug info, optimize for non D debuggers\n\
   -gs              always emit stack frame\n"
 #if 0
 "  -gx              add stack stomp code\n"
