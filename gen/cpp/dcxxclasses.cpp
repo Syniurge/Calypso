@@ -240,7 +240,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
 
     fthunk->importAll(callee->_scope);
     fthunk->semantic(callee->_scope);
-    fthunk->protection = PROTprivate;  // HACK NOTE: setting the prot to private will bypass the invariant checks
+    fthunk->protection = {PROTprivate, nullptr};  // HACK NOTE: setting the prot to private will bypass the invariant checks
     fthunk->semantic2(callee->_scope);
     fthunk->semantic3(callee->_scope);
     //fprintf(stderr, "%s", fthunk->fbody->toChars());

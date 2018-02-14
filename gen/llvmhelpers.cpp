@@ -46,6 +46,7 @@
 #include <stack>
 
 #include "llvm/Support/CommandLine.h"
+#include "gen/dynamiccompile.h"
 
 llvm::cl::opt<llvm::GlobalVariable::ThreadLocalMode> clThreadModel(
     "fthread-model", llvm::cl::ZeroOrMore, llvm::cl::desc("Thread model"),
@@ -280,11 +281,42 @@ void DtoAssert(Module *M, Loc &loc, DValue *msg) {
   gIR->ir->CreateUnreachable();
 }
 
+void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
+  const auto file = DtoConstCString(loc.filename ? loc.filename
+                                                 : M->srcfile->name->toChars());
+  const auto line = DtoConstUint(loc.linnum);
+  const auto fn = getCAssertFunction(loc, gIR->module);
+
+  llvm::SmallVector<LLValue *, 4> args;
+  if (global.params.targetTriple->isOSDarwin()) {
+    const auto irFunc = gIR->func();
+    const auto funcName =
+        irFunc && irFunc->decl ? irFunc->decl->toPrettyChars() : "";
+    args.push_back(DtoConstCString(funcName));
+    args.push_back(file);
+    args.push_back(line);
+    args.push_back(msg);
+  } else if (global.params.targetTriple->getEnvironment() ==
+             llvm::Triple::Android) {
+    args.push_back(file);
+    args.push_back(line);
+    args.push_back(msg);
+  } else {
+    args.push_back(msg);
+    args.push_back(file);
+    args.push_back(line);
+  }
+
+  gIR->funcGen().callOrInvoke(fn, args);
+
+  gIR->ir->CreateUnreachable();
+}
+
 /******************************************************************************
  * MODULE FILE NAME
  ******************************************************************************/
 
-LLValue *DtoModuleFileName(Module *M, const Loc &loc) {
+LLConstant *DtoModuleFileName(Module *M, const Loc &loc) {
   return DtoConstString(loc.filename ? loc.filename
                                      : M->srcfile->name->toChars());
 }
@@ -873,7 +905,8 @@ void DtoResolveVariable(VarDeclaration *vd) {
     llvm::GlobalVariable *gvar =
         getOrCreateGlobal(vd->loc, gIR->module, DtoMemType(vd->type), isLLConst,
                           linkage, nullptr, irMangle, vd->isThreadlocal());
-    getIrGlobal(vd)->value = gvar;
+    auto varIr = getIrGlobal(vd);
+    varIr->value = gvar;
 
     // Set the alignment (it is important not to use type->alignsize because
     // VarDeclarations can have an align() attribute independent of the type
@@ -889,6 +922,9 @@ void DtoResolveVariable(VarDeclaration *vd) {
     */
 
     applyVarDeclUDAs(vd, gvar);
+    if (varIr->dynamicCompileConst) {
+      addDynamicCompiledVar(gIR, varIr);
+    }
 
     IF_LOG Logger::cout() << *gvar << '\n';
   }
@@ -1227,9 +1263,7 @@ LLConstant *DtoTypeInfoOf(Type *type, bool base) {
                          type->toChars(), base);
   LOG_SCOPE
 
-  type = type->merge2(); // needed.. getTypeInfo does the same
-  getTypeInfoType(type, nullptr);
-  TypeInfoDeclaration *tidecl = type->vtinfo;
+  TypeInfoDeclaration *tidecl = getOrCreateTypeInfoDeclaration(type, nullptr);
   assert(tidecl);
   Declaration_codegen(tidecl);
   assert(getIrGlobal(tidecl)->value != NULL);

@@ -8,6 +8,7 @@ default:
     switches = [
         "-I@RUNTIME_DIR@/src",
         "-I@PROFILERT_DIR@/d",
+        "-I@JITRT_DIR@/d",
         "-I@CALYPSORT_DIR@",
         "-I@PHOBOS2_DIR@",@SHARED_LIBS_RPATH@
         "-defaultlib=phobos2-ldc,druntime-ldc",

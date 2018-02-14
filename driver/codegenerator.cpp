@@ -21,6 +21,7 @@
 #include "gen/logger.h"
 #include "gen/modules.h"
 #include "gen/runtime.h"
+#include "gen/dynamiccompile.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -265,6 +266,7 @@ void CodeGenerator::writeAndFreeLLModule(const char *filename) {
   ir_->replaceGlobals();
 
   ir_->DBuilder.Finalize();
+  generateBitcodeForDynamicCompile(ir_);
 
   emitLLVMUsedArray(*ir_);
   emitLinkerOptions(*ir_, ir_->module, ir_->context());

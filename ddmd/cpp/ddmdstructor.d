@@ -235,7 +235,7 @@ SharedStaticDtorDeclaration new_SharedStaticDtorDeclaration(Loc loc, Loc endloc,
 UnitTestDeclaration new_UnitTestDeclaration(Loc loc, Loc endloc, StorageClass stc, char *codedoc) { return new UnitTestDeclaration(loc, endloc, stc, codedoc); }
 NewDeclaration new_NewDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments, int varargs) { return new NewDeclaration(loc, endloc, stc, arguments, varargs); }
 DeleteDeclaration new_DeleteDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments) { return new DeleteDeclaration(loc, endloc, stc, arguments); }
-StructDeclaration new_StructDeclaration(Loc loc, Identifier id) { return new StructDeclaration(loc, id); }
+StructDeclaration new_StructDeclaration(Loc loc, Identifier id, bool inObject) { return new StructDeclaration(loc, id, inObject); }
 UnionDeclaration new_UnionDeclaration(Loc loc, Identifier id) { return new UnionDeclaration(loc, id); }
 InterfaceDeclaration new_InterfaceDeclaration(Loc loc, Identifier id, BaseClasses *baseclasses) { return new InterfaceDeclaration(loc, id, baseclasses); }
 // DVCondition new_DVCondition(Module mod, uint level, Identifier ident) { return new DVCondition(mod, level, ident); }
@@ -386,11 +386,11 @@ void construct_Modmap(Modmap _this, Loc loc, StringExp arg)
     memcpy(postvtblThis, &Modmap.classinfo.m_init[offset], Modmap.classinfo.m_init.length - offset);
     _this.__ctor(loc, arg);
 }
-void construct_StructDeclaration(StructDeclaration _this, Loc loc, Identifier id)
+void construct_StructDeclaration(StructDeclaration _this, Loc loc, Identifier id, bool inObject)
 {
     auto postvtblThis = &(cast(byte*)_this)[offset];
     memcpy(postvtblThis, &StructDeclaration.classinfo.m_init[offset], StructDeclaration.classinfo.m_init.length - offset);
-    _this.__ctor(loc, id);
+    _this.__ctor(loc, id, inObject);
 }
 void construct_UnionDeclaration(UnionDeclaration _this, Loc loc, Identifier id)
 {

@@ -204,7 +204,7 @@ SharedStaticDtorDeclaration* new_SharedStaticDtorDeclaration(Loc loc, Loc endloc
 UnitTestDeclaration* new_UnitTestDeclaration(Loc loc, Loc endloc, StorageClass stc, char *codedoc);
 NewDeclaration* new_NewDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments, int varargs);
 DeleteDeclaration* new_DeleteDeclaration(Loc loc, Loc endloc, StorageClass stc, Parameters *arguments);
-StructDeclaration* new_StructDeclaration(Loc loc, Identifier *id);
+StructDeclaration* new_StructDeclaration(Loc loc, Identifier *id, bool inObject = false);
 UnionDeclaration* new_UnionDeclaration(Loc loc, Identifier *id);
 InterfaceDeclaration* new_InterfaceDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses);
 DVCondition* new_DVCondition(Module *mod, unsigned int level, Identifier *ident);
@@ -291,7 +291,7 @@ void construct_EnumMember(EnumMember *_this, Loc loc, Identifier *id, Expression
 void construct_AliasDeclaration(AliasDeclaration *_this, Loc loc, Identifier *ident, Type *type);
 void construct_Import(Import *_this, Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 void construct_Modmap(Modmap *_this, Loc loc, StringExp *arg);
-void construct_StructDeclaration(StructDeclaration *_this, Loc loc, Identifier *id);
+void construct_StructDeclaration(StructDeclaration *_this, Loc loc, Identifier *id, bool inObject = false);
 void construct_UnionDeclaration(UnionDeclaration *_this, Loc loc, Identifier *id);
 void construct_ClassDeclaration(ClassDeclaration *_this, Loc loc, Identifier *id, BaseClasses *baseclasses, Dsymbols* members, bool inObject = false);
 void construct_AnonDeclaration(AnonDeclaration *_this, Loc loc, bool isunion, Dsymbols *decl);

@@ -199,7 +199,7 @@ void Module::saveEmittedSymbolList()
 // {
 // }
 
-inline Prot DeclMapper::toProt(clang::AccessSpecifier AS)
+inline PROTKIND DeclMapper::toProt(clang::AccessSpecifier AS)
 {
     switch(AS) {
         case clang::AS_public:

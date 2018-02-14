@@ -97,14 +97,16 @@ enum PINLINE;
 #define STCexptemp       0x800000000000LL // temporary variable that has lifetime restricted to an expression
 #define STCmaybescope    0x1000000000000LL // parameter might be 'scope'
 #define STCscopeinferred 0x2000000000000LL // 'scope' has been inferred and should not be part of mangling
-#define STCimplicit      0x4000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
-#define STCmove          0x8000000000000LL // for C++ rvalue references // CALYPSO
+#define STCfuture        0x4000000000000LL // introducing new base class function
+#define STClocal         0x8000000000000LL // do not forward (see ddmd.dsymbol.ForwardingScopeDsymbol).
+#define STCimplicit      0x10000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCmove          0x20000000000000LL // for C++ rvalue references // CALYPSO
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
-    STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
+    STCabstract | STCsynchronized | STCdeprecated | STCfuture | STCoverride | STClazy | STCalias |
     STCout | STCin |
     STCmanifest | STCimmutable | STCshared | STCwild | STCnothrow | STCnogc | STCpure | STCref | STCtls |
-    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable |
+    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable | STClocal |
     STCmove); // CALYPSO
 
 struct Match
@@ -166,6 +168,8 @@ public:
     bool isOut()   { return (storage_class & STCout) != 0; }
     bool isRef()   { return (storage_class & STCref) != 0; }
 
+    bool isFuture() { return (storage_class & STCfuture) != 0; }
+
     Prot prot();
 
     Declaration *isDeclaration() { return this; }
@@ -206,6 +210,7 @@ public:
     Dsymbol *_import;           // !=NULL if unresolved internal alias for selective import
 
     virtual void _key(); // CALYPSO
+    static AliasDeclaration *create(Loc loc, Identifier *id, Type *type);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     void aliasSemantic(Scope *sc);
@@ -605,6 +610,7 @@ public:
     unsigned flags;                     // FUNCFLAGxxxxx
 
     virtual void _key(); // CALYPSO
+    static FuncDeclaration *create(Loc loc, Loc endloc, Identifier *id, StorageClass storage_class, Type *type);
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     void semantic2(Scope *sc);

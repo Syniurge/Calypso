@@ -288,7 +288,7 @@ template <typename AggTy>
 
     if (exp->op == TOKcall) {
         auto ce2 = static_cast<CallExp*>(exp);
-        ce2->unaSemantic(sc);
+        unaSemantic(ce2, sc);
         if (ce2->e1->op == TOKtype &&
                     ad->getType() == static_cast<TypeExp*>(ce2->e1)->type->toBasetype())
             ce = ce2; // rewrite T var = T(...) as T var; v.this(...);
@@ -302,7 +302,7 @@ template <typename AggTy>
         auto e1 = new_DotVarExp(loc, ve, static_cast<Declaration*>(ad->ctor));
 
         if (!ce) {
-            exp = exp->semantic(sc);
+            exp = semantic(exp, sc);
             exp = resolveProperties(sc, exp);
             
             if (exp->type->constConv(ad->getType()) >= MATCHconst)
@@ -476,7 +476,7 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
     assert(tcd && ad->isBaseOf2(tcd));
 
     e1 = new_CastExp(loc, e1, ad->getType()); // NOTE: not strictly necessary if first base
-    e1 = e1->semantic(sc);
+    e1 = semantic(e1, sc);
 
     return e1;
 }
@@ -493,7 +493,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     auto arguments = new Expressions;
     arguments->push(e);
     e = new_CallExp(e->loc, new_TypeExp(e->loc, tv), arguments);
-    return e->semantic(sc);
+    return semantic(e, sc);
 }
 
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)

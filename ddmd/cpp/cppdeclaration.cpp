@@ -339,7 +339,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
-    e = e->semantic(sc);
+    e = semantic(e, sc);
 
     Dsymbol *s;
     if (e->op == TOKvar)
@@ -544,7 +544,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
                         STCdeprecated | STCoverride |
                         STC_TYPECTOR | STCfinal | STCtls | STCgshared | STCref | STCreturn |
                         STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
-        sc2->protection = Prot(PROTpublic);
+        sc2->protection = {PROTpublic, nullptr};
         sc2->explicitProtection = 0;
         sc2->aligndecl = NULL;
         sc2->flags = sc->flags & ~SCOPEcontract;

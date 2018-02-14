@@ -829,7 +829,7 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
             for (auto arg: *a) {
                 if (auto e = isExpression(arg)) {
                     assert(isExpression((*tiargs)[i]));
-                    (*tiargs)[i] = e->semantic(sc);
+                    (*tiargs)[i] = ::semantic(e, sc);
                 }
                 i++;
             }
