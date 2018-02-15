@@ -22,7 +22,7 @@ size_t correspondingParamIdx(size_t argi, TemplateDeclaration* tempdecl, Objects
 
 struct RefParamPartialOrderingComparison;
 namespace clang {
-    bool isAtLeastAsSpecializedAs(Sema &S,
+    bool isAtLeastAsSpecializedAs_(Sema &S,
                                      SourceLocation Loc,
                                      FunctionTemplateDecl *FT1,
                                      FunctionTemplateDecl *FT2,
@@ -390,7 +390,7 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(c_td2->getPrimaryTemplate());
 
     const unsigned TDF_IgnoreQualifiers = 0x02;
-    auto Better1 = clang::isAtLeastAsSpecializedAs(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
+    auto Better1 = clang::isAtLeastAsSpecializedAs_(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
                                 isa<clang::CXXConversionDecl>(FuncTemp1->getTemplatedDecl())? clang::TPOC_Conversion : clang::TPOC_Call,
                                 fargs->dim, TDF_IgnoreQualifiers);
     if (Better1)
@@ -491,7 +491,8 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
         }
 
         if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
-                    &ExplicitTemplateArgs, Args, Specialization, DedInfo))
+                    &ExplicitTemplateArgs, Args, Specialization, DedInfo, false,
+                    [](llvm::ArrayRef<clang::QualType>){ return false; }))
             return MATCHnomatch;
     } else if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
                     &ExplicitTemplateArgs, Specialization, DedInfo))

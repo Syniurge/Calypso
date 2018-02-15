@@ -772,9 +772,9 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 
     if (Val.isZero())
         val = 0.0;
-    else if (&Val.getSemantics() == &llvm::APFloat::IEEEsingle)
+    else if (&Val.getSemantics() == &llvm::APFloat::IEEEsingle())
         val = Val.convertToFloat();
-    else if (&Val.getSemantics() == &llvm::APFloat::IEEEdouble)
+    else if (&Val.getSemantics() == &llvm::APFloat::IEEEdouble())
     {
         val = Val.convertToDouble();
         t = Type::tfloat64;
@@ -894,8 +894,8 @@ bool ExprMapper::toAPValue(clang::APValue& Result, Expression* e)
 
             auto tofltSemantics = [] (Type *t) {
                 switch(t->ty) {
-                    case Tfloat32: return &llvm::APFloat::IEEEsingle;
-                    case Tfloat64: return &llvm::APFloat::IEEEdouble;
+                    case Tfloat32: return &llvm::APFloat::IEEEsingle();
+                    case Tfloat64: return &llvm::APFloat::IEEEdouble();
                     default: llvm_unreachable("Unhandled tofltSemantics");
                 }
             };

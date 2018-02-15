@@ -14,7 +14,7 @@ using llvm::isa;
 bool LangPlugin::canInterpret(::FuncDeclaration *fd)
 {
     auto FD = getFD(fd);
-    return FD->isConstexpr() && FD->hasBody();
+    return FD->isConstexpr() && FD->isDefined();
 }
 
 Expression *LangPlugin::interpret(::FuncDeclaration *fd, InterState *istate, Expressions *arguments,

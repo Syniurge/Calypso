@@ -32,6 +32,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/ASTUnit.h"
+#include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Lookup.h"
@@ -469,8 +470,8 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     updateCGFInsertPoint();
 
     clangCG::Address address(src, clang::CharUnits::One());
-    auto LV = clang::CodeGen::LValue::MakeAddr(address, Context.getRecordType(Record),
-                        Context, clangCG::AlignmentSource::Decl);
+    auto LV = clangCG::LValue::MakeAddr(address, Context.getRecordType(Record),
+                        Context, clangCG::LValueBaseInfo(clangCG::AlignmentSource::Decl));
 
     // NOTE: vd might be a field from an anon struct or union injected to ad->fields during semantic
     // LDC differs from Clang in that it also injects the fields to the LLVM type, and access to indirect fields
@@ -587,8 +588,9 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     auto Ty = toFunctionType(fdecl);
     
     clangCG::Address This(vthis, clang::CharUnits::One());
-    return CGM->getCXXABI().getVirtualFunctionPointer(
+    auto F = CGM->getCXXABI().getVirtualFunctionPointer(
                             *CGF(), MD, This, Ty, clang::SourceLocation());
+    return F.getFunctionPointer();
 }
 
 static const clangCG::CGFunctionInfo &arrangeFunctionCall(
@@ -604,7 +606,7 @@ static const clangCG::CGFunctionInfo &arrangeFunctionCall(
         clangCG::RequiredArgs required =
             clangCG::RequiredArgs::forPrototypePlus(FPT, Args.size(), FD);
 
-        return CGM->getTypes().arrangeCXXMethodCall(Args, FPT, required);
+        return CGM->getTypes().arrangeCXXMethodCall(Args, FPT, required, /*numPrefixArgs=*/0); // NOTE: numPrefixArgs is always 0 except during dtor calls that need a VTT
     }
     else
         return CGM->getTypes().arrangeFreeFunctionCall(Args, FPT, false);
@@ -717,7 +719,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
     llvm::Instruction *callOrInvoke;
-    RV = CGF()->EmitCall(FInfo, callable, ReturnValue, Args, FD,
+    RV = CGF()->EmitCall(FInfo, clangCG::CGCallee(FD, callable), ReturnValue, Args,
                             &callOrInvoke, invokeDest, postinvoke);
 
     if (postinvoke)

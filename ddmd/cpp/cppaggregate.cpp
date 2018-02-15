@@ -200,7 +200,7 @@ template <typename AggTy>
         if (RD->getCanonicalDecl() == RD2->getCanonicalDecl())
             return true;
 
-        auto Offset = clang::ComputeBaseOffset(Context, RD, RD2);
+        auto Offset = clang::ComputeBaseOffset_(Context, RD, RD2);
         *poffset += Offset.NonVirtualOffset.getQuantity();
     }
 

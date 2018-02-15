@@ -43,6 +43,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Host.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Target/TargetMachine.h"
@@ -683,8 +684,8 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
 
     // Initialize a compiler invocation object from the clang (-cc1) arguments.
     const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
-    clang::CompilerInvocation CI;
-    clang::CompilerInvocation::CreateFromArgs(CI, CCArgs.begin(), CCArgs.end(), *Diags);
+    auto CI = std::make_shared<clang::CompilerInvocation>();
+    clang::CompilerInvocation::CreateFromArgs(*CI, CCArgs.begin(), CCArgs.end(), *Diags);
 
     // Parse the headers
     DiagClient->muted = false;
@@ -695,9 +696,9 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
 
     PCHContainerOps.reset(new clang::PCHContainerOperations);
 
-    AST = ASTUnit::LoadFromCompilerInvocation(&CI, PCHContainerOps, Diags, Files, false, false, false,
-                                              clang::TU_Complete, false, false, false,
-                                              new InstantiationChecker).release();
+    AST = ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false, false, false,
+                                              clang::TU_Complete, false, false, false/*,
+                                              new InstantiationChecker*/).release(); // Clang 5.x FIXME: remove InstantiationChecker
     AST->getSema();
     Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
 
@@ -732,43 +733,48 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
 void PCH::loadFromPCH(clang::driver::Compilation* C)
 {
     clang::FileSystemOptions FileSystemOpts;
-    clang::ASTReader::ASTReadResult ReadResult;
-    
+//     clang::ASTReader::ASTReadResult ReadResult;
+
     DiagClient->muted = false;
 
     PCHContainerOps.reset(new clang::PCHContainerOperations);
     auto *Reader = PCHContainerOps->getReaderOrNull("raw");
 
-    AST = ASTUnit::LoadFromASTFile(pchFilename, *Reader,
+    AST = ASTUnit::LoadFromASTFile(pchFilename, *Reader, clang::ASTUnit::LoadEverything,
                             Diags, FileSystemOpts, false, false, llvm::None, false,
-                            /* AllowPCHWithCompilerErrors = */ true, false,
-                            new InstantiationChecker, &ReadResult).release();
+                            /* AllowPCHWithCompilerErrors = */ true, false/*,
+                            new InstantiationChecker, &ReadResult*/).release();
 
     DiagClient->muted = !opts::cppVerboseDiags;
 
-    switch (ReadResult) {
-        case clang::ASTReader::Success:
-            break;
+//     switch (ReadResult) {
+//         case clang::ASTReader::Success:
+//             break;
+//
+//         case clang::ASTReader::Failure:
+//         case clang::ASTReader::Missing:
+//         case clang::ASTReader::OutOfDate:
+//         case clang::ASTReader::VersionMismatch:
+//         case clang::ASTReader::ConfigurationMismatch:
+//             delete AST;
+//             Diags->Reset();
+//
+//             // Headers or flags may have changed since the PCH was generated, fall back to headers.
+//             loadFromHeaders(C);
+//             return;
+//
+//         default:
+//             fatal();
+//             return;
+//     }
 
-        case clang::ASTReader::Failure:
-        case clang::ASTReader::Missing:
-        case clang::ASTReader::OutOfDate:
-        case clang::ASTReader::VersionMismatch:
-        case clang::ASTReader::ConfigurationMismatch:
-            delete AST;
-            Diags->Reset();
+    if (!AST) {
+        Diags->Reset();
 
-            // Headers or flags may have changed since the PCH was generated, fall back to headers.
-            loadFromHeaders(C);
-            return;
-
-        default:
-            fatal();
-            return;
+        // Headers or flags may have changed since the PCH was generated, fall back to headers.
+        loadFromHeaders(C);
+        return;
     }
-
-    if (!AST)
-        fatal();
 }
 
 void PCH::update()
@@ -870,7 +876,7 @@ void PCH::update()
                 if (MMap->parseModuleMapFile(MMapFile, false, Dir))
                 {
                     ::error(Loc(), "Clang module map '%s/%s' file parsing failed",
-                                    MMapFile->getDir()->getName(), MMapFile->getName());
+                            MMapFile->getDir()->getName().str().c_str(), MMapFile->getName().str().c_str());
                     fatal();
                 }
             }
@@ -983,9 +989,8 @@ void PCH::save()
     auto Buffer = std::make_shared<clang::PCHBuffer>();
     auto *Writer = PCHContainerOps->getWriterOrNull("raw");
 
-    auto GenPCH = new clang::PCHGenerator(PP, pchFilename,
-                                          nullptr, Sysroot, Buffer,
-                                          llvm::ArrayRef<llvm::IntrusiveRefCntPtr<clang::ModuleFileExtension>>(),
+    auto GenPCH = new clang::PCHGenerator(PP, pchFilename, Sysroot, Buffer,
+                                          llvm::ArrayRef<std::shared_ptr<clang::ModuleFileExtension>>(),
                                           true);
     GenPCH->InitializeSema(AST->getSema());
 

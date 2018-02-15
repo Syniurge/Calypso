@@ -666,7 +666,7 @@ bool isMapped(const clang::Decl *D)
         // do not map the ones not supported by the target machine set by LDC
         if (auto TD = FD->getAttr<clang::TargetAttr>()) {
             auto ParsedAttr = TD->parse();
-            for (auto& Feature: ParsedAttr.first)
+            for (auto& Feature: ParsedAttr.Features)
                 if (!calypso.TargetFeatures.count(Feature))
                     return false;
         }
