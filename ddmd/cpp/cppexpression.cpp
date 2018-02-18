@@ -169,8 +169,8 @@ Expression *ExprMapper::fromBinExp(clang::SourceLocation Loc,
         case clang::BO_Or: return new_OrExp(loc, lhs, rhs);
         case clang::BO_Xor: return new_XorExp(loc, lhs, rhs);
 
-        case clang::BO_LAnd: return new_AndAndExp(loc, lhs, rhs);
-        case clang::BO_LOr: return new_OrOrExp(loc, lhs, rhs);
+        case clang::BO_LAnd: return new_LogicalExp(loc, TOKandand, lhs, rhs);
+        case clang::BO_LOr: return new_LogicalExp(loc, TOKoror, lhs, rhs);
 
         case clang::BO_Shl: return new_ShlExp(loc, lhs, rhs);
         case clang::BO_Shr: return new_ShrExp(loc, lhs, rhs);

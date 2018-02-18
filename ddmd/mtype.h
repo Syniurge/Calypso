@@ -53,6 +53,8 @@ typedef class IrType type;
 typedef struct TYPE type;
 #endif
 
+Type *typeSemantic(Type *t, Loc loc, Scope *sc);
+Type *merge(Type *type);
 void semanticTypeInfo(Scope *sc, Type *t);
 MATCH deduceType(RootObject *o, Scope *sc, Type *tparam, TemplateParameters *parameters, Objects *dedtypes, unsigned *wm = NULL, size_t inferStart = 0);
 StorageClass ModToStc(unsigned mod);
@@ -261,10 +263,8 @@ public:
     d_uns64 size();
     virtual d_uns64 size(Loc loc);
     virtual unsigned alignsize();
-    virtual Type *semantic(Loc loc, Scope *sc);
     Type *trySemantic(Loc loc, Scope *sc);
     virtual bool isMergeable() { return true; } // CALYPSO
-    Type *merge();
     Type *merge2();
     void modToBuffer(OutBuffer *buf);
     char *modToChars();
@@ -444,7 +444,6 @@ public:
     static TypeVector *create(Loc loc, Type *basetype);
     const char *kind() const;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc);
     unsigned alignsize();
     Expression *getProperty(Loc loc, Identifier *ident, int flag);
@@ -480,7 +479,6 @@ public:
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
     unsigned alignsize();
-    Type *semantic(Loc loc, Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isString();
@@ -505,7 +503,6 @@ public:
     Type *syntaxCopy();
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize() /*const*/;
-    Type *semantic(Loc loc, Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isString();
@@ -529,7 +526,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
-    Type *semantic(Loc loc, Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(Loc loc);
@@ -549,7 +545,6 @@ public:
     static TypePointer *create(Type *t);
     const char *kind() const;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
     MATCH implicitConvTo(Type *to);
     MATCH constConv(Type *to);
@@ -569,7 +564,6 @@ public:
     virtual bool isRvalRef() const; // CALYPSO
     const char *kind() const;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc) /*const*/;
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(Loc loc);
@@ -637,7 +631,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     bool isTransitive() { return false; } // CALYPSO
-    Type *semantic(Loc loc, Scope *sc);
     void purityLevel();
     bool hasLazyParameters();
     bool parameterEscapes(Parameter *p);
@@ -665,7 +658,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     bool isTransitive() { return false; } // CALYPSO
-    Type *semantic(Loc loc, Scope *sc);
     Type *addStorageClass(StorageClass stc);
     d_uns64 size(Loc loc) /*const*/;
     unsigned alignsize() /*const*/;
@@ -711,7 +703,6 @@ public:
     Type *syntaxCopy();
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Dsymbol *toDsymbol(Scope *sc);
-    Type *semantic(Loc loc, Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -725,7 +716,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Type *semantic(Loc loc, Scope *sc);
     Dsymbol *toDsymbol(Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -740,7 +730,6 @@ public:
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Type *semantic(Loc loc, Scope *sc);
     d_uns64 size(Loc loc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -752,7 +741,6 @@ public:
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Type *semantic(Loc loc, Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -780,7 +768,6 @@ public:
     d_uns64 size(Loc loc);
     unsigned alignsize();
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     Dsymbol *toDsymbol(Scope *sc);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isBaseOf(Type *t, int *poffset); // CALYPSO
@@ -811,7 +798,6 @@ public:
     Type *syntaxCopy();
     d_uns64 size(Loc loc);
     unsigned alignsize();
-    Type *semantic(Loc loc, Scope *sc);
     Dsymbol *toDsymbol(Scope *sc);
     Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *getProperty(Loc loc, Identifier *ident, int flag);
@@ -849,7 +835,6 @@ public:
     const char *kind() const;
     d_uns64 size(Loc loc) /*const*/;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     unsigned alignsize(); // CALYPSO
     structalign_t alignment(); // CALYPSO
     Dsymbol *toDsymbol(Scope *sc);
@@ -879,7 +864,6 @@ public:
     static TypeTuple *create(Parameters *arguments);
     const char *kind() const;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     bool equals(RootObject *o);
     Expression *getProperty(Loc loc, Identifier *ident, int flag);
     Expression *defaultInit(Loc loc);
@@ -894,7 +878,6 @@ public:
 
     const char *kind() const;
     Type *syntaxCopy();
-    Type *semantic(Loc loc, Scope *sc);
     void resolve(Loc loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     void accept(Visitor *v) { v->visit(this); }
 };

@@ -114,7 +114,9 @@ enum TOK : int
     TOKushr,
     TOKushrass,
     TOKcat,
-    TOKcatass, // ~ ~=
+    TOKcatass, // ~=
+    TOKcatelemass,
+    TOKcatdcharass,
     TOKadd,
     TOKmin,
     TOKaddass,
@@ -147,7 +149,7 @@ enum TOK : int
     TOKpreplusplus,
     TOKpreminusminus,
 
-    // 111
+    // 113
     // Numeric literals
     TOKint32v,
     TOKuns32v,
@@ -162,13 +164,13 @@ enum TOK : int
     TOKimaginary64v,
     TOKimaginary80v,
 
-    // 123
+    // 125
     // Char constants
     TOKcharv,
     TOKwcharv,
     TOKdcharv,
 
-    // 126
+    // 128
     // Leaf operators
     TOKidentifier,
     TOKstring,
@@ -179,7 +181,7 @@ enum TOK : int
     TOKtuple,
     TOKerror,
 
-    // 134
+    // 136
     // Basic types
     TOKvoid,
     TOKint8,
@@ -206,7 +208,7 @@ enum TOK : int
     TOKdchar,
     TOKbool,
 
-    // 158
+    // 160
     // Aggregates
     TOKstruct,
     TOKclass,
@@ -241,7 +243,7 @@ enum TOK : int
     TOKmanifest,
     TOKimmutable,
 
-    // 189
+    // 191
     // Statements
     TOKif,
     TOKelse,
@@ -268,7 +270,7 @@ enum TOK : int
     TOKon_scope_failure,
     TOKon_scope_success,
 
-    // 213
+    // 215
     // Contracts
     TOKinvariant,
 
@@ -280,7 +282,7 @@ enum TOK : int
     TOKref,
     TOKmacro,
 
-    // 219
+    // 221
     TOKparameters,
     TOKtraits,
     TOKoverloadset,
@@ -301,7 +303,7 @@ enum TOK : int
     TOKvector,
     TOKpound,
 
-    // 237
+    // 239
     TOKinterval,
     TOKvoidexp,
     TOKcantexp,
@@ -389,6 +391,8 @@ alias TOKushr = TOK.TOKushr;
 alias TOKushrass = TOK.TOKushrass;
 alias TOKcat = TOK.TOKcat;
 alias TOKcatass = TOK.TOKcatass;
+alias TOKcatelemass = TOK.TOKcatelemass;
+alias TOKcatdcharass = TOK.TOKcatdcharass;
 alias TOKadd = TOK.TOKadd;
 alias TOKmin = TOK.TOKmin;
 alias TOKaddass = TOK.TOKaddass;
@@ -771,6 +775,8 @@ extern (C++) struct Token
         TOKandass: "&=",
         TOKorass: "|=",
         TOKcatass: "~=",
+        TOKcatelemass: "~=",
+        TOKcatdcharass: "~=",
         TOKcat: "~",
         TOKcall: "call",
         TOKidentity: "is",
@@ -843,7 +849,7 @@ extern (C++) struct Token
         return true;
     }());
 
-    static this()
+    shared static this()
     {
         Identifier.initTable();
         foreach (kw; keywords)

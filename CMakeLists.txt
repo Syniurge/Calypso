@@ -52,10 +52,10 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.6.0") # May be overridden by git hash tag
+set(LDC_VERSION "1.7.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   76)
+set(DMDFE_PATCH_VERSION   77)
 set(DMDFE_FIX_LEVEL       1) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
@@ -404,11 +404,14 @@ append("-DLDC_WITH_PGO" LDC_CXXFLAGS)
 # Enable Dynamic compilation if supported for this platform and LLVM version.
 # LLVM >= 3.9 is required
 #
-set(LDC_DYNAMIC_COMPILE False)  # must be a valid Python boolean constant (case sensitive)
-if (NOT (LDC_LLVM_VER LESS 400))
-    message(STATUS "Building LDC with dynamic compilation support")
-    add_definitions(-DLDC_DYNAMIC_COMPILE)
-    set(LDC_DYNAMIC_COMPILE True)
+set(LDC_DYNAMIC_COMPILE "AUTO" CACHE STRING "Support dynamic compilation (True|False). Enabled by default.")
+if(LDC_DYNAMIC_COMPILE STREQUAL "AUTO")
+    set(LDC_DYNAMIC_COMPILE False)  # must be a valid Python boolean constant (case sensitive)
+    if (NOT (LDC_LLVM_VER LESS 400))
+        set(LDC_DYNAMIC_COMPILE True)
+        message(STATUS "Building LDC with dynamic compilation support")
+        add_definitions(-DLDC_DYNAMIC_COMPILE)
+    endif()
 endif()
 
 #

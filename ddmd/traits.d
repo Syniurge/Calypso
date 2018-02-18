@@ -36,6 +36,7 @@ import ddmd.nogc;
 import ddmd.root.array;
 import ddmd.root.speller;
 import ddmd.root.stringtable;
+import ddmd.semantic;
 import ddmd.tokens;
 import ddmd.typesem;
 import ddmd.visitor;
@@ -63,13 +64,14 @@ struct PushAttributes
 
 extern (C++) __gshared StringTable traitsStringTable;
 
-static this()
+shared static this()
 {
     static immutable string[] names =
     [
         "isAbstractClass",
         "isArithmetic",
         "isAssociativeArray",
+        "isDeprecated",
         "isFinalClass",
         "isPOD",
         "isNested",
@@ -469,6 +471,10 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
     {
         return isTypeX(t => t.toBasetype().ty == Taarray);
     }
+    if (e.ident == Id.isDeprecated)
+    {
+        return isDsymX(t => t.isDeprecated());
+    }
     if (e.ident == Id.isStaticArray)
     {
         return isTypeX(t => t.toBasetype().ty == Tsarray);
@@ -603,7 +609,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         }
 
         auto se = new StringExp(e.loc, cast(char*)id.toChars());
-        return se.semantic(sc);
+        return se.expressionSemantic(sc);
     }
     if (e.ident == Id.getProtection)
     {
@@ -631,7 +637,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         auto protName = protectionToChars(s.prot().kind); // TODO: How about package(names)
         assert(protName);
         auto se = new StringExp(e.loc, cast(char*)protName);
-        return se.semantic(sc);
+        return se.expressionSemantic(sc);
     }
     if (e.ident == Id.parent)
     {
@@ -660,14 +666,14 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                 if (td.overroot) // if not start of overloaded list of TemplateDeclaration's
                     td = td.overroot; // then get the start
                 Expression ex = new TemplateExp(e.loc, td, f);
-                ex = ex.semantic(sc);
+                ex = ex.expressionSemantic(sc);
                 return ex;
             }
             if (auto fld = f.isFuncLiteralDeclaration())
             {
                 // Directly translate to VarExp instead of FuncExp
                 Expression ex = new VarExp(e.loc, fld, true);
-                return ex.semantic(sc);
+                return ex.expressionSemantic(sc);
             }
         }
         return resolve(e.loc, sc, s, false);
@@ -746,7 +752,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             if (ex.op == TOKdotid)
                 // Prevent semantic() from replacing Symbol with its initializer
                 (cast(DotIdExp)ex).wantsym = true;
-            ex = ex.semantic(scx);
+            ex = ex.expressionSemantic(scx);
             return ex;
         }
         else if (e.ident == Id.getVirtualFunctions ||
@@ -755,7 +761,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         {
             uint errors = global.errors;
             Expression eorig = ex;
-            ex = ex.semantic(scx);
+            ex = ex.expressionSemantic(scx);
             if (errors < global.errors)
                 e.error("`%s` cannot be resolved", eorig.toChars());
             //ex.print();
@@ -801,7 +807,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             });
 
             auto tup = new TupleExp(e.loc, exps);
-            return tup.semantic(scx);
+            return tup.expressionSemantic(scx);
         }
         else
             assert(0);
@@ -849,7 +855,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         if (ad.aliasthis)
             exps.push(new StringExp(e.loc, cast(char*)ad.aliasthis.ident.toChars()));
         Expression ex = new TupleExp(e.loc, exps);
-        ex = ex.semantic(sc);
+        ex = ex.expressionSemantic(sc);
         return ex;
     }
     if (e.ident == Id.getAttributes)
@@ -882,7 +888,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         auto udad = s.userAttribDecl;
         auto exps = udad ? udad.getAttributes() : new Expressions();
         auto tup = new TupleExp(e.loc, exps);
-        return tup.semantic(sc);
+        return tup.expressionSemantic(sc);
     }
     if (e.ident == Id.getFunctionAttributes)
     {
@@ -923,7 +929,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         tf.attributesApply(&pa, &PushAttributes.fp, TRUSTformatSystem);
 
         auto tup = new TupleExp(e.loc, mods);
-        return tup.semantic(sc);
+        return tup.expressionSemantic(sc);
     }
     if (e.ident == Id.getFunctionVariadicStyle)
     {
@@ -979,7 +985,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                 assert(0);
         }
         auto se = new StringExp(e.loc, cast(char*)style);
-        return se.semantic(sc);
+        return se.expressionSemantic(sc);
     }
     if (e.ident == Id.getParameterStorageClasses)
     {
@@ -1082,7 +1088,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             push("scope");
 
         auto tup = new TupleExp(e.loc, exps);
-        return tup.semantic(sc);
+        return tup.expressionSemantic(sc);
     }
     if (e.ident == Id.getLinkage)
     {
@@ -1118,7 +1124,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         }
         auto linkage = linkageToChars(link);
         auto se = new StringExp(e.loc, cast(char*)linkage);
-        return se.semantic(sc);
+        return se.expressionSemantic(sc);
     }
     if (e.ident == Id.allMembers ||
         e.ident == Id.derivedMembers)
@@ -1244,7 +1250,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
          *   [ __traits(allMembers, ...) ]
          */
         Expression ex = new TupleExp(e.loc, exps);
-        ex = ex.semantic(sc);
+        ex = ex.expressionSemantic(sc);
         return ex;
     }
     if (e.ident == Id.compiles)
@@ -1273,7 +1279,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
                 t.resolve(e.loc, sc2, &ex, &t, &s);
                 if (t)
                 {
-                    t.semantic(e.loc, sc2);
+                    t.typeSemantic(e.loc, sc2);
                     if (t.ty == Terror)
                         err = true;
                 }
@@ -1282,7 +1288,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             }
             if (ex)
             {
-                ex = ex.semantic(sc2);
+                ex = ex.expressionSemantic(sc2);
                 ex = resolvePropertiesOnly(sc2, ex);
                 ex = ex.optimize(WANTvalue);
                 if (sc2.func && sc2.func.type.ty == Tfunction)
@@ -1359,6 +1365,17 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
         if (auto fa2 = s2.isFuncAliasDeclaration())
             s2 = fa2.toAliasFunc();
 
+        // https://issues.dlang.org/show_bug.cgi?id=11259
+        // compare import symbol to a package symbol
+        static bool cmp(Dsymbol s1, Dsymbol s2)
+        {
+            auto imp = s1.isImport();
+            return imp && imp.pkg && imp.pkg == s2.isPackage();
+        }
+
+        if (cmp(s1,s2) || cmp(s2,s1))
+            return True();
+
         return (s1 == s2) ? True() : False();
     }
     if (e.ident == Id.getUnitTests)
@@ -1420,7 +1437,7 @@ extern (C++) Expression semanticTraits(TraitsExp e, Scope* sc)
             collectUnitTests(sds.members);
         }
         auto te = new TupleExp(e.loc, exps);
-        return te.semantic(sc);
+        return te.expressionSemantic(sc);
     }
     if (e.ident == Id.getVirtualIndex)
     {

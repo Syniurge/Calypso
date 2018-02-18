@@ -122,8 +122,6 @@ public:
     virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     virtual Scope *newScope(Scope *sc);
     void setScope(Scope *sc);
-    void semantic2(Scope *sc);
-    void semantic3(Scope *sc);
     virtual bool determineFields(); // CALYPSO
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
@@ -322,7 +320,6 @@ public:
     void finalizeSize();
     bool isFuncHidden(FuncDeclaration *fd);
     FuncDeclaration *findFunc(Identifier *ident, TypeFunction *tf);
-    virtual void interfaceSemantic(Scope *sc);  // CALYPSO
     bool isCOMclass() const;
     virtual bool isCOMinterface() const;
     bool isCPPclass() const;

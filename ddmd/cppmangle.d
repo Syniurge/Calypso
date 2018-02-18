@@ -28,6 +28,7 @@ import ddmd.root.outbuffer;
 import ddmd.root.rootobject;
 import ddmd.target;
 import ddmd.tokens;
+import ddmd.typesem;
 import ddmd.visitor;
 
 /* Do mangling for C++ linkage.
@@ -501,7 +502,7 @@ extern (C++) final class CppMangleVisitor : Visitor
                 // Mangle as delegate
                 Type td = new TypeFunction(null, t, 0, LINKd);
                 td = new TypeDelegate(td);
-                t = t.merge();
+                t = merge(t);
             }
             if (t.ty == Tsarray)
             {
@@ -1956,7 +1957,7 @@ private:
                     // Mangle as delegate
                     Type td = new TypeFunction(null, t, 0, LINKd);
                     td = new TypeDelegate(td);
-                    t = t.merge();
+                    t = merge(t);
                 }
                 if (t.ty == Tsarray)
                 {
@@ -1997,5 +1998,18 @@ extern (C++) const(char)* toCppMangleMSVC(Dsymbol s)
 extern (C++) const(char)* cppTypeInfoMangleMSVC(Dsymbol s)
 {
     //printf("cppTypeInfoMangle(%s)\n", s.toChars());
-    assert(0);
+    version (IN_LLVM)
+    {
+        // Return the mangled name of the RTTI Type Descriptor.
+        // Reverse-engineered using a few C++ exception classes.
+        scope VisualCPPMangler v = new VisualCPPMangler(!global.params.mscoff);
+        v.buf.writestring("\1??_R0?AV");
+        v.mangleIdent(s);
+        v.buf.writestring("@8");
+        return v.buf.extractString();
+    }
+    else
+    {
+        assert(0);
+    }
 }

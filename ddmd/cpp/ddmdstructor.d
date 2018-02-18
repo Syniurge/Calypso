@@ -155,8 +155,7 @@ UshrExp new_UshrExp(Loc loc, Expression e1, Expression e2) { return new UshrExp(
 AndExp new_AndExp(Loc loc, Expression e1, Expression e2) { return new AndExp(loc, e1, e2); }
 OrExp new_OrExp(Loc loc, Expression e1, Expression e2) { return new OrExp(loc, e1, e2); }
 XorExp new_XorExp(Loc loc, Expression e1, Expression e2) { return new XorExp(loc, e1, e2); }
-OrOrExp new_OrOrExp(Loc loc, Expression e1, Expression e2) { return new OrOrExp(loc, e1, e2); }
-AndAndExp new_AndAndExp(Loc loc, Expression e1, Expression e2) { return new AndAndExp(loc, e1, e2); }
+LogicalExp new_LogicalExp(Loc loc, TOK op, Expression e1, Expression e2) { return new LogicalExp(loc, op, e1, e2); }
 CmpExp new_CmpExp(TOK op, Loc loc, Expression e1, Expression e2) { return new CmpExp(op, loc, e1, e2); }
 InExp new_InExp(Loc loc, Expression e1, Expression e2) { return new InExp(loc, e1, e2); }
 RemoveExp new_RemoveExp(Loc loc, Expression e1, Expression e2) { return new RemoveExp(loc, e1, e2); }

@@ -66,7 +66,7 @@ namespace llvm {
 
 // in expressionsem.d
 Expression *unaSemantic(UnaExp *e, Scope *sc); // CALYPSO
-Expression *semantic(Expression *e, Scope *sc);
+Expression *expressionSemantic(Expression *e, Scope *sc);
 #endif
 
 Expression *resolveProperties(Scope *sc, Expression *e);
@@ -1265,14 +1265,7 @@ public:
     void accept(Visitor *v) { v->visit(this); }
 };
 
-class OrOrExp : public BinExp
-{
-public:
-    Expression *toBoolean(Scope *sc);
-    void accept(Visitor *v) { v->visit(this); }
-};
-
-class AndAndExp : public BinExp
+class LogicalExp : public BinExp
 {
 public:
     Expression *toBoolean(Scope *sc);

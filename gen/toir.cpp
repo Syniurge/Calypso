@@ -620,9 +620,24 @@ public:
 
   using BinOpFunc = DValue *(Loc &, Type *, DValue *, Expression *, bool);
 
+  static Expression *getLValExp(Expression *e) {
+    e = skipOverCasts(e);
+    if (e->op == TOKcomma) {
+      CommaExp *ce = static_cast<CommaExp *>(e);
+      Expression *newCommaRhs = getLValExp(ce->e2);
+      if (newCommaRhs != ce->e2) {
+        CommaExp *newComma = static_cast<CommaExp *>(ce->copy());
+        newComma->e2 = newCommaRhs;
+        newComma->type = newCommaRhs->type;
+        e = newComma;
+      }
+    }
+    return e;
+  }
+
   template <BinOpFunc binOpFunc, bool useLValTypeForBinOp>
   static DValue *binAssign(BinAssignExp *e) {
-    Expression *lvalExp = skipOverCasts(e->e1);
+    Expression *lvalExp = getLValExp(e->e1);
     DValue *lhsLVal = toElem(lvalExp);
 
     // Use the lhs lvalue for the binop lhs and optionally cast it to the full
@@ -1784,8 +1799,8 @@ public:
 
   //////////////////////////////////////////////////////////////////////////////
 
-  void visit(AndAndExp *e) override {
-    IF_LOG Logger::print("AndAndExp::toElem: %s @ %s\n", e->toChars(),
+  void visit(LogicalExp *e) override {
+    IF_LOG Logger::print("LogicalExp::toElem: %s @ %s\n", e->toChars(),
                          e->type->toChars());
     LOG_SCOPE;
 
@@ -1794,18 +1809,27 @@ public:
 
     DValue *u = toElem(e->e1);
 
-    llvm::BasicBlock *andand = p->insertBB("andand");
-    llvm::BasicBlock *andandend = p->insertBBAfter(andand, "andandend");
+    const bool isAndAnd = (e->op == TOKandand); // otherwise OrOr
+    llvm::BasicBlock *rhsBB = p->insertBB(isAndAnd ? "andand" : "oror");
+    llvm::BasicBlock *endBB =
+        p->insertBBAfter(rhsBB, isAndAnd ? "andandend" : "ororend");
 
     LLValue *ubool = DtoRVal(DtoCast(e->loc, u, Type::tbool));
 
     llvm::BasicBlock *oldblock = p->scopebb();
-    auto truecount = PGO.getRegionCount(e);
-    auto falsecount = PGO.getCurrentRegionCount() - truecount;
+    uint64_t truecount, falsecount;
+    if (isAndAnd) {
+      truecount = PGO.getRegionCount(e);
+      falsecount = PGO.getCurrentRegionCount() - truecount;
+    } else {
+      falsecount = PGO.getRegionCount(e);
+      truecount = PGO.getCurrentRegionCount() - falsecount;
+    }
     auto branchweights = PGO.createProfileWeights(truecount, falsecount);
-    p->ir->CreateCondBr(ubool, andand, andandend, branchweights);
+    p->ir->CreateCondBr(ubool, isAndAnd ? rhsBB : endBB,
+                        isAndAnd ? endBB : rhsBB, branchweights);
 
-    p->scope() = IRScope(andand);
+    p->scope() = IRScope(rhsBB);
     PGO.emitCounterIncrement(e);
     emitCoverageLinecountInc(e->e2->loc);
     DValue *v = toElemDtor(e->e2);
@@ -1816,8 +1840,8 @@ public:
     }
 
     llvm::BasicBlock *newblock = p->scopebb();
-    llvm::BranchInst::Create(andandend, p->scopebb());
-    p->scope() = IRScope(andandend);
+    llvm::BranchInst::Create(endBB, p->scopebb());
+    p->scope() = IRScope(endBB);
 
     // DMD allows stuff like `x == 0 && assert(false)`
     if (e->type->toBasetype()->ty == Tvoid) {
@@ -1831,70 +1855,17 @@ public:
       resval = ubool;
     } else {
       llvm::PHINode *phi =
-          p->ir->CreatePHI(LLType::getInt1Ty(gIR->context()), 2, "andandval");
-      // If we jumped over evaluation of the right-hand side,
-      // the result is false. Otherwise it's the value of the right-hand side.
-      phi->addIncoming(LLConstantInt::getFalse(gIR->context()), oldblock);
-      phi->addIncoming(vbool, newblock);
-      resval = phi;
-    }
-
-    result = new DImValue(e->type, resval);
-  }
-
-  //////////////////////////////////////////////////////////////////////////////
-
-  void visit(OrOrExp *e) override {
-    IF_LOG Logger::print("OrOrExp::toElem: %s @ %s\n", e->toChars(),
-                         e->type->toChars());
-    LOG_SCOPE;
-
-    auto &PGO = gIR->funcGen().pgo;
-    PGO.setCurrentStmt(e);
-
-    DValue *u = toElem(e->e1);
-
-    llvm::BasicBlock *oror = p->insertBB("oror");
-    llvm::BasicBlock *ororend = p->insertBBAfter(oror, "ororend");
-
-    LLValue *ubool = DtoRVal(DtoCast(e->loc, u, Type::tbool));
-
-    llvm::BasicBlock *oldblock = p->scopebb();
-    auto falsecount = PGO.getRegionCount(e);
-    auto truecount = PGO.getCurrentRegionCount() - falsecount;
-    auto branchweights = PGO.createProfileWeights(truecount, falsecount);
-    p->ir->CreateCondBr(ubool, ororend, oror, branchweights);
-
-    p->scope() = IRScope(oror);
-    PGO.emitCounterIncrement(e);
-    emitCoverageLinecountInc(e->e2->loc);
-    DValue *v = toElemDtor(e->e2);
-
-    LLValue *vbool = nullptr;
-    if (v && !v->isFunc() && v->type != Type::tvoid) {
-      vbool = DtoRVal(DtoCast(e->loc, v, Type::tbool));
-    }
-
-    llvm::BasicBlock *newblock = p->scopebb();
-    llvm::BranchInst::Create(ororend, p->scopebb());
-    p->scope() = IRScope(ororend);
-
-    // DMD allows stuff like `x == 0 || assert(false)`
-    if (e->type->toBasetype()->ty == Tvoid) {
-      result = nullptr;
-      return;
-    }
-
-    LLValue *resval = nullptr;
-    if (ubool == vbool || !vbool) {
-      // No need to create a PHI node.
-      resval = ubool;
-    } else {
-      llvm::PHINode *phi =
-          p->ir->CreatePHI(LLType::getInt1Ty(gIR->context()), 2, "ororval");
-      // If we jumped over evaluation of the right-hand side,
-      // the result is true. Otherwise, it's the value of the right-hand side.
-      phi->addIncoming(LLConstantInt::getTrue(gIR->context()), oldblock);
+          p->ir->CreatePHI(LLType::getInt1Ty(gIR->context()), 2,
+                           isAndAnd ? "andandval" : "ororval");
+      if (isAndAnd) {
+        // If we jumped over evaluation of the right-hand side,
+        // the result is false. Otherwise it's the value of the right-hand side.
+        phi->addIncoming(LLConstantInt::getFalse(gIR->context()), oldblock);
+      } else {
+        // If we jumped over evaluation of the right-hand side,
+        // the result is true. Otherwise, it's the value of the right-hand side.
+        phi->addIncoming(LLConstantInt::getTrue(gIR->context()), oldblock);
+      }
       phi->addIncoming(vbool, newblock);
       resval = phi;
     }
@@ -2472,7 +2443,7 @@ public:
       // Turn it back into a TypeAArray
       vtype = e->values->tdata()[0]->type;
       aatype = TypeAArray::create(vtype, e->keys->tdata()[0]->type);
-      aatype = aatype->semantic(e->loc, nullptr);
+      aatype = typeSemantic(aatype, e->loc, nullptr);
     }
 
     {

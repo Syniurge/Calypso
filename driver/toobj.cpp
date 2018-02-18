@@ -38,7 +38,11 @@
 #endif
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#if LDC_LLVM_VER >= 600
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#else
 #include "llvm/Target/TargetSubtargetInfo.h"
+#endif
 #include "llvm/IR/Module.h"
 #include <cstddef>
 #include <fstream>
@@ -116,13 +120,6 @@ static void assemble(const std::string &asmpath, const std::string &objpath) {
 
 namespace {
 using namespace llvm;
-static void printDebugLoc(const DebugLoc &debugLoc, formatted_raw_ostream &os) {
-  os << debugLoc.getLine() << ":" << debugLoc.getCol();
-  if (DILocation *IDL = debugLoc.getInlinedAt()) {
-    os << "@";
-    printDebugLoc(IDL, os);
-  }
-}
 
 class AssemblyAnnotator : public AssemblyAnnotationWriter {
 // Find the MDNode which corresponds to the DISubprogram data that described F.
@@ -194,7 +191,7 @@ public:
         os << ';';
       }
       os << " [debug line = ";
-      printDebugLoc(debugLoc, os);
+      debugLoc.print(os);
       os << ']';
     }
     if (const DbgDeclareInst *DDI = dyn_cast<DbgDeclareInst>(instr)) {
