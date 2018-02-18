@@ -78,6 +78,8 @@ public:
 //     Modmap(Loc loc, StringExp *arg);
     virtual void _key(); // CALYPSO
     void setScope(Scope* sc);
+
+    void accept(Visitor *v) { v->visit(this); }
 };
 
 struct InterState;

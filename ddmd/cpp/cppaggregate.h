@@ -73,12 +73,12 @@ public:
     void addLocalClass(ClassDeclarations *) override;
 
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
-    void interfaceSemantic(Scope *sc) override;
 
     bool byRef() const override { return false; }
     Expression *defaultInit(Loc loc) override;
     bool allowMultipleInheritance() override { return true; }
     bool allowInheritFromStruct() override { return true; }
+    bool needsInterfaceSemantic() const override { return false; }
     void makeNested() override;
     void finalizeVtbl() override;
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;

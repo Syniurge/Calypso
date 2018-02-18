@@ -22,6 +22,7 @@ import ddmd.expression;
 import ddmd.globals;
 import ddmd.identifier;
 import ddmd.mtype;
+import ddmd.root.outbuffer;
 import ddmd.semantic;
 import ddmd.visitor;
 
@@ -337,6 +338,11 @@ public:
     {
         Dsymbol.setScope(sc);
         importAll(sc);
+    }
+
+    override void accept(Visitor v)
+    {
+        v.visit(this);
     }
 }
 

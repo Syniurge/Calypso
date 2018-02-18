@@ -302,7 +302,7 @@ template <typename AggTy>
         auto e1 = new_DotVarExp(loc, ve, static_cast<Declaration*>(ad->ctor));
 
         if (!ce) {
-            exp = semantic(exp, sc);
+            exp = expressionSemantic(exp, sc);
             exp = resolveProperties(sc, exp);
             
             if (exp->type->constConv(ad->getType()) >= MATCHconst)
@@ -349,10 +349,6 @@ Expression* StructDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* 
 Expression* ClassDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
     return buildVarInitializerImpl(this, sc, vd, exp);
-}
-
-void ClassDeclaration::interfaceSemantic(Scope *sc)
-{
 }
 
 Expression *ClassDeclaration::defaultInit(Loc loc)
@@ -476,7 +472,7 @@ Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration 
     assert(tcd && ad->isBaseOf2(tcd));
 
     e1 = new_CastExp(loc, e1, ad->getType()); // NOTE: not strictly necessary if first base
-    e1 = semantic(e1, sc);
+    e1 = expressionSemantic(e1, sc);
 
     return e1;
 }
@@ -493,7 +489,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     auto arguments = new Expressions;
     arguments->push(e);
     e = new_CallExp(e->loc, new_TypeExp(e->loc, tv), arguments);
-    return semantic(e, sc);
+    return expressionSemantic(e, sc);
 }
 
 ::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
@@ -505,7 +501,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 
     // On aggregate destruction the GC looks for a "__xdtor" member
     auto _alias = new_AliasDeclaration(Loc(), Id::__xdtor, ad->dtors[0]);
-    _alias->semantic(sc);
+    semantic(_alias, sc);
     ad->members->push(_alias);
     _alias->addMember(sc, ad); // add to symbol table
 
@@ -539,7 +535,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
                 parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL));
                 tfeqptr = new_TypeFunction(parameters, Type::tbool, 0, LINKcpp);
                 tfeqptr->mod = MODconst;
-                tfeqptr = (TypeFunction *)tfeqptr->semantic(Loc(), scx);
+                tfeqptr = (TypeFunction *)typeSemantic(tfeqptr, Loc(), scx);
 
                 scx->pop();
             }
@@ -583,7 +579,7 @@ template <typename AggTy>
                 assert(isCPP(vd));
 
                 if (vd->_scope)
-                    vd->semantic(nullptr);
+                    semantic(vd, nullptr);
 
                 auto c_vd = static_cast<VarDeclaration*>(vd);
                 auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);

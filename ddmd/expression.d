@@ -1888,13 +1888,13 @@ extern (C++) bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type t
                 if (!tprm.equals(arg.type))
                 {
                     //printf("arg.type = %s, p.type = %s\n", arg.type.toChars(), p.type.toChars());
-                    if (arg.implicitConvTo(tprm) == MATCHnomatch) // CALYPSO
+                    if (arg.implicitConvTo(tprm) == MATCH.nomatch) // CALYPSO
                     {
                         AggregateDeclaration toad = getAggregateSym(tprm);
                         if (toad && toad.hasImplicitCtor(arg))
                         {
                             arg = new CallExp(arg.loc, new TypeExp(arg.loc, toad.getType()), arg);
-                            arg = arg.semantic(sc);
+                            arg = arg.expressionSemantic(sc);
                         }
                     }
                     arg = arg.implicitCastTo(sc, tprm);

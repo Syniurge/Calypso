@@ -2824,7 +2824,7 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
                 MATCH c2 = tf2.callMatch(tthis_best, fargs, callMatchFlags); // CALYPSO
                 //printf("2: c1 = %d, c2 = %d\n", c1, c2);
                 if (c1 == c2 && !td_best) // CALYPSO renew preference for non-template functions over template functions here
-                    c2 = MATCHexact;
+                    c2 = MATCH.exact;
                 if (c1 > c2) goto Ltd;
                 if (c1 < c2) goto Ltd_best;
             }

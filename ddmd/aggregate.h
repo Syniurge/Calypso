@@ -334,6 +334,7 @@ public:
     virtual bool byRef() const { return true; }
     virtual bool allowMultipleInheritance(); // will allow more than one non-interface base
     virtual bool allowInheritFromStruct();  // even though C++ class types are value, we may want to keep mapping POD classes to D structs to keep init lists
+    virtual bool needsInterfaceSemantic() const;
     virtual Expression *defaultInit(Loc loc);
     virtual void initVtbl();
     virtual void finalizeVtbl();

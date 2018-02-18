@@ -243,10 +243,10 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     fthunk->fbody = new_CompoundStatement(loc, s1, s2);
 
     fthunk->importAll(callee->_scope);
-    fthunk->semantic(callee->_scope);
+    semantic(fthunk, callee->_scope);
     fthunk->protection = {PROTprivate, nullptr};  // HACK NOTE: setting the prot to private will bypass the invariant checks
-    fthunk->semantic2(callee->_scope);
-    fthunk->semantic3(callee->_scope);
+    semantic2(fthunk, callee->_scope);
+    semantic3(fthunk, callee->_scope);
     //fprintf(stderr, "%s", fthunk->fbody->toChars());
     Declaration_codegen(fthunk);
 

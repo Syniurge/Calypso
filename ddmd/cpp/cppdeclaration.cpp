@@ -339,7 +339,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
-    e = semantic(e, sc);
+    e = expressionSemantic(e, sc);
 
     Dsymbol *s;
     if (e->op == TOKvar)
@@ -395,7 +395,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         auto td = static_cast<cpp::TemplateDeclaration*>(s);
         if (td->semanticRun == PASSinit) {
             assert(td->_scope);
-            td->semantic(td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
+            semantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
         }
 
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
@@ -422,7 +422,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             assert(false && "DeclReferencer semanticTiargs failed");
 
         td->makeForeignInstance(tempinst);
-        tempinst->semantic(sc);
+        semantic(tempinst, sc);
 
         s = tempinst->toAlias();
     }
@@ -430,9 +430,9 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     {
         if (s->isAggregateDeclaration()) { // restricting to aggregates to better grasp if there's more types of symbols that need this
             if (s->semanticRun < PASSsemantic2)
-                s->semantic2(sc);
+                semantic2(s, sc);
             if (s->semanticRun < PASSsemantic3)
-                s->semantic3(sc);
+                semantic3(s, sc);
         }
     }
 

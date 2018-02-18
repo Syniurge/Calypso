@@ -80,7 +80,7 @@ private extern (C++) final class TemplateParameterSemanticVisitor : Visitor
     override void visit(TemplateValueParameter tvp)
     {
         if (!reliesOnTident(tvp.valType, parameters))
-            tvp.nonDependentValType = tvp.valType.semantic(tvp.loc, sc); // CALYPSO for C++ template value parameters with dependent types semantic'ing valType is too early
+            tvp.nonDependentValType = tvp.valType.typeSemantic(tvp.loc, sc); // CALYPSO for C++ template value parameters with dependent types semantic'ing valType is too early
         version (none)
         {
             // defer semantic analysis to arg match

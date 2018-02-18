@@ -1958,7 +1958,7 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
         int inferred = 0;
         if (!dsym.type)
         {
-            if (auto ei = _init.isExpInitializer())
+            if (auto ei = dsym._init.isExpInitializer())
                 origInitExp = ei.exp.copy(); // CALYPSO
 
             dsym.inuse++;
@@ -2526,7 +2526,7 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
                     Expression foreignExp; // CALYPSO
                     auto adty = getAggregateSym(dsym.type);
                     if (adty && adty.langPlugin())
-                        foreignExp = adty.buildVarInitializer(sc, this, origInitExp ? origInitExp : exp);
+                        foreignExp = adty.buildVarInitializer(sc, dsym, origInitExp ? origInitExp : exp);
                     if (foreignExp)
                         exp = foreignExp;
                     else if (isBlit)
@@ -2873,6 +2873,10 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
             ob.writenl();
         }
         //printf("-Import::semantic('%s'), pkg = %p\n", toChars(), pkg);
+    }
+
+    override void visit(Modmap mm) // CALYPSO
+    {
     }
 
     void attribSemantic(AttribDeclaration ad)
@@ -4305,7 +4309,7 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
                 tret = tret.addStorageClass(funcdecl.storage_class | sc.stc);
                 tret = tret.addMod(funcdecl.type.mod);
                 tf.next = tret;
-                if (ad.byRef()) // CALYPSO
+                if (!ad.byRef()) // CALYPSO
                     sc.stc |= STCref;
             }
 
@@ -4804,7 +4808,7 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
                         if (f2)
                         {
                             f2 = f2.overloadExactMatch(funcdecl.type);
-                            if (!allowFinalOverride() && f2 && f2.isFinalFunc() && f2.prot().kind != PROTprivate)  // CALYPSO
+                            if (!funcdecl.allowFinalOverride() && f2 && f2.isFinalFunc() && f2.prot().kind != PROTprivate)  // CALYPSO
                                 funcdecl.error("cannot override final function %s.%s", b.sym.toChars(), f2.toPrettyChars());
                         }
                     }
@@ -5594,8 +5598,8 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
 
     final void interfaceSemantic(ClassDeclaration cd)
     {
-        if (cd.langPlugin())
-            return cd.interfaceSemantic(); // CALYPSO LDC 1.7 FIXME needs reconsidering
+        if (!cd.needsInterfaceSemantic())// CALYPSO UGLY (needs reconsidering)
+            return;
 
         cd.vtblInterfaces = new BaseClasses();
         cd.vtblInterfaces.reserve(cd.interfaces.length);
@@ -6195,7 +6199,7 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
 
         // CALYPSO
         if (!cldec.langPlugin())
-            markAggregateReferenced(this);
+            markAggregateReferenced(cldec);
         //printf("-ClassDeclaration.semantic(%s), type = %p, sizeok = %d, this = %p\n", toChars(), type, sizeok, this);
     }
 

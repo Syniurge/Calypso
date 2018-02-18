@@ -21,6 +21,7 @@ import ddmd.gluelayer;
 import ddmd.declaration;
 import ddmd.dscope;
 import ddmd.dsymbol;
+import ddmd.expression;
 import ddmd.func;
 import ddmd.globals;
 import ddmd.id;
@@ -780,10 +781,6 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         return fdmatch;
     }
 
-    void interfaceSemantic(Scope* sc) // CALYPSO
-    {
-    }
-
     /****************************************
      */
     final bool isCOMclass() const
@@ -854,7 +851,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         /* If the base class is not abstract, then this class cannot
          * be abstract.
          */
-        if (!isInterfaceDeclaration() && (!baseClass || !baseClass.isAbstract()))
+        if (!isInterfaceDeclaration() && (!baseClass || !baseClass.isClassDeclaration() || !(cast(ClassDeclaration)baseClass).isAbstract())) // CALYPSO
             return no();
 
         /* If any abstract functions are inherited, but not overridden,
@@ -947,6 +944,11 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         return false;
     }
 
+    bool needsInterfaceSemantic() const
+    {
+        return true;
+    }
+
     override Expression defaultInit(Loc loc)
     {
         static if (LOGDEFAULTINIT)
@@ -1037,7 +1039,6 @@ extern (C++) final class InterfaceDeclaration : ClassDeclaration
               : new InterfaceDeclaration(loc, ident, null);
         return ClassDeclaration.syntaxCopy(id);
     }
-
 
     override Scope* newScope(Scope* sc)
     {

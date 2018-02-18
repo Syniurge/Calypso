@@ -1058,7 +1058,7 @@ void LangPlugin::semanticModules()
         auto m = cpp::Module::amodules[i];
         if (global.params.verbose)
             fprintf(global.stdmsg, "semantic2 %s\n", m->toChars());
-        m->semantic2(nullptr);
+        semantic2(m, nullptr);
     }
     if (global.errors)
         fatal();
@@ -1068,7 +1068,7 @@ void LangPlugin::semanticModules()
         auto m = cpp::Module::amodules[i];
         if (global.params.verbose)
             fprintf(global.stdmsg, "semantic3 %s\n", m->toChars());
-        m->semantic3(nullptr);
+        semantic3(m, nullptr);
     }
     Module::runDeferredSemantic3();
     if (global.errors)

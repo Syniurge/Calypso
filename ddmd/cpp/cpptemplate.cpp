@@ -304,7 +304,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         {
             // Try to fix forward reference. Ungag errors while doing so.
             Ungag ungag = ungagSpeculative();
-            semantic(_scope);
+            semantic(this, _scope);
         }
         if (semanticRun == PASSinit)
         {
@@ -830,7 +830,7 @@ bool TemplateInstance::semanticTiargs(Scope* sc)
             for (auto arg: *a) {
                 if (auto e = isExpression(arg)) {
                     assert(isExpression((*tiargs)[i]));
-                    (*tiargs)[i] = ::semantic(e, sc);
+                    (*tiargs)[i] = expressionSemantic(e, sc);
                 }
                 i++;
             }

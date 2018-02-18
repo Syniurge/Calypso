@@ -140,7 +140,7 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
         // So returning an ArrayLiteralExp instead of a TupleExp for now..
 
         Expression* ex = new_ArrayLiteralExp(e->loc, exps);
-        return semantic(ex, sc);
+        return expressionSemantic(ex, sc);
     }
     assert(0);
 

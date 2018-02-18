@@ -76,13 +76,15 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
     irs.DBuilder.EmitBlockStart(c->loc);
     PGO.emitCounterIncrement(c);
 
+    bool isCPPclass = false;
+
     if (auto lp = c->langPlugin()) // CALYPSO
       lp->codegen()->toBeginCatch(irs, c);
     else
     {
 
     const auto cd = c->type->toBasetype()->isClassHandle();
-    const bool isCPPclass = cd->isCPPclass();
+    isCPPclass = cd->isCPPclass();
 
     const auto enterCatchFn = getRuntimeFunction(
         Loc(), irs.module,

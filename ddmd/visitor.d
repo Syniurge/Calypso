@@ -404,6 +404,11 @@ extern (C++) class Visitor
         visit(cast(Dsymbol)s);
     }
 
+    void visit(Modmap s) // CALYPSO
+    {
+        visit(cast(Dsymbol)s);
+    }
+
     void visit(OverloadSet s)
     {
         visit(cast(Dsymbol)s);

@@ -453,7 +453,7 @@ void DtoCheckPragma(PragmaDeclaration *decl, Dsymbol *s,
       if (valid_params) {
         TemplateValueParameter *p0 = params[0]->isTemplateValueParameter();
         if (!p0->valType->deco)
-            p0->valType = p0->valType->semantic(p0->loc, td->_scope); // CALYPSO
+            p0->valType = typeSemantic(p0->valType, p0->loc, td->_scope); // CALYPSO
         valid_params = valid_params && p0 && p0->valType == Type::tstring;
       }
 

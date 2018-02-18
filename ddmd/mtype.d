@@ -1029,7 +1029,7 @@ extern (C++) abstract class Type : RootObject
 
     final void copyDeco() // CALYPSO
     {
-        Type tm = merge();
+        Type tm = merge(this);
         if (tm == this)
             return;
         deco = tm.deco;
@@ -6114,16 +6114,16 @@ extern (C++) final class TypeFunction : TypeNext
                     //printf("match %d\n", m);
 
                     // CALYPSO explicit @implicit ctor
-                    if (m == MATCHnomatch && !(flag & 2))
+                    if (m == MATCH.nomatch && !(flag & 2))
                     {
                         auto toad = getAggregateSym(tprm);
                         if (toad && toad.hasImplicitCtor(arg))
                         {
-                            m = MATCHimplicitctor;
+                            m = MATCH.implicitctor;
                             targ = toad.getType();
                         }
                     }
-                    else if (m > MATCHnomatch && p.storageClass & STCmove) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
+                    else if (m > MATCH.nomatch && p.storageClass & STCmove) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
                     {
                         assert(p.storageClass & STCref);
                         bool ismove = false;
@@ -6133,7 +6133,7 @@ extern (C++) final class TypeFunction : TypeNext
                             ismove = ce.f && (cast(TypeFunction)ce.f.type).ismove;
                         }
                         if (!ismove)
-                            m = MATCHnomatch;
+                            m = MATCH.nomatch;
                     }
                 }
 

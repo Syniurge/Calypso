@@ -859,6 +859,7 @@ public:
             else
                 assert(0);
         }
+        }
         processArgs(args);
         buf.writeByte('Z');
     }

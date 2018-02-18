@@ -755,7 +755,7 @@ extern (C++) FuncDeclaration buildXtoHash(StructDeclaration sd, Scope* sc)
      * hash value will also contain the result of parent class's toHash().
      */
     const(char)* code =
-        "object.size_t h = 0;" ~ // CALYPSO qualify size_t
+        ".object.size_t h = 0;" ~ // CALYPSO qualify size_t
         "foreach (i, T; typeof(p.tupleof))" ~
         "    h += typeid(T).getHash(cast(const void*)&p.tupleof[i]);" ~
         "return h;";

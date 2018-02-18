@@ -5699,7 +5699,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                             {
                                 Expression e = callCpCtor(sc, e2x);
                                 e = new ConstructExp(exp.loc, e1x, e);
-                                result = e.semantic(sc);
+                                result = e.expressionSemantic(sc);
                                 return;
                             }
 

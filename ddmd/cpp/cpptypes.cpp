@@ -124,7 +124,7 @@ void BuiltinTypes::map(clang::CanQualType &CQT, Type* t)
     {
         assert(t->isTypeBasic() && !isCPP(t));
         auto c_t = new cpp::TypeBasic(t->ty, T);
-        toD[T] = c_t->merge();
+        toD[T] = merge(c_t);
         toClang[c_t] = T;
     }
 }
@@ -1906,8 +1906,8 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
         } else if (scSemImplicitImports) {
             auto dst = Package::resolve(im->packages, nullptr, &im->pkg);
             if (!dst->lookup(im->id)) {
-                im->semantic(scSemImplicitImports);
-                im->semantic2(scSemImplicitImports);
+                semantic(im, scSemImplicitImports);
+                semantic2(im, scSemImplicitImports);
             }
         }
     }
@@ -2212,7 +2212,7 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
         case Tident:
         case Tinstance:
         {
-            t = t->semantic(loc, sc);
+            t = typeSemantic(t, loc, sc);
             return toType(loc, t, sc, stc);
         }
         case Tpointer:
