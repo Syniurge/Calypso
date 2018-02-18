@@ -14,9 +14,8 @@ module cpp.eh.libunwind;
 version (CRuntime_Microsoft) {} else
 {
 
-import ldc.eh.common;
-import ldc.eh.libunwind;
-
+import rt.dwarfeh;
+import rt.unwind;
 import cpp.core;
 
 modmap (C++) "unwind-cxx-d.h";
@@ -56,33 +55,22 @@ struct ABI_libstdcxx
                         get_thrown_object_ptr = __get_object_from_ue;
 }
 
-class CppHandler(ABI) : ForeignHandler
+class CppHandler : ForeignHandler
 {
-    ABI.__cxa_exception *_cpp_exception;
-    _Unwind_Context_Ptr context;
-
-    this(_cpp__Unwind_Exception *e, _Unwind_Context_Ptr context)
+    private bool doCatchImpl(ABI)(void* entry, _Unwind_Exception* exceptionObject) shared
     {
-        this._cpp_exception = ABI.cxa_exception_from_exception_unwind_exception(e);
-        this.context = context;
-    }
+        static ABI.type_info *getCatchTypeInfo(void* entry)
+        {
+            auto a = cast(__calypso_type_info_ptr)cast(Object)entry;
+            return a ? cast(ABI.type_info*)a.p : null;
+        }
 
-    void *getException()
-    {
-        return &_cpp_exception.unwindHeader;
-    }
+        auto catchTypeInfo = getCatchTypeInfo(entry);
+        if (!catchTypeInfo)
+            return false; // not a catch (C++) clause
 
-    ABI.type_info *getCatchTypeInfo(void* address, ubyte encoding)
-    {
-        size_t catchTypeInfoWrapAddr;
-        get_encoded_value(cast(ubyte*) address, catchTypeInfoWrapAddr, encoding, context);
-
-        auto a = cast(__calypso_type_info_ptr)cast(Object)cast(void*)catchTypeInfoWrapAddr;
-        return a ? cast(ABI.type_info*)a.p : null;
-    }
-
-    bool doCatch(void* address, ubyte encoding)
-    {
+        ABI.__cxa_exception *_cpp_exception =
+                ABI.cxa_exception_from_exception_unwind_exception(cast(_cpp__Unwind_Exception*) exceptionObject);
         void *__thr_obj = ABI.get_thrown_object_ptr(&_cpp_exception.unwindHeader);
 
         // libstdc++ only: for pointer types it's the actual pointer that needs to get adjusted, not the pointer to pointer that is the exception object.
@@ -91,8 +79,7 @@ class CppHandler(ABI) : ForeignHandler
             if (_cpp_exception.exceptionType.__is_pointer_p())
                 __thr_obj = *cast(void **) __thr_obj;
 
-        auto catchTypeInfo = getCatchTypeInfo(address, encoding);
-        if (catchTypeInfo && catchTypeInfo.can_catch(_cpp_exception.exceptionType, &__thr_obj))
+        if (catchTypeInfo.can_catch(_cpp_exception.exceptionType, &__thr_obj))
         {
             _cpp_exception.adjustedPtr = __thr_obj; // NOTE: __cxa_begin_catch returns adjustedPtr, which in C++ EH is set by the personality routine if the search phase is successful
             return true;
@@ -100,29 +87,22 @@ class CppHandler(ABI) : ForeignHandler
 
         return false;
     }
-}
 
-class CppHandlerFactory : ForeignHandlerFactory
-{
-    bool doHandleExceptionClass(ulong exception_class) shared
+    override bool doCatch(void* entry, _Unwind_Exception* exceptionObject) shared
     {
-        return ABI_libcxx.is_exception_class(exception_class)
-            || ABI_libstdcxx.is_exception_class(exception_class);
-    }
-
-    ForeignHandler create(_Unwind_Context_Ptr context, _Unwind_Exception* exception_info) shared
-    {
-        if (ABI_libcxx.is_exception_class(exception_info.exception_class))
-            return new CppHandler!ABI_libcxx(cast(_cpp__Unwind_Exception*) exception_info, context);
-        else
-            return new CppHandler!ABI_libstdcxx(cast(_cpp__Unwind_Exception*) exception_info, context);
+        auto exception_class = exceptionObject.exception_class;
+        if (ABI_libcxx.is_exception_class(exception_class))
+            return doCatchImpl!ABI_libcxx(entry, exceptionObject);
+        else if (ABI_libstdcxx.is_exception_class(exception_class))
+            return doCatchImpl!ABI_libstdcxx(entry, exceptionObject);
+        return false;
     }
 }
 
 // shared static this()
 extern(C) void _d_cpp_init_eh()
 {
-    foreignHandlerFactories ~=  new CppHandlerFactory;
+    foreignHandlers ~=  new CppHandler;
 }
 
 } // !CRuntime_Microsoft
