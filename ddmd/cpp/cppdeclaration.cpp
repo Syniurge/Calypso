@@ -177,13 +177,16 @@ EnumDeclaration::EnumDeclaration(const EnumDeclaration &o)
 {
 }
 
-void EnumDeclaration::semantic(Scope *sc)
+void EnumDeclaration::accept(Visitor *v)
 {
-    ::EnumDeclaration::semantic(sc);
-    const_cast<clang::EnumDecl*>(ED)->dsym = this;
+    v->visit(this);
 
-    if (!defaultval && !members)
-        defaultval = memtype->defaultInit(); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
+    if (v->_typeid() == TI_DsymbolSem1Visitor) {
+        const_cast<clang::EnumDecl*>(ED)->dsym = this;
+
+        if (!defaultval && !members)
+            defaultval = memtype->defaultInit(); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
+    }
 }
 
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
@@ -204,10 +207,11 @@ Dsymbol* EnumMember::syntaxCopy(Dsymbol* s)
     return ::EnumMember::syntaxCopy(s);
 }
 
-void EnumMember::semantic(Scope *sc)
+void EnumMember::accept(Visitor *v)
 {
-    ::EnumMember::semantic(sc);
-    const_cast<clang::EnumConstantDecl*>(ECD)->dsym = this;
+    v->visit(this);
+    if (v->_typeid() == TI_DsymbolSem1Visitor)
+        const_cast<clang::EnumConstantDecl*>(ECD)->dsym = this;
 }
 
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
@@ -229,18 +233,13 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
     return new cpp::AliasDeclaration(*this); // hmm hmm
 }
 
-// Resolve aliases lazily, the DMD way of evaluating everything leads to infinite recursion for some C++ templates
-// Ex.: typedef _Index_tuple<_Indexes, sizeof(_Indexes)> _Index_tuple<size_t... _Indexes>::__next;
-void AliasDeclaration::semantic(Scope *sc)
-{
-}
-
 void AliasDeclaration::doSemantic()
 {
     if (!_scope)
         return;
 
-    ::AliasDeclaration::semantic(_scope);
+    isUsed = true;
+    semantic(this, _scope);
 }
 
 Dsymbol *AliasDeclaration::toAlias()
@@ -255,29 +254,20 @@ Dsymbol *AliasDeclaration::toAlias2()
     return ::AliasDeclaration::toAlias2();
 }
 
+void AliasDeclaration::accept(Visitor *v)
+{
+    if (v->_typeid() == TI_DsymbolSem1Visitor && !isUsed)
+        ; // resolve aliases lazily, the DMD way of evaluating everything leads to infinite recursion for some C++ templates
+          // ex.: typedef _Index_tuple<_Indexes, sizeof(_Indexes)> _Index_tuple<size_t... _Indexes>::__next;
+    else
+        v->visit(this);
+}
+
 IMPLEMENT_syntaxCopy(VarDeclaration, VD)
 IMPLEMENT_syntaxCopy(FuncDeclaration, FD)
 IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
 IMPLEMENT_syntaxCopy(DtorDeclaration, CDD)
 IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
-
-void FuncDeclaration::semantic(Scope *sc)
-{
-    ::FuncDeclaration::semantic(sc);
-    const_cast<clang::FunctionDecl*>(FD)->dsym = this;
-}
-
-void CtorDeclaration::semantic(Scope *sc)
-{
-    ::CtorDeclaration::semantic(sc);
-    const_cast<clang::CXXConstructorDecl*>(CCD)->dsym = this;
-}
-
-void DtorDeclaration::semantic(Scope *sc)
-{
-    ::DtorDeclaration::semantic(sc);
-    const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
-}
 
 TypeMapper DeclReferencer::mapper(nullptr, true);
 ExprMapper DeclReferencer::expmap(mapper);
@@ -584,32 +574,58 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
         InstantiateAndTraverseFunctionBody(fd, fd->_scope);
 }
 
-void FuncDeclaration::doSemantic3(::FuncDeclaration *fd, Scope *sc)
+void FuncDeclaration::doSemantic3(::FuncDeclaration *fd)
 {
     if (fd->semanticRun >= PASSsemantic3)
         return;
     fd->semanticRun = PASSsemantic3;
     fd->semantic3Errors = false;
 
-    if (getIsUsed(fd))
-        InstantiateAndTraverseFunctionBody(fd, sc);
+    if (getIsUsed(fd)) {
+        assert(fd->_scope);
+        InstantiateAndTraverseFunctionBody(fd, fd->_scope);
+    }
 
     fd->semanticRun = PASSsemantic3done;
 }
 
-void FuncDeclaration::semantic3(Scope *sc)
+void FuncDeclaration::accept(Visitor *v)
 {
-    doSemantic3(this, sc);
+    auto v_ti = v->_typeid();
+
+    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
+        v->visit(this);
+        const_cast<clang::FunctionDecl*>(FD)->dsym = this;
+    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+        doSemantic3(this);
+    } else
+        v->visit(this);
 }
 
-void CtorDeclaration::semantic3(Scope *sc)
+void CtorDeclaration::accept(Visitor *v)
 {
-    cpp::FuncDeclaration::doSemantic3(this, sc);
+    auto v_ti = v->_typeid();
+
+    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
+        v->visit(this);
+        const_cast<clang::CXXConstructorDecl*>(CCD)->dsym = this;
+    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+        cpp::FuncDeclaration::doSemantic3(this);
+    } else
+        v->visit(this);
 }
 
-void DtorDeclaration::semantic3(Scope *sc)
+void DtorDeclaration::accept(Visitor *v)
 {
-    cpp::FuncDeclaration::doSemantic3(this, sc);
+    auto v_ti = v->_typeid();
+
+    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
+        v->visit(this);
+        const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
+    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+        cpp::FuncDeclaration::doSemantic3(this);
+    } else
+        v->visit(this);
 }
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f)

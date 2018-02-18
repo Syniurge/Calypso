@@ -36,6 +36,11 @@ import ddmd.staticassert;
 
 extern (C++) class Visitor
 {
+    const(void)* _typeid() const // CALYPSO: enable overrides of DMD's visitors by cpp::XXX::accept()
+    {
+        return null; // visitors of interest return (D's) typeid(typeof(this))
+    }
+
     void visit(Statement)
     {
         assert(0);

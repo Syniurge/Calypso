@@ -84,10 +84,6 @@ void Modmap::importAll(Scope *sc)
     calypso.pch.add(arg->toPtr(), sc->_module);
 }
 
-void Modmap::semantic(Scope* sc)
-{
-}
-
 GlobalImport::GlobalImport(Loc loc)
 {
     construct_Import(this, loc, nullptr, calypso.id_Scpp, nullptr, 0);

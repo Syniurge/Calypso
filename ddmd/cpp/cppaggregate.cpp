@@ -91,18 +91,19 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
-
-void StructDeclaration::semantic(Scope *sc)
+void StructDeclaration::accept(Visitor *v)
 {
-    ::StructDeclaration::semantic(sc);
-    const_cast<clang::RecordDecl*>(RD)->dsym = this;
-}
+    auto v_ti = v->_typeid();
 
-void StructDeclaration::semantic3(Scope *sc)
-{
-    if (isUsed)
-        MarkAggregateReferencedImpl(this);
-    ::StructDeclaration::semantic3(sc);
+    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
+        v->visit(this);
+        const_cast<clang::RecordDecl*>(RD)->dsym = this;
+    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+        if (isUsed)
+            MarkAggregateReferencedImpl(this);
+        v->visit(this);
+    } else
+        v->visit(this);
 }
 
 Expression *StructDeclaration::defaultInit(Loc loc)
@@ -144,20 +145,19 @@ void StructDeclaration::finalizeSize()
         zeroInit = 0;
 }
 
-void ClassDeclaration::semantic(Scope *sc)
+void ClassDeclaration::accept(Visitor *v)
 {
-//     if (semanticRun >= PASSsemanticdone)
-//         return;
+    auto v_ti = v->_typeid();
 
-    ::ClassDeclaration::semantic(sc);
-    const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
-}
-
-void ClassDeclaration::semantic3(Scope *sc)
-{
-    if (isUsed)
-        MarkAggregateReferencedImpl(this);
-    ::ClassDeclaration::semantic3(sc);
+    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
+        v->visit(this);
+        const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
+    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+        if (isUsed)
+            MarkAggregateReferencedImpl(this);
+        v->visit(this);
+    } else
+        v->visit(this);
 }
 
 bool ClassDeclaration::mayBeAnonymous()

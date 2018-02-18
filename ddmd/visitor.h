@@ -303,6 +303,9 @@ class Parameter;
 class Visitor
 {
 public:
+    virtual const void* _typeid() const { return nullptr; } // CALYPSO: enable overrides of DMD's visitors by cpp::XXX::accept()
+                                                            // visitors of interest return (D's) typeid(typeof(this))
+
     virtual void visit(Statement *) { assert(0); }
     virtual void visit(ErrorStatement *s) { visit((Statement *)s); }
     virtual void visit(PeelStatement *s) { visit((Statement *)s); }

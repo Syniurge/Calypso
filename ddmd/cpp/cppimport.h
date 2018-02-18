@@ -34,7 +34,6 @@ public:
     Modmap(Loc loc, StringExp *arg);
 
     void importAll(Scope *sc) override;
-    void semantic(Scope *sc) override;
 };
 
 // Special import for lookups from C++ modules

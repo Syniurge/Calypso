@@ -33,7 +33,6 @@ public:
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
     TemplateDeclaration(const TemplateDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
-    void semantic(Scope *sc) override;
     bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, ::TemplateInstance *ti) override;
     bool evaluateConstraint(::TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, ::FuncDeclaration *fd) override;
     bool earlyFunctionValidityCheck(::TemplateInstance *ti, Scope *sc, Objects *dedtypes) override;
@@ -59,6 +58,8 @@ public:
     void correctTempDecl(TemplateInstance *ti);
 
     bool allowTupleParameterAnywhere() override { return true; }
+
+    void accept(Visitor *v) override;
 };
 
 class TemplateInstance : public ::TemplateInstance

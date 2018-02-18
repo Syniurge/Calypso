@@ -58,14 +58,14 @@ public:
                     Type* type, const clang::FunctionDecl *FD);
     FuncDeclaration(const FuncDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 
-    static void doSemantic3(::FuncDeclaration *fd, Scope *sc);
+    static void doSemantic3(::FuncDeclaration *fd);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
+
+    void accept(Visitor *v) override;
 };
 
 class CtorDeclaration : public ::CtorDeclaration
@@ -80,10 +80,10 @@ public:
                     Type* type, const clang::CXXConstructorDecl *CCD);
     CtorDeclaration(const CtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
+
+    void accept(Visitor *v) override;
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -98,11 +98,11 @@ public:
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
     DtorDeclaration(const DtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    void semantic3(Scope *sc) override;
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
+
+    void accept(Visitor *v) override;
 };
 
 class EnumDeclaration : public ::EnumDeclaration
@@ -116,7 +116,8 @@ public:
             const clang::EnumDecl *ED);
     EnumDeclaration(const EnumDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
+
+    void accept(Visitor *v) override;
 };
 
 class EnumMember : public ::EnumMember
@@ -129,7 +130,8 @@ public:
     EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
                const clang::EnumConstantDecl *ECD);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
+
+    void accept(Visitor *v) override;
 };
 
 class AliasDeclaration : public ::AliasDeclaration
@@ -138,16 +140,17 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::TypedefNameDecl *TND;
-    Scope* semScope = nullptr;
+    bool isUsed = false;
 
     AliasDeclaration(Loc loc, Identifier *ident, Type *type,
             const clang::TypedefNameDecl *TND);
     AliasDeclaration(const AliasDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
     void doSemantic();
     Dsymbol *toAlias() override;
     Dsymbol *toAlias2() override;
+
+    void accept(Visitor *v) override;
 };
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);

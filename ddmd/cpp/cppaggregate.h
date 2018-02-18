@@ -37,8 +37,6 @@ public:
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    void semantic3(Scope *sc) override;
     bool determineFields() override;
     bool buildLayout() override;
     void finalizeSize() override;
@@ -48,6 +46,8 @@ public:
     bool disableDefaultCtor() override { return false; }
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
+
+    void accept(Visitor *v) override;
 };
 
 // The rest, i.e anything involving inheritance, virtual functions.
@@ -64,8 +64,6 @@ public:
                      Dsymbols* members, const clang::CXXRecordDecl *RD);
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void semantic(Scope *sc) override;
-    void semantic3(Scope *sc) override;
     bool determineFields() override;
     bool buildLayout() override;
     bool mayBeAnonymous() override;
@@ -83,6 +81,8 @@ public:
     void finalizeVtbl() override;
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
+
+    void accept(Visitor *v) override;
 };
 
 class UnionDeclaration : public ::UnionDeclaration

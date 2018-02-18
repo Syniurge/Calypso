@@ -323,4 +323,9 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 // TODO: use this pattern for all global.params.verbose logging; MOVE to root/ddmd/
 void log_verbose(const std::string& header, const std::string& msg);
 
+// DMD visitors TypeInfo constants
+extern void* const TI_DsymbolSem1Visitor;
+extern void* const TI_DsymbolSem2Visitor;
+extern void* const TI_DsymbolSem3Visitor;
+
 #endif /* DMD_CPP_CALYPSO_H */

@@ -96,6 +96,11 @@ extern(C++) final class Semantic2Visitor : Visitor
         this.sc = sc;
     }
 
+    override const(void*) _typeid() const // CALYPSO
+    {
+        return cast(void*) typeid(Semantic2Visitor);
+    }
+
     override void visit(Dsymbol) {}
 
     override void visit(StaticAssert sa)
@@ -563,6 +568,11 @@ extern(C++) final class Semantic3Visitor : Visitor
     this(Scope* sc)
     {
         this.sc = sc;
+    }
+
+    override const(void*) _typeid() const // CALYPSO
+    {
+        return cast(void*) typeid(Semantic3Visitor);
     }
 
     override void visit(Dsymbol) {}
@@ -1809,7 +1819,7 @@ else
     }
 }
 
-private extern(C++) final class DsymbolSemanticVisitor : Visitor
+extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public)
 {
     alias visit = super.visit;
 
@@ -1817,6 +1827,11 @@ private extern(C++) final class DsymbolSemanticVisitor : Visitor
     this(Scope* sc)
     {
         this.sc = sc;
+    }
+
+    override const(void*) _typeid() const // CALYPSO
+    {
+        return cast(void*) typeid(DsymbolSemanticVisitor);
     }
 
     override void visit(Dsymbol dsym)
