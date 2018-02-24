@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.4.3)
 project(ldc)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
@@ -141,11 +141,12 @@ if(MSVC)
 
     if(${D_COMPILER_ID} STREQUAL "DigitalMars" AND (MSVC_VERSION GREATER 1800)) # VS 2015+
         append("-Llegacy_stdio_definitions.lib" DDMD_DFLAGS)
-    elseif(${D_COMPILER_ID} STREQUAL "LDMD") # WORKAROUND (LDC 1.3 BUG?): shouldn't this be done in linker-msvc.cpp? | LDC 1.4 NOTE: is this still necessary?
+    elseif(${D_COMPILER_ID} STREQUAL "LDMD") # WORKAROUND (LDC 1.3-1.7 BUG?): shouldn't this be done in linker-msvc.cpp?
         if(CMAKE_BUILD_TYPE MATCHES "Debug")
-            string(REGEX MATCH "\\(([0-9]+\\.[0-9]+)\\.[0-9]+\\)" D_COMPILER_VERSION_LDC ${D_COMPILER_VERSION_STRING})
+            string(REGEX MATCH "\\(([0-9]+)\\.([0-9]+)\\.[0-9]+\\)" D_COMPILER_VERSION_LDC ${D_COMPILER_VERSION_STRING})
             set(D_COMPILER_VERSION_LDC "${CMAKE_MATCH_1}")
-            if(${D_COMPILER_VERSION_LDC} STREQUAL "1.3")
+            set(D_COMPILER_SUBVERSION_LDC "${CMAKE_MATCH_2}")
+            if(${D_COMPILER_VERSION_LDC} STREQUAL "1" AND D_COMPILER_SUBVERSION_LDC GREATER 2)
                 append("-mscrtlib=libcmtd" DDMD_DFLAGS)
             endif()
         endif()
@@ -256,10 +257,6 @@ if(MSVC)
 else()
     separate_arguments(LLVM_LDFLAGS UNIX_COMMAND "${LLVM_LDFLAGS}")
 endif()
-
-# CALYPSO
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # LLVM_CXXFLAGS may contain -Wcovered-switch-default and -fcolor-diagnostics
 # which are clang-only options
@@ -560,13 +557,6 @@ set_target_properties(
 
 ### CALYPSO ###
 
-find_program(NINJA_PROGRAM NAMES ninja-build ninja)
-if (NOT NINJA_PROGRAM)
-    message(FATAL_ERROR "Ninja not found!")
-endif()
-
-include(ExternalProject)
-
 set(CLANG_PREBUILT_DIR "" CACHE STRING "Pre-built Calypso Clang submodule (optional, to speed up CI builds)")
 
 set(CLANG_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/clang)
@@ -625,26 +615,35 @@ set(CLANG_BUILD_FLAGS "" CACHE STRING "Clang build arguments")
 separate_arguments(CLANG_BUILD_ARGS UNIX_COMMAND "${CLANG_BUILD_FLAGS}")
 
 if(NOT CLANG_PREBUILT_DIR)
+    include(ExternalProject)
+
+    set(CLANG_GENERATOR "${CMAKE_GENERATOR}")
+    set(CLANG_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+
+    string(FIND "${CLANG_GENERATOR}" "Visual Studio" vspos)
+    if (NOT vspos EQUAL -1)
+        # MSBuild only takes one project file as command line argument at a time, so specifying
+        # multiple Clang libs in the same command doesn't work. As a workaround ninja is used instead.
+        find_program(NINJA_PROGRAM NAMES ninja-build ninja)
+        if (NOT NINJA_PROGRAM)
+            message(FATAL_ERROR "Ninja not found!")
+        endif()
+        set(CLANG_GENERATOR Ninja)
+        set(CLANG_MAKE_PROGRAM "${NINJA_PROGRAM}")
+        set(CLANG_CMAKE_FLAGS ${CLANG_CMAKE_FLAGS} "-DCMAKE_MAKE_PROGRAM=${NINJA_PROGRAM}")
+    endif()
+
     ExternalProject_Add(clang
         SOURCE_DIR ${CLANG_SOURCE_DIR}
         BINARY_DIR ${CLANG_BINARY_DIR}
         STAMP_DIR ${CLANG_STAMP_DIR}
-        CMAKE_GENERATOR Ninja  # WORKAROUND for 2 issues:
-                # - with MSBuild only one project can be specified and the build command fails
-                # - with make the -j argument isn't passed unless $(MAKE) is used which is non-portable
+        CMAKE_GENERATOR "${CLANG_GENERATOR}"
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CLANG_BUILD_TYPE} -DLLVM_CONFIG=${LLVM_CONFIG} ${CLANG_CMAKE_FLAGS}
-        BUILD_COMMAND ${NINJA_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
+        BUILD_COMMAND ${CLANG_MAKE_PROGRAM} ${CLANG_BUILD_ARGS} ${CLANG_TARGETS}
         BUILD_BYPRODUCTS ${CLANG_BYPRODUCTS}
+        BUILD_ALWAYS 1  # always trigger a rebuild of Clang in case there were changes
         INSTALL_COMMAND ""
         STEP_TARGETS rtcopy
-    )
-
-    # Always trigger a rebuild of Clang in case there were changes.
-    # NOTE: CMake 3.2 introduces BUILD_ALWAYS for this.
-    ExternalProject_Add_Step(clang rebuild
-        COMMAND ${CMAKE_COMMAND} -E remove "${CLANG_STAMP_DIR}/clang-build"
-        DEPENDERS build
-        ALWAYS 1
     )
 
     ExternalProject_Add_Step(clang rtcopy
@@ -682,7 +681,7 @@ add_custom_target(${LDMD_EXE} ALL DEPENDS ${LDMD_EXE_FULL})
 
 # Figure out how to link the main LDC executable, for which we need to take the
 # LLVM flags into account.
-set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}")
+set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${CLANG_LIBS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}") # CALYPSO
 if(LDC_WITH_LLD)
     if(MSVC)
         list(APPEND LDC_LINKERFLAG_LIST lldCOFF.lib lldCore.lib lldDriver.lib)
@@ -775,7 +774,7 @@ endfunction()
 
 # CONFIG generator expressions need to be repeated due to https://cmake.org/Bug/view.php?id=14353
 if(MSVC_IDE)
-    separate_arguments(LDC_FLAG_LIST WINDOWS_COMMAND "${CLANG_LIBS} ${LDC_TRANSLATED_LINKER_FLAGS} ${D_COMPILER_FLAGS} ${DDMD_DFLAGS} ${DDMD_LFLAGS}") # CALYPSO
+    separate_arguments(LDC_FLAG_LIST WINDOWS_COMMAND "${LDC_TRANSLATED_LINKER_FLAGS} ${D_COMPILER_FLAGS} ${DDMD_DFLAGS} ${DDMD_LFLAGS}")
     add_custom_command(
         OUTPUT ${LDC_EXE_FULL}
         COMMAND ${D_COMPILER} -L$<TARGET_LINKER_FILE:${LDC_LIB}> ${LDC_FLAG_LIST} -I${PROJECT_SOURCE_DIR}/${DDMDFE_PATH} -of${LDC_EXE_FULL} ${LDC_D_SOURCE_FILES} $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:-g> $<$<NOT:$<CONFIG:Debug>>:-O> $<$<NOT:$<CONFIG:Debug>>:-inline> $<$<NOT:$<CONFIG:Debug>>:-release>
@@ -786,7 +785,7 @@ else()
     build_d_executable(
         "${LDC_EXE_FULL}"
         "${LDC_D_SOURCE_FILES}"
-        "$<TARGET_LINKER_FILE:${LDC_LIB}>;${CLANG_LIBS}" # CALYPSO
+        "$<TARGET_LINKER_FILE:${LDC_LIB}>"
         "${LDC_D_SOURCE_FILES};${FE_RES}"
         "${LDC_LIB}"
     )
