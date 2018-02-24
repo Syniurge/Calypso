@@ -1,9 +1,9 @@
 Calypso notes
 ------------
 
-Calypso creates a bridge between DMD/LDC and Clang, both at the AST level (DMD <=> Clang's AST, Sema, ...) and at the code generation level (LDC <=> Clang's Codegen) to make D interface directly with the almost full set of C++ features, and no binding is needed.
+Calypso creates a bridge between DMD/LDC and Clang, both at the AST level (DMD <=> Clang's AST, Sema, ...) and at the code generation level (LDC <=> Clang's Codegen) to make D interface directly with the almost entire spectrum of C++ features.
 
-It's not a separate tool, but a fork of LDC which enables you to directly import/include a C/C++ header and use the declarations from within D. No intermediate file is necessary.
+It's not a separate tool, but a fork of LDC which enables you to directly import/include a C/C++ header and use the declarations from within D. No intermediate file is necessary, and no binding is involved.
 
 Calypso introduces a new keyword, **modmap**, along with the concept of language plugins which are queried by DMD's parser when it encounters special « **import** *(ABC)* xxx.yyy; » symbols. Interfacing with C++ declarations comes down to:
 
@@ -15,45 +15,43 @@ import (C++) NamespaceA._;       // special module per namespace, imports every 
                                  // global functions and typedefs whose direct parent is NamespaceA::
 ```
 
-The resulting imported symbols are usable like their D counterparts. For more detailed examples and explanations on Calypso's features see [tests/calypso](tests/calypso).
+The resulting imported symbols are usable like their D counterparts. For more detailed examples see [tests/calypso](tests/calypso) and [examples](examples).
 
 Although Calypso is currently soldered to LDC, separating the two and placing Calypso and its bulky Clang dependency in an optional shared library should be easy. In this way, D compilers won't have to depend on a C/C++ compiler, and wider C++ support than what D currently has won't result in too cumbersome intrusions in core DMD/LDC.
 
 Installation notes
 -------
 
-A Clang 3.9 fork makes its appearance as a submodule, it's therefore strongly recommended to build Calypso against LLVM 3.9.1 (and not 3.9.0 which contains a breaking bug).
+Refer to the LDC wiki ([Linux and OS X](http://wiki.dlang.org/Building_LDC_from_source) and
+[Windows](http://wiki.dlang.org/Building_and_hacking_LDC_on_Windows_using_MSVC)).
 
-Please note that to build Calypso in ```Debug``` mode LLVM needs to be built in ```Debug``` mode as well.
+There are only a few requirements specific to Calypso:
+- CMake minimum version is 3.4+
+- Clang is tied to its corresponding LLVM version, it's therefore strongly recommended to build Calypso which introduces a Clang 5.0 submodule against LLVM 5.0
+- MSVC (Windows) builds require [Ninja](https://ninja-build.org/)
 
-### Installing on OSX
-```
-mkdir build && cd build
-ccmake -D LLVM_CONFIG=$homebrew_D/Cellar/llvm@3.9/3.9.1_1/bin/llvm-config ..
-make -j8
-```
-NOTE: you may encounter https://github.com/Syniurge/Calypso/issues/77, https://github.com/Syniurge/Calypso/issues/57
+`cmake -G Ninja` is recommended instead of `make` to take advantage by default of all available CPU cores while building the Clang external module (it's also possible to set `cmake -DCLANG_BUILD_FLAGS="-jX"`).
 
-### Installing on ubuntu 16.04
-covered in https://github.com/Syniurge/Calypso/issues/49
+Calypso may also have nightly builds in the future.
 
-## Specific flags and building the basic example
+## Specific flags
 
-Calypso adds the -cpp-flags option to LDC to pass arguments to Clang during header parsing, e.g to enable C++11:
+The `-cpp-flags` option was added to LDC to pass arguments to Clang during header parsing, e.g to enable C++11:
 
     $ ldc2 -cpp-args -std=c++11 main.d
 
-## missing features
+## Missing features
 
-### exception handling
+### Exception handling
 * C++ exception rethrowing
-* `catch(...)` (C++ catch all); NOTE: `catch (C++) (ref T e)` is ok) https://github.com/Syniurge/Calypso/issues/74
+* `catch (C++) {}` i.e catch any C++ exception instead of specifying a type with `catch (C++) (ref T e)` (https://github.com/Syniurge/Calypso/issues/74)
 * MSVC exception handling
 
-### other
-* upgrade to more recent LDC, clang
+### Other
 * Register the destructor of C++ classes and structs while allocating a C++ class through the GC (as is being done for D structs)
-* macro functions are not mapped to D (as enums and templates) https://github.com/Syniurge/Calypso/issues/66
+* Map macro functions as enums and templates (https://github.com/Syniurge/Calypso/issues/66). Currently only macro constants get mapped.
+
+*****
 
 LDC – the LLVM-based D Compiler
 ===============================
