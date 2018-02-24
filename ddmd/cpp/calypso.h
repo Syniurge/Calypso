@@ -66,6 +66,7 @@ struct SpecValue
 
 Identifier *idPool(const char *s);
 
+Identifier *prefixConflictingIdentifier(Identifier *ident);
 Identifier *fromIdentifier(const clang::IdentifierInfo *II);
 Identifier *fromDeclarationName(const clang::DeclarationName N, SpecValue *spec = nullptr);
 Identifier *getIdentifier(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);

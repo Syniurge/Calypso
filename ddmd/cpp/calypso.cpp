@@ -83,6 +83,13 @@ RootObject *SpecValue::toTemplateArg(Loc loc)
         return t;
 }
 
+Identifier *prefixConflictingIdentifier(Identifier *ident)
+{
+    llvm::SmallString<48> s(u8"ℂ"); // non-ASCII and unavailable on most keyboards, but pretty
+    s += llvm::StringRef(ident->toChars(), ident->length());
+    return Identifier::idPool(s.c_str(), s.size());
+}
+
 Identifier *fromIdentifier(const clang::IdentifierInfo *II)
 {
     return Identifier::idPool(II->getNameStart(), II->getLength());
@@ -398,11 +405,7 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
     }
 
     if (needsPrefixing)
-    {
-        llvm::SmallString<48> s(u8"ℂ"); // non-ASCII and unavailable on most keyboards, but pretty
-        s += llvm::StringRef(ident->toChars(), ident->length());
-        ident = Identifier::idPool(s.c_str(), s.size());
-    }
+        ident = prefixConflictingIdentifier(ident);
 
     return ident;
 }

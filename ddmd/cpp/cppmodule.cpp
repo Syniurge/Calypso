@@ -1338,8 +1338,15 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 
 Dsymbol* DeclMapper::VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E)
 {
+    auto TU = calypso.getASTContext().getTranslationUnitDecl();
+
     Loc loc;
     auto ident = fromIdentifier(II);
+
+    // C allows macros and other symbols to share the same name, D doesn't
+    // Conflicting macros get prefixed with ℂ
+    if (!TU->lookup(clang::DeclarationName(II)).empty())
+        ident = prefixConflictingIdentifier(ident);
 
     ExprMapper expmap(*this);
     auto e = expmap.fromExpression(E);
