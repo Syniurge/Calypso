@@ -163,6 +163,7 @@ void BuiltinTypes::build(clang::ASTContext &Context)
     map(Context.DoubleTy, Type::tfloat64);
     map(Context.LongDoubleTy, Type::tfloat80);
     map(Context.HalfTy, Type::tfloat32); // FIXME: 16 bits float, map to std.numeric CustomFloat?
+    map(Context.Float128Ty, Type::tfloat80); // FIXME: there is no equivalent in D atm
 
         //===- Language-specific types --------------------------------------------===//
     { // nullptr_t needs to be mangled differently from void*
