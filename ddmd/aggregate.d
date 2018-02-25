@@ -910,9 +910,10 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         size_t elem_i = 0;
         Expression addAgg(Loc loc, AggregateDeclaration ad) // returns null if ok, ErrorExp if not
         {
-            if (auto base = toAggregateBase(ad))
-                if (auto e = addAgg(loc, base))
-                    return e;
+            if (auto cd = ad.isClassDeclaration())
+                foreach (b; *cd.baseclasses)  // CALYPSO
+                    if (auto e = addAgg(loc, b.sym))
+                        return e;
 
             uint offset = 0;
             auto fieldsDim = ad.fields.dim - ad.isNested();
