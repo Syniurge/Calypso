@@ -450,7 +450,7 @@ macro(compile_calypsort d_flags lib_suffix path_suffix all_at_once outlist_o out
     get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
     dc("${CALYPSORT_D}"
         ${CALYPSORT_DIR}
-        "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${CALYPSORT_DIR};-cpp-cachedir=${calypsort_cppdir}"
+        "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR};-I${CALYPSORT_DIR};-cpp-cachedir=${calypsort_cppdir}"
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"
        "${all_at_once}"
         ${outlist_o}
