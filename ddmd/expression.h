@@ -150,7 +150,7 @@ public:
     virtual Expression *syntaxCopy();
 
     // kludge for template.isExpression()
-    int dyncast() const { return DYNCAST_EXPRESSION; }
+    DYNCAST dyncast() const { return DYNCAST_EXPRESSION; }
 
     void print();
     const char *toChars();

@@ -248,7 +248,7 @@ public:
     bool equivs(RootObject *o) { return equals(o); } // 1.1 FIXME: temporary to not break middle-end code // CALYPSO NOTE: introduced before dmd 2.067, used for function overloading
     bool equivalent(Type *t);
     // kludge for template.isType()
-    int dyncast() const { return DYNCAST_TYPE; }
+    DYNCAST dyncast() const { return DYNCAST_TYPE; }
     int covariant(Type *t, StorageClass *pstc = NULL, bool fix17349 = true);
     const char *toChars();
     char *toPrettyChars(bool QualifyTypes = false);
@@ -913,7 +913,7 @@ public:
     Parameter *syntaxCopy();
     Type *isLazyArray();
     // kludge for template.isType()
-    int dyncast() const { return DYNCAST_PARAMETER; }
+    DYNCAST dyncast() const { return DYNCAST_PARAMETER; }
     virtual void accept(Visitor *v) { v->visit(this); }
 
     static Parameters *arraySyntaxCopy(Parameters *parameters);
