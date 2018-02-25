@@ -325,8 +325,8 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 void log_verbose(const std::string& header, const std::string& msg);
 
 // DMD visitors TypeInfo constants
-extern void* const TI_DsymbolSem1Visitor;
-extern void* const TI_DsymbolSem2Visitor;
-extern void* const TI_DsymbolSem3Visitor;
+extern const void* const TI_DsymbolSem1Visitor;
+extern const void* const TI_DsymbolSem2Visitor;
+extern const void* const TI_DsymbolSem3Visitor;
 
 #endif /* DMD_CPP_CALYPSO_H */
