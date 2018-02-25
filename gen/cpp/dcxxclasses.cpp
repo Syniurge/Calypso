@@ -586,8 +586,18 @@ struct DCXXVptrAdjuster
                                               Indices, /*InBounds=*/true,
                                               /*InRangeIndex=*/1);
         } else {
-            if (getContext().getLangOpts().RTTIData)
-                DCXXVTableAddressPoint = Builder.CreateConstInBoundsGEP2_64(DCXXVTable, 0, 1);
+            if (getContext().getLangOpts().RTTIData) {
+                llvm::Constant *Indices[] = {
+                    llvm::ConstantInt::get(CGF.Int32Ty, 0),
+                    llvm::ConstantInt::get(CGF.Int32Ty, 0),
+                    llvm::ConstantInt::get(CGF.Int32Ty, 1)
+                };
+
+                DCXXVTableAddressPoint =
+                    llvm::ConstantExpr::getGetElementPtr(DCXXVTable->getValueType(), DCXXVTable,
+                        Indices, /*InBounds=*/true,
+                        /*InRangeIndex=*/1);;
+            }
             else
                 DCXXVTableAddressPoint = DCXXVTable;
         }
