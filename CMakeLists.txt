@@ -681,7 +681,7 @@ add_custom_target(${LDMD_EXE} ALL DEPENDS ${LDMD_EXE_FULL})
 
 # Figure out how to link the main LDC executable, for which we need to take the
 # LLVM flags into account.
-set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${CLANG_LIBS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}") # CALYPSO
+set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}")
 if(LDC_WITH_LLD)
     if(MSVC)
         list(APPEND LDC_LINKERFLAG_LIST lldCOFF.lib lldCore.lib lldDriver.lib)
@@ -774,7 +774,7 @@ endfunction()
 
 # CONFIG generator expressions need to be repeated due to https://cmake.org/Bug/view.php?id=14353
 if(MSVC_IDE)
-    separate_arguments(LDC_FLAG_LIST WINDOWS_COMMAND "${LDC_TRANSLATED_LINKER_FLAGS} ${D_COMPILER_FLAGS} ${DDMD_DFLAGS} ${DDMD_LFLAGS}")
+    separate_arguments(LDC_FLAG_LIST WINDOWS_COMMAND "${CLANG_LIBS} ${LDC_TRANSLATED_LINKER_FLAGS} ${D_COMPILER_FLAGS} ${DDMD_DFLAGS} ${DDMD_LFLAGS}")
     add_custom_command(
         OUTPUT ${LDC_EXE_FULL}
         COMMAND ${D_COMPILER} -L$<TARGET_LINKER_FILE:${LDC_LIB}> ${LDC_FLAG_LIST} -I${PROJECT_SOURCE_DIR}/${DDMDFE_PATH} -of${LDC_EXE_FULL} ${LDC_D_SOURCE_FILES} $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:-g> $<$<NOT:$<CONFIG:Debug>>:-O> $<$<NOT:$<CONFIG:Debug>>:-inline> $<$<NOT:$<CONFIG:Debug>>:-release>
@@ -785,7 +785,7 @@ else()
     build_d_executable(
         "${LDC_EXE_FULL}"
         "${LDC_D_SOURCE_FILES}"
-        "$<TARGET_LINKER_FILE:${LDC_LIB}>"
+        "$<TARGET_LINKER_FILE:${LDC_LIB}>;${CLANG_LIBS}"
         "${LDC_D_SOURCE_FILES};${FE_RES}"
         "${LDC_LIB}"
     )
@@ -941,7 +941,7 @@ set(LDC_UNITTEST_EXE_FULL ${PROJECT_BINARY_DIR}/bin/${LDC_EXE_NAME}-unittest${CM
 build_d_executable(
     "${LDC_UNITTEST_EXE_FULL}"
     "-unittest;${LDC_D_SOURCE_FILES}"
-    "$<TARGET_LINKER_FILE:${LDC_LIB}>"
+    "$<TARGET_LINKER_FILE:${LDC_LIB}>;${CLANG_LIBS}"
     "${LDC_D_SOURCE_FILES}"
     "${LDC_LIB}"
 )
