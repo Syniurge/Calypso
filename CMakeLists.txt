@@ -578,7 +578,7 @@ set(CLANG_TARGETS "clang-headers")
 
 macro(add_clang_lib _libname_)
     set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
-    set(CLANG_BYPRODUCTS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
+    set(CLANG_BYPRODUCTS ${CLANG_BYPRODUCTS} ${CLANG_${_libname_}_LIB})
     set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
     set(CLANG_TARGETS ${CLANG_TARGETS} ${_libname_})
 endmacro(add_clang_lib)
