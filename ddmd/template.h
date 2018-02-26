@@ -358,6 +358,7 @@ public:
     // CALYPSO variadic template generalization (pretty intrusive...)
     virtual size_t correspondingParamIdx(size_t argi);
     virtual TemplateParameter* correspondingParam(size_t argi);
+    virtual Objects* tiargsForMangling() { return tiargs; }
 
     TemplateInstance *isTemplateInstance() { return this; }
     void accept(Visitor *v) { v->visit(this); }

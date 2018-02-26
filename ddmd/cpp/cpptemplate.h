@@ -80,6 +80,7 @@ public:
     void declareParameters(Scope *sc) override {}
     size_t correspondingParamIdx(size_t argi) override;
     TemplateParameter* correspondingParam(size_t argi) override;
+    Objects* tiargsForMangling() override;
 
     bool completeInst();
     void correctTiargs();

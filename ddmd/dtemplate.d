@@ -6239,7 +6239,6 @@ extern (C++) class TemplateInstance : ScopeDsymbol
     {
         if (!ident && inst && !errors)
             ident = genIdent(tiargs); // need an identifier for name mangling purposes.
-//             ident = genIdent(inst.tiargs); // need an identifier for name mangling purposes. // CALYPSO 1.1 NOTE: skipped, https://github.com/Syniurge/Calypso/commit/2502925cf14e58022ebb0f532cc70a66fb55e61d doesn't make sense to me (the cpp:: getIdent switches this.tiargs to primTiargs, so why take inst.tiargs?..)
         return ident;
     }
 
@@ -7597,6 +7596,11 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         assert(tempdecl && tempdecl.isTemplateDeclaration());
         auto tempdecl = cast(TemplateDeclaration)this.tempdecl;
         return (*tempdecl.parameters)[.correspondingParamIdx(argi, tempdecl, tiargs)];
+    }
+
+    Objects* tiargsForMangling()
+    {
+        return tiargs;
     }
 
     override final inout(TemplateInstance) isTemplateInstance() inout

@@ -857,6 +857,11 @@ TemplateParameter* TemplateInstance::correspondingParam(size_t argi)
     return (*primtemp->parameters)[::correspondingParamIdx(argi, primtemp, tiargs)];
 }
 
+Objects* TemplateInstance::tiargsForMangling()
+{
+    return primTiargs ? primTiargs : tiargs;
+}
+
 bool TemplateInstance::completeInst()
 {
     auto& Context = calypso.getASTContext();
