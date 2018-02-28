@@ -4721,6 +4721,10 @@ bool reliesOnTident(Type t, TemplateParameters* tparams = null, size_t iStart = 
             this.iStart = iStart;
         }
 
+        override void visit(Dsymbol s) // CALYPSO
+        {
+        }
+
         override void visit(Type t)
         {
         }
@@ -4780,7 +4784,7 @@ bool reliesOnTident(Type t, TemplateParameters* tparams = null, size_t iStart = 
             }
         }
 
-        final void visitTempInst(TemplateInstance ti) // CALYPSO
+        override void visit(TemplateInstance ti) // CALYPSO
         {
             visitIdentifier(ti.name);
             if (result)
@@ -4796,7 +4800,7 @@ bool reliesOnTident(Type t, TemplateParameters* tparams = null, size_t iStart = 
                 if (o.dyncast() == DYNCAST.identifier)
                     visitIdentifier(cast(Identifier) o);
                 else if (o.dyncast() == DYNCAST.dsymbol)
-                    visitTempInst(cast(TemplateInstance) o);
+                    (cast(TemplateInstance)o).accept(this);
                 if (result)
                     return;
             }
@@ -4812,7 +4816,7 @@ bool reliesOnTident(Type t, TemplateParameters* tparams = null, size_t iStart = 
 
         override void visit(TypeInstance t)
         {
-            visitTempInst(t.tempinst); // CALYPSO
+            t.tempinst.accept(this); // CALYPSO
             if (result)
                 return;
             visitIdents(t);
@@ -5085,10 +5089,16 @@ bool reliesOnTident(Type t, TemplateParameters* tparams = null, size_t iStart = 
                 visit(cast(BinExp)e);
         }
 
-        override void visit(DotIdExp e) // CALYPSO addition (1.1 NOTE: strange that so many Expression got added since 0.17 but no DotIdExp)
+        // CALYPSO additions (1.1 NOTE: strange that so many Expression got added since 0.17 but no DotIdExp)
+        override void visit(DotIdExp e)
         {
             visit(cast(UnaExp)e);
             visitIdentifier(e.ident);
+        }
+
+        override void visit(ScopeExp e)
+        {
+            e.sds.accept(this);
         }
     }
 
