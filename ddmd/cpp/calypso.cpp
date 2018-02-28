@@ -574,44 +574,6 @@ void LangPlugin::mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration
 
 /***********************/
 
-void InstantiationChecker::CompletedImplicitDefinition(const clang::FunctionDecl *D)
-{
-    if (!calypso.pch.AST)
-        return; // we may still be in the initial parsing of headers
-
-    auto& Diags = calypso.getDiagnostics();
-
-    calypso.pch.needSaving = true;
-
-    if (Diags.hasErrorOccurred())
-    {
-//         if (!D->isInvalidDecl())
-//             fprintf(stderr, "Marking %s invalid", D->getNameAsString().c_str());
-//         const_cast<clang::FunctionDecl*>(D)->setInvalidDecl();
-        Diags.Reset();
-    }
-}
-
-void InstantiationChecker::FunctionDefinitionInstantiated(const clang::FunctionDecl *D)
-{
-    if (!calypso.pch.AST)
-        return; // we may still be in the initial parsing of headers
-
-    auto& Diags = calypso.getDiagnostics();
-
-    calypso.pch.needSaving = true;
-
-    if (Diags.hasErrorOccurred())
-    {
-//         if (!D->isInvalidDecl())
-//             fprintf(stderr, "Marking %s invalid", D->getNameAsString().c_str());
-//         const_cast<clang::FunctionDecl*>(D)->setInvalidDecl();
-        Diags.Reset();
-    }
-}
-
-/***********************/
-
 DiagMuter::DiagMuter()
 {
     calypso.pch.DiagClient->muted = true;
@@ -701,8 +663,7 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
     PCHContainerOps.reset(new clang::PCHContainerOperations);
 
     AST = ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false, false, false,
-                                              clang::TU_Complete, false, false, false/*,
-                                              new InstantiationChecker*/).release(); // Clang 5.x FIXME: remove InstantiationChecker
+                                              clang::TU_Complete, false, false, false).release();
     AST->getSema();
     Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
 
@@ -747,7 +708,7 @@ void PCH::loadFromPCH(clang::driver::Compilation* C)
     AST = ASTUnit::LoadFromASTFile(pchFilename, *Reader, clang::ASTUnit::LoadEverything,
                             Diags, FileSystemOpts, false, false, llvm::None, false,
                             /* AllowPCHWithCompilerErrors = */ true, false/*,
-                            new InstantiationChecker, &ReadResult*/).release();
+                            &ReadResult*/).release();
 
     DiagClient->muted = !opts::cppVerboseDiags;
 

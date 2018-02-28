@@ -52,6 +52,8 @@ using reclang::DiagnosticPrinter;
 
 namespace clangCG = clang::CodeGen;
 
+/***********************/
+
 struct SpecValue
 {
     const char *op = nullptr; // for overloaded operators
@@ -82,14 +84,7 @@ const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
 
 Loc fromLoc(clang::SourceLocation L);
 
-class InstantiationChecker : public clang::ASTConsumer, public clang::ASTMutationListener
-{
-public:
-    clang::ASTMutationListener *GetASTMutationListener() override { return this; }
-
-    void CompletedImplicitDefinition(const clang::FunctionDecl *D) override;
-    void FunctionDefinitionInstantiated(const clang::FunctionDecl *D) override;
-};
+/***********************/
 
 class DiagMuter
 {
@@ -97,6 +92,8 @@ public:
    DiagMuter();
    ~DiagMuter();
 };
+
+/***********************/
 
 class PCH
 {
@@ -130,6 +127,8 @@ protected:
     void loadFromHeaders(clang::driver::Compilation* C);
     void loadFromPCH(clang::driver::Compilation* C);
 };
+
+/***********************/
 
 class LangPlugin : public ::LangPlugin, public ::ForeignCodeGen
 {
@@ -311,6 +310,8 @@ private:
     llvm::DenseMap<const clang::Type *, llvm::Type*> TypeCache;
 };
 
+/***********************/
+
 extern LangPlugin calypso;
 bool isCPP(Type* t);
 bool isCPP(Dsymbol *s);
@@ -321,7 +322,7 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 #define CALYPSO_LANGPLUGIN \
     ::LangPlugin *langPlugin() override { return &calypso; }
 
-// TODO: use this pattern for all global.params.verbose logging; MOVE to root/ddmd/
+// TODO: use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
 
 // DMD visitors TypeInfo constants
