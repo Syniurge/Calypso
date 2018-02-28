@@ -2311,11 +2311,6 @@ const clang::ClassTemplateSpecializationDecl *getDefinition(const clang::ClassTe
     if (auto Definition = D->getDefinition())
         return cast<clang::ClassTemplateSpecializationDecl>(Definition);
 
-    if (auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D))
-        if (auto MemberInst = const_cast<clang::ClassTemplatePartialSpecializationDecl*>(Partial)->getInstantiatedFromMember()) // not the same method name..
-            if (auto MemberDef = getDefinition(MemberInst))
-                return MemberDef; // Ulterior WARNING: is this still relevant? member instantations should always be preferred
-
     return D;
 }
 
