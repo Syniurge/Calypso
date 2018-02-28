@@ -86,15 +86,6 @@ Loc fromLoc(clang::SourceLocation L);
 
 /***********************/
 
-class DiagMuter
-{
-public:
-   DiagMuter();
-   ~DiagMuter();
-};
-
-/***********************/
-
 class PCH
 {
 public:

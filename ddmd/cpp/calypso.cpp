@@ -574,18 +574,6 @@ void LangPlugin::mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration
 
 /***********************/
 
-DiagMuter::DiagMuter()
-{
-    calypso.pch.DiagClient->muted = true;
-}
-
-DiagMuter::~DiagMuter()
-{
-    calypso.pch.DiagClient->muted = false;
-}
-
-/***********************/
-
 void PCH::init()
 {
     pchHeader = calypso.getCacheFilename(".h");
