@@ -181,6 +181,11 @@ public:
         this.buf = buf;
     }
 
+    override const(void*) _typeid() const // CALYPSO
+    {
+        return cast(void*) typeid(Mangler);
+    }
+
     /**
     * writes a back reference with the relative position encoded with base 26
     *  using upper case letters for all digits but the last digit which uses
@@ -713,11 +718,7 @@ public:
                 ad.parent = null;
             }
         }
-        auto lp = ad.langPlugin();
-        if (ad.isAnonymous() && lp)
-            lp.mangleAnonymousAggregate(buf, ad); // CALYPSO HACK (very ugly)
-        else
-            visit(cast(Dsymbol)ad);
+        visit(cast(Dsymbol)ad);
         ad.parent = parentsave;
     }
 

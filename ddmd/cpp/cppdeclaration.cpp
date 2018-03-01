@@ -7,6 +7,7 @@
 #include "cpp/cppimport.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/ddmdstructor.h"
+#include "cpp/ddmdvisitor.h"
 #include "aggregate.h"
 #include "init.h"
 #include "scope.h"

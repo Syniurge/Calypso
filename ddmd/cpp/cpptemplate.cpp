@@ -4,6 +4,7 @@
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppexpression.h"
 #include "cpp/ddmdstructor.h"
+#include "cpp/ddmdvisitor.h"
 #include "aggregate.h"
 #include "enum.h"
 #include "id.h"

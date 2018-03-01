@@ -384,7 +384,6 @@ public:
     // ===== - - - - - ===== //
 
     const char *mangle(Dsymbol s); // TODO replace by getForeignMangler
-    void mangleAnonymousAggregate(OutBuffer *buf, AggregateDeclaration ad); // HACK
 
     // create a mangler for types and symbols specific to this plugin
     // base is the D mangler

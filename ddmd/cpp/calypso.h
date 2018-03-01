@@ -147,7 +147,6 @@ public:
                                Statement *handler, StorageClass stc) override;
 
     const char *mangle(Dsymbol *s) override;
-    void mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad) override;
     Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
@@ -292,6 +291,8 @@ public:
 
     std::string getCacheFilename(const char *suffix = nullptr);
 
+    void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
+
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly
 
@@ -315,10 +316,5 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 
 // TODO: use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
-
-// DMD visitors TypeInfo constants
-extern const void* const TI_DsymbolSem1Visitor;
-extern const void* const TI_DsymbolSem2Visitor;
-extern const void* const TI_DsymbolSem3Visitor;
 
 #endif /* DMD_CPP_CALYPSO_H */

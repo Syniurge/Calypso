@@ -5,6 +5,7 @@
 #include "cpp/cppdeclaration.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/ddmdstructor.h"
+#include "cpp/ddmdvisitor.h"
 #include "attrib.h"
 #include "scope.h"
 #include "target.h"
@@ -18,6 +19,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Sema/Sema.h"
+#include "llvm/ADT/StringExtras.h"
 
 namespace cpp
 {
@@ -49,6 +51,22 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 
         markAggregateReferenced(ad);
     }
+}
+
+void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf)
+{
+    auto MangleCtx = pch.MangleCtx;
+    auto RD = getRecordDecl(ad);
+
+    // Get a unique id for the anonymous struct.
+    unsigned AnonStructId = MangleCtx->getAnonymousStructId(RD);
+
+    llvm::SmallString<8> Str;
+    Str += "$_";
+    Str += llvm::utostr(AnonStructId);
+
+    buf->printf("%llu", (ulonglong)Str.size());
+    buf->writestring(Str.c_str());
 }
 
 StructDeclaration::StructDeclaration(Loc loc, Identifier* id,
@@ -102,6 +120,11 @@ void StructDeclaration::accept(Visitor *v)
         if (isUsed)
             MarkAggregateReferencedImpl(this);
         v->visit(this);
+    } else if (v_ti == TI_Mangler) { // mangle
+        if (isAnonymous())
+            calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
+        else
+            v->visit(this);
     } else
         v->visit(this);
 }
@@ -156,6 +179,11 @@ void ClassDeclaration::accept(Visitor *v)
         if (isUsed)
             MarkAggregateReferencedImpl(this);
         v->visit(this);
+    } else if (v_ti == TI_Mangler) { // mangle
+        if (isAnonymous())
+            calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
+        else
+            v->visit(this);
     } else
         v->visit(this);
 }

@@ -556,22 +556,6 @@ const char *LangPlugin::mangle(Dsymbol *s)
     return FoundStr.c_str();
 }
 
-void LangPlugin::mangleAnonymousAggregate(OutBuffer *buf, ::AggregateDeclaration* ad)
-{
-    auto MangleCtx = pch.MangleCtx;
-    auto RD = getRecordDecl(ad);
-
-    // Get a unique id for the anonymous struct.
-    unsigned AnonStructId = MangleCtx->getAnonymousStructId(RD);
-
-    llvm::SmallString<8> Str;
-    Str += "$_";
-    Str += llvm::utostr(AnonStructId);
-
-    buf->printf("%llu", (ulonglong)Str.size());
-    buf->writestring(Str.c_str());
-}
-
 /***********************/
 
 void PCH::init()
