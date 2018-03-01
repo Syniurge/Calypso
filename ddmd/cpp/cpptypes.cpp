@@ -8,6 +8,7 @@
 #include "cpp/cppmodule.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/ddmdstructor.h"
+#include "cpp/ddmdvisitor.h"
 #include "driver/cl_options.h"
 #include "id.h"
 #include "module.h"
@@ -85,6 +86,20 @@ public:
     bool isTransitive() override { return false; }
     bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
+
+    void accept(Visitor *v) override
+    {
+        auto v_ti = v->_typeid();
+
+        if (v_ti == TI_Mangler) { // mangle
+            if (isRvalueRef) {
+                v->visit(static_cast<Type*>(this)); // only 'R'
+                static_cast<Mangler*>(v)->buf->writeByte('#');
+            }
+            v->visit(this);
+        } else
+            v->visit(this);
+    }
 };
 
 //  There are a few D builtin types that are mapped to several C++ ones, such as wchar_t/dchar <=> wchar_t. Even though they're the same, we have to differentiate them (e.g char_traits<wchar_t>char_traits<char32>) or else two template instances might have different tempdecl while their aggregate member get the same deco
@@ -94,10 +109,14 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::BuiltinType *T;
+    unsigned idx;
+
+    static unsigned nextIdx[TMAX];
 
     TypeBasic(TY ty, const clang::BuiltinType *T = nullptr)
     {
         this->T = T; // NOTE: the order matters here, the D ctor calls merge() which gets the type mangled so T has to be set
+        this->idx = nextIdx[ty]++;
         construct_TypeBasic(this, ty);
     }
 
@@ -105,7 +124,26 @@ public:
     {
         return sizeof(*this);
     }
+
+    void accept(Visitor *v) override
+    {
+        auto v_ti = v->_typeid();
+
+        if (v_ti == TI_Mangler) { // mangle
+            auto buf = static_cast<Mangler*>(v)->buf;
+
+            v->visit(this);
+            buf->writeByte('#');
+            v->visit(this);
+            if (idx != 0)
+              buf->writeByte('0' + idx);
+            buf->writeByte('#');
+        } else
+            v->visit(this);
+    }
 };
+
+unsigned TypeBasic::nextIdx[TMAX] = {0};
 
 /***** Builtin type correspondances *****/
 
@@ -122,8 +160,8 @@ void BuiltinTypes::map(clang::CanQualType &CQT, Type* t)
     }
     else
     {
-        assert(t->isTypeBasic() && !isCPP(t));
         auto c_t = new cpp::TypeBasic(t->ty, T);
+        assert(c_t == merge(c_t));
         toD[T] = merge(c_t);
         toClang[c_t] = T;
     }
@@ -226,57 +264,6 @@ Type *BuiltinTypes::toInt(clang::TargetInfo::IntType intTy)
 
     assert(false && "unexpected int type size");
     return nullptr;
-}
-
-/***** Mangler extension for Calypso-specific types *****/
-
-// Fortunately the DMD ::Mangler always call visit((Type *)t); for every type.
-// However the visitor pattern is pretty much useless since it's always visit(Type *t) which gets called, ugly but will do for now..
-
-class ManglerExt : public Visitor
-{
-public:
-    OutBuffer *buf;
-    Visitor *base;
-    bool forEquiv;
-
-    ManglerExt(OutBuffer *buf, bool forEquiv, Visitor *base)
-    {
-        this->buf = buf;
-        this->forEquiv = forEquiv;
-        this->base = base;
-    }
-
-    void visit(Type *t)
-    {
-        if (forEquiv)
-            return;
-
-        if (t->isTypeBasic())
-        {
-            buf->writeByte('#');
-            buf->writeByte('0' + unsigned(static_cast<cpp::TypeBasic*>(t)->T->getKind())); // FIXME: needs a more durable solution
-            buf->writeByte('#');
-        }
-        else if (t->ty == Treference)
-        {
-            auto tref = static_cast<cpp::TypeReference*>(t);
-            if (tref->isRvalueRef) {
-                buf->writeByte('#');
-                buf->writeByte('#');
-            }
-        }
-    }
-};
-
-Visitor *LangPlugin::getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base)
-{
-    // FIXME
-    static ManglerExt manglerExt(nullptr, false, nullptr);
-    manglerExt.buf = buf;
-    manglerExt.forEquiv = forEquiv;
-    manglerExt.base = base;
-    return &manglerExt;
 }
 
 /***** Clang -> DMD types *****/

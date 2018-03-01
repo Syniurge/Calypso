@@ -299,8 +299,6 @@ public:
 
     override void visit(Type t)
     {
-        if (auto langPlugin = t.langPlugin()) // CALYPSO
-            langPlugin.getForeignMangler(buf, false /+rigorous+/, this).visit(t); // 1.1 FIXME
         tyToDecoBuffer(buf, t.ty);
     }
 

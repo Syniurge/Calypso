@@ -115,10 +115,6 @@ public:
 
     virtual const char *mangle(Dsymbol *s) = 0; // TODO replace by getForeignMangler
 
-    // create a mangler for types and symbols specific to this plugin
-    // base is the D mangler
-    virtual Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) = 0;
-
     // ===== - - - - - ===== //
 
     virtual Expression *getRightThis(Loc loc, Scope *sc, AggregateDeclaration *ad,

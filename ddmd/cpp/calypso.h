@@ -147,7 +147,6 @@ public:
                                Statement *handler, StorageClass stc) override;
 
     const char *mangle(Dsymbol *s) override;
-    Visitor *getForeignMangler(OutBuffer *buf, bool forEquiv, Visitor *base) override;
 
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int flag = 0) override;
