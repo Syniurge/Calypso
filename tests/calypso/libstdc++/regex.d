@@ -1,6 +1,5 @@
 // RUN: %ldc -cpp-args -std=c++11 -cpp-cachedir=%t.cache -of %t %s
-// RUN: %t > %t.out
-// RUN: FileCheck %s < %t.out
+// RUN: %t
 
 /**
  * std::regex example.
@@ -11,7 +10,7 @@ module _regex_;
 modmap (C++) "<regex>";
 modmap (C++) "<string>";
 
-import std.stdio;
+import std.stdio, std.conv;
 import (C++) std.regex, std.smatch;
 import (C++) regex_constants = std.regex_constants._;
 import (C++) std._ : cppstring = string, regex_search,
@@ -30,7 +29,7 @@ void main()
 
     auto word_regex = regex("(\\S+)");
     auto words_begin = sregex_iterator(s.begin, s.end, word_regex);
-    auto words_end = sregex_iterator;
+    auto words_end = sregex_iterator();
 
     writeln("Found ", distance(words_begin, words_end), " words");
 
@@ -40,10 +39,10 @@ void main()
         smatch match = *i;
         cppstring match_str = match.str;
         if (match_str.size > N)
-            writeln("  ", match_str);
+            writeln("  ", match_str.c_str.to!string);
     }
 
     auto long_word_regex = regex("(\\w{7,})");
     cppstring new_s = regex_replace(s, long_word_regex, "[$&]");
-    writeln(new_s);
+    writeln(new_s.c_str.to!string);
 }
