@@ -128,7 +128,7 @@ IrTypePointer::IrTypePointer(Type *dt, LLType *lt) : IrType(dt, lt) {}
 
 IrTypePointer *IrTypePointer::get(Type *dt) {
   assert(!dt->ctype);
-  assert((dt->ty == Tpointer || dt->ty == Tnull) && "not pointer/null type");
+  assert((dt->ty == Tpointer || dt->ty == Treference || dt->ty == Tnull) && "not pointer/reference/null type"); // CALYPSO
 
   LLType *elemType;
   if (dt->ty == Tnull) {

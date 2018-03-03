@@ -1379,7 +1379,7 @@ public:
 
     // the Tclass catches interface comparisons, regular
     // class equality should be rewritten as a.opEquals(b) by this time
-    if (t->isintegral() || t->ty == Tpointer || isClassReference(t) || // CALYPSO
+    if (t->isintegral() || t->ty == Tpointer || t->ty == Treference || isClassReference(t) || // CALYPSO
         t->ty == Tnull) {
       Logger::println("integral or pointer or interface");
       llvm::ICmpInst::Predicate cmpop;

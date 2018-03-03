@@ -110,7 +110,8 @@ LLType *DtoType(Type *t) {
 
   // pointers
   case Tnull:
-  case Tpointer: {
+  case Tpointer:
+  case Treference: { // CALYPSO
     return IrTypePointer::get(t)->getLLType();
   }
 

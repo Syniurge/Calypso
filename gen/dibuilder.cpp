@@ -276,7 +276,7 @@ ldc::DIType ldc::DIBuilder::CreateEnumType(Type *type) {
 ldc::DIType ldc::DIBuilder::CreatePointerType(Type *type) {
   llvm::Type *T = DtoType(type);
   Type *t = type->toBasetype();
-  assert(t->ty == Tpointer);
+  assert(t->ty == Tpointer || t->ty == Treference); // CALYPSO
 
   // find base type
   Type *nt = t->nextOf();
@@ -690,7 +690,7 @@ ldc::DIType ldc::DIBuilder::CreateTypeDescription(Type *type) {
       return CreateEnumType(type);
     return CreateBasicType(type);
   }
-  if (t->ty == Tpointer)
+  if (t->ty == Tpointer || t->ty == Treference) // CALYPSO
     return CreatePointerType(type);
   if (t->ty == Tarray)
     return CreateArrayType(type);
