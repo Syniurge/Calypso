@@ -28,8 +28,10 @@ using llvm::cast;
 using llvm::dyn_cast;
 using llvm::isa;
 
-// Internal Calypso types (unlike TypeValueof which might used by normal D code) essential for template arguments matching.
-// D's const being transitive and since Calypso only needs logical const internally, keeping it outside of DMD seemed like the better idea..
+/***** Calypso-specific types *****/
+
+// Internal Calypso types essential for template arguments matching.
+// D's const being transitive and since Calypso only needs logical const internally, keeping it outside of DMD seemed like the better idea.
 
 class TypePointer : public ::TypePointer
 {
@@ -54,6 +56,45 @@ public:
     bool isTransitive() override { return false; }
     bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
+
+    virtual bool isIncompleteArray() const { return false; }
+};
+
+// C array with unspecified size e.g int a[]
+class TypeIncompleteArray : public TypePointer
+{
+public:
+    TypeIncompleteArray(Type *t) : TypePointer(t) {}
+
+    Type *syntaxCopy() override
+    {
+        Type* t = next->syntaxCopy();
+        if (t == next)
+            t = this;
+        else
+        {
+            t = new TypeIncompleteArray(t);
+            t->mod = mod;
+        }
+        return t;
+    }
+
+    unsigned short sizeType() override { return sizeof(*this); }
+    bool isIncompleteArray() const override { return true; }
+
+    void accept(Visitor *v) override
+    {
+        auto v_ti = v->_typeid();
+
+        if (v_ti == TI_Mangler) { // mangle
+            auto buf = static_cast<Mangler*>(v)->buf;
+
+            v->visit(this);
+            buf->writeByte('#');
+            buf->writeByte('A');
+        } else
+            v->visit(this);
+    }
 };
 
 class TypeReference : public ::TypeReference
@@ -464,7 +505,7 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
     }
     else if (isa<clang::IncompleteArrayType>(T))
     {
-        return new TypePointer(t);
+        return new TypeIncompleteArray(t);
     }
 
     llvm::llvm_unreachable_internal("Unrecognized C++ array type");
@@ -2208,9 +2249,12 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
         {
             auto Pointee = toType(loc, t->nextOf(), sc);
 
-            if (t->ty == Tpointer)
+            if (t->ty == Tpointer) {
+                if (isCPP(t))
+                    if (static_cast<TypePointer*>(t)->isIncompleteArray())
+                        return Context.getIncompleteArrayType(Pointee, clang::ArrayType::Normal, 0);
                 return Context.getPointerType(Pointee);
-            else {
+            } else {
                 auto tref = static_cast<TypeReference*>(t);
                 return tref->isRvalueRef ? Context.getRValueReferenceType(Pointee)
                             : Context.getLValueReferenceType(Pointee);
