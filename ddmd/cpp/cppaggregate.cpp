@@ -49,6 +49,16 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
                         MarkFunctionReferenced(fd);
             }
 
+        DeclReferencer declReferencer;
+        auto sc = ad->_scope;
+        if (!sc)
+            sc = ad->getModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
+        assert(sc);
+
+        for (auto Field: D->fields())
+            if (auto InClassInit = Field->getInClassInitializer())
+                declReferencer.Traverse(ad->loc, sc, InClassInit);
+
         markAggregateReferenced(ad);
     }
 }

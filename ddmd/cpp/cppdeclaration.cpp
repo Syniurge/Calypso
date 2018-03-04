@@ -542,7 +542,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
         sc2->fieldinit = NULL;
         sc2->fieldinit_dim = 0;
 
-        DeclReferencer declReferencer(fd);
+        DeclReferencer declReferencer;
         declReferencer.Traverse(fd->loc, sc2, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))

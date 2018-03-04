@@ -222,8 +222,6 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
     static TypeMapper mapper;
     static ExprMapper expmap;
 
-    ::FuncDeclaration* visitedFunc;
-
     Loc loc;
     Scope *sc = nullptr;
 
@@ -232,8 +230,7 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:
-    DeclReferencer(::FuncDeclaration* visitedFunc)
-        : visitedFunc(visitedFunc)
+    DeclReferencer()
     {
         mapper.addImplicitDecls = false;
     }
