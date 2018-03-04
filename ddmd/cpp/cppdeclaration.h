@@ -245,6 +245,8 @@ public:
     bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E);
     bool VisitDeclRefExpr(const clang::DeclRefExpr *E);
     bool VisitMemberExpr(const clang::MemberExpr *E);
+
+    bool shouldVisitImplicitCode() const { return true; }
 };
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
