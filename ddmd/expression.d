@@ -6698,6 +6698,8 @@ extern (C++) final class CallExp : UnaExp
             tb = tb.nextOf();
         if (tb.ty == Tfunction && (cast(TypeFunction)tb).isref)
         {
+            if  ((cast(TypeFunction)tb).ismove) // CALYPSO
+                return false;
             if (e1.op == TOKdotvar)
                 if ((cast(DotVarExp)e1).var.isCtorDeclaration())
                     return false;

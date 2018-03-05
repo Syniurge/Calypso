@@ -6124,17 +6124,8 @@ extern (C++) final class TypeFunction : TypeNext
                         }
                     }
                     else if (m > MATCH.nomatch && p.storageClass & STCmove) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
-                    {
-                        assert(p.storageClass & STCref);
-                        bool ismove = false;
-                        if (arg.op == TOKcall)
-                        {
-                            auto ce = cast(CallExp)arg;
-                            ismove = ce.f && (cast(TypeFunction)ce.f.type).ismove;
-                        }
-                        if (!ismove)
+                        if (arg.isLvalue())
                             m = MATCH.nomatch;
-                    }
                 }
 
                 // Non-lvalues do not match ref or out parameters
