@@ -5755,7 +5755,7 @@ extern (C++) final class FuncExp : Expression
             tfy.isproperty = tfx.isproperty;
             tfy.isref = tfx.isref;
             tfy.iswild = tfx.iswild;
-            tfy.copyDeco(); // CALYPSO
+            tfy.deco = tfy.merge().deco;
 
             tfx = tfy;
         }
@@ -5764,7 +5764,7 @@ extern (C++) final class FuncExp : Expression
         {
             // Allow conversion from implicit function pointer to delegate
             tx = new TypeDelegate(tfx);
-            tx.copyDeco(); // CALYPSO
+            tx.deco = tx.merge().deco;
         }
         else
         {

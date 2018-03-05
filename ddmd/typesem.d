@@ -682,7 +682,7 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
         }
         else
         {
-            mtype.copyDeco(); // CALYPSO FIXME
+            mtype.deco = mtype.merge().deco;
             /* Don't return merge(), because arg identifiers and default args
              * can be different
              * even though the types match
@@ -1120,7 +1120,7 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
         }
 
         if (tf.next)
-            tf.copyDeco(); // CALYPSO // LDC 1.7 FIXME: copyDeco has been useless for a while
+            tf.deco = tf.merge().deco;
 
         /* Don't return merge(), because arg identifiers and default args
          * can be different
@@ -1160,7 +1160,7 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
              * can be different
              * even though the types match
              */
-            mtype.copyDeco(); // CALYPSO // LDC 1.7 FIXME: copyDeco has been useless for a while
+            mtype.deco = mtype.merge().deco;
             result = mtype;
         }
     }
@@ -1339,7 +1339,7 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
         //printf("TypeTuple::semantic(this = %p)\n", this);
         //printf("TypeTuple::semantic() %p, %s\n", this, toChars());
         if (!mtype.deco)
-            mtype.copyDeco(); // CALYPSO FIXME
+            mtype.deco = mtype.merge().deco;
 
         /* Don't return merge(), because a tuple with one type has the
          * same deco as that type.

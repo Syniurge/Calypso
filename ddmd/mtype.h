@@ -149,7 +149,6 @@ public:
     TY ty;
     MOD mod;  // modifiers MODxxxx
     char *deco;
-//     char *equivDeco; // CALYPSO HACK? We're forced to differentiate equality by deco for mangling and equivalence e.g for function overriding or implicit conversions. C++ has logical const, more builtin types, and uniqueness of C++ types must be preserved for template instantiation to stay consistent. Or... perhaps we could get rid of the mtype intrusions by making DMD and Calypso communicate more abstractly but that's a lot more work.
 
     /* These are cached values that are lazily evaluated by constOf(), immutableOf(), etc.
      * They should not be referenced by anybody but mtype.c.
@@ -245,7 +244,6 @@ public:
     Type *copy();
     virtual Type *syntaxCopy();
     bool equals(RootObject *o);
-    bool equivs(RootObject *o) { return equals(o); } // 1.1 FIXME: temporary to not break middle-end code // CALYPSO NOTE: introduced before dmd 2.067, used for function overloading
     bool equivalent(Type *t);
     // kludge for template.isType()
     DYNCAST dyncast() const { return DYNCAST_TYPE; }
@@ -258,7 +256,6 @@ public:
     virtual LangPlugin *langPlugin() { return NULL; }
     virtual unsigned short sizeType();
     virtual bool isTransitive() { return true; }
-    void copyDeco(); // some semantic() overrides do not return merge() e.g TypeFunction, both deco and equivDeco need to be set
 
     d_uns64 size();
     virtual d_uns64 size(Loc loc);

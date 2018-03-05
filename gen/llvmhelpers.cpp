@@ -680,7 +680,7 @@ DValue *DtoCast(Loc &loc, DValue *val, Type *to) {
     }
   }
 
-  if (fromtype->equivs(totype)) {
+  if (fromtype->covariant(totype)) {
     return val;
   }
 

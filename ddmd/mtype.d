@@ -987,7 +987,7 @@ extern (C++) abstract class Type : RootObject
         terror = basic[Terror];
         tnull = basic[Tnull];
         tnull = new TypeNull();
-        tnull.copyDeco(); // CALYPSO
+        tnull.deco = tnull.merge().deco;
 
         tvoidptr = tvoid.pointerTo();
         tstring = tchar.immutableOf().arrayOf();
@@ -1025,15 +1025,6 @@ extern (C++) abstract class Type : RootObject
     bool isTransitive() // CALYPSO
     {
         return true;
-    }
-
-    final void copyDeco() // CALYPSO
-    {
-        Type tm = merge(this);
-        if (tm == this)
-            return;
-        deco = tm.deco;
-//         equivDeco = tm.equivDeco;
     }
 
     final d_uns64 size()
@@ -2109,7 +2100,7 @@ extern (C++) abstract class Type : RootObject
             Type t = new TypePointer(this);
             if (ty == Tfunction)
             {
-                t.copyDeco(); // CALYPSO
+                t.deco = t.merge().deco;
                 pto = t;
             }
             else
@@ -5883,7 +5874,7 @@ extern (C++) final class TypeFunction : TypeNext
                     tf.isscopeinferred = true;
             }
 
-            tf.copyDeco(); // CALYPSO
+            tf.deco = tf.merge().deco;
             t = tf;
         }
         return t;
