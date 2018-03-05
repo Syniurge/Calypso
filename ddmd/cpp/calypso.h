@@ -146,8 +146,6 @@ public:
     ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
                                Statement *handler, StorageClass stc) override;
 
-    const char *mangle(Dsymbol *s) override;
-
     Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int flag = 0) override;
     Expression *callCpCtor(Scope *sc, Expression *e) override;
@@ -290,6 +288,7 @@ public:
 
     std::string getCacheFilename(const char *suffix = nullptr);
 
+    const char *mangle(Dsymbol *s);
     void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
 
 private:

@@ -113,10 +113,6 @@ public:
 
     // ===== - - - - - ===== //
 
-    virtual const char *mangle(Dsymbol *s) = 0; // TODO replace by getForeignMangler
-
-    // ===== - - - - - ===== //
-
     virtual Expression *getRightThis(Loc loc, Scope *sc, AggregateDeclaration *ad,
         Expression *e1, Declaration *var, int flag = 0) = 0;
     virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;

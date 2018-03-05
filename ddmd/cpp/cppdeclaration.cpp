@@ -25,7 +25,7 @@ using llvm::dyn_cast;
 void MarkModuleForGenIfNeeded(Dsymbol *s)
 {
     assert(isCPP(s));
-    calypso.mangle(s); // LDC 1.2 FIXME: query Clang directly?
+    calypso.mangle(s);
 
     const clang::Decl* D;
     if (auto fd = s->isFuncDeclaration())
@@ -33,7 +33,7 @@ void MarkModuleForGenIfNeeded(Dsymbol *s)
     else if (auto vd = s->isVarDeclaration())
         D = static_cast<cpp::VarDeclaration*>(vd)->VD;
     else
-        llvm_unreachable("Unhandled symbl");
+        llvm_unreachable("Unhandled symbol");
 
     auto& MangledName = calypso.MangledDeclNames[getCanonicalDecl(D)];
     auto minst = s->getInstantiatingModule();

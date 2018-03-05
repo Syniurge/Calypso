@@ -516,28 +516,17 @@ const char *LangPlugin::mangle(Dsymbol *s)
 {
     assert(isCPP(s));
 
-//     if (s->isModule())
-//         return ::mangleImpl(s); // LDC 1.2 FIXME: mangle() shouldn't be needed anymore except in .slist/MarkModuleForGenIfNeeded, where it should be replaced by querying Clang directly?
-
     auto ND = cast<clang::NamedDecl>(getDecl(s));
 
     auto &FoundStr = MangledDeclNames[getCanonicalDecl(ND)];
     if (!FoundStr.empty())
         return FoundStr.c_str();
 
-    auto& Context = calypso.getASTContext();
     auto MangleCtx = pch.MangleCtx;
 
     llvm::SmallString<256> Buffer;
     llvm::StringRef Str;
-    if (auto Tag = dyn_cast<clang::TagDecl>(ND)) {
-        auto TagTy = Context.getTagDeclType(Tag);
-
-        llvm::raw_svector_ostream Out(Buffer);
-        MangleCtx->mangleTypeName(TagTy, Out);
-//         Out << "_D"; // WARNING: mangleTypeName returns the RTTI typeinfo mangling
-        Str = Out.str();
-    } else if (MangleCtx->shouldMangleDeclName(ND)) {
+    if (MangleCtx->shouldMangleDeclName(ND)) {
         llvm::raw_svector_ostream Out(Buffer);
         if (const auto *D = dyn_cast<clang::CXXConstructorDecl>(ND))
             MangleCtx->mangleCXXCtor(D, clang::Ctor_Complete, Out);
