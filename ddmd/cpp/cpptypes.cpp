@@ -1224,6 +1224,10 @@ namespace
 // so it's not a problem, in D they make DMD instantiate the template endlessly.
 // The workaround is to discard the decls and cross fingers that they're aren't required elsewhere.
 
+// FIXME: the proper fix would be to be as lazy as C++, both during semantic phases and codegen.
+// This means lazier than D, which could go through semantic phases lazily for imported modules but cannot be lazy for
+// for modules being codegen'd.
+
 typedef unsigned RCResult;
 const RCResult RC_Not = 0;
 const RCResult RC_Literal = 1 << 0;
