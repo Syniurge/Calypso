@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "eh_catch.h";
+pragma (cppmap, "eh_catch.h");
 
 import (C++) std.exception, ooops;
 import (C++) test._;

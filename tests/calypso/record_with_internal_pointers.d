@@ -2,7 +2,7 @@
 // RUN: %ldc -cpp-args -std=c++11 -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "record_with_internal_pointers.h";
+pragma (cppmap, "record_with_internal_pointers.h");
 import (C++) B, _;
 
 void fun1(B x) {

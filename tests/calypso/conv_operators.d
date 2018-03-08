@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "conv_operators.hpp";
+pragma (cppmap, "conv_operators.hpp");
 
 import (C++) Point;
 

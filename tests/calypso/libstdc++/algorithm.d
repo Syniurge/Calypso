@@ -6,8 +6,8 @@
  * std::algorithm example.
  */
 
-modmap (C++) "<algorithm>";
-modmap (C++) "<vector>";
+pragma (cppmap, "<algorithm>");
+pragma (cppmap, "<vector>");
 
 import std.stdio;
 import cpp.std.range;

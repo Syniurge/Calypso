@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "<cmath>";
+pragma (cppmap, "<cmath>");
 
 import (C++) std._;
 import std.stdio : writeln;

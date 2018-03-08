@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "auto_return_type.h";
+pragma (cppmap, "auto_return_type.h");
 
 import (C++) _;
 import std.stdio : writeln;

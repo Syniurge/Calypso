@@ -8,7 +8,7 @@
 
 module _set_;
 
-modmap (C++) "<set>";
+pragma (cppmap, "<set>");
 
 import std.stdio;
 import (C++) std.set;

@@ -8,7 +8,7 @@
 
 module _future_;
 
-modmap (C++) "<future>";
+pragma (cppmap, "<future>");
 
 import std.stdio;
 import (C++) std.future, std.future_status;

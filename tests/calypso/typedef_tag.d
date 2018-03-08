@@ -2,7 +2,7 @@
 // R_N: %t > %t.out
 // R_N: FileCheck %s < %t.out
 
-modmap (C++) "typedef_tag.h";
+pragma (cppmap, "typedef_tag.h");
 
 import (C++) ABC;
 import (C++) RenamedAnon = AnonEnum;

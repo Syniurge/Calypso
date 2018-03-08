@@ -5,26 +5,26 @@
  * libc stress import test
  */
 
-modmap (C++) "<assert.h>";
-modmap (C++) "<complex.h>";
-modmap (C++) "<ctype.h>";
-modmap (C++) "<errno.h>";
-modmap (C++) "<fenv.h>";
-modmap (C++) "<inttypes.h>";
-modmap (C++) "<limits.h>";
-modmap (C++) "<locale.h>";
-modmap (C++) "<math.h>";
-modmap (C++) "<setjmp.h>";
-modmap (C++) "<signal.h>";
-modmap (C++) "<stdint.h>";
-modmap (C++) "<stdio.h>";
-modmap (C++) "<stdlib.h>";
-modmap (C++) "<string.h>";
-modmap (C++) "<tgmath.h>";
-modmap (C++) "<time.h>";
-modmap (C++) "<uchar.h>";
-modmap (C++) "<wchar.h>";
-modmap (C++) "<wctype.h>";
+pragma (cppmap, "<assert.h>");
+pragma (cppmap, "<complex.h>");
+pragma (cppmap, "<ctype.h>");
+pragma (cppmap, "<errno.h>");
+pragma (cppmap, "<fenv.h>");
+pragma (cppmap, "<inttypes.h>");
+pragma (cppmap, "<limits.h>");
+pragma (cppmap, "<locale.h>");
+pragma (cppmap, "<math.h>");
+pragma (cppmap, "<setjmp.h>");
+pragma (cppmap, "<signal.h>");
+pragma (cppmap, "<stdint.h>");
+pragma (cppmap, "<stdio.h>");
+pragma (cppmap, "<stdlib.h>");
+pragma (cppmap, "<string.h>");
+pragma (cppmap, "<tgmath.h>");
+pragma (cppmap, "<time.h>");
+pragma (cppmap, "<uchar.h>");
+pragma (cppmap, "<wchar.h>");
+pragma (cppmap, "<wctype.h>");
 
 import (C++) _;
 

@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "dynamic_cast.h";
+pragma (cppmap, "dynamic_cast.h");
 
 import (C++) B, C;
 

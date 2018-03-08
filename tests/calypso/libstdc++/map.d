@@ -8,8 +8,8 @@
 
 module _map_;
 
-modmap (C++) "<map>";
-modmap (C++) "<string>";
+pragma (cppmap, "<map>");
+pragma (cppmap, "<string>");
 
 import std.stdio, std.conv;
 import (C++) std.map;

@@ -5,10 +5,10 @@ Calypso creates a bridge between DMD/LDC and Clang, both at the AST level (DMD <
 
 It's not a separate tool, but a fork of LDC which enables you to directly import/include a C/C++ header and use the declarations from within D. No intermediate file is necessary, and no binding is involved.
 
-Calypso introduces a new keyword, **modmap**, along with the concept of language plugins which are queried by DMD's parser when it encounters special « **import** *(ABC)* xxx.yyy; » symbols. Interfacing with C++ declarations comes down to:
+Calypso introduces a new pragma, **cppmap**, along with the concept of language plugins which are queried by DMD's parser when it encounters special « **import** *(ABC)* xxx.yyy; » symbols. Interfacing with C++ declarations comes down to:
 
 ```D
-modmap (C++) "cppheader.h";      // tells Clang to load cppheader.h but do not import anything
+pragma (cppmap, "cppheader.h");  // tells Clang to parse cppheader.h but do not import anything
 
 import (C++) NamespaceA.Class1;  // imports NamespaceA::Class1
 import (C++) NamespaceA._;       // special module per namespace, imports every global variables,

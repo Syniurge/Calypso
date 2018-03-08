@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "classvalue_dtor.h";
+pragma (cppmap, "classvalue_dtor.h");
 
 import (C++) B, C, D;
 

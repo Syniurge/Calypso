@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "macro.h";
+pragma (cppmap, "macro.h");
 
 import (C++) _;
 import std.stdio : writeln;

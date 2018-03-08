@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "functemplateoverloads.h";
+pragma (cppmap, "functemplateoverloads.h");
 
 import (C++) _;
 

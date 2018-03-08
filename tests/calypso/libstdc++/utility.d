@@ -6,7 +6,7 @@
  * std::utility example.
  */
 
-modmap (C++) "<utility>";
+pragma (cppmap, "<utility>");
 
 import std.stdio;
 import (C++) std.pair;

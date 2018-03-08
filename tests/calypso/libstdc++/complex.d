@@ -8,9 +8,9 @@
 
 module _complex_;
 
-modmap (C++) "<complex>";
-modmap (C++) "<iostream>";
-modmap (C++) "<iomanip>";
+pragma (cppmap, "<complex>");
+pragma (cppmap, "<iostream>");
+pragma (cppmap, "<iomanip>");
 
 import std.stdio;
 import (C++) std.complex;

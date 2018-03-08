@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "struct_ctor.h";
+pragma (cppmap, "struct_ctor.h");
 
 import (C++) S258, S510, S772, S1020;
 

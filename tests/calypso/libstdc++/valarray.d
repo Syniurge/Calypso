@@ -8,7 +8,7 @@
 
 module _valarray_;
 
-modmap (C++) "<valarray>";
+pragma (cppmap, "<valarray>");
 
 import std.stdio;
 import (C++) std.valarray;

@@ -7,8 +7,8 @@
 
 module _regex_;
 
-modmap (C++) "<regex>";
-modmap (C++) "<string>";
+pragma (cppmap, "<regex>");
+pragma (cppmap, "<string>");
 
 import std.stdio, std.conv;
 import (C++) std.regex, std.smatch;

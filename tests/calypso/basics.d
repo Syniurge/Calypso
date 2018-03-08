@@ -9,29 +9,20 @@
  *   $ ldc2 -cpp-args -std=c++11 basics.d
  */
 
-modmap (C++) "basics.hpp";
-modmap (C++) "basics.cpp";
-    // « modmap » is a new keyword introduced to specify the C++ headers.
-    // It doesn't import anything, its only role is to tell Clang which C++ headers this module depends upon.
-    //
-    // Currently Calypso makes Clang gathers all the headers togehter into one precompiled header, which is
-    // then lazily loaded by the import (C++) directives.
+pragma (cppmap, "basics.hpp");
+pragma (cppmap, "basics.cpp");
+    // « cppmap » is a new pragma introduced to specify the C/C++ headers.
+    // It tells Clang to parse the headers but doesn't import anything.
 
 import std.stdio, std.conv, std.string;
-import (C++) test._; // « _ » is a special module that contains all the global variables, global functions
-                // and typedefs of a namespace (the ones which aren't nested inside a struct or a class,
-                // or another namespace).
 import (C++) test.testStruct; // imports test::testStruct
 import (C++) test.testClass; // imports test::testClass
 import (C++) test.testInherit; // etc. each struct/class/enum template or not is placed in a module named after it
-import (C++) test.anotherClass;
-import (C++) test.testMultipleInherit;
-import (C++) test.enumTest;
-import (C++) test.arrayOfTen;
 import (C++) test.tempWithPartialSpecs; // imports the primary class template as well as all its partial and explicit specializations
-
-// NOTE: The imports (C++) only take the AST into consideration, the header file where the symbols are
-//       declared doesn't matter as long as they are in the precompiled header.
+import (C++) test.anotherClass, test.testMultipleInherit,
+             test.enumTest, test.arrayOfTen;
+import (C++) test._; // « _ » is a special module that contains every global variable, global function
+                // and typedef of a namespace.
 
 class testDClass
 {

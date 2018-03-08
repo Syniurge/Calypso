@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-args -std=c++11 -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "move_semantics.h";
+pragma (cppmap, "move_semantics.h");
 
 import (C++) A;
 import (C++) std._ : move;

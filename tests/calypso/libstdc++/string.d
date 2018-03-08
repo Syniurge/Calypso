@@ -8,7 +8,7 @@
 
 module _string_;
 
-modmap (C++) "<string>";
+pragma (cppmap, "<string>");
 
 import std.stdio, std.conv;
 import (C++) std.string : cppstring = string;

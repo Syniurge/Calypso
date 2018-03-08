@@ -8,7 +8,7 @@
 
 module _queue_;
 
-modmap (C++) "<queue>";
+pragma (cppmap, "<queue>");
 
 import std.stdio;
 import (C++) std.queue;

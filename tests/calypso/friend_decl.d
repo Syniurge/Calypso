@@ -2,7 +2,7 @@
 // R_N: %t > %t.out
 // R_N: FileCheck %s < %t.out
 
-modmap (C++) "friend_decl.h";
+pragma (cppmap, "friend_decl.h");
 
 void main()
 {

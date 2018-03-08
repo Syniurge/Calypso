@@ -8,9 +8,9 @@
 
 module _stack_;
 
-modmap (C++) "<stack>";
-modmap (C++) "<vector>";
-modmap (C++) "<deque>";
+pragma (cppmap, "<stack>");
+pragma (cppmap, "<vector>");
+pragma (cppmap, "<deque>");
 
 import std.stdio;
 import (C++) std.stack;

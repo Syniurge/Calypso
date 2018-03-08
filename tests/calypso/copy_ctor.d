@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "copy_ctor.h";
+pragma (cppmap, "copy_ctor.h");
 
 import (C++) StaticCount, StaticCountDerived;
 

@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "constexpr_factorial.hpp";
+pragma (cppmap, "constexpr_factorial.hpp");
 
 import std.stdio : write;
 import (C++) _ : factorial;

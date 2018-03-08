@@ -8,7 +8,7 @@
 
 module _bitset_;
 
-modmap (C++) "<bitset>";
+pragma (cppmap, "<bitset>");
 
 import std.stdio;
 import (C++) std.bitset;

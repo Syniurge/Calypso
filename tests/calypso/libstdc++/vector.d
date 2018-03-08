@@ -8,7 +8,7 @@
 
 module _vector_;
 
-modmap (C++) "<vector>";
+pragma (cppmap, "<vector>");
 
 import std.stdio, std.conv;
 import (C++) std.vector;

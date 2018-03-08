@@ -8,7 +8,7 @@
 
 module _deque_;
 
-modmap (C++) "<deque>";
+pragma (cppmap, "<deque>");
 
 import std.stdio;
 import (C++) std.deque;

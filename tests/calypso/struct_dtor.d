@@ -1,7 +1,7 @@
 // RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
-modmap (C++) "struct_dtor.h";
+pragma (cppmap, "struct_dtor.h");
 
 import (C++) S, S2;
 

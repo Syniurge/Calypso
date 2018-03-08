@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "baseclassoffset.h";
+pragma (cppmap, "baseclassoffset.h");
 
 import (C++) Cls, ClsB, MulInh;
 import std.stdio : writeln;

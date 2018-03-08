@@ -8,8 +8,8 @@
 
 module _array_;
 
-modmap (C++) "<array>";
-modmap (C++) "<algorithm>";
+pragma (cppmap, "<array>");
+pragma (cppmap, "<algorithm>");
 
 import std.stdio;
 import cpp.std.range;

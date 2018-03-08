@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "constexpr_ctor.hpp";
+pragma (cppmap, "constexpr_ctor.hpp");
 
 import std.stdio : writeln;
 import (C++) A;

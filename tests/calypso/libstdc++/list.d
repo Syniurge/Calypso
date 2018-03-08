@@ -8,7 +8,7 @@
 
 module _list_;
 
-modmap (C++) "<list>";
+pragma (cppmap, "<list>");
 
 import std.stdio;
 import (C++) std.list;

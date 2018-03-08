@@ -2,7 +2,7 @@
 // RUN: %t > %t.out
 // RUN: FileCheck %s < %t.out
 
-modmap (C++) "<atomic>";
+pragma (cppmap, "<atomic>");
 
 import std.stdio : writeln;
 import (C++) std.atomic;
