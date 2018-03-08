@@ -142,6 +142,9 @@ public:
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) override;
 
+    int getPragma(Scope* sc, PragmaDeclaration* decl) override;
+    void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) override;
+
     bool doesHandleCatch(LINK lang) override;
     ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
                                Statement *handler, StorageClass stc) override;

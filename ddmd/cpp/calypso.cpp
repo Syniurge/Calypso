@@ -1076,6 +1076,29 @@ int LangPlugin::doesHandleModmap(const char* lang)
                 static_cast<StringExp*>(arg));
 }
 
+int LangPlugin::getPragma(Scope* sc, PragmaDeclaration* decl)
+{
+    if (decl->ident == id_cppmap) {
+        Expressions *args = decl->args;
+        Expression *expr =
+            (args && args->dim > 0) ? expressionSemantic((*args)[0], sc) : nullptr;
+
+        const char *arg1str;
+        if (!args || args->dim != 1 || !parseStringExp(expr, arg1str)) {
+            error(decl->loc, "must specify a C/C++ header (<xyz.h> for system includes)");
+            fatal();
+        }
+
+        pch.add(arg1str, sc->_module);
+        return 1;
+    }
+    return 0;
+}
+
+void LangPlugin::pragmaSemantic(Scope* sc, PragmaDeclaration* decl)
+{
+}
+
 void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
 {
     if (!getASTUnit())

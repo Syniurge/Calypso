@@ -16,6 +16,7 @@ import ddmd.aggregate;
 import ddmd.arraytypes;
 import ddmd.cond;
 import ddmd.declaration;
+import ddmd.dimport;
 import ddmd.dmodule;
 import ddmd.dscope;
 import ddmd.dsymbol;
@@ -765,6 +766,7 @@ extern (C++) class AnonDeclaration : AttribDeclaration // CALYPSO (made non fina
 extern (C++) final class PragmaDeclaration : AttribDeclaration
 {
     Expressions* args;      // array of Expression's
+    LangPlugin lp;    // CALYPSO
 
     extern (D) this(Loc loc, Identifier ident, Expressions* args, Dsymbols* decl)
     {
@@ -828,6 +830,14 @@ extern (C++) final class PragmaDeclaration : AttribDeclaration
         }
 
         return sc;
+    }
+
+    override void setScope(Scope* sc) // CALYPSO NOTE: this feels inelegantly early but pragma(cppmap, ...) has to add its header to the list before Import::setScope() which may Module::load()
+    {
+        foreach (l; langPlugins)
+            if (l.getPragma(sc, this))
+                lp = l;
+        super.setScope(sc);
     }
 
     override const(char)* kind() const

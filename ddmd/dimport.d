@@ -13,6 +13,7 @@ module ddmd.dimport;
 // Online documentation: https://dlang.org/phobos/ddmd_dimport.html
 
 import ddmd.arraytypes;
+import ddmd.attrib;
 import ddmd.declaration;
 import ddmd.dmodule;
 import ddmd.dscope;
@@ -375,6 +376,13 @@ public:
     Import createImport(int treeId,
         Loc loc, Identifiers *packages, Identifier id,
         Identifier aliasId, int isstatic);
+
+    // ===== - - - - - ===== //
+
+    int getPragma(Scope* sc, PragmaDeclaration decl);
+    void pragmaSemantic(Scope* sc, PragmaDeclaration decl);
+
+    // ===== - - - - - ===== //
 
     // foreign exceptions
     bool doesHandleCatch(LINK lang);

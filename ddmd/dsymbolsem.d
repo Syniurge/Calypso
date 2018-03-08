@@ -3118,6 +3118,10 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
         {
             // nothing to do anymore
         }
+        else if (auto lp = pd.lp) // CALYPSO
+        {
+            lp.pragmaSemantic(sc, pd);
+        }
         else if (global.params.ignoreUnsupportedPragmas)
         {
             if (global.params.verbose)

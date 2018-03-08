@@ -106,6 +106,13 @@ public:
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) = 0;
 
+    // ===== - - - - - ===== //
+
+    virtual int getPragma(Scope* sc, PragmaDeclaration* decl) = 0;
+    virtual void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) = 0;
+
+    // ===== - - - - - ===== //
+
     // foreign exceptions
     virtual bool doesHandleCatch(LINK lang) = 0;
     virtual Catch *createCatch(Loc loc, Type *t, Identifier *id,

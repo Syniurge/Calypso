@@ -160,6 +160,7 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s);
     Scope *newScope(Scope *sc);
     const char *kind() const;
+    void setScope(Scope* sc);
     void accept(Visitor *v) { v->visit(this); }
 };
 
