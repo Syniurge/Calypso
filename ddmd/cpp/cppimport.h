@@ -23,7 +23,6 @@ public:
     Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 
     ::Module *loadModule(Scope* sc) override;
-    void load(Scope *sc) override;
 };
 
 // Special import for lookups from C++ modules

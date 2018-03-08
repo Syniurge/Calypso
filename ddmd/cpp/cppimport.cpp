@@ -57,22 +57,6 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
     return m;
 }
 
-void Import::load(Scope* sc)
-{
-    // Ugly HACK to anticipate the modmap from cpp.eh.gnu and prevent the AST merging assert
-    static ::Import* im_cpp_core = nullptr;
-    if (!im_cpp_core) {
-        Scope* scx = Scope::createGlobal(::Module::rootModule);
-        auto packages = new Identifiers;
-        packages->push(idPool("cpp"));
-        im_cpp_core = new_Import(Loc(), packages, idPool("core"), nullptr, true);
-        im_cpp_core->importAll(scx);
-        scx->pop();
-    }
-
-    ::Import::load(sc);
-}
-
 GlobalImport::GlobalImport(Loc loc)
 {
     construct_Import(this, loc, nullptr, calypso.id_Scpp, nullptr, 0);

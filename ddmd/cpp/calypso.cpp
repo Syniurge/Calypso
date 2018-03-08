@@ -37,6 +37,7 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Parse/Parser.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
@@ -582,15 +583,6 @@ void PCH::init()
     DiagClient->muted = !opts::cppVerboseDiags;
     Diags = new clang::DiagnosticsEngine(DiagID,
                                          &*DiagOpts, DiagClient);
-
-    auto headerList = calypso.getCacheFilename();
-    std::ifstream fheaderList(headerList);
-    if (!fheaderList)
-        return;
-
-    std::string line;
-    while (std::getline(fheaderList, line))
-        headers.push(strdup(line.c_str()));
 }
 
 void PCH::add(const char* header, ::Module *from)
@@ -602,7 +594,8 @@ void PCH::add(const char* header, ::Module *from)
         using namespace llvm::sys::fs;
         using namespace llvm::sys::path;
 
-        auto headerFn = new llvm::SmallString<128>(parent_path(from->srcfile->name->str));
+        auto headerFn = new llvm::SmallString<64>(
+                            parent_path(from->srcfile->name->str));
         append(*headerFn, llvm::StringRef(header));
 
         file_status result;
@@ -620,11 +613,31 @@ void PCH::add(const char* header, ::Module *from)
             return;
 
     headers.push(header);
-    needHeadersReload = true;
 }
 
-void PCH::loadFromHeaders(clang::driver::Compilation* C)
+void PCH::loadFromHeaders()
 {
+    // Re-emit the source file with #include directives
+    {
+        std::ofstream fmono(pchHeader);
+        if (!fmono) {
+            ::error(Loc(), "C++ monolithic header couldn't be created");
+            fatal();
+        }
+
+        for (auto header: headers) {
+            fmono << "#include ";
+            if (header[0] != '<')
+                fmono << "\"";
+            fmono << header;
+            if (header[0] != '<')
+                fmono << "\"";
+            fmono << "\n";
+        }
+    }
+
+    std::unique_ptr<clang::driver::Compilation> C(calypso.buildClangCompilation());
+
     // We use a trick from clang-interpreter to extract -cc1 flags from "puny human" flags
     // We expect to get back exactly one command job, if we didn't something
     // failed. Extract that job from the compilation.
@@ -647,8 +660,8 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
 
     PCHContainerOps.reset(new clang::PCHContainerOperations);
 
-    AST = ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false, false, false,
-                                              clang::TU_Complete, false, false, false).release();
+    AST = clang::ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false, false, false,
+                                              clang::TU_Complete, false, false, false);
     AST->getSema();
     Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
 
@@ -661,18 +674,7 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
         fatal();
     }
 
-    /* Update the list of headers */
-
-    auto headerList = calypso.getCacheFilename();
-    std::ofstream fheaderList(headerList);
-    if (!fheaderList)
-    {
-        ::error(Loc(), "C/C++ header list cache file couldn't be opened/created");
-        fatal();
-    }
-
-    for (unsigned i = 0; i < headers.dim; ++i)
-        fheaderList << headers[i] << "\n";
+    nextHeader = headers.size();
 
     /* Mark every C++ module object file dirty */
 
@@ -680,8 +682,10 @@ void PCH::loadFromHeaders(clang::driver::Compilation* C)
     llvm::sys::fs::remove(genListFilename, true);
 }
 
-void PCH::loadFromPCH(clang::driver::Compilation* C)
+void PCH::loadFromPCH()
 {
+    std::unique_ptr<clang::driver::Compilation> C(calypso.buildClangCompilation());
+
     clang::FileSystemOptions FileSystemOpts;
 //     clang::ASTReader::ASTReadResult ReadResult;
 
@@ -690,10 +694,10 @@ void PCH::loadFromPCH(clang::driver::Compilation* C)
     PCHContainerOps.reset(new clang::PCHContainerOperations);
     auto *Reader = PCHContainerOps->getReaderOrNull("raw");
 
-    AST = ASTUnit::LoadFromASTFile(pchFilename, *Reader, clang::ASTUnit::LoadEverything,
+    AST = clang::ASTUnit::LoadFromASTFile(pchFilename, *Reader, clang::ASTUnit::LoadEverything,
                             Diags, FileSystemOpts, false, false, llvm::None, false,
                             /* AllowPCHWithCompilerErrors = */ true, false/*,
-                            &ReadResult*/).release();
+                            &ReadResult*/);
 
     DiagClient->muted = !opts::cppVerboseDiags;
 
@@ -718,25 +722,106 @@ void PCH::loadFromPCH(clang::driver::Compilation* C)
 //             return;
 //     }
 
-    if (!AST) {
+    auto fallbackToHeaders = [&] () {
         Diags->Reset();
+        loadFromHeaders();
+    };
 
+    if (!AST) {
         // Headers or flags may have changed since the PCH was generated, fall back to headers.
-        loadFromHeaders(C);
+        fallbackToHeaders();
         return;
     }
+
+    const clang::DirectoryLookup *CurDir;
+
+    // Check whether every cppmap'd header is present within the AST, otherwise trigger a full reload.
+    // TODO: this isn't strictly necessary and should be made configurable.
+    for (auto header: headers) {
+        auto fileEntry = lookupHeader(header, CurDir);
+        if (!fileEntry || !fileEntry->isInPCH()) {
+            fallbackToHeaders();
+            return;
+        }
+    }
+
+    nextHeader = headers.size();
+}
+
+void PCH::loadNewHeaders()
+{
+    auto& SrcMgr = AST->getSourceManager();
+    auto& PP = AST->getPreprocessor();
+    auto& S = AST->getSema();
+
+    auto* Consumer = &S.getASTConsumer();
+
+    if (!S.OpaqueParser)
+        S.OpaqueParser = new clang::Parser(PP, S, /*SkipFunctionBodies=*/ false);
+    auto& P = *static_cast<clang::Parser*>(S.OpaqueParser);
+
+    if (!P.getCurScope()) {
+        P.EnterScope(clang::Scope::DeclScope);
+        S.CurContext = nullptr;
+        S.ActOnTranslationUnitScope(P.getCurScope());
+    }
+
+    for (; nextHeader < headers.size(); nextHeader++) {
+        const clang::DirectoryLookup *CurDir;
+
+        auto File = lookupHeader(headers[nextHeader], CurDir);
+        if (!File) {
+            ::error(Loc(), "'%s'  file not found", headers[nextHeader]);
+            fatal();
+        }
+
+        auto FileCharacter = PP.getHeaderSearchInfo().getFileDirFlavor(File);
+        auto FID = SrcMgr.getOrCreateFileID(File, FileCharacter);
+
+        if (PP.EnterSourceFile(FID, CurDir, clang::SourceLocation()))
+            fatal();
+        P.ConsumeToken();
+
+        clang::Parser::DeclGroupPtrTy ADecl;
+        for (bool AtEOF = P.ParseTopLevelDecl(ADecl); !AtEOF;
+             AtEOF = P.ParseTopLevelDecl(ADecl)) {
+            if (ADecl && !Consumer->HandleTopLevelDecl(ADecl.get()))
+                fatal();
+        }
+
+        for (clang::Decl *D : S.WeakTopLevelDecls())
+            Consumer->HandleTopLevelDecl(clang::DeclGroupRef(D));
+    }
+}
+
+const clang::FileEntry* PCH::lookupHeader(const char* header, const clang::DirectoryLookup*& CurDir)
+{
+    auto& FileMgr = AST->getFileManager();
+    auto& PP = AST->getPreprocessor();
+
+    auto FromFile = FileMgr.getFile(pchHeader, false);
+    bool IsMapped;
+    clang::ModuleMap::KnownHeader SuggestedModule;
+
+    bool isAngled = header[0] == '<';
+    llvm::StringRef headerStr(header);
+    return PP.LookupFile(clang::SourceLocation(),
+                  isAngled ? headerStr.slice(1, headerStr.size() - 1) : headerStr,
+                  isAngled, nullptr, FromFile, CurDir,
+                  nullptr, nullptr, &SuggestedModule, &IsMapped);
 }
 
 void PCH::update()
 {
-    if (headers.empty())
+    if (nextHeader >= headers.size())
         return;
 
-    if (!needHeadersReload && AST)
+    if (AST) {
+        loadNewHeaders();
         return;
+    }
 
-    // FIXME
-    assert(!(needHeadersReload && AST) && "Need AST merging FIXME");
+    bool needHeadersReload = false;
 
     auto CheckCacheFile = [&] (std::string& fn) {
         using namespace llvm::sys::fs;
@@ -755,43 +840,20 @@ void PCH::update()
     CheckCacheFile(pchHeader);
     CheckCacheFile(pchFilename);
 
-    if (needHeadersReload)
-    {
-        // Re-emit the source file with #include directives
-        std::ofstream fmono(pchHeader);
-        if (!fmono) {
-            ::error(Loc(), "C++ monolithic header couldn't be created");
-            fatal();
-        }
-
-        for (auto header: headers) {
-            fmono << "#include ";
-            if (header[0] != '<')
-                fmono << "\"";
-            fmono << header;
-            if (header[0] != '<')
-                fmono << "\"";
-            fmono << "\n";
-        }
+    if (needHeadersReload) {
+        // One of the cache files doesn't exist, so reparse the header files
+        loadFromHeaders();
+    } else {
+        // Give the existing PCH a try
+        loadFromPCH();
     }
 
-    std::unique_ptr<clang::driver::Compilation> C(calypso.buildClangCompilation());
-    if (needHeadersReload)
-    {
-        // The PCH either doesn't exist or is obsolete, reparse the header files
-        loadFromHeaders(C.get());
-        needHeadersReload = false;
-    }
-    else
-    {
-        // The PCH is up-to-date, use it
-        loadFromPCH(C.get());
-    }
-
-    /* Collect Clang module map files */
     auto& SrcMgr = AST->getSourceManager();
     auto& PP = AST->getPreprocessor();
 
+//     PP.enableIncrementalProcessing();
+
+    /* Collect Clang module map files */
     MMap = new ModuleMap(AST->getSourceManager(), *Diags,
                             PP.getLangOpts(), &PP.getTargetInfo(), PP.getHeaderSearchInfo());
 
@@ -844,9 +906,7 @@ void PCH::update()
     {
         Diags->Reset();
 
-        delete AST;
         delete MMap;
-        AST = nullptr;
 
         needHeadersReload = true;
         return update();
@@ -1321,6 +1381,11 @@ clang::Preprocessor& LangPlugin::getPreprocessor()
 clang::SourceManager& LangPlugin::getSourceManager()
 {
     return getASTUnit()->getSourceManager();
+}
+
+clang::FileManager& LangPlugin::getFileManager()
+{
+    return getASTUnit()->getFileManager();
 }
 
 std::string LangPlugin::getCacheFilename(const char *suffix)

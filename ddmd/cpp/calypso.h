@@ -34,6 +34,7 @@ class ASTUnit;
 class MacroInfo;
 class ModuleMap;
 class PCHContainerOperations;
+class DirectoryLookup;
 namespace driver { class Compilation; class Driver; }
 }
 
@@ -46,7 +47,6 @@ class TemplateInstance;
 class TypeMapper;
 
 namespace reclang { class DiagnosticPrinter; }
-using clang::ASTUnit;
 using clang::ModuleMap;
 using reclang::DiagnosticPrinter;
 
@@ -91,9 +91,9 @@ class PCH
 public:
     Strings headers; // array of all C/C++ header names with the "" or <>, required as long as we're using a PCH
             // the array is initialized at the first pragma(cppmap, ...).importAll and kept in sync with a cache file named 'calypso_cache.list'
-            // TODO: it's currently pretty basic and dumb and doesn't check whether the same header might be named differently or is already included by another
-    bool needHeadersReload = false;
-    ASTUnit *AST = nullptr;
+    size_t nextHeader;
+
+    std::unique_ptr<clang::ASTUnit> AST;
     clang::MangleContext *MangleCtx = nullptr;
 
     DiagnosticPrinter *DiagClient;
@@ -112,11 +112,13 @@ public:
 
     std::string pchHeader;
     std::string pchFilename;
-//     std::string pchFilenameNew; // the PCH may be updated by Calypso, but into a different file since the original PCH is still opened as external source for the ASTContext
 
 protected:
-    void loadFromHeaders(clang::driver::Compilation* C);
-    void loadFromPCH(clang::driver::Compilation* C);
+    void loadFromHeaders();
+    void loadFromPCH();
+    void loadNewHeaders();
+
+    const clang::FileEntry* lookupHeader(const char* header, const clang::DirectoryLookup*& CurDir);
 };
 
 /***********************/
@@ -278,12 +280,13 @@ public:
 
     void buildMacroMap();
 
-    ASTUnit *getASTUnit() { return pch.AST; }
+    clang::ASTUnit *getASTUnit() { return pch.AST.get(); }
     clang::ASTContext &getASTContext();
     clang::Sema &getSema();
     clang::DiagnosticsEngine &getDiagnostics();
     clang::Preprocessor &getPreprocessor();
     clang::SourceManager &getSourceManager();
+    clang::FileManager &getFileManager();
 
     std::string getCacheFilename(const char *suffix = nullptr);
 

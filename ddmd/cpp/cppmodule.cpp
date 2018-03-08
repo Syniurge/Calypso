@@ -1683,9 +1683,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     auto& S = calypso.getSema();
     auto& Diags = calypso.pch.Diags;
 
-    S.CurContext = Context.getTranslationUnitDecl(); // HACK? Needed for declaring implicit ctors and dtors
+    S.CurContext = Context.getTranslationUnitDecl();
     if (!S.TUScope)
-        // Clang BUG? TUScope isn't set when no Parser is used, but required by template instantiations (e.g LazilyCreateBuiltin)
         S.TUScope = new clang::Scope(nullptr, clang::Scope::DeclScope, *Diags);
 
     const clang::DeclContext *DC = Context.getTranslationUnitDecl();
