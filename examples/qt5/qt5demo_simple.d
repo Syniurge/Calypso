@@ -7,7 +7,7 @@
  *   $ ldc2 -g -wi -v -cpp-args -D_REENTRANT -cpp-args -fPIE -cpp-args -DQT_WIDGETS_LIB -cpp-args -DQT_GUI_LIB -cpp-args -DQT_CORE_LIB -cpp-args -I/path/to/Qt/5.4/gcc_64/mkspecs/linux-g++ -cpp-args -I/path/to/Qt/5.4/gcc_64/include -cpp-args -I/path/to/Qt/5.4/gcc_64/include/QtWidgets -cpp-args -I/path/to/Qt/5.4/gcc_64/include/QtGui -cpp-args -I/path/to/Qt/5.4/gcc_64/include/QtCore -L-L/path/to/Qt/5.4/gcc_64/lib -L-rpath=/path/to/Qt/5.4/gcc_64/lib -L-lQt5Widgets -L-lQt5Gui -L-lQt5Core -L-lGL -L-lstdc++ qt5demo.d
  */
 
-modmap (C++) "<QtWidgets>";
+pragma (cppmap, "<QtWidgets>");
 
 import core.runtime;
 import std.stdio, std.conv;

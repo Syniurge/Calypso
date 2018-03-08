@@ -12,7 +12,7 @@
 modmap (C++) "OGRE/Ogre.h";
 modmap (C++) "OGRE/InputContext.h";
 modmap (C++) "OGRE/SdkCameraMan.h";
-modmap (C++) "BaseApplication.h";
+pragma (cppmap, "BaseApplication.h");
 
 import std.stdio, std.file, std.conv;
 

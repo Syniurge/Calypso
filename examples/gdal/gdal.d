@@ -2,8 +2,8 @@
 // "/usr/include" on Linux. I use this command line to compile (in case you need it)
 // ldc2 -L-lstdc++ -cpp-args -I/usr/include gdal.d -L-lgdal
 
-modmap (C++) "gdalwarper.h";
-modmap (C++) "cpl_conv.h";    // needed for CPLMalloc
+pragma (cppmap, "gdalwarper.h");
+pragma (cppmap, "cpl_conv.h");    // needed for CPLMalloc
 
 import (C++) _;
 import (C++) GDALWarpOperation;

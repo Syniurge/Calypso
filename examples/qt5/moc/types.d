@@ -6,8 +6,8 @@
 
 module moc.types;
 
-modmap (C++) "<qglobal.h>";
-modmap (C++) "<qmetatype.h>";
+pragma (cppmap, "<qglobal.h>");
+pragma (cppmap, "<qmetatype.h>");
 
 import
     std.conv,
@@ -17,7 +17,7 @@ import
 public import (C++)
     QMetaType,
     QObject,
-    QtCore : qreal;
+    _ : qreal;
 
 // Qt expects C++ type names, so we need a map of *differing* builtin types before querying QMetaType.type()
 enum string[string] DtoCXXTypeMap = [

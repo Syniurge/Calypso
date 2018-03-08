@@ -1,19 +1,9 @@
 /**
  * D adaptation of the Qt5 tutorial at: http://doc.qt.io/qt-5/qtwidgets-mainwindows-application-example.html
  *
- * Module map files from utils/modulemap/ should be installed in the libc and Qt include folders.
- *
- * Then build with:
- *   $ ldc2 -cpp-args -std=c++11 -relocation-model=pic -v -wi -cpp-args -D_REENTRANT -cpp-args -fPIE -cpp-args -DQT_WIDGETS_LIB -cpp-args -DQT_GUI_LIB -cpp-args -DQT_CORE_LIB -cpp-args -I/pathto/Qt/5.7/gcc_64/mkspecs/linux-g++ -cpp-args -I/pathto/Qt/5.7/gcc_64/include -cpp-args -I/pathto/Qt/5.7/gcc_64/include/QtWidgets -cpp-args -I/pathto/Qt/5.7/gcc_64/include/QtGui -cpp-args -I/pathto/Qt/5.7/gcc_64/include/QtCore -cpp-args -I/pathto/Qt/5.7/gcc_64/include/QtCore/5.7.0 -cpp-args -I/pathto/Qt/5.7/gcc_64/include/QtCore/5.7.0/QtCore -L-L/pathto/Qt/5.7/gcc_64/lib -L-rpath=/pathto/Qt/5.7/gcc_64/lib -L-lQt5Widgets -L-lQt5Gui -L-lQt5Core -L-lGL qt5demo.d moc/package.d moc/moc_.d moc/types.d
+ * Build with:
+ *   $ ldc2 -relocation-model=pic -v -wi -cpp-args "-std=c++11 -D_REENTRANT -fPIE -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB -I/pathto/Qt/5.x/gcc_64/mkspecs/linux-g++ -I/pathto/Qt/5.x/gcc_64/include -I/pathto/Qt/5.x/gcc_64/include/QtWidgets -I/pathto/Qt/5.x/gcc_64/include/QtGui -I/pathto/Qt/5.x/gcc_64/include/QtCore -I/pathto/Qt/5.x/gcc_64/include/QtCore/5.x.y -I/pathto/Qt/5.x/gcc_64/include/QtCore/5.x.y/QtCore" -L-L/pathto/Qt/5.x/gcc_64/lib -L-rpath=/pathto/Qt/5.x/gcc_64/lib -L-lQt5Widgets -L-lQt5Gui -L-lQt5Core -L-lGL qt5demo.d moc/package.d moc/moc_.d moc/types.d
  */
-
- // WORKAROUND until modmap gets fixed
-modmap (C++) "<QtCore>";
-modmap (C++) "<private/qmetaobject_p.h>";
-modmap (C++) "<qglobal.h>";
-modmap (C++) "<qmetatype.h>";
-
-modmap (C++) "<QtWidgets>";
 
 // D imports
 import moc;
@@ -21,7 +11,8 @@ import core.runtime;
 import std.stdio, std.conv;
 
 // Main Qt imports
-import (C++) Qt.QtCore;
+pragma (cppmap, "<QtWidgets>");
+import (C++) Qt._;
 import (C++) QCoreApplication, QApplication, QString, QPushButton, QAction, QMainWindow;
 import (C++) QWidget, QLineEdit, QLabel, QLayout, QGridLayout, QTextDocument;
 import (C++) QCloseEvent, QPlainTextEdit, QMenu, QToolBar, QMessageBox, QFlags;

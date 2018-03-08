@@ -6,8 +6,8 @@
 
 module moc.moc_;
 
-modmap (C++) "<QtCore>";
-modmap (C++) "<private/qmetaobject_p.h>";
+pragma (cppmap, "<QtCore>");
+pragma (cppmap, "<private/qmetaobject_p.h>");
 
 import cpp.core;
 import std.traits : isCallable, hasUDA;
@@ -27,7 +27,7 @@ public import (C++)
     MetaDataFlags,
     MethodFlags,
     QBasicAtomicInteger,
-    QtCore : qRegisterMetaType;
+    _ : qRegisterMetaType;
 
 public alias QByteArrayData = QArrayData;
 
