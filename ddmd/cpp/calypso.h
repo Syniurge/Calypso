@@ -121,7 +121,7 @@ protected:
 
 /***********************/
 
-class LangPlugin : public ::LangPlugin, public ::ForeignCodeGen
+class LangPlugin final : public ::LangPlugin, public ::ForeignCodeGen
 {
 public:
     void _init() override;
