@@ -204,12 +204,11 @@ public:
     enum
     {
         ForcePolymorphic = 1 << 0, // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false
-        MapImplicitRecords = 1 << 1,
+        MapTemplatePatterns = 1 << 1, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
         MapTemplateInstantiations = 1 << 2,
         MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
         NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 5,
-        MapTemplatePatterns = 1 << 6, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
     };
 
 

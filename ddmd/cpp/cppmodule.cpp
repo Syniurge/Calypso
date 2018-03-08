@@ -410,7 +410,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     auto& Diags = *calypso.pch.Diags;
     auto Canon = D->getCanonicalDecl();
 
-    if (D->isImplicit() && !(flags & MapImplicitRecords))
+    if (D->isInjectedClassName())
         return nullptr;
 
     auto decldefs = new Dsymbols;
@@ -1832,7 +1832,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
         else
             m->rootKey.first = D;
 
-        if (auto s = mapper.VisitDecl(D, DeclMapper::MapImplicitRecords))
+        if (auto s = mapper.VisitDecl(D))
             m->members->append(s);
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
