@@ -312,7 +312,7 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 #define CALYPSO_LANGPLUGIN \
     ::LangPlugin *langPlugin() override { return &calypso; }
 
-// TODO: use this pattern for all global.params.verbose logging
+// Use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
 
 #endif /* DMD_CPP_CALYPSO_H */

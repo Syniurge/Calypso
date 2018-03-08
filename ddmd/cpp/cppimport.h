@@ -11,7 +11,7 @@
 #include "dsymbol.h"
 #include "cpp/calypso.h"
 
-#include "../import.h"
+#include "import.h"
 
 namespace cpp {
 

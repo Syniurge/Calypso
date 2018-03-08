@@ -58,7 +58,7 @@ void codegenModules(Modules &modules, bool oneobj);
 
 void log_verbose(const std::string& header, const std::string& msg){
     // to look aligned with other -v printed lines
-    int prefix_width=9; // TODO: adjust upwards as needed
+    int prefix_width = 9; // TODO: adjust upwards as needed
     fprintf(global.stdmsg, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
 }
 
@@ -71,8 +71,6 @@ using llvm::isa;
 
 LangPlugin calypso;
 BuiltinTypes builtinTypes;
-
-static inline ASTUnit* ast() { return calypso.pch.AST; }
 
 RootObject *SpecValue::toTemplateArg(Loc loc)
 {
@@ -498,7 +496,7 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
 
 Loc fromLoc(clang::SourceLocation L)
 {
-    auto& SrcMgr = ast()->getSourceManager();
+    auto& SrcMgr = calypso.getSourceManager();
     Loc loc;
 
     if (L.isInvalid())

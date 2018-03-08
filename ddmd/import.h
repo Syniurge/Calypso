@@ -139,8 +139,8 @@ public:
     virtual void adjustLinkerArgs(std::vector<std::string>& args) = 0;
 
     // ===== - - - - - ===== //
-    // mars_mainBody hooks
 
+    // mars_mainBody hooks
     virtual void semanticModules() = 0;
     virtual void codegenModules() = 0;
 
