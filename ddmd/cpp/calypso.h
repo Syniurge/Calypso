@@ -240,6 +240,8 @@ public:
 
     const char *Argv0;
 
+    Identifier* id_cppmap;
+
     Identifier* id_cpp;
     Identifier* id_core;
     Identifier* id__;

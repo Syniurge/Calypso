@@ -16,7 +16,7 @@
 #include "declaration.h"
 #include "expression.h"
 #include "id.h"
-#include "expression.h"
+#include "scope.h"
 
 #include "driver/tool.h"
 #include "driver/cl_options.h"
@@ -1076,6 +1076,16 @@ int LangPlugin::doesHandleModmap(const char* lang)
                 static_cast<StringExp*>(arg));
 }
 
+static bool parseStringExp(Expression *e, const char *&res) {
+    e = e->optimize(WANTvalue);
+    if (e->op != TOKstring) {
+        return false;
+    }
+    auto s = static_cast<StringExp *>(e);
+    res = s->toStringz();
+    return true;
+}
+
 int LangPlugin::getPragma(Scope* sc, PragmaDeclaration* decl)
 {
     if (decl->ident == id_cppmap) {
@@ -1169,6 +1179,8 @@ void LangPlugin::_init()
         ::error(Loc(), "%s isn't a directory", opts::cppCacheDir.c_str());
         fatal();
     }
+
+    id_cppmap = idPool("cppmap");
 
     id_cpp = idPool("cpp");
     id_core = idPool("core");
