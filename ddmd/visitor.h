@@ -89,7 +89,6 @@ class DebugSymbol;
 class VersionSymbol;
 class EnumMember;
 class Import;
-class Modmap; // CALYPSO
 class OverloadSet;
 class LabelDsymbol;
 class AliasThis;
@@ -382,7 +381,6 @@ public:
     virtual void visit(VersionSymbol *s) { visit((Dsymbol *)s); }
     virtual void visit(EnumMember *s) { visit((VarDeclaration *)s); }
     virtual void visit(Import *s) { visit((Dsymbol *)s); }
-    virtual void visit(Modmap *s) { visit((Dsymbol *)s); } // CALYPSO
     virtual void visit(OverloadSet *s) { visit((Dsymbol *)s); }
     virtual void visit(LabelDsymbol *s) { visit((Dsymbol *)s); }
     virtual void visit(AliasThis *s) { visit((Dsymbol *)s); }

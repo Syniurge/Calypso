@@ -379,12 +379,6 @@ void construct_Import(Import _this, Loc loc, Identifiers *packages, Identifier i
     memcpy(postvtblThis, &Import.classinfo.m_init[offset], Import.classinfo.m_init.length - offset);
     _this.__ctor(loc, packages, id, aliasId, isstatic);
 }
-void construct_Modmap(Modmap _this, Loc loc, StringExp arg)
-{
-    auto postvtblThis = &(cast(byte*)_this)[offset];
-    memcpy(postvtblThis, &Modmap.classinfo.m_init[offset], Modmap.classinfo.m_init.length - offset);
-    _this.__ctor(loc, arg);
-}
 void construct_StructDeclaration(StructDeclaration _this, Loc loc, Identifier id, bool inObject)
 {
     auto postvtblThis = &(cast(byte*)_this)[offset];

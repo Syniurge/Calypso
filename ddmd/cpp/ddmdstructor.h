@@ -289,7 +289,6 @@ void construct_EnumDeclaration(EnumDeclaration *_this, Loc loc, Identifier *id, 
 void construct_EnumMember(EnumMember *_this, Loc loc, Identifier *id, Expression *value, Type *origType);
 void construct_AliasDeclaration(AliasDeclaration *_this, Loc loc, Identifier *ident, Type *type);
 void construct_Import(Import *_this, Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
-void construct_Modmap(Modmap *_this, Loc loc, StringExp *arg);
 void construct_StructDeclaration(StructDeclaration *_this, Loc loc, Identifier *id, bool inObject = false);
 void construct_UnionDeclaration(UnionDeclaration *_this, Loc loc, Identifier *id);
 void construct_ClassDeclaration(ClassDeclaration *_this, Loc loc, Identifier *id, BaseClasses *baseclasses, Dsymbols* members, bool inObject = false);

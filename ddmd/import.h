@@ -69,18 +69,6 @@ public:
     void accept(Visitor *v) { v->visit(this); }
 };
 
-class Modmap : public Dsymbol
-{
-public:
-    StringExp *arg;
-
-//     Modmap(Loc loc, StringExp *arg);
-    virtual void _key(); // CALYPSO
-    void setScope(Scope* sc);
-
-    void accept(Visitor *v) { v->visit(this); }
-};
-
 struct InterState;
 class ForeignCodeGen;
 
@@ -90,13 +78,6 @@ public:
     virtual void _init() = 0;
 
     // ===== - - - - - ===== //
-
-    // returns -1 if said lang isn't handled by this plugin, or its id number
-    // to be passed to createImport otherwise
-    virtual int doesHandleModmap(const char* lang) = 0;
-
-    virtual Modmap *createModmap(int langId,
-        Loc loc, Expression *arg) = 0;
 
     // returns -1 if said tree isn't handled by this plugin, or its id number
     // to be passed to createImport otherwise

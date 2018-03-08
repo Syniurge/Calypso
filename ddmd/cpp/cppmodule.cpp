@@ -1675,7 +1675,7 @@ static void mapClangModule(DeclMapper &mapper,
 Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
 {
     if (!calypso.getASTUnit()) {
-        ::error(loc, "Importing a C++ module without specifying C++ headers with modmap");
+        ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\")");
         fatal();
     }
 

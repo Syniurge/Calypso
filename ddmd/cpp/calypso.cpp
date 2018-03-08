@@ -1061,21 +1061,6 @@ int LangPlugin::doesHandleImport(const char* tree)
                 packages, id, aliasId, isstatic);
 }
 
-int LangPlugin::doesHandleModmap(const char* lang)
-{
-    if (strcmp((const char *) lang, "C") == 0
-        || strcmp((const char *) lang, "C++") == 0)
-        return 0;
-
-    return -1;
-}
-
-::Modmap* LangPlugin::createModmap(int langId, Loc loc, Expression* arg)
-{
-    return new Modmap(loc,
-                static_cast<StringExp*>(arg));
-}
-
 static bool parseStringExp(Expression *e, const char *&res) {
     e = e->optimize(WANTvalue);
     if (e->op != TOKstring) {

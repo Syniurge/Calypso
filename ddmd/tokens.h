@@ -135,7 +135,7 @@ enum TOK
         // Aggregates
         TOKstruct, TOKclass, TOKinterface, TOKunion, TOKenum, TOKimport,
         TOKalias, TOKoverride, TOKdelegate, TOKfunction,
-        TOKmixin, TOKmodmap /* CALYPSO */,
+        TOKmixin,
 
         TOKalign, TOKextern, TOKprivate, TOKprotected, TOKpublic, TOKexport,
         TOKstatic, TOKfinal, TOKconst, TOKabstract,

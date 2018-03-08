@@ -221,7 +221,6 @@ enum TOK : int
     TOKdelegate,
     TOKfunction,
     TOKmixin,
-    TOKmodmap, // CALYPSO
     TOKalign,
     TOKextern,
     TOKprivate,
@@ -482,7 +481,6 @@ alias TOKoverride = TOK.TOKoverride;
 alias TOKdelegate = TOK.TOKdelegate;
 alias TOKfunction = TOK.TOKfunction;
 alias TOKmixin = TOK.TOKmixin;
-alias TOKmodmap = TOK.TOKmodmap; // CALYPSO
 alias TOKalign = TOK.TOKalign;
 alias TOKextern = TOK.TOKextern;
 alias TOKprivate = TOK.TOKprivate;
@@ -661,7 +659,6 @@ extern (C++) struct Token
         TOKenum: "enum",
         TOKimport: "import",
         TOKmixin: "mixin",
-        TOKmodmap: "modmap", // CALYPSO
         TOKstatic: "static",
         TOKfinal: "final",
         TOKconst: "const",
@@ -1156,7 +1153,6 @@ private immutable TOK[] keywords =
     TOKenum,
     TOKimport,
     TOKmixin,
-    TOKmodmap, // CALYPSO
     TOKstatic,
     TOKfinal,
     TOKconst,

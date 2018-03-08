@@ -26,16 +26,6 @@ public:
     void load(Scope *sc) override;
 };
 
-struct Modmap : public ::Modmap
-{
-public:
-    CALYPSO_LANGPLUGIN
-
-    Modmap(Loc loc, StringExp *arg);
-
-    void importAll(Scope *sc) override;
-};
-
 // Special import for lookups from C++ modules
 class GlobalImport : public ::Import
 {

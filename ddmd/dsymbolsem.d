@@ -2890,10 +2890,6 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
         //printf("-Import::semantic('%s'), pkg = %p\n", toChars(), pkg);
     }
 
-    override void visit(Modmap mm) // CALYPSO
-    {
-    }
-
     void attribSemantic(AttribDeclaration ad)
     {
         if (ad.semanticRun != PASSinit)

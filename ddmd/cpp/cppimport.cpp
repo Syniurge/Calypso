@@ -73,17 +73,6 @@ void Import::load(Scope* sc)
     ::Import::load(sc);
 }
 
-Modmap::Modmap(Loc loc, StringExp *arg)
-{
-    construct_Modmap(this, loc, arg);
-}
-
-void Modmap::importAll(Scope *sc)
-{
-    assert(arg->sz == 1); // FIXME
-    calypso.pch.add(arg->toPtr(), sc->_module);
-}
-
 GlobalImport::GlobalImport(Loc loc)
 {
     construct_Import(this, loc, nullptr, calypso.id_Scpp, nullptr, 0);

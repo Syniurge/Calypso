@@ -460,9 +460,6 @@ final class Parser(AST) : Lexer
                 a = parseImport();
                 // keep pLastDecl
                 break;
-            case TOKmodmap: // CALYPSO
-                a = parseModmap();
-                break;
 
             case TOKtemplate:
                 s = cast(AST.Dsymbol)parseTemplateDeclaration();
@@ -3333,59 +3330,6 @@ final class Parser(AST) : Lexer
             nextToken();
         }
 
-        return decldefs;
-    }
-
-    AST.Dsymbols *parseModmap() // CALYPSO
-    {
-        auto decldefs = new AST.Dsymbols();
-        Loc loc;
-        AST.StringExp arg;
-        AST.LangPlugin lp;
-        int langId = -1;  // id returned by the plugin when several languages are supported (e.g Calypso has one for C, one for C++, ..)
-        //printf("Parser::parseModmap()\n");
-        nextToken();
-        // parse the language token and look for a language plugin supporting it
-        if (token.value != TOKlparen)
-            error("modmap language expected");
-        else
-        {
-            parenthesedSpecialToken(&token);
-            if (!token.len)
-                error("modmap language expected");
-            else
-            {
-                foreach (plugin; AST.langPlugins)
-                {
-                    langId = plugin.doesHandleModmap(token.ustring);
-                    if (langId != -1)
-                    {
-                        lp = plugin;
-                        break;
-                    }
-                }
-                if (lp is null)
-                    error("no language plugin was found to support language %s", token.toChars());
-            }
-            nextToken();
-        }
-        // parse the argument (typically a string, might force that later)
-        do
-        {
-        L1:
-            loc = token.loc;
-            arg = parsePrimaryExp().toStringExp();
-            if (!arg)
-                error("Expected a string expression following modmap");
-            auto s = lp.createModmap(langId, loc, arg);
-            decldefs.push(s);
-            if (token.value != TOKcomma)
-                break;
-            nextToken();
-        } while (1);
-        if (token.value != TOKsemicolon)
-            error("';' expected");
-        nextToken();
         return decldefs;
     }
 

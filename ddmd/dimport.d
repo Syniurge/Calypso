@@ -323,30 +323,6 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
     }
 }
 
-// CALYPSO
-extern(C++) class Modmap : Dsymbol
-{
-public:
-    StringExp arg;
-
-    extern(D) this(Loc loc, StringExp arg)
-    {
-        this.loc = loc;
-        this.arg = arg;
-    }
-
-    override void setScope(Scope* sc)
-    {
-        Dsymbol.setScope(sc);
-        importAll(sc);
-    }
-
-    override void accept(Visitor v)
-    {
-        v.visit(this);
-    }
-}
-
 import ddmd.aggregate;
 import ddmd.dinterpret;
 import ddmd.dstruct;
@@ -361,13 +337,6 @@ public:
     void _init();
 
     // ===== - - - - - ===== //
-
-    // returns -1 if said lang isn't handled by this plugin, or its id number
-    // to be passed to createImport otherwise
-    int doesHandleModmap(const (char)* lang);
-
-    Modmap createModmap(int langId,
-        Loc loc, Expression arg);
 
     // returns -1 if said tree isn't handled by this plugin, or its id number
     // to be passed to createImport otherwise

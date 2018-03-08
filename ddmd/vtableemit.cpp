@@ -34,7 +34,6 @@ void EnumDeclaration::_key() {}
 void EnumMember::_key() {}
 void AliasDeclaration::_key() {}
 void Import::_key() {}
-void Modmap::_key() {}
 void AggregateDeclaration::_key() {}
 void StructDeclaration::_key() {}
 void UnionDeclaration::_key() {}
