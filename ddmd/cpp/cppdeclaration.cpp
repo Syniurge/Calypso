@@ -270,13 +270,20 @@ IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
 IMPLEMENT_syntaxCopy(DtorDeclaration, CDD)
 IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
 
-TypeMapper DeclReferencer::mapper(nullptr, true);
+/***********************/
+
+DeclMapper DeclReferencer::mapper(nullptr, true);
 ExprMapper DeclReferencer::expmap(mapper);
 
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 {
     this->loc = loc;
     this->sc = mapper.scSemImplicitImports = sc;
+
+    // First map nested record decls (esp. lambda classes)
+    // This needs to be done before because lambda CXXRecordDecl may be used before and/or after within the AST/
+    NestedDeclMapper(*this).TraverseStmt(S);
+
     TraverseStmt(S);
 }
 
@@ -393,7 +400,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
                     return false;
             return true;
         };
-        if (!checkTiargs(tiargs)) // TODO: C++11 code may use lambdas, should we reference them as well?
+        if (!checkTiargs(tiargs))
             goto Lcleanup;
 
         SpecValue spec(mapper);
@@ -479,6 +486,27 @@ bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
 {
     return VisitDeclRef(E->getMemberDecl());
 }
+
+/***********************/
+
+bool NestedDeclMapper::VisitLambdaExpr(const clang::LambdaExpr *E)
+{
+    return TraverseCXXRecordDecl(E->getLambdaClass());
+}
+
+bool NestedDeclMapper::TraverseCXXRecordDecl(const clang::CXXRecordDecl *D)
+{
+    if (D->isLambda() && D->getLambdaManglingNumber() == 0)
+        return true; // the lambda record is internal, no need to map it
+
+    if (auto a = dref.mapper.VisitRecordDecl(D))
+        for (auto s: *a)
+            semantic(s, dref.sc);
+
+    return true;
+}
+
+/***********************/
 
 void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
 {

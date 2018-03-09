@@ -323,7 +323,13 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
     auto loc = fromLoc(D->getLocation());
     auto decldefs = new Dsymbols;
 
-    auto id = fromIdentifier(D->getIdentifier());
+    auto II = D->getIdentifier();
+    if (!II) {
+        assert(D->isImplicit()); // lambda capture fields are unnamed and implicit
+        return nullptr;
+    }
+
+    auto id = fromIdentifier(II);
     Type *t = nullptr;
 
     auto Ty = withoutNonAliasSugar(D->getType());
@@ -513,15 +519,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                         S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, j ? true : false,
                                                 k ? clang::Qualifiers::Const : 0);
         }
-
-//         if (D->isInvalidDecl())
-//         {
-//             // Despite being invalid themselves methods of invalid records are not always marked invalid for some reason.
-//             // We need to mark everyone invalid, because if we don't emitting debug info for them will trigger an assert.
-//             for (auto MD : CRD->methods())
-//                 if (!MD->isStatic())
-//                     MD->setInvalidDecl();
-//         }
     }
 
     // Add specific decls: fields, vars, tags, templates, typedefs

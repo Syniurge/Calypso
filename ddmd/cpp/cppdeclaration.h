@@ -171,8 +171,7 @@ bool isMapped(const clang::Decl *D);
 class DeclMapper : public TypeMapper
 {
 public:
-    DeclMapper(Module *mod)
-        : TypeMapper(mod) {} // hmm why does putting into .cpp give me a link error?
+    DeclMapper(Module *mod, bool isGlobal = false) : TypeMapper(mod, isGlobal) {}
 
     inline PROTKIND toProt(clang::AccessSpecifier AS);
 
@@ -215,10 +214,14 @@ public:
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };
 
+class NestedDeclMapper;
+
 // Run semantic() on referenced functions and record decls to instantiate templates and have them codegen'd
 class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
-    static TypeMapper mapper;
+    friend class NestedDeclMapper;
+
+    static DeclMapper mapper;
     static ExprMapper expmap;
 
     Loc loc;
@@ -245,6 +248,20 @@ public:
     bool shouldVisitImplicitCode() const { return true; }
 };
 
+// Map records nested within a function, which includes lambda types.
+class NestedDeclMapper : public clang::RecursiveASTVisitor<NestedDeclMapper>
+{
+    DeclReferencer& dref;
+
+public:
+    NestedDeclMapper(DeclReferencer& dref) : dref(dref) {}
+
+    bool VisitLambdaExpr(const clang::LambdaExpr *E);
+    bool TraverseCXXRecordDecl(const clang::CXXRecordDecl *D);
+
+    bool shouldVisitImplicitCode() const { return true; }
+};
+
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 bool isPolymorphic(const clang::RecordDecl *D);
 void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
@@ -252,6 +269,8 @@ void MarkFunctionReferenced(::FuncDeclaration* fd);
 
 inline bool& getIsUsed(::FuncDeclaration* fd)
 {
+    assert(isCPP(fd));
+
     if (fd->isCtorDeclaration())
         return static_cast<cpp::CtorDeclaration*>(fd)->isUsed;
     else if (fd->isDtorDeclaration())

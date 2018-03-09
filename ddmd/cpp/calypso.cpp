@@ -286,7 +286,6 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
     else // generate a name, rare occurrence anyway and only ever matters for virtual conversion operators
     {
         // FIXME: *might* collide
-        llvm::raw_string_ostream OS(fullName);
         fullName += T.getAsString();
         fullName.erase(std::remove_if(fullName.begin(), fullName.end(),
             [](char c) { return !isalnum(c); }), fullName.end());
@@ -307,6 +306,28 @@ static Identifier *getConversionIdentifier(const clang::CXXConversionDecl *D,
 
     t = mapper.fromType(T, Loc());
     return Id::_cast;
+}
+
+static Identifier *getLambdaIdentifier(const clang::CXXRecordDecl *D)
+{
+    // NOTE: the mangling number differentiates lambda classes *per* lambda function signature,
+    // so both have to enter into account while naming a lambda.
+    auto& MangleCtx = calypso.pch.MangleCtx;
+    std::string name("__lambda_");
+
+    auto ManglingNumber = D->getLambdaManglingNumber();
+    name += std::to_string(ManglingNumber);
+    name += "_";
+
+    assert(D->isLambda());
+
+    {
+        llvm::raw_string_ostream OS(name);
+        MangleCtx->mangleTypeName(
+                clang::QualType(D->getLambdaCallOperator()->getFunctionType(), 0), OS);
+    }
+
+    return Identifier::idPool(name.c_str(), name.size());
 }
 
 Identifier *fromDeclarationName(const clang::DeclarationName N,
@@ -366,9 +387,14 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
 
     if (D->getIdentifier())
         II = D->getIdentifier();
-    else if (auto Tag = llvm::dyn_cast<clang::TagDecl>(D))
+    else if (auto Tag = dyn_cast<clang::TagDecl>(D)) {
         if (auto Typedef = Tag->getTypedefNameForAnonDecl())
             II = Typedef->getIdentifier();
+        else if (auto Record = dyn_cast<clang::CXXRecordDecl>(D))
+            if (Record->isLambda())
+                if (auto lambdaIdent = getLambdaIdentifier(Record))
+                    return lambdaIdent;
+    }
 
     if (!II)
         return nullptr;
