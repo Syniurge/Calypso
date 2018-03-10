@@ -211,6 +211,21 @@ void LangPlugin::leaveFunc()
     CGFStack.pop();
 }
 
+bool LangPlugin::isEmitted(Dsymbol* s)
+{
+    if (!isSymbolReferenced(s))
+        return false;
+
+    if (auto fd = s->isFuncDeclaration()) {
+        auto FD = getFD(fd);
+        if (!FD->hasBody(FD))
+            if (!FD->doesDeclarationForceExternallyVisibleDefinition())
+                return false;
+    }
+
+    return true;
+}
+
 void LangPlugin::updateCGFInsertPoint()
 {
     auto BB = gIR->scope().begin;

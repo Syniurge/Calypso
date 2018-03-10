@@ -182,6 +182,8 @@ public:
     void enterFunc(::FuncDeclaration *fd) override;
     void leaveFunc() override;
 
+    bool isEmitted(Dsymbol* s) override;
+
     LLType *toType(Type *t) override;
     llvm::FunctionType *toFunctionType(::FuncDeclaration *fdecl) override;
     bool passAggregateArgumentByRef(AggregateDeclaration* ad) override;

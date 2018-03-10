@@ -23,6 +23,8 @@ public:
     virtual void enterFunc(FuncDeclaration *fd) = 0;
     virtual void leaveFunc() = 0;
 
+    virtual bool isEmitted(Dsymbol* s) = 0;
+
     virtual LLType *toType(Type *t) = 0;
     virtual llvm::FunctionType *toFunctionType(FuncDeclaration *fdecl) = 0;
     virtual bool passAggregateArgumentByRef(AggregateDeclaration* ad) = 0;
