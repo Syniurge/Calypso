@@ -93,7 +93,8 @@ void MarkVarReferenced(::VarDeclaration* vd)
     if (Var->getTemplateSpecializationKind() == clang::TSK_ImplicitInstantiation)
         S.InstantiateVariableDefinition(Var->getLocation(), Var);
 
-    MarkModuleForGenIfNeeded(vd);
+    if (vd->isDataseg())
+        MarkModuleForGenIfNeeded(vd);
 }
 
 FuncDeclaration::FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
