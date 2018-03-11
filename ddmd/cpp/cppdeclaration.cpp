@@ -78,6 +78,9 @@ bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
 
 void MarkVarReferenced(::VarDeclaration* vd)
 {
+    if (vd->isEnumMember())
+        return;
+
     auto c_vd = static_cast<cpp::VarDeclaration*>(vd);
     if (c_vd->isUsed)
         return;
