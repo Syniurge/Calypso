@@ -17,3 +17,10 @@ Point<_Tp>::operator Point<_Tp2>() const
 {
     return Point<_Tp2>(_Tp2(x), _Tp2(y));
 }
+
+// Issue #65: https://github.com/Syniurge/Calypso/issues/65
+struct A { int x; };
+
+struct B : public A {
+  operator float() const;
+};
