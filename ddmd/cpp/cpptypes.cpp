@@ -1157,8 +1157,7 @@ TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
 Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 {
     auto Typedef = T->getDecl();
-    if (isAnonTagTypedef(Typedef) || isSameNameTagTypedef(Typedef) ||
-                getDeclContextNamedOrTU(Typedef)->isTranslationUnit())  // temporary HACK to avoid importing "_" just because of typedefs (eg size_t)
+    if (isAnonTagTypedef(Typedef) || isSameNameTagTypedef(Typedef))
         return fromType(Typedef->getUnderlyingType());
 
     return typeQualifiedFor(Typedef);
