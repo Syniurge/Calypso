@@ -4289,7 +4289,20 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
             return;
         }
 
-        if (!exp.to.equals(exp.e1.type) && exp.mod == cast(ubyte)~0)
+        Type t1b = exp.e1.type.toBasetype();
+        Type tob = exp.to.toBasetype();
+
+        // CALYPSO HACK: disable overloading by opCast if exp.type is a C++ base of exp.e1.type
+        // See issue #65: https://github.com/Syniurge/Calypso/issues/65
+        bool disableOpCast = false;
+
+        auto t1ad = getAggregateSym(t1b);
+        ClassDeclaration t1cd = t1ad ? t1ad.isClassDeclaration() : null;
+        auto toad = getAggregateSym(tob);
+        if (toad && t1cd && toad.langPlugin() && toad.isBaseOf(t1cd, null))
+            disableOpCast = true;
+
+        if (!exp.to.equals(exp.e1.type) && exp.mod == cast(ubyte)~0 && !disableOpCast)
         {
             if (Expression e = exp.op_overload(sc))
             {
@@ -4297,9 +4310,6 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                 return;
             }
         }
-
-        Type t1b = exp.e1.type.toBasetype();
-        Type tob = exp.to.toBasetype();
 
         if (tob.ty == Tstruct && !tob.equals(t1b))
         {
