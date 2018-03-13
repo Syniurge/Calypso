@@ -18,7 +18,7 @@ import rt.dwarfeh;
 import rt.unwind;
 import cpp.core;
 
-modmap (C++) "unwind-cxx-d.h";
+pragma (cppmap, "unwind-cxx-d.h");
 
 import (C++) _Unwind_Exception : _cpp__Unwind_Exception = _Unwind_Exception;
 
