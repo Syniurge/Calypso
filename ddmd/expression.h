@@ -922,6 +922,7 @@ public:
     unsigned char mod;          // MODxxxxx
 
     Expression *syntaxCopy();
+    bool isLvalue(); // CALYPSO
 
     void accept(Visitor *v) { v->visit(this); }
 };

@@ -6970,6 +6970,15 @@ extern (C++) final class CastExp : UnaExp
         return to ? new CastExp(loc, e1.syntaxCopy(), to.syntaxCopy()) : new CastExp(loc, e1.syntaxCopy(), mod);
     }
 
+    override bool isLvalue() // CALYPSO not entirely sure about this change, but shouldn't downcasts of lvalues to base aggregates be considered lvalues as well?
+    {
+        if (!e1.isLvalue())
+            return false;
+        if (type.isBaseOf(e1.type, null))
+            return true;
+        return false;
+    }
+
     override void accept(Visitor v)
     {
         v.visit(this);
