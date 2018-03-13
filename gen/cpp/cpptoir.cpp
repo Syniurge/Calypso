@@ -464,21 +464,26 @@ bool LangPlugin::addFieldInitializers(llvm::SmallVectorImpl<llvm::Constant*>& co
 }
 
 LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
-                                      ::VarDeclaration* vd, Type *srcType)
+                                      ::VarDeclaration* vd)
 {
     auto& Context = getASTContext();
-    assert(isCPP(ad) && isCPP(vd));
+    assert(isCPP(vd));
 
-    if (srcType && srcType->ty == Tclass
-            && !isCPP(static_cast<TypeClass*>(srcType)->sym))
-    {
+    auto parent = vd->toParent2()->isAggregateDeclaration();
+    assert(parent && isCPP(parent));
+
+    auto srcType = ad->getType();
+    if (!ad->isClassDeclaration() || isCPP(ad))
+        srcType = srcType->pointerTo();
+
+    if (ad != parent) {
         Loc loc;
         DImValue srcValue(srcType, src);
 
-        src = DtoRVal(DtoCast(loc, &srcValue, ad->type->pointerTo())); // casting is needed here for this.CppClass.member
+        src = DtoRVal(DtoCast(loc, &srcValue, parent->getType()->pointerTo()));
     }
 
-    auto Record = getRecordDecl(ad);
+    auto Record = getRecordDecl(parent);
     auto Field = cast<clang::FieldDecl>(
                         static_cast<cpp::VarDeclaration*>(vd)->VD);
 
@@ -488,7 +493,7 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     auto LV = clangCG::LValue::MakeAddr(address, Context.getRecordType(Record),
                         Context, clangCG::LValueBaseInfo(clangCG::AlignmentSource::Decl));
 
-    // NOTE: vd might be a field from an anon struct or union injected to ad->fields during semantic
+    // NOTE: vd might be a field from an anon struct or union injected to parent->fields during semantic
     // LDC differs from Clang in that it also injects the fields to the LLVM type, and access to indirect fields
     // goes straight for the field instead of GEPing the anon struct first.
     // So we need to do this now:

@@ -1803,7 +1803,7 @@ FuncDeclaration *getParentFunc(Dsymbol *sym) {
 }
 
 LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
-                           VarDeclaration *vd, Type *srcType) {
+                           VarDeclaration *vd) {
   IF_LOG Logger::println("Indexing aggregate field %s:", vd->toPrettyChars());
   LOG_SCOPE;
 
@@ -1812,8 +1812,8 @@ LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
   // ourselves, DtoType below would be enough.
   DtoResolveDsymbol(ad);
 
-  if (auto lp = ad->langPlugin()) // CALYPSO
-    return lp->codegen()->toIndexAggregate(src, ad, vd, srcType);
+  if (auto lp = vd->toParent2()->langPlugin()) // CALYPSO
+    return lp->codegen()->toIndexAggregate(src, ad, vd);
 
   // Cast the pointer we got to the canonical struct type the indices are
   // based on.

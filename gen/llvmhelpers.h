@@ -132,7 +132,7 @@ void findDefaultTarget();
 ///
 /// 'src' is a pointer to the start of the memory of an 'ad' instance.
 LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
-                           VarDeclaration *vd, Type *srcType = nullptr); // CALYPSO
+                           VarDeclaration *vd);
 
 /// Returns the index of a given member variable in the resulting LLVM type of
 /// an aggregate.

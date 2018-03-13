@@ -146,8 +146,6 @@ public:
     ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
                                Statement *handler, StorageClass stc) override;
 
-    Expression *getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
-        Expression *e1, Declaration *var, int flag = 0) override;
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 
     ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
@@ -211,7 +209,7 @@ public:
 
     bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 
-    LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd, Type *srcType) override;
+    LLValue* toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad, ::VarDeclaration* vd) override;
     void addBaseClassData(AggrTypeBuilder &builder, ::AggregateDeclaration *base) override;
     void emitAdditionalClassSymbols(::ClassDeclaration *cd) override;
     void toInitClass(TypeClass* tc, LLValue* dst) override;

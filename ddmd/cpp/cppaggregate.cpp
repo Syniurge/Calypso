@@ -491,30 +491,6 @@ Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
     return a;
 }
 
-// NOTE: we need to adjust every "this" pointer when accessing fields from bases
-// This is what Clang does in Sema::PerformObjectMemberConversion
-Expression *LangPlugin::getRightThis(Loc loc, Scope *sc, ::AggregateDeclaration *ad,
-        Expression *e1, Declaration *var, int)
-{
-    Type *t = e1->type->toBasetype();
-    AggregateDeclaration* tad;
-    if (t->ty == Tpointer)
-        tad = getAggregateSym(t->nextOf());
-    else
-        tad = getAggregateSym(t);
-
-    if (ad == tad)
-        return e1;
-
-    ::ClassDeclaration *tcd = t->isClassHandle();
-    assert(tcd && ad->isBaseOf2(tcd));
-
-    e1 = new_CastExp(loc, e1, ad->getType()); // NOTE: not strictly necessary if first base
-    e1 = expressionSemantic(e1, sc);
-
-    return e1;
-}
-
 Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 {
     Type* tv = e->type->baseElemOf();

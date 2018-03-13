@@ -974,17 +974,17 @@ public:
       if (e1type->ty == Tpointer) {
         assert(e1type->nextOf()->ty == Tstruct);
         TypeStruct *ts = static_cast<TypeStruct *>(e1type->nextOf());
-        arrptr = DtoIndexAggregate(DtoRVal(l), ts->sym, vd, l->type); // CALYPSO
+        arrptr = DtoIndexAggregate(DtoRVal(l), ts->sym, vd);
       }
       // indexing normal struct
       else if (e1type->ty == Tstruct) {
         TypeStruct *ts = static_cast<TypeStruct *>(e1type);
-        arrptr = DtoIndexAggregate(DtoLVal(l), ts->sym, vd, l->type); // CALYPSO
+        arrptr = DtoIndexAggregate(DtoLVal(l), ts->sym, vd);
       }
       // indexing class
       else if (e1type->ty == Tclass) {
         TypeClass *tc = static_cast<TypeClass *>(e1type);
-        arrptr = DtoIndexAggregate(DtoClassHandle(l), tc->sym, vd, l->type); // CALYPSO
+        arrptr = DtoIndexAggregate(DtoClassHandle(l), tc->sym, vd);
       } else {
         llvm_unreachable("Unknown DotVarExp type for VarDeclaration.");
       }

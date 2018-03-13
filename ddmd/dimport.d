@@ -383,8 +383,6 @@ public:
 
     // ===== - - - - - ===== //
 
-    Expression getRightThis(Loc loc, Scope *sc, AggregateDeclaration ad,
-        Expression e1, Declaration var, int flag = 0);
     Expression callCpCtor(Scope *sc, Expression e);
 
     FuncDeclaration buildDtor(AggregateDeclaration ad, Scope *sc);

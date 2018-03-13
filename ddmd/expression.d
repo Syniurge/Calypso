@@ -93,9 +93,6 @@ void emplaceExp(T : UnionExp)(T* p, Expression e)
 extern (C++) Expression getRightThis(Loc loc, Scope* sc, AggregateDeclaration ad, Expression e1, Declaration var, int flag = 0)
 {
     //printf("\ngetRightThis(e1 = %s, ad = %s, var = %s)\n", e1.toChars(), ad.toChars(), var.toChars());
-    if (ad && ad.langPlugin()) // CALYPSO
-        if (auto result = ad.langPlugin().getRightThis(loc, sc, ad, e1, var, flag))
-            return result;
 L1:
     Type t = e1.type.toBasetype();
     //printf("e1.type = %s, var.type = %s\n", e1.type.toChars(), var.type.toChars());
@@ -106,12 +103,11 @@ L1:
         !(t.ty == Tpointer && t.nextOf().ty == Tstruct && (cast(TypeStruct)t.nextOf()).sym == ad) &&
         !(t.ty == Tstruct && (cast(TypeStruct)t).sym == ad))
     {
-        ClassDeclaration cd = ad.isClassDeclaration();
         ClassDeclaration tcd = t.isClassHandle();
 
         /* e1 is the right this if ad is a base class of e1
          */
-        if (!cd || !tcd || !(tcd == cd || cd.isBaseOf(tcd, null)))
+        if (!tcd || !(tcd == ad || ad.isBaseOf(tcd, null))) // CALYPSO
         {
             /* Only classes can be inner classes with an 'outer'
              * member pointing to the enclosing class instance
