@@ -47,7 +47,7 @@ class DiagnosticPrinter : public DiagnosticConsumer {
 public:
   DiagnosticPrinter(raw_ostream &os, DiagnosticOptions *diags,
                         bool OwnsOutputStream = false);
-  virtual ~DiagnosticPrinter();
+  ~DiagnosticPrinter() override;
 
   /// setPrefix - Set the diagnostic printer prefix string, which will be
   /// printed at the start of any diagnostics. If empty, no prefix string is
