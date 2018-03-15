@@ -556,7 +556,8 @@ set_target_properties(
     ARCHIVE_OUTPUT_NAME ldc
     LIBRARY_OUTPUT_NAME ldc
     RUNTIME_OUTPUT_NAME ldc
-    COMPILE_FLAGS "${LLVM_CXXFLAGS} ${LDC_CXXFLAGS} ${EXTRA_CXXFLAGS}"
+    # -fno-rtti added to avoid Undefined symbols "typeinfo for clang::DiagnosticConsumer" https://github.com/Syniurge/Calypso/pull/104
+    COMPILE_FLAGS "${LLVM_CXXFLAGS} ${LDC_CXXFLAGS} ${EXTRA_CXXFLAGS} -fno-rtti"
     LINK_FLAGS "${SANITIZE_LDFLAGS}"
 )
 
