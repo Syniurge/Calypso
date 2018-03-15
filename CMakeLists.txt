@@ -693,6 +693,10 @@ if(LDC_WITH_LLD)
     else()
         set(LDC_LINKERFLAG_LIST "-llldCOFF;-llldCore;-llldDriver;${LDC_LINKERFLAG_LIST}")
     endif()
+    if(APPLE)
+        # fix https://github.com/Syniurge/Calypso/issues/101 OSX build fails after update to llvm 5.0.1
+        set(LDC_LINKERFLAG_LIST "-lc++;${LDC_LINKERFLAG_LIST}")
+    endif()
 endif()
 
 set(LDC_LINK_MANUALLY OFF)
