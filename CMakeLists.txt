@@ -174,7 +174,7 @@ string(STRIP "${DDMD_DFLAGS}" DDMD_DFLAGS)
 # as enabling warnings on the DMD frontend only leads to a lot of clutter in
 # the output (LLVM_CXXFLAGS sometimes already includes -Wall).
 set(LDC_CXXFLAGS)
-if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
+if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang"))
     # Disable some noisy warnings:
     #  * -Wunused-parameter triggers for LLVM headers
     #  * -Wmissing-field-initializer leads to reams of warnings in gen/asm-*.h
@@ -184,6 +184,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
     #    function pointers to void*.
     #  * -Wgnu-anonymous-struct and -Wnested-anon-types trigger for tokens.h.
     #  * -Wgnu-redeclared-enum triggers for various frontend headers.
+    append("-fno-rtti" LDC_CXXFLAGS) # CALYPSO
     append("-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-non-virtual-dtor" LDC_CXXFLAGS)
     if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
         append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum" LDC_CXXFLAGS)
