@@ -73,10 +73,12 @@ before_install:
   -
     if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
       wget -O clang-calypso.tar.xz https://github.com/Syniurge/clang/releases/download/v5.0/clang-5.0-calypso.tar.xz;
-      mkdir clang-calypso;
-      tar -xvf clang-calypso.tar.xz --strip 1 -C clang-calypso;
-      export CLANG_PREBUILT="$(pwd)/clang-calypso";
+    elif [ "${TRAVIS_OS_NAME}" = "osx" ]; then
+      wget -O clang-calypso.tar.xz https://github.com/Syniurge/clang/releases/download/v5.0/clang-5.0-calypso-osx.tar.xz;
     fi;
+    mkdir clang-calypso;
+    tar -xvf clang-calypso.tar.xz --strip 1 -C clang-calypso;
+    export CLANG_PREBUILT="$(pwd)/clang-calypso";
 
 install:
   - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
