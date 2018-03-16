@@ -697,7 +697,7 @@ if(LDC_WITH_LLD)
 endif()
 
 set(LDC_LINK_MANUALLY OFF)
-if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")))
+if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")))
     # On Unix-like systems, DMD and LDC will use the C compiler for linking, but
     # will pass on -L options prefixed by -Xlinker to directly forward them to
     # the underlying ld. Since there are some flags the GCC driver handles itself
