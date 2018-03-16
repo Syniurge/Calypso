@@ -20,6 +20,7 @@ matrix:
       #d: ldc-beta
       #env: LLVM_VERSION=6.0.0-5 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
     - os: osx
+      osx_image: xcode9.3beta
       d: ldc
       env: LLVM_VERSION=5.0.1 OPTS="-DBUILD_SHARED_LIBS=ON"
   allow_failures:
