@@ -557,7 +557,8 @@ set_target_properties(
     ARCHIVE_OUTPUT_NAME ldc
     LIBRARY_OUTPUT_NAME ldc
     RUNTIME_OUTPUT_NAME ldc
-    COMPILE_FLAGS "${LLVM_CXXFLAGS} ${LDC_CXXFLAGS} ${EXTRA_CXXFLAGS}"
+    # -fno-rtti added to avoid Undefined symbols "typeinfo for clang::DiagnosticConsumer" https://github.com/Syniurge/Calypso/pull/104
+    COMPILE_FLAGS "${LLVM_CXXFLAGS} ${LDC_CXXFLAGS} ${EXTRA_CXXFLAGS} -fno-rtti"
     LINK_FLAGS "${SANITIZE_LDFLAGS}"
 )
 
@@ -693,6 +694,10 @@ if(LDC_WITH_LLD)
         list(APPEND LDC_LINKERFLAG_LIST lldCOFF.lib lldCore.lib lldDriver.lib)
     else()
         set(LDC_LINKERFLAG_LIST "-llldCOFF;-llldCore;-llldDriver;${LDC_LINKERFLAG_LIST}")
+    endif()
+    if(APPLE)
+        # fix https://github.com/Syniurge/Calypso/issues/101 OSX build fails after update to llvm 5.0.1
+        set(LDC_LINKERFLAG_LIST "-lc++;${LDC_LINKERFLAG_LIST}")
     endif()
 endif()
 
