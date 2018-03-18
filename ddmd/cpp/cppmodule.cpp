@@ -822,15 +822,20 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
                     { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
         }
 
-        auto FirstOverload =
 #if defined(_MSC_VER)
-                *std::_Find_if_unchecked( // MSVC's find_if tries to assign a new value to First, which doesn't work
+        // MSVC's find_if tries to assign a new value to First, whose operator= is disabled
+        auto FirstOverload = R.begin();
+        {
+            auto _Last = R.end();
+            for (; FirstOverload != _Last; ++FirstOverload)
+                if (pred(*FirstOverload))
+                    break;
+        }
 #else
-                *std::find_if(
+        auto FirstOverload = std::find_if(R.begin(), R.end(), pred);
 #endif
-                    R.begin(), R.end(), pred);
-        assert(FirstOverload);
-        bool isFirstOverloadInScope = FirstOverload->getCanonicalDecl() == D->getCanonicalDecl();
+        assert(FirstOverload != R.end());
+        bool isFirstOverloadInScope = (*FirstOverload)->getCanonicalDecl() == D->getCanonicalDecl();
 
         bool wrapInTemp = spec &&
                     !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
