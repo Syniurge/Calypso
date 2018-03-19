@@ -186,7 +186,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ($
     #  * -Wgnu-redeclared-enum triggers for various frontend headers.
     append("-fno-rtti" LDC_CXXFLAGS) # CALYPSO
     append("-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-non-virtual-dtor" LDC_CXXFLAGS)
-    if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
+    if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang"))
         append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum" LDC_CXXFLAGS)
         if(CMAKE_BUILD_TYPE MATCHES "Debug")
             append("-fstandalone-debug" LDC_CXXFLAGS)
@@ -236,7 +236,7 @@ endif()
 set(SANITIZE_CXXFLAGS)
 set(SANITIZE_LDFLAGS)
 if(SANITIZE)
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
         append("-fsanitize=address" SANITIZE_CXXFLAGS)
         append("-fsanitize=address" SANITIZE_LDFLAGS)
     else()
@@ -272,7 +272,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 endif()
 # LLVM_CXXFLAGS may contain -Wno-maybe-uninitialized
 # which is gcc-only options
-if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+if((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
     string(REPLACE "-Wno-maybe-uninitialized " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
 endif()
 
@@ -526,7 +526,7 @@ endif()
 #
 set(TEST_COVERAGE OFF CACHE BOOL "instrument compiler for code coverage analysis")
 if(TEST_COVERAGE)
-    if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"))
+    if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
         append("-O0 -g -fprofile-arcs -ftest-coverage" EXTRA_CXXFLAGS)
         list(APPEND LLVM_LDFLAGS "-lgcov")
     else()
