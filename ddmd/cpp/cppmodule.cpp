@@ -497,21 +497,15 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     {
         if (!D->isUnion() && !CRD->isDependentType())
         {
-            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);;
-
-            auto MarkEmit = [&] (clang::FunctionDecl *FD) {
-                if (!FD)
-                    return;
-                InstantiateFunctionDefinition(S, FD);
-            };
+            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
             // Clang declares and defines implicit ctors/assignment operators lazily,
             // but before D's semantic passes we at least need to declare them
-            MarkEmit(S.LookupDefaultConstructor(_CRD));
+            S.LookupDefaultConstructor(_CRD);
             for (int i = 0; i < 2; i++)
                 S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0);
 
-            MarkEmit(S.LookupDestructor(_CRD));
+            S.LookupDestructor(_CRD);
 
             for (int i = 0; i < 2; i++)
                 for (int j = 0; j < 2; j++)

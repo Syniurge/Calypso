@@ -542,14 +542,15 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
 
     if (D->isInvalidDecl())
     {
-        assert(fd->parent->isTemplateInstance() && isCPP(fd->parent));
-        auto c_ti = static_cast<cpp::TemplateInstance*>(fd->parent);
-        c_ti->markInvalid();
+        if (fd->parent->isTemplateInstance() && isCPP(fd->parent)) {
+            auto c_ti = static_cast<cpp::TemplateInstance*>(fd->parent);
+            c_ti->markInvalid();
+        }
         return;
     }
 
     const clang::FunctionDecl *Def;
-    if (!D->isInvalidDecl() && D->hasBody(Def))
+    if (D->hasBody(Def))
     {
         Scope *sc2 = sc->push();
         sc2->func = fd;
