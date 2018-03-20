@@ -38,16 +38,30 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         return;
 
     if (D->hasDefinition()) {
+        auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
-        S.MarkVTableUsed(D->getLocation(), D);
 
-        for (auto s: *ad->members)
-            if (s->isFuncDeclaration() && isCPP(s)) {
-                auto fd = static_cast<::FuncDeclaration*>(s);
-                if (auto MD = dyn_cast<clang::CXXMethodDecl>(getFD(fd)))
-                    if (MD->isVirtual())
+        auto Key = Context.getCurrentKeyFunction(D);
+        const clang::FunctionDecl* Body;
+        if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body))) {
+            // As in C++, only mark virtual methods for codegen if the key method is defined
+            // If the definition isn't the current TU, assume that methods have been emitted
+            // by another TU.
+            S.MarkVTableUsed(D->getLocation(), D);
+
+            for (auto s: *ad->members)
+                if (s->isFuncDeclaration() && isCPP(s)) {
+                    auto fd = static_cast<::FuncDeclaration*>(s);
+                    auto MD = dyn_cast<clang::CXXMethodDecl>(getFD(fd));
+                    if (MD && MD->isVirtual())
                         MarkFunctionReferenced(fd);
-            }
+                }
+
+            if (ad->defaultCtor)
+                calypso.markSymbolReferenced(ad->defaultCtor);
+            if (ad->dtor)
+                calypso.markSymbolReferenced(ad->dtor);
+        }
 
         DeclReferencer declReferencer;
         auto sc = ad->_scope;

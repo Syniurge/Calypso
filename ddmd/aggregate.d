@@ -1044,14 +1044,6 @@ extern(C++) void markAggregateReferenced(AggregateDeclaration ad)
             if (auto blp = baseClass.sym.langPlugin())
                 blp.markSymbolReferenced(baseClass.sym);
 
-    if (auto lp = ad.langPlugin())
-    {
-        if (ad.defaultCtor)
-            lp.markSymbolReferenced(ad.defaultCtor);
-        if (ad.dtor)
-            lp.markSymbolReferenced(ad.dtor);
-    }
-
     void visitAggSyms(Type t)
     {
         switch (t.ty) {
