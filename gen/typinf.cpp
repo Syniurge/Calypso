@@ -36,6 +36,7 @@
 #include "scope.h"
 #include "template.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/classes.h"
 #include "gen/irstate.h"
 #include "gen/linkage.h"
@@ -417,7 +418,10 @@ public:
     b.push_uint(hasptrs);
 
     // function xdtor/xdtorti
-    b.push_funcptr(sd->dtor);
+    auto dtor = sd->dtor;
+    if (dtor && dtor->langPlugin() && !dtor->langPlugin()->codegen()->isEmitted(dtor))
+        dtor = nullptr; // CALYPSO HACK
+    b.push_funcptr(dtor);
 
     // function xpostblit
     FuncDeclaration *xpostblit = sd->postblit;
