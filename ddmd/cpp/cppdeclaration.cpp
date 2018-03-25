@@ -677,12 +677,16 @@ const clang::Decl *getCanonicalDecl(const clang::Decl *D)
     {
         // if the canonical decl is an out-of-line friend decl and the actual decl is declared, prefer the latter to the former
         // to ensure that it ends up in the proper module, not the friend decl parent's module
-        if (auto FD = dyn_cast<clang::FunctionDecl>(D)) {
-            for (auto Redecl: FD->redecls())
+        if (auto Func = dyn_cast<clang::FunctionDecl>(D)) {
+            for (auto Redecl: Func->redecls())
                 if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
                     return Redecl;
-        } else if (auto TD = dyn_cast<clang::RedeclarableTemplateDecl>(D)) {
-            for (auto Redecl: TD->redecls())
+        } else if (auto Tag = dyn_cast<clang::TagDecl>(D)) {
+            for (auto Redecl: Tag->redecls())
+                if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
+                    return Redecl;
+        } else if (auto Temp = dyn_cast<clang::RedeclarableTemplateDecl>(D)) {
+            for (auto Redecl: Temp->redecls())
                 if (Redecl->getFriendObjectKind() == clang::Decl::FOK_None)
                     return Redecl;
         }
