@@ -1819,7 +1819,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
         if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
             D = Spec->getSpecializedTemplate();
 
-        D = cast<clang::NamedDecl>(D->getCanonicalDecl());
+        D = cast<clang::NamedDecl>(const_cast<clang::Decl*>(getCanonicalDecl(D)));
         auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
 
         if (CTD)
