@@ -1,6 +1,6 @@
 project(runtime C)
 
-cmake_minimum_required(VERSION 2.8.9)
+cmake_minimum_required(VERSION 2.8.12)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -38,7 +38,7 @@ set(BUILD_BC_LIBS         OFF                                 CACHE BOOL   "Buil
 set(INCLUDE_INSTALL_DIR   ${CMAKE_INSTALL_PREFIX}/include/d   CACHE PATH   "Path to install D modules to")
 set(BUILD_SHARED_LIBS     AUTO                                CACHE STRING "Whether to build the runtime as a shared library (ON|OFF|BOTH)")
 set(D_FLAGS               -w                                  CACHE STRING "Runtime D compiler flags, separated by ';'")
-set(D_FLAGS_DEBUG         -g;-link-debuglib                   CACHE STRING "Runtime D compiler flags (debug libraries), separated by ';'")
+set(D_FLAGS_DEBUG         -g;-link-defaultlib-debug           CACHE STRING "Runtime D compiler flags (debug libraries), separated by ';'")
 set(D_FLAGS_RELEASE       -O3;-release                        CACHE STRING "Runtime D compiler flags (release libraries), separated by ';'")
 set(COMPILE_ALL_D_FILES_AT_ONCE ON                            CACHE BOOL   "Compile all D files for a lib in a single command line instead of separately")
 set(RT_ARCHIVE_WITH_LDC   AUTO                                CACHE STRING "Whether to archive the static runtime libs via LDC instead of CMake archiver")
@@ -113,11 +113,7 @@ if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
     if(NOT SHARED_LIBS_SUPPORTED)
         message(FATAL_ERROR "Shared libraries (BUILD_SHARED_LIBS) are only supported on Linux, macOS and FreeBSD for the time being.")
     endif()
-
-    # Only use the `-shared` lib suffix if static libs are generated too
-    if(NOT ${BUILD_SHARED_LIBS} STREQUAL "ON")
-        set(SHARED_LIB_SUFFIX "-shared")
-    endif()
+    set(SHARED_LIB_SUFFIX "-shared")
 endif()
 
 # Auto-detect C system libraries
@@ -134,7 +130,6 @@ endif()
 get_directory_property(PROJECT_PARENT_DIR DIRECTORY ${PROJECT_SOURCE_DIR} PARENT_DIRECTORY)
 set(RUNTIME_DIR ${PROJECT_SOURCE_DIR}/druntime CACHE PATH "druntime root directory")
 set(PHOBOS2_DIR ${PROJECT_SOURCE_DIR}/phobos CACHE PATH "Phobos root directory")
-set(PROFILERT_DIR ${PROJECT_SOURCE_DIR}/profile-rt CACHE PATH "profile-rt root directory")
 set(JITRT_DIR ${PROJECT_SOURCE_DIR}/jit-rt CACHE PATH "jit runtime root directory")
 set(CALYPSORT_DIR ${PROJECT_SOURCE_DIR}/calypso CACHE PATH "calypso-rt root directory")
 
@@ -151,14 +146,10 @@ list(REMOVE_ITEM DRUNTIME_D ${RUNTIME_DIR}/src/etc/linux/memoryerror.d)
 #        See PR #1917; partly fixed upstream.
 file(GLOB_RECURSE DRUNTIME_D_STDCPP ${RUNTIME_DIR}/src/core/stdcpp/*.d)
 list(REMOVE_ITEM DRUNTIME_D ${DRUNTIME_D_STDCPP})
-# remove all modules in gcstub/
-file(GLOB_RECURSE DRUNTIME_D_GCSTUB ${RUNTIME_DIR}/src/gcstub/*.d)
-list(REMOVE_ITEM DRUNTIME_D ${DRUNTIME_D_GCSTUB})
 # remove some modules in rt/
 list(REMOVE_ITEM DRUNTIME_D
     ${RUNTIME_DIR}/src/rt/alloca.d
     ${RUNTIME_DIR}/src/rt/llmath.d
-    ${RUNTIME_DIR}/src/rt/trace.d
 )
 # only include core/sys/ modules matching the platform
 file(GLOB_RECURSE DRUNTIME_D_BIONIC  ${RUNTIME_DIR}/src/core/sys/bionic/*.d)
@@ -259,19 +250,27 @@ file(GLOB_RECURSE CALYPSORT_D ${CALYPSORT_DIR}/*.d)
 # Add extra paths on Linux and disable linker arch mismatch warnings (like
 # DMD and GDC do). OS X doesn't need extra configuration due to the use of
 # fat binaries. Other Posixen might need to be added here.
-if("${TARGET_SYSTEM}" MATCHES "Linux|FreeBSD")
-    if(MULTILIB)
-        set(MULTILIB_ADDITIONAL_PATH         "\n        \"-L-L${CMAKE_BINARY_DIR}/lib${MULTILIB_SUFFIX}\",\n        \"-L--no-warn-search-mismatch\",")
-        set(MULTILIB_ADDITIONAL_INSTALL_PATH "\n        \"-L-L${CMAKE_INSTALL_PREFIX}/lib${MULTILIB_SUFFIX}\",\n        \"-L--no-warn-search-mismatch\",")
-    endif()
+if(MULTILIB AND NOT "${TARGET_SYSTEM}" MATCHES "APPLE")
+    set(MULTILIB_ADDITIONAL_PATH         "\n        \"-L-L${CMAKE_BINARY_DIR}/lib${MULTILIB_SUFFIX}\",\n        \"-L--no-warn-search-mismatch\",")
+    set(MULTILIB_ADDITIONAL_INSTALL_PATH "\n        \"-L-L${CMAKE_INSTALL_PREFIX}/lib${MULTILIB_SUFFIX}\",\n        \"-L--no-warn-search-mismatch\",")
+endif()
 
-    if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
-        if(MULTILIB)
-            set(SHARED_LIBS_RPATH "\n        \"-L-rpath=${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}:${CMAKE_BINARY_DIR}/lib${MULTILIB_SUFFIX}\",")
-        else()
-            set(SHARED_LIBS_RPATH "\n        \"-L-rpath=${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}\",")
-        endif()
+# Set the -rpath linker option when shared runtime libraries are built.
+# The installed config file doesn't use SHARED_LIBS_RPATH.
+if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
+    if(MULTILIB AND NOT "${TARGET_SYSTEM}" MATCHES "APPLE")
+        set(SHARED_LIBS_RPATH "\n        \"-L-Wl,-rpath,${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}:${CMAKE_BINARY_DIR}/lib${MULTILIB_SUFFIX}\",")
+    else()
+        set(SHARED_LIBS_RPATH "\n        \"-L-Wl,-rpath,${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}\",")
     endif()
+endif()
+
+# Only have either shared or static libs?
+# Then explicitly default to linking against them via default LDC switch.
+if(${BUILD_SHARED_LIBS} STREQUAL "ON")
+    set(ADDITIONAL_DEFAULT_LDC_SWITCHES ",\n        \"-link-defaultlib-shared\"")
+elseif(${BUILD_SHARED_LIBS} STREQUAL "OFF")
+    set(ADDITIONAL_DEFAULT_LDC_SWITCHES ",\n        \"-link-defaultlib-shared=false\"")
 endif()
 
 # Only generate the config files if this CMake project is embedded in the LDC CMake project.
@@ -323,15 +322,19 @@ if("${TARGET_SYSTEM}" MATCHES "MSVC")
     # We want to be able to link against all 4 C runtime variants (libcmt[d] / msvcrt[d]).
     string(REGEX REPLACE "(^| )[/-]M[TD]d?( |$)" "\\2" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
     append("/MT /Zl" CMAKE_C_FLAGS_RELEASE)
+    # warning C4100: unreferenced formal parameter
+    # warning C4127: conditional expression is constant
     # warning C4131: uses old-style declarator
     # warning C4206: nonstandard extension used: translation unit is empty
+    # warnings C42{44,67}: conversion from '...' to '...', possible loss of data
+    # warning C4245: conversion from '...' to '...', signed/unsigned mismatch
     # warning C4996: zlib uses 'deprecated' POSIX names
-    append("/wd4131 /wd4206 /wd4996" CMAKE_C_FLAGS_RELEASE)
+    append("/wd4100 /wd4127 /wd4131 /wd4206 /wd4244 /wd4245 /wd4267 /wd4996" CMAKE_C_FLAGS_RELEASE)
 endif()
 CHECK_INCLUDE_FILE(unistd.h HAVE_UNISTD_H)
 if (HAVE_UNISTD_H)
     # Needed for zlib
-    append("-DHAVE_UNISTD_H" CMAKE_C_FLAGS_RELEASE)
+    append("-DHAVE_UNISTD_H" CMAKE_C_FLAGS)
 endif()
 # 2) Set all other CMAKE_C_FLAGS variants to CMAKE_C_FLAGS_RELEASE
 set(variables
@@ -472,6 +475,7 @@ function(set_common_library_properties target is_shared)
         VERSION ${DMDFE_VERSION}
         SOVERSION ${DMDFE_PATCH_VERSION}
         LINKER_LANGUAGE C
+        MACOSX_RPATH ON
     )
     if(RT_ARCHIVE_WITH_LDC AND NOT is_shared)
         set_target_properties(${target} PROPERTIES LINKER_LANGUAGE D)
@@ -695,22 +699,6 @@ macro(build_runtime_variants d_flags c_flags ld_flags path_suffix outlist_target
     )
 endmacro()
 
-# Builds static and/or shared debug+release druntime/Phobos + static profile-rt.
-macro(build_all_runtime_variants d_flags c_flags ld_flags path_suffix outlist_targets)
-    build_runtime_variants("${d_flags}" "${c_flags}" "${ld_flags}" "${path_suffix}" ${outlist_targets})
-
-    if(LDC_WITH_PGO)
-        # static profile-rt
-        build_profile_runtime("${d_flags};${D_FLAGS};${D_FLAGS_RELEASE}" "${c_flags}" "${ld_flags}" "" "${path_suffix}" ${outlist_targets})
-        get_target_suffix("" "${path_suffix}" target_suffix)
-        set_common_library_properties(ldc-profile-rt${target_suffix} OFF)
-    endif()
-endmacro()
-
-
-# Setup the build of profile-rt
-include(profile-rt/DefineBuildProfileRT.cmake)
-
 # Setup the build of jit runtime
 include(jit-rt/DefineBuildJitRT.cmake)
 
@@ -726,8 +714,8 @@ if(MULTILIB AND "${TARGET_SYSTEM}" MATCHES "APPLE")
     set(hostsuffix "${LIB_SUFFIX}${HOST_BITNESS}")
 
     set(libtargets)
-    build_all_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${hostsuffix}" libtargets)
-    build_all_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" libtargets)
+    build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${hostsuffix}" libtargets)
+    build_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" libtargets)
 
     # Only build the host version of the jit runtime due to LLVM dependency.
     set(libtargets_jit)
@@ -739,7 +727,7 @@ if(MULTILIB AND "${TARGET_SYSTEM}" MATCHES "APPLE")
 
     # KLUDGE: Cannot use `$<TARGET_LINKER_FILE:target>` in custom command.
     # Set up the list of generated libs (without 'lib' prefix) to be merged manually.
-    set(libs_to_install ldc-profile-rt.a)
+    set(libs_to_install)
     if(NOT ${BUILD_SHARED_LIBS} STREQUAL "ON")
         list(APPEND libs_to_install druntime-ldc.a druntime-ldc-debug.a
                                     phobos2-ldc.a  phobos2-ldc-debug.a
@@ -760,21 +748,31 @@ if(MULTILIB AND "${TARGET_SYSTEM}" MATCHES "APPLE")
         add_custom_command(
             OUTPUT  ${final_path}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}
-            COMMAND "lipo"
-            ARGS    ${multi_path} ${host_path} -create -output ${final_path}
+            COMMAND lipo ${multi_path} ${host_path} -create -output ${final_path}
             DEPENDS ${libtargets}
         )
 
         set(target_name "")
+        set(lib_extension "")
         get_filename_component(target_name ${lib} NAME_WE)
+        get_filename_component(lib_extension ${lib} EXT)
+
         add_custom_target(${target_name} ALL DEPENDS ${final_path})
+
+        # For merged dylibs, set install_name to "@rpath/<filename>".
+        if(${lib_extension} STREQUAL ".dylib")
+            add_custom_command(
+                TARGET ${target_name} POST_BUILD
+                COMMAND install_name_tool -id "@rpath/lib${lib}" ${final_path}
+            )
+        endif()
 
         install(FILES       ${final_path}
                 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX})
     endforeach()
 else()
     set(libs_to_install)
-    build_all_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" libs_to_install)
+    build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" libs_to_install)
 
     # Only build the host version of the jit runtime due to LLVM dependency.
     set(libtargets_jit)
@@ -784,7 +782,7 @@ else()
 
     # don't add multilib targets to libs_to_install
     if(MULTILIB)
-        build_all_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" dummy)
+        build_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" dummy)
     endif()
 
     foreach(libname ${libs_to_install})
@@ -1025,31 +1023,4 @@ if(MULTILIB AND ${HOST_BITNESS} EQUAL 64)
 endif()
 
 # Add the standalone druntime tests.
-# TODO: Add test/excetions and test/init_fini.
-if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
-    if(MULTILIB AND "${TARGET_SYSTEM}" MATCHES "APPLE")
-        # KLUDGE: The library target is a custom command for multilib builds (lipo),
-        # so cannot use TARGET_FILE directly. Should stash away that name instead.
-        set(druntime_path "${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/libdruntime-ldc${SHARED_LIB_SUFFIX}.dylib")
-    else()
-        set(druntime_path "$<TARGET_FILE:druntime-ldc${SHARED_LIB_SUFFIX}>")
-    endif()
-    set(outdir ${PROJECT_BINARY_DIR}/druntime-test-shared)
-
-    add_test(NAME clean-druntime-test-shared
-        COMMAND ${CMAKE_COMMAND} -E remove_directory ${outdir})
-
-    if("${TARGET_SYSTEM}" MATCHES "FreeBSD")
-        set(linkflags "")
-    else()
-        set(linkflags "LINKDL=-L-ldl")
-    endif()
-
-    add_test(NAME druntime-test-shared
-        COMMAND make -C ${PROJECT_SOURCE_DIR}/druntime/test/shared
-            ROOT=${outdir} DMD=${LDMD_EXE_FULL} MODEL=default DRUNTIMESO=${druntime_path}
-            CFLAGS=-Wall\ -Wl,-rpath,${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX} ${linkflags}
-    )
-
-    set_tests_properties(druntime-test-shared PROPERTIES DEPENDS clean-druntime-test-shared)
-endif()
+include(StandaloneDRuntimeTests)

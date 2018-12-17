@@ -262,14 +262,8 @@ public:
       // adding more control flow.
       if (result && result->type->ty != Tvoid &&
           !result->definedInFuncEntryBB()) {
-        if (result->isLVal()) {
-          LLValue *copy = DtoAlloca(result->type);
-          DtoMemCpy(copy, DtoLVal(result));
-          result = new DLValue(result->type, copy);
-        } else {
-          LLValue *copy = DtoAllocaDump(result);
-          result = new DLValue(result->type, copy);
-        }
+        LLValue *copy = DtoAllocaDump(result);
+        result = new DLValue(result->type, copy);
       }
 
       llvm::BasicBlock *endbb = p->insertBB("toElem.success");
@@ -1056,23 +1050,20 @@ public:
     assert(!isSpecialRefVar(vd) && "Code not expected to handle special ref "
                                    "vars, although it can easily be made to.");
 
-    LLValue *v;
     const auto ident = p->func()->decl->ident;
     if (ident == Id::ensure || ident == Id::require) {
       Logger::println("contract this exp");
-      v = DtoBitCast(p->func()->nestArg, DtoType(e->type)->getPointerTo());
+      LLValue *v = DtoBitCast(p->func()->nestArg, DtoType(e->type));
+      result = new DImValue(e->type, v);
     } else if (vd->toParent2() != p->func()->decl) {
       Logger::println("nested this exp");
       result = DtoNestedVariable(e->loc, e->type, vd, e->type->ty == Tstruct);
-      return;
     } else {
       Logger::println("normal this exp");
-      v = p->func()->thisArg;
-      auto thisval = new DLValue(p->func()->decl->vthis->type, v);
+      LLValue *v = p->func()->thisArg;
+      auto thisval = new DLValue(p->func()->decl->vthis->type, v); // CALYPSO LDC 1.8 NOTE: new line was result = new DLValue(e->type, DtoBitCast(v, DtoPtrToType(e->type)));
       result = DtoCast(e->loc, thisval, e->type); // CALYPSO cast thisArg to the actual ThisExp type (super needs to be adjusted for DCXX classes)
-      return;
     }
-    result = new DLValue(e->type, DtoBitCast(v, DtoPtrToType(e->type)));
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -1309,9 +1300,6 @@ public:
         llvm_unreachable("Unsupported floating point comparison operator.");
       }
       eval = p->ir->CreateFCmp(cmpop, DtoRVal(l), DtoRVal(r));
-    } else if (t->ty == Tsarray || t->ty == Tarray) {
-      Logger::println("static or dynamic array");
-      eval = DtoArrayCompare(e->loc, e->op, l, r);
     } else if (t->ty == Taarray) {
       eval = LLConstantInt::getFalse(gIR->context());
     } else if (t->ty == Tdelegate) {
@@ -1651,7 +1639,9 @@ public:
       } else if (e->e1->op == TOKvar) {
         if (auto vd = static_cast<VarExp *>(e->e1)->var->isVarDeclaration()) {
           if (vd->onstack) {
-            DtoFinalizeClass(e->loc, DtoRVal(dval));
+            assert(vd->scopeClassType);
+            const auto cd = vd->scopeClassType->sym->isClassDeclaration();
+            DtoFinalizeScopeClass(e->loc, DtoRVal(dval), cd);
             onstack = true;
           }
         }
@@ -1701,7 +1691,7 @@ public:
     auto &PGO = gIR->funcGen().pgo;
     PGO.setCurrentStmt(e);
 
-    if (!global.params.useAssert)
+    if (global.params.useAssert != CHECKENABLEon)
       return;
 
     // condition
@@ -1733,7 +1723,7 @@ public:
      */
     DValue *const msg = e->msg ? toElemDtor(e->msg) : nullptr;
     Module *const module = p->func()->decl->getModule();
-    if (global.params.betterC) {
+    if (global.params.checkAction == CHECKACTION_C) {
       const auto cMsg =
           msg ? DtoArrayPtr(msg) // assuming `msg` is null-terminated, like DMD
               : DtoConstCString(e->e1->toChars());
@@ -2166,7 +2156,7 @@ public:
       DtoStore(DtoRVal(slice), DtoLVal(result));
     } else {
       // append element
-      DtoCatAssignElement(e->loc, e1type, result, e->e2);
+      DtoCatAssignElement(e->loc, result, e->e2);
     }
   }
 
@@ -2223,7 +2213,7 @@ public:
         // function. Happens with anonymous functions.
         cval = funcGen.nestedVar;
       } else if (irfn.nestArg) {
-        cval = DtoLoad(irfn.nestArg);
+        cval = irfn.nestArg;
       } else if (irfn.thisArg) {
         AggregateDeclaration *ad = irfn.decl->isMember2();
         if (!ad || !ad->vthis) {

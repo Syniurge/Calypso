@@ -29,7 +29,7 @@
 
 #include "driver/cache.h"
 
-#include "ddmd/errors.h"
+#include "dmd/errors.h"
 #include "driver/cache_pruning.h"
 #include "driver/cl_options.h"
 #include "driver/cl_options_sanitizers.h"
@@ -339,7 +339,11 @@ void calculateModuleHash(llvm::Module *m, llvm::SmallString<32> &str) {
   outputIR2ObjRelevantCmdlineArgs(hash_os);
   outputIR2ObjRelevantEnvironmentOpts(hash_os);
 
+#if LDC_LLVM_VER >= 700
+  llvm::WriteBitcodeToFile(*m, hash_os);
+#else
   llvm::WriteBitcodeToFile(m, hash_os);
+#endif
   hash_os.resultAsString(str);
   IF_LOG Logger::println("Module's LLVM bitcode hash is: %s", str.c_str());
 }

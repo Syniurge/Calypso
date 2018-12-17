@@ -23,6 +23,7 @@
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/nested.h"
+#include "gen/optimizer.h"
 #include "gen/rttibuilder.h"
 #include "gen/runtime.h"
 #include "gen/structs.h"
@@ -266,6 +267,50 @@ void DtoFinalizeClass(Loc &loc, LLValue *inst) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void DtoFinalizeScopeClass(Loc &loc, LLValue *inst, ClassDeclaration *cd) {
+  if (!isOptimizationEnabled()) {
+    DtoFinalizeClass(loc, inst);
+    return;
+  }
+
+  assert(cd);
+  // As of 2.077, the front-end doesn't emit the implicit delete() for C++
+  // classes, so this code assumes D classes.
+  assert(!cd->isCPPclass());
+
+  bool hasDtor = false;
+  for (; cd; cd = cd->baseClass) {
+    if (cd->dtor) {
+      hasDtor = true;
+      break;
+    }
+  }
+
+  if (hasDtor) {
+    DtoFinalizeClass(loc, inst);
+    return;
+  }
+
+  // no dtors => only finalize (via druntime call) if monitor is set,
+  // see https://github.com/ldc-developers/ldc/issues/2515
+  llvm::BasicBlock *ifbb = gIR->insertBB("if");
+  llvm::BasicBlock *endbb = gIR->insertBBAfter(ifbb, "endif");
+
+  const auto monitor = DtoLoad(DtoGEPi(inst, 0, 1), ".monitor");
+  const auto hasMonitor =
+      gIR->ir->CreateICmp(llvm::CmpInst::ICMP_NE, monitor,
+                          getNullValue(monitor->getType()), ".hasMonitor");
+  llvm::BranchInst::Create(ifbb, endbb, hasMonitor, gIR->scopebb());
+
+  gIR->scope() = IRScope(ifbb);
+  DtoFinalizeClass(loc, inst);
+  gIR->ir->CreateBr(endbb);
+
+  gIR->scope() = IRScope(endbb);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
   IF_LOG Logger::println("DtoCastClass(%s, %s)", val->type->toChars(),
                          _to->toChars());
@@ -359,11 +404,12 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
     return DtoAggregateDValue(_to->toBasetype(), v); // CALYPSO
   }
 
-  if (fc->sym->cpp) {
+  if (fc->sym->classKind == ClassKind::cpp) {
     Logger::println("C++ class/interface cast");
     auto tcd = tsym->isClassDeclaration();
-    LLValue *v = (tcd && tcd->cpp) ? DtoBitCast(DtoRVal(val), toType) // CALYPSO
-                              : LLConstant::getNullValue(toType);
+    LLValue *v = tcd && tcd->classKind == ClassKind::cpp // CALYPSO
+                     ? DtoBitCast(DtoRVal(val), toType)
+                     : LLConstant::getNullValue(toType);
     return new DImValue(_to, v);
   }
 

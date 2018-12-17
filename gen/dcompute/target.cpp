@@ -9,10 +9,10 @@
 
 #if LDC_LLVM_SUPPORTED_TARGET_SPIRV || LDC_LLVM_SUPPORTED_TARGET_NVPTX
 
-#include "ddmd/dsymbol.h"
-#include "ddmd/mars.h"
-#include "ddmd/module.h"
-#include "ddmd/scope.h"
+#include "dmd/dsymbol.h"
+#include "dmd/mars.h"
+#include "dmd/module.h"
+#include "dmd/scope.h"
 #include "driver/linker.h"
 #include "driver/toobj.h"
 #include "driver/cl_options.h"
@@ -36,9 +36,10 @@ void DComputeTarget::doCodeGen(Module *m) {
 void DComputeTarget::emit(Module *m) {
   // Reset the global ABI to the target's ABI. Necessary because we have
   // multiple ABI we are trying to target. Also reset gIR. These are both
-  // reused. Somewhat of a HACK.
+  // reused. MAJOR HACK.
   gABI = abi;
   gIR = _ir;
+  gTargetMachine = targetMachine;
   doCodeGen(m);
 }
 
@@ -52,7 +53,6 @@ void DComputeTarget::writeModule() {
 
   const char *path = FileName::combine(global.params.objdir, os.str().c_str());
 
-  setGTargetMachine();
   ::writeModule(&_ir->module, path);
 
   delete _ir;

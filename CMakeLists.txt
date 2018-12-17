@@ -52,11 +52,11 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.7.0") # May be overridden by git hash tag
+set(LDC_VERSION "1.8.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   77)
-set(DMDFE_FIX_LEVEL       1) # Comment out if not used
+set(DMDFE_PATCH_VERSION   78)
+set(DMDFE_FIX_LEVEL       3) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
 if(DEFINED DMDFE_FIX_LEVEL)
@@ -89,7 +89,7 @@ if(D_VERSION EQUAL 1)
     message(FATAL_ERROR "D version 1 is no longer supported.
 Please consider using D version 2 or checkout the 'd1' git branch for the last version supporting D version 1.")
 elseif(D_VERSION EQUAL 2)
-    set(DDMDFE_PATH ddmd)
+    set(DDMDFE_PATH dmd)
     set(LDC_EXE ldc2)
     set(LDMD_EXE ldmd2)
     set(LDCPROFDATA_EXE ldc-profdata)
@@ -208,17 +208,8 @@ elseif(MSVC)
     append("/GR- /EHs-c-" CMAKE_CXX_FLAGS)
     append("/D_HAS_EXCEPTIONS=0" CMAKE_CXX_FLAGS)
 
-    # warning C4018: signed/unsigned mismatch
-    # warning C4101: unreferenced local variable
-    # warning C4102: unreferenced label
-    # warning C4146: unary minus operator applied to unsigned type, result still unsigned
-    # warning C4201: nonstandard extension used: nameless struct/union
-    # warnings C4244 and C4267: conversion from '...' to '...', possible loss of data
-    # warnings C4456-4459: declaration of '...' hides ...
-    # warning C4624: destructor was implicitly defined as deleted because a base class destructor is inaccessible or deleted
-    # warning C4800: forcing value to bool 'true' or 'false' (performance warning)
-    # warning C4996: we're not using Microsoft's secure stringOp_s() functions
-    append("/wd4018 /wd4101 /wd4102 /wd4146 /wd4201 /wd4244 /wd4267 /wd4456 /wd4457 /wd4458 /wd4459 /wd4624 /wd4800 /wd4996" LDC_CXXFLAGS)
+    # disable warning C4201: nonstandard extension used: nameless struct/union
+    append("/wd4201" LDC_CXXFLAGS)
 endif()
 # Append -mminimal-toc for gcc 4.0.x - 4.5.x on ppc64
 if( CMAKE_COMPILER_IS_GNUCXX
@@ -326,6 +317,7 @@ file(GLOB IR_HDR ir/*.h)
 set(DRV_SRC
     driver/cache.cpp
     driver/cl_options.cpp
+    driver/cl_options_instrumentation.cpp
     driver/cl_options_sanitizers.cpp
     driver/cl_options-llvm.cpp
     driver/codegenerator.cpp
@@ -340,12 +332,14 @@ set(DRV_SRC
     driver/linker-gcc.cpp
     driver/linker-msvc.cpp
     driver/main.cpp
+    driver/plugins.cpp
     ${CMAKE_BINARY_DIR}/driver/ldc-version.cpp
 )
 set(DRV_HDR
     driver/cache.h
     driver/cache_pruning.h
     driver/cl_options.h
+    driver/cl_options_instrumentation.h
     driver/cl_options_sanitizers.h
     driver/cl_options-llvm.h
     driver/codegenerator.h
@@ -355,6 +349,7 @@ set(DRV_HDR
     driver/ldc-version.h
     driver/archiver.h
     driver/linker.h
+    driver/plugins.h
     driver/targetmachine.h
     driver/toobj.h
     driver/tool.h
@@ -397,23 +392,16 @@ source_group("Source Files" FILES ${DRV_SRC_D})
 include(HandleLTOPGOBuildOptions)
 
 #
-# Enable PGO if supported for this platform.
-#
-set(LDC_WITH_PGO True)  # must be a valid Python boolean constant (case sensitive)
-message(STATUS "Building LDC with PGO support")
-append("-DLDC_WITH_PGO" LDC_CXXFLAGS)
-
-#
 # Enable Dynamic compilation if supported for this platform and LLVM version.
-# LLVM >= 3.9 is required
 #
 set(LDC_DYNAMIC_COMPILE "AUTO" CACHE STRING "Support dynamic compilation (True|False). Enabled by default.")
 if(LDC_DYNAMIC_COMPILE STREQUAL "AUTO")
     set(LDC_DYNAMIC_COMPILE False)  # must be a valid Python boolean constant (case sensitive)
-    if (NOT (LDC_LLVM_VER LESS 400))
+    if (NOT (LDC_LLVM_VER LESS 500))
         set(LDC_DYNAMIC_COMPILE True)
         message(STATUS "Building LDC with dynamic compilation support")
         add_definitions(-DLDC_DYNAMIC_COMPILE)
+        add_definitions(-DLDC_DYNAMIC_COMPILE_API_VERSION=1)
     endif()
 endif()
 
@@ -696,6 +684,24 @@ if(LDC_WITH_LLD)
     endif()
 endif()
 
+# Plugin support
+if(UNIX)
+    set(LDC_ENABLE_PLUGINS_DEFAULT ON)
+else()
+    set(LDC_ENABLE_PLUGINS_DEFAULT OFF)
+endif()
+set(LDC_ENABLE_PLUGINS ${LDC_ENABLE_PLUGINS_DEFAULT} CACHE BOOL "Build LDC with plugin support (increases binary size)")
+if(LDC_ENABLE_PLUGINS)
+    message(STATUS "Building LDC with plugin support (LDC_ENABLE_PLUGINS=ON)")
+    add_definitions(-DLDC_ENABLE_PLUGINS)
+    # For plugin support, we need to link with --export-dynamic on Unix.
+    if(UNIX AND NOT APPLE)
+        set(LDC_LINKERFLAG_LIST "${LDC_LINKERFLAG_LIST};-Wl,--export-dynamic")
+    endif()
+else()
+    message(STATUS "Building LDC without plugin support (LDC_ENABLE_PLUGINS=OFF)")
+endif()
+
 set(LDC_LINK_MANUALLY OFF)
 if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")))
     # On Unix-like systems, DMD and LDC will use the C compiler for linking, but
@@ -873,19 +879,17 @@ if (NOT (LDC_LLVM_VER LESS 309) AND LDC_INSTALL_LTOPLUGIN)
 endif()
 
 #
-# Locate ASan and other runtime libraries, and copy them to our lib folder
+# Locate ASan and other LLVM compiler-rt libraries, and copy them to our lib folder
 # Location is LLVM_LIBRARY_DIRS/clang/<version>/lib/<OS>/ , for example LLVM_LIBRARY_DIRS/clang/4.0.0/lib/darwin/
 #
-if(APPLE)
+if(APPLE OR WIN32)
     set(LDC_INSTALL_LLVM_RUNTIME_LIBS_DEFAULT ON)
 else()
     set(LDC_INSTALL_LLVM_RUNTIME_LIBS_DEFAULT OFF)
 endif()
-set(LDC_INSTALL_LLVM_RUNTIME_LIBS ${LDC_INSTALL_LLVM_RUNTIME_LIBS_DEFAULT} CACHE BOOL "Copy/install runtime libraries (ASan, libFuzzer) from LLVM/Clang into LDC lib dir when available.")
+set(LDC_INSTALL_LLVM_RUNTIME_LIBS ${LDC_INSTALL_LLVM_RUNTIME_LIBS_DEFAULT} CACHE BOOL "Copy/install LLVM compiler-rt libraries (ASan, libFuzzer, ...) from LLVM/Clang into LDC lib dir when available.")
 function(copy_compilerrt_lib llvm_lib_name ldc_lib_name fixup_dylib)
-    # The LLVM version string can contain the SVN revision number, so cut that off
-    string(SUBSTRING "${LLVM_VERSION_STRING}" 0 5 LLVM_VERSION_STRING_CROPPED)
-    set(llvm_lib_path ${LLVM_LIBRARY_DIRS}/clang/${LLVM_VERSION_STRING_CROPPED}/lib/${llvm_lib_name})
+    set(llvm_lib_path ${LLVM_LIBRARY_DIRS}/clang/${LLVM_VERSION_BASE_STRING}/lib/${llvm_lib_name})
     if(EXISTS ${llvm_lib_path})
         message(STATUS "Copying runtime library: ${llvm_lib_path} --> ${ldc_lib_name}")
         set(ldc_lib_path ${PROJECT_BINARY_DIR}/lib${LIB_SUFFIX}/${ldc_lib_name})
@@ -898,19 +902,41 @@ function(copy_compilerrt_lib llvm_lib_name ldc_lib_name fixup_dylib)
         message(STATUS "Not found: ${llvm_lib_path}")
     endif()
 endfunction()
+include(CheckTypeSize)
+check_type_size(void* ptr_size)
 if (LDC_INSTALL_LLVM_RUNTIME_LIBS)
     # Locate LLVM sanitizer runtime libraries, and copy them to our lib folder
     # Note: libFuzzer is part of compiler-rt version >= 6.0, but was part of LLVM =< 5.0
 
     if(APPLE)
         copy_compilerrt_lib("darwin/libclang_rt.asan_osx_dynamic.dylib" "libldc_rt.asan_osx_dynamic.dylib" TRUE)
+        copy_compilerrt_lib("darwin/libclang_rt.osx.a"                  "libldc_rt.osx.a"                  FALSE)
+        copy_compilerrt_lib("darwin/libclang_rt.profile_osx.a"          "libldc_rt.profile_osx.a"          FALSE)
         if(NOT (LDC_LLVM_VER LESS 600))
             copy_compilerrt_lib("darwin/libclang_rt.fuzzer_osx.a" "libldc_rt.fuzzer_osx.a" FALSE)
+            copy_compilerrt_lib("darwin/libclang_rt.xray_osx.a"   "libldc_rt.xray_osx.a"   FALSE)
         endif()
     elseif(UNIX)
-        copy_compilerrt_lib("linux/libclang_rt.asan-x86_64.a" "libldc_rt.asan-x86_64.a" FALSE)
+        copy_compilerrt_lib("linux/libclang_rt.asan-x86_64.a"     "libldc_rt.asan-x86_64.a"     FALSE)
+        copy_compilerrt_lib("linux/libclang_rt.builtins-x86_64.a" "libldc_rt.builtins-x86_64.a" FALSE)
+        copy_compilerrt_lib("linux/libclang_rt.profile-x86_64.a"  "libldc_rt.profile-x86_64.a"  FALSE)
+        if(NOT (LDC_LLVM_VER LESS 500))
+            copy_compilerrt_lib("linux/libclang_rt.xray-x86_64.a"   "libldc_rt.xray-x86_64.a"   FALSE)
+        endif()
         if(NOT (LDC_LLVM_VER LESS 600))
             copy_compilerrt_lib("linux/libclang_rt.fuzzer-x86_64.a" "libldc_rt.fuzzer-x86_64.a" FALSE)
+        endif()
+    elseif(WIN32)
+        set(compilerrt_arch_suffix "x86_64")
+        if(${ptr_size} EQUAL 4)
+            set(compilerrt_arch_suffix "i386")
+        endif()
+        copy_compilerrt_lib("windows/clang_rt.asan-${compilerrt_arch_suffix}.lib"     "ldc_rt.asan.lib"     FALSE)
+        copy_compilerrt_lib("windows/clang_rt.builtins-${compilerrt_arch_suffix}.lib" "ldc_rt.builtins.lib" FALSE)
+        copy_compilerrt_lib("windows/clang_rt.profile-${compilerrt_arch_suffix}.lib"  "ldc_rt.profile.lib"  FALSE)
+        if(NOT (LDC_LLVM_VER LESS 600))
+            copy_compilerrt_lib("windows/clang_rt.fuzzer-${compilerrt_arch_suffix}.lib" "ldc_rt.fuzzer.lib" FALSE)
+            copy_compilerrt_lib("windows/clang_rt.xray-${compilerrt_arch_suffix}.lib"   "ldc_rt.xray.lib"   FALSE)
         endif()
     endif()
 

@@ -146,9 +146,13 @@ class AssemblyAnnotator : public AssemblyAnnotationWriter {
     return "";
   }
 
+  const llvm::DataLayout &DL;
+
 public:
+  AssemblyAnnotator(const llvm::DataLayout &dl) : DL(dl) {}
+
   void emitFunctionAnnot(const Function *F,
-                         formatted_raw_ostream &os) LLVM_OVERRIDE {
+                         formatted_raw_ostream &os) override {
     os << "; [#uses = " << F->getNumUses() << ']';
 
     // show demangled name
@@ -159,8 +163,7 @@ public:
     os << '\n';
   }
 
-  void printInfoComment(const Value &val,
-                        formatted_raw_ostream &os) LLVM_OVERRIDE {
+  void printInfoComment(const Value &val, formatted_raw_ostream &os) override {
     bool padding = false;
     if (!val.getType()->isVoidTy()) {
       os.PadToColumn(50);
@@ -173,7 +176,7 @@ public:
         os << ", type = " << *val.getType();
       } else if (isa<AllocaInst>(&val)) {
         os << ", size/byte = "
-           << gDataLayout->getTypeAllocSize(val.getType()->getContainedType(0));
+           << DL.getTypeAllocSize(val.getType()->getContainedType(0));
       }
       os << ']';
     }
@@ -356,6 +359,13 @@ void writeModule(llvm::Module *m, const char *filename) {
             errinfo.message().c_str());
       fatal();
     }
+
+#if LDC_LLVM_VER >= 700
+    auto &M = *m;
+#else
+    auto M = m;
+#endif
+
     if (opts::isUsingThinLTO()) {
 #if LDC_LLVM_VER >= 309
       Logger::println("Creating module summary for ThinLTO");
@@ -374,11 +384,11 @@ void writeModule(llvm::Module *m, const char *filename) {
           *m, /* function freq callback */ nullptr, &PSI);
 #endif
 
-      llvm::WriteBitcodeToFile(m, bos, true, &moduleSummaryIndex,
+      llvm::WriteBitcodeToFile(M, bos, true, &moduleSummaryIndex,
                                /* generate ThinLTO hash */ true);
 #endif
     } else {
-      llvm::WriteBitcodeToFile(m, bos);
+      llvm::WriteBitcodeToFile(M, bos);
     }
   }
 
@@ -393,7 +403,7 @@ void writeModule(llvm::Module *m, const char *filename) {
             errinfo.message().c_str());
       fatal();
     }
-    AssemblyAnnotator annotator;
+    AssemblyAnnotator annotator(m->getDataLayout());
     m->print(aos, &annotator);
   }
 

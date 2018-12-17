@@ -281,7 +281,6 @@ llvm::GetElementPtrInst *DtoGEP(LLValue *ptr, llvm::ArrayRef<LLValue *> indices,
                                 bool inBounds, const char *name,
                                 llvm::BasicBlock *bb) {
   LLPointerType *p = isaPointer(ptr);
-  (void)p;
   assert(p && "GEP expects a pointer type");
   auto gep = llvm::GetElementPtrInst::Create(
       p->getElementType(), ptr, indices, name, bb ? bb : gIR->scopebb());
@@ -350,7 +349,11 @@ void DtoMemCpy(LLValue *dst, LLValue *src, LLValue *nbytes, unsigned align) {
   dst = DtoBitCast(dst, VoidPtrTy);
   src = DtoBitCast(src, VoidPtrTy);
 
+#if LDC_LLVM_VER >= 700
+  gIR->ir->CreateMemCpy(dst, align, src, align, nbytes, false /*isVolatile*/);
+#else
   gIR->ir->CreateMemCpy(dst, src, nbytes, align, false /*isVolatile*/);
+#endif
 }
 
 void DtoMemCpy(LLValue *dst, LLValue *src, bool withPadding, unsigned align) {

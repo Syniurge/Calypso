@@ -18,10 +18,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ddmd/declaration.h"
-#include "ddmd/identifier.h"
-#include "ddmd/module.h"
-#include "ddmd/template.h"
+#include "dmd/declaration.h"
+#include "dmd/identifier.h"
+#include "dmd/module.h"
+#include "dmd/template.h"
 #include "gen/dcompute/target.h"
 #include "gen/logger.h"
 #include "gen/recursivevisitor.h"
@@ -66,6 +66,8 @@ struct DComputeSemanticAnalyser : public StoppableVisitor {
     }
     return false;
   }
+
+  using StoppableVisitor::visit;
 
   void visit(InterfaceDeclaration *decl) override {
     decl->error("interfaces and classes not allowed in `@compute` code");
@@ -169,7 +171,8 @@ struct DComputeSemanticAnalyser : public StoppableVisitor {
     stop = true;
   }
   void visit(SwitchStatement *e) override {
-    if (!e->condition->type->isintegral()) {
+    if (e->condition->op == TOKcall &&
+        static_cast<CallExp *>(e->condition)->f->ident == Id::__switch) {
       e->error("cannot `switch` on strings in `@compute` code");
       stop = true;
     }

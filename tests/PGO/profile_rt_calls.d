@@ -1,5 +1,7 @@
 // Tests runtime profile-rt access.
 
+// REQUIRES: PGO_RT
+
 // RUN: %ldc -fprofile-instr-generate=%t.profraw -run %s
 
 import ldc.profile;
@@ -15,8 +17,6 @@ bool notinstrumented(bool a, bool b) {
 }
 
 extern(C) void getdataprofile() {
-    assert( getData("unknown function") == null );
-    assert( getData("getdataprofile") != null );
     assert( getData!foo != null );
     assert( getData!fooC != null );
     assert( getData!fooCpp != null );

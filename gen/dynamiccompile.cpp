@@ -26,6 +26,8 @@
 
 namespace {
 
+enum { ApiVersion = LDC_DYNAMIC_COMPILE_API_VERSION };
+
 const char *DynamicCompileModulesHeadName = "dynamiccompile_modules_head";
 
 llvm::GlobalValue *getPredefinedSymbol(llvm::Module &module,
@@ -189,47 +191,39 @@ void fixRtModule(llvm::Module &newModule,
   // Replace call to thunks in jitted code with direct calls to functions
   for (auto &&fun : newModule.functions()) {
     iterateFuncInstructions(fun, [&](llvm::Instruction &instr) -> bool {
-      if (auto call = llvm::dyn_cast<llvm::CallInst>(&instr)) {
-        auto callee = call->getCalledValue();
-        assert(nullptr != callee);
-        auto it = thunkFun2func.find(callee->getName());
-        if (thunkFun2func.end() != it) {
-          auto realFunc = newModule.getFunction(it->second);
-          assert(nullptr != realFunc);
-          call->setCalledFunction(realFunc);
+      for (auto &op : instr.operands()) {
+        auto val = op.get();
+        if (auto callee = llvm::dyn_cast<llvm::Function>(val)) {
+          auto it = thunkFun2func.find(callee->getName());
+          if (thunkFun2func.end() != it) {
+            auto realFunc = newModule.getFunction(it->second);
+            assert(nullptr != realFunc);
+            op.set(realFunc);
+          }
         }
       }
       return false;
     });
   }
 
-  int objectsFixed = 0;
-  for (auto &&obj : newModule.globals()) {
-    auto it = thunkVar2func.find(obj.getName());
-    if (thunkVar2func.end() != it) {
-      if (obj.hasInitializer()) {
-        auto func = newModule.getFunction(it->second);
-        assert(nullptr != func);
-        obj.setConstant(true);
-        obj.setInitializer(func);
+  // Thunks should be unused now, strip them
+  for (auto &&it : funcs) {
+    assert(nullptr != it.first);
+    assert(nullptr != it.second.thunkFunc);
+    auto func = newModule.getFunction(it.second.thunkFunc->getName());
+    assert(func != nullptr);
+    if (func->use_empty()) {
+      func->eraseFromParent();
+    }
+
+    if (nullptr != it.second.thunkVar) {
+      auto var = newModule.getGlobalVariable(it.second.thunkVar->getName());
+      assert(var != nullptr);
+      if (var->use_empty()) {
+        var->eraseFromParent();
       }
-      ++objectsFixed;
     }
   }
-  for (auto &&obj : newModule.functions()) {
-    if (contains(externalFuncs, obj.getName())) {
-      obj.setLinkage(llvm::GlobalValue::ExternalLinkage);
-      obj.setVisibility(llvm::GlobalValue::DefaultVisibility);
-      ++objectsFixed;
-    } else {
-      if (llvm::GlobalValue::ExternalLinkage == obj.getLinkage() &&
-          !obj.isDeclaration()) {
-        obj.setLinkage(llvm::GlobalValue::InternalLinkage);
-      };
-    }
-  }
-  assert((thunkVar2func.size() + externalFuncs.size()) ==
-         static_cast<std::size_t>(objectsFixed));
 }
 
 void removeFunctionsTargets(IRState *irs, llvm::Module &module) {
@@ -458,6 +452,7 @@ llvm::StructType *getFuncListElemType(llvm::LLVMContext &context) {
 
 // struct RtCompileModuleList
 // {
+//   i32 version; // Must be first
 //   RtCompileModuleList* next;
 //   i8* irData;
 //   i32 irDataSize;
@@ -477,6 +472,7 @@ llvm::StructType *getModuleListElemType(llvm::LLVMContext &context,
   llvm::StructType *ret =
       llvm::StructType::create(context /*, "RtCompileModuleList"*/); // fwddecl
   llvm::Type *elements[] = {
+      llvm::IntegerType::get(context, 32),
       llvm::PointerType::getUnqual(ret),
       llvm::IntegerType::getInt8PtrTy(context),
       llvm::IntegerType::get(context, 32),
@@ -579,8 +575,9 @@ llvm::GlobalVariable *generateModuleListElem(IRState *irs, const Types &types,
   auto symListInit = generateSymList(irs, types, globalVals);
   auto varlistInit = generateVarList(irs, types);
   llvm::Constant *fields[] = {
+      llvm::ConstantInt::get(irs->context(), APInt(32, ApiVersion)), // version
       llvm::ConstantPointerNull::get(llvm::dyn_cast<llvm::PointerType>(
-          elem_type->getElementType(0))), // next
+          elem_type->getElementType(1))), // next
       irData->getInitializer(),           // irdata
       irDataLen->getInitializer(),        // irdata len
       funcListInit.first,                 // funclist
@@ -607,15 +604,6 @@ llvm::PointerType *getModListHeadType(llvm::LLVMContext &context,
 llvm::GlobalVariable *declareModListHead(llvm::Module &module,
                                          const Types &types) {
   auto type = getModListHeadType(module.getContext(), types);
-  //  auto existingVar =
-  //  module.getGlobalVariable(DynamicCompileModulesHeadName); if (nullptr !=
-  //  existingVar) {
-  //    if (type != existingVar->getType()) {
-  //      error(Loc(), "Invalid DynamicCompileModulesHeadName type");
-  //      fatal();
-  //    }
-  //    return existingVar;
-  //  }
   return new llvm::GlobalVariable(module, type, false,
                                   llvm::GlobalValue::ExternalLinkage, nullptr,
                                   DynamicCompileModulesHeadName);
@@ -633,9 +621,9 @@ void generateCtorBody(IRState *irs, const Types &types, llvm::Function *func,
   builder.SetInsertPoint(bb);
 
   auto zero64 = llvm::ConstantInt::get(irs->context(), APInt(64, 0));
-  auto zero32 = llvm::ConstantInt::get(irs->context(), APInt(32, 0));
+  auto elemIndex = llvm::ConstantInt::get(irs->context(), APInt(32, 1));
   auto modListHeadPtr = declareModListHead(irs->module, types);
-  llvm::Value *gepVals[] = {zero64, zero32};
+  llvm::Value *gepVals[] = {zero64, elemIndex};
   auto elemNextPtr = builder.CreateGEP(modListElem, gepVals);
   auto prevHeadVal = builder.CreateLoad(builder.CreateBitOrPointerCast(
       modListHeadPtr, types.modListElemType->getPointerTo()->getPointerTo()));
@@ -669,7 +657,11 @@ void setupModuleBitcodeData(const llvm::Module &srcModule, IRState *irs,
 
   llvm::SmallString<1024> str;
   llvm::raw_svector_ostream os(str);
+#if LDC_LLVM_VER >= 700
+  llvm::WriteBitcodeToFile(srcModule, os);
+#else
   llvm::WriteBitcodeToFile(&srcModule, os);
+#endif
 
   auto runtimeCompiledIr = new llvm::GlobalVariable(
       irs->module, llvm::Type::getInt8PtrTy(irs->context()), true,
@@ -736,7 +728,12 @@ void generateBitcodeForDynamicCompile(IRState *irs) {
 
   llvm::ValueToValueMapTy unused;
   auto newModule = llvm::CloneModule(
-      &irs->module, unused, [&](const llvm::GlobalValue *val) -> bool {
+#if LDC_LLVM_VER >= 700
+      irs->module,
+#else
+      &irs->module,
+#endif
+      unused, [&](const llvm::GlobalValue *val) -> bool {
         // We don't dereference here, so const_cast should be safe
         auto it = filter.find(const_cast<llvm::GlobalValue *>(val));
         return filter.end() != it &&

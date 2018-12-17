@@ -24,9 +24,6 @@
 #include <deque>
 #include <vector>
 
-// FIXME: Just for the BOUDNSCHECK enum; this is not pretty
-#include "globals.h"
-
 namespace llvm {
 class FastMathFlags;
 class TargetMachine;
@@ -38,6 +35,8 @@ namespace cl = llvm::cl;
 /// Stores the commandline arguments list, including the ones specified by the
 /// config and response files.
 extern llvm::SmallVector<const char *, 32> allArguments;
+
+extern cl::OptionCategory linkingCategory;
 
 /* Mostly generated with the following command:
    egrep -e '^(cl::|#if|#e)' gen/cl_options.cpp \
@@ -69,6 +68,7 @@ extern cl::opt<std::string> moduleDeps;
 extern cl::opt<std::string> cacheDir;
 extern cl::list<std::string> linkerSwitches;
 extern cl::list<std::string> ccSwitches;
+extern cl::opt<cl::boolOrDefault> staticFlag;
 
 extern cl::opt<bool> m32bits;
 extern cl::opt<bool> m64bits;
@@ -83,14 +83,7 @@ extern bool fFastMath;
 extern llvm::FastMathFlags defaultFMF;
 void setDefaultMathOptions(llvm::TargetOptions &targetOptions);
 
-extern cl::opt<BOUNDSCHECK> boundsCheck;
-extern bool nonSafeBoundsChecks;
-
-#if LDC_WITH_PGO
-extern cl::opt<std::string> genfileInstrProf;
-extern cl::opt<std::string> usefileInstrProf;
-#endif
-extern cl::opt<bool> instrumentFunctions;
+extern bool invReleaseMode;
 
 // CALYPSO
 extern cl::list<std::string> cppArgs;

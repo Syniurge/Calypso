@@ -20,8 +20,9 @@ config.llvm_tools_dir      = "@LLVM_TOOLS_DIR@"
 config.llvm_version        = @LDC_LLVM_VER@
 config.llvm_targetsstr     = "@LLVM_TARGETS_TO_BUILD@"
 config.default_target_bits = @DEFAULT_TARGET_BITS@
-config.with_PGO            = @LDC_WITH_PGO@
+config.with_PGO            = True
 config.dynamic_compile     = @LDC_DYNAMIC_COMPILE@
+config.plugins_supported   = "@LDC_ENABLE_PLUGINS@" == "ON"
 
 config.name = 'LDC'
 
@@ -55,6 +56,10 @@ if not config.dynamic_compile:
 env_cc = os.environ.get('CC', '')
 if env_cc:
     config.environment['CC'] = env_cc
+
+env_cxx = os.environ.get('CXX', '')
+if env_cxx:
+    config.environment['CXX'] = env_cxx
 
 # Define available features so that we can disable tests depending on LLVM version
 config.available_features.add("llvm%d" % config.llvm_version)

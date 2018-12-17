@@ -175,36 +175,32 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
     LLGlobalVariable *ci;
     if (auto lp = (*c_it)->langPlugin()) // CALYPSO
       ci = lp->codegen()->toCatchScopeType(irs, p.t);
-    else {
-      ClassDeclaration *cd = p.t->isClassHandle();
-      DtoResolveClass(cd);
-      if (cd->isCPPclass()) {
-        const char *name = Target::cppTypeInfoMangle(cd);
-        auto cpp_ti = getOrCreateGlobal(
-            cd->loc, irs.module, getVoidPtrType(), /*isConstant=*/true,
-            LLGlobalValue::ExternalLinkage, /*init=*/nullptr, name);
+    else if (p.cd->isCPPclass()) {
+      const char *name = Target::cppTypeInfoMangle(p.cd);
+      auto cpp_ti = getOrCreateGlobal(
+          p.cd->loc, irs.module, getVoidPtrType(), /*isConstant=*/true,
+          LLGlobalValue::ExternalLinkage, /*init=*/nullptr, name);
 
-        // Wrap std::type_info pointers inside a __cpp_type_info_ptr class instance so that
-        // the personality routine may differentiate C++ catch clauses from D ones.
-        OutBuffer mangleBuf;
-        mangleBuf.writestring("_D");
-        mangleToBuffer(cd, &mangleBuf);
-        mangleBuf.printf("%d%s", 18, "_cpp_type_info_ptr");
-        const auto wrapperMangle = getIRMangledVarName(mangleBuf.peekString(), LINKd);
+      // Wrap std::type_info pointers inside a __cpp_type_info_ptr class instance so that
+      // the personality routine may differentiate C++ catch clauses from D ones.
+      OutBuffer mangleBuf;
+      mangleBuf.writestring("_D");
+      mangleToBuffer(p.cd, &mangleBuf);
+      mangleBuf.printf("%d%s", 18, "_cpp_type_info_ptr");
+      const auto wrapperMangle = getIRMangledVarName(mangleBuf.peekString(), LINKd);
 
-        RTTIBuilder b(ClassDeclaration::cpp_type_info_ptr);
-        b.push(cpp_ti);
+      RTTIBuilder b(ClassDeclaration::cpp_type_info_ptr);
+      b.push(cpp_ti);
 
-        auto wrapperType = llvm::cast<llvm::StructType>(
-            static_cast<IrTypeClass*>(ClassDeclaration::cpp_type_info_ptr->type->ctype)->getMemoryLLType());
-        auto wrapperInit = b.get_constant(wrapperType);
+      auto wrapperType = llvm::cast<llvm::StructType>(
+          static_cast<IrTypeClass*>(ClassDeclaration::cpp_type_info_ptr->type->ctype)->getMemoryLLType());
+      auto wrapperInit = b.get_constant(wrapperType);
 
-        ci = getOrCreateGlobal(
-            cd->loc, irs.module, wrapperType, /*isConstant=*/true,
-            LLGlobalValue::LinkOnceODRLinkage, wrapperInit, wrapperMangle);
-      } else {
-        ci = getIrAggr(cd)->getClassInfoSymbol();
-      }
+      ci = getOrCreateGlobal(
+          p.cd->loc, irs.module, wrapperType, /*isConstant=*/true,
+          LLGlobalValue::LinkOnceODRLinkage, wrapperInit, wrapperMangle);
+    } else {
+      ci = getIrAggr(p.cd)->getClassInfoSymbol();
     }
     catchBlocks.push_back({ci, p.catchBB, branchWeights});
     c_it++;

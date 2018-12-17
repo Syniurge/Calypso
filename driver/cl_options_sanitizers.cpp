@@ -14,8 +14,9 @@
 
 #include "driver/cl_options_sanitizers.h"
 
-#include "ddmd/errors.h"
-#include "ddmd/dsymbol.h"
+#include "dmd/errors.h"
+#include "dmd/declaration.h"
+#include "dmd/dsymbol.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/SpecialCaseList.h"
@@ -109,8 +110,16 @@ void parseFSanitizeCoverageParameter(llvm::StringRef name,
     opts.TracePCGuard = true;
   }
 #if LDC_LLVM_VER >= 500
+  else if (name == "inline-8bit-counters") {
+    opts.Inline8bitCounters = true;
+  }
   else if (name == "no-prune") {
     opts.NoPrune = true;
+  }
+#endif
+#if LDC_LLVM_VER >= 600
+  else if (name == "pc-table") {
+    opts.PCTable = true;
   }
 #endif
   else {
@@ -182,18 +191,8 @@ void outputSanitizerSettings(llvm::raw_ostream &hash_os) {
   hash_os << SanitizerBits(enabledSanitizers);
 
 #ifdef ENABLE_COVERAGE_SANITIZER
-  hash_os << sanitizerCoverageOptions.CoverageType;
-  hash_os << sanitizerCoverageOptions.IndirectCalls;
-  hash_os << sanitizerCoverageOptions.TraceBB;
-  hash_os << sanitizerCoverageOptions.TraceCmp;
-  hash_os << sanitizerCoverageOptions.TraceDiv;
-  hash_os << sanitizerCoverageOptions.TraceGep;
-  hash_os << sanitizerCoverageOptions.Use8bitCounters;
-  hash_os << sanitizerCoverageOptions.TracePC;
-  hash_os << sanitizerCoverageOptions.TracePCGuard;
-#if LDC_LLVM_VER >= 500
-  hash_os << sanitizerCoverageOptions.NoPrune;
-#endif
+  hash_os.write(reinterpret_cast<char *>(&sanitizerCoverageOptions),
+                sizeof(sanitizerCoverageOptions));
 #endif
 }
 
@@ -201,14 +200,18 @@ bool functionIsInSanitizerBlacklist(FuncDeclaration *funcDecl) {
   if (!sanitizerBlacklist)
     return false;
 
+  auto funcName = mangleExact(funcDecl);
+  auto fileName = funcDecl->loc.filename;
+
 #if LDC_LLVM_VER >= 600
   // TODO: LLVM 6.0 supports sections (e.g. "[address]") in the blacklist file
   // to only blacklist a function for a particular sanitizer. We could make use
   // of that too.
-  return sanitizerBlacklist->inSection("" /* section name */, "fun",
-                                       mangleExact(funcDecl));
+  return sanitizerBlacklist->inSection(/*Section=*/"", "fun", funcName) ||
+         sanitizerBlacklist->inSection(/*Section=*/"", "src", fileName);
 #else
-  return sanitizerBlacklist->inSection("fun", mangleExact(funcDecl));
+  return sanitizerBlacklist->inSection("fun", funcName) ||
+         sanitizerBlacklist->inSection("src", fileName);
 #endif
 }
 

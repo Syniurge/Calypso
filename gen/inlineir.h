@@ -14,7 +14,7 @@
 #ifndef LDC_GEN_INLINEIR_H
 #define LDC_GEN_INLINEIR_H
 
-#include "ddmd/arraytypes.h"
+#include "dmd/arraytypes.h"
 
 class DValue;
 class FuncDeclaration;
@@ -24,6 +24,10 @@ namespace llvm {
 class Function;
 class Value;
 }
+
+/// Check LDC_inline_ir pragma declaration is valid
+/// Will call fatal() in case of errors
+void DtoCheckInlineIRPragma(Identifier *ident, Dsymbol *s);
 
 DValue *DtoInlineIRExpr(Loc &loc, FuncDeclaration *fdecl,
                         Expressions *arguments,

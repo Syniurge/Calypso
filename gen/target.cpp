@@ -5,7 +5,7 @@
 // This file is distributed under the BSD-style LDC license. See the LICENSE
 // file for details.
 //
-// Implements some parts of the front-end Target class (ddmd/target.{d,h}).
+// Implements some parts of the front-end Target class (dmd/target.{d,h}).
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,7 +25,7 @@
 using llvm::APFloat;
 
 void Target::_init() {
-  ptrsize = gDataLayout->getPointerSize(ADDRESS_SPACE);
+  ptrsize = gDataLayout->getPointerSize();
 
   llvm::Type *const real = DtoType(Type::basic[Tfloat80]);
   realsize = gDataLayout->getTypeAllocSize(real);

@@ -11,7 +11,7 @@
 
 #include "gen/dcompute/target.h"
 #include "gen/dcompute/druntime.h"
-#include "ddmd/template.h"
+#include "dmd/template.h"
 #include "gen/abi-spirv.h"
 #include "gen/logger.h"
 #include "llvm/Transforms/Scalar.h"
@@ -52,7 +52,6 @@ public:
                                                     : SPIR_DATALAYOUT32);
     _ir->dcomputetarget = this;
   }
-  void setGTargetMachine() override { gTargetMachine = nullptr; }
 
   // Adapted from clang
   void addMetadata() override {

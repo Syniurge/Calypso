@@ -17,7 +17,7 @@
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
-#include "gen/llvmcompat.h"
+#include "globals.h" // for CHECKENABLE enum
 
 #if LDC_LLVM_VER >= 500
 #define LLVM_END_WITH_NULL
@@ -28,6 +28,13 @@ typedef Array<const char *> Strings;
 
 namespace opts {
 namespace cl = llvm::cl;
+
+/// Duplicate the string and replace '/' with '\' on Windows.
+char *dupPathString(const std::string &src);
+
+/// Helper function to handle -of, -od, etc.
+/// llvm::cl::opt<std::string> --> char*
+void initFromPathString(const char *&dest, const cl::opt<std::string> &src);
 
 /// Helper class to determine values
 template <class DT> struct FlagParserDataType {};
@@ -40,6 +47,11 @@ template <> struct FlagParserDataType<bool> {
 template <> struct FlagParserDataType<cl::boolOrDefault> {
   static cl::boolOrDefault true_val() { return cl::BOU_TRUE; }
   static cl::boolOrDefault false_val() { return cl::BOU_FALSE; }
+};
+
+template <> struct FlagParserDataType<CHECKENABLE> {
+  static CHECKENABLE true_val() { return CHECKENABLEon; }
+  static CHECKENABLE false_val() { return CHECKENABLEoff; }
 };
 
 template <class DataType> class FlagParser : public cl::generic_parser_base {
@@ -70,19 +82,16 @@ public:
   }
 
   // Implement virtual functions needed by generic_parser_base
-  unsigned getNumOptions() const LLVM_OVERRIDE { return 1; }
+  unsigned getNumOptions() const override { return 0; }
+
 #if LDC_LLVM_VER >= 400
   llvm::StringRef
 #else
   const char *
 #endif
-  getOption(unsigned N) const LLVM_OVERRIDE {
-    assert(N == 0);
-#if LDC_LLVM_VER >= 308 && LDC_LLVM_VER < 400
-    return owner().ArgStr.data();
-#else
-    return owner().ArgStr;
-#endif
+  getOption(unsigned N) const override {
+    llvm_unreachable("Unexpected call");
+    return "";
   }
 
 #if LDC_LLVM_VER >= 400
@@ -90,13 +99,9 @@ public:
 #else
   const char *
 #endif
-  getDescription(unsigned N) const LLVM_OVERRIDE {
-    assert(N == 0);
-#if LDC_LLVM_VER >= 308 && LDC_LLVM_VER < 400
-    return owner().HelpStr.data();
-#else
-    return owner().HelpStr;
-#endif
+  getDescription(unsigned N) const override {
+    llvm_unreachable("Unexpected call");
+    return "";
   }
 
 private:
@@ -107,7 +112,7 @@ private:
 
 public:
   // getOptionValue - Return the value of option name N.
-  const cl::GenericOptionValue &getOptionValue(unsigned N) const LLVM_OVERRIDE {
+  const cl::GenericOptionValue &getOptionValue(unsigned N) const override {
     return EmptyOptionValue;
   }
 

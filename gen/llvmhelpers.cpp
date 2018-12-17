@@ -21,7 +21,6 @@
 #include "gen/functions.h"
 #include "gen/irstate.h"
 #include "gen/llvm.h"
-#include "gen/llvmcompat.h"
 #include "gen/logger.h"
 #include "gen/nested.h"
 #include "gen/mangling.h"
@@ -71,6 +70,14 @@ bool isArchx86_64() {
 
 bool isTargetWindowsMSVC() {
   return global.params.targetTriple->isWindowsMSVCEnvironment();
+}
+
+bool isMusl() {
+#if LDC_LLVM_VER >= 309
+  return global.params.targetTriple->isMusl();
+#else
+  return false;
+#endif
 }
 
 /******************************************************************************
@@ -222,12 +229,30 @@ LLValue *DtoAllocaDump(DValue *val, const char *name) {
   return DtoAllocaDump(val, val->type, name);
 }
 
+LLValue *DtoAllocaDump(DValue *val, int alignment, const char *name) {
+  return DtoAllocaDump(val, DtoType(val->type), alignment, name);
+}
+
 LLValue *DtoAllocaDump(DValue *val, Type *asType, const char *name) {
   return DtoAllocaDump(val, DtoType(asType), DtoAlignment(asType), name);
 }
 
 LLValue *DtoAllocaDump(DValue *val, LLType *asType, int alignment,
                        const char *name) {
+  if (val->isLVal()) {
+    LLValue *lval = DtoLVal(val);
+    LLType *asMemType = i1ToI8(voidToI8(asType));
+    LLValue *copy = DtoRawAlloca(asMemType, alignment, name);
+    const auto minSize =
+        std::min(getTypeAllocSize(lval->getType()->getPointerElementType()),
+                 getTypeAllocSize(asMemType));
+    const auto minAlignment =
+        std::min(DtoAlignment(val->type), static_cast<unsigned>(alignment));
+    DtoMemCpy(copy, lval, DtoConstSize_t(minSize), minAlignment);
+    // TODO: zero-out any remaining bytes?
+    return copy;
+  }
+
   return DtoAllocaDump(DtoRVal(val), asType, alignment, name);
 }
 
@@ -296,6 +321,14 @@ void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
     args.push_back(file);
     args.push_back(line);
     args.push_back(msg);
+  } else if (global.params.targetTriple->isOSSolaris() || isMusl()) {
+    const auto irFunc = gIR->func();
+    const auto funcName =
+        (irFunc && irFunc->decl) ? irFunc->decl->toPrettyChars() : "";
+    args.push_back(msg);
+    args.push_back(file);
+    args.push_back(line);
+    args.push_back(DtoConstCString(funcName));
   } else if (global.params.targetTriple->getEnvironment() ==
              llvm::Triple::Android) {
     args.push_back(file);
@@ -437,7 +470,8 @@ DValue *DtoNullValue(Type *type, Loc loc) {
   // integer, floating, pointer, assoc array, delegate and class have no special
   // representation
   if (basetype->isintegral() || basetype->isfloating() || basety == Tpointer ||
-      basety == Tclass || basety == Tdelegate || basety == Taarray) {
+      basety == Tnull || basety == Tclass || basety == Tdelegate ||
+      basety == Taarray) {
     return new DNullValue(type, LLConstant::getNullValue(lltype));
   }
   // dynamic array
@@ -1039,7 +1073,7 @@ DValue *DtoDeclarationExp(Dsymbol *declaration) {
   } else if (AttribDeclaration *a = declaration->isAttribDeclaration()) {
     Logger::println("AttribDeclaration");
     // choose the right set in case this is a conditional declaration
-    if (auto d = a->include(nullptr, nullptr)) {
+    if (auto d = a->include(nullptr)) {
       for (unsigned i = 0; i < d->dim; ++i) {
         DtoDeclarationExp((*d)[i]);
       }

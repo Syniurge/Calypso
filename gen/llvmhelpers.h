@@ -27,6 +27,9 @@ struct IRState;
 // An arrayreference type with initializer_list support (C++11):
 template <class T> using ArrayParam = llvm::ArrayRef<T>;
 
+// Helper function because LLVM's isMusl wasn't around before 3.9.
+bool isMusl();
+
 llvm::LLVMContext& getGlobalContext();
 
 // dynamic memory helpers
@@ -51,6 +54,7 @@ llvm::AllocaInst *DtoRawAlloca(LLType *lltype, size_t alignment,
 LLValue *DtoGcMalloc(Loc &loc, LLType *lltype, const char *name = "");
 
 LLValue *DtoAllocaDump(DValue *val, const char *name = "");
+LLValue *DtoAllocaDump(DValue *val, int alignment, const char *name = "");
 LLValue *DtoAllocaDump(DValue *val, Type *asType, const char *name = "");
 LLValue *DtoAllocaDump(DValue *val, LLType *asType, int alignment = 0,
                        const char *name = "");
@@ -210,9 +214,6 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
 ///
 DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
                         Expressions *arguments, LLValue *sretPointer = nullptr);
-DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
-                        const std::vector<DValue *> &argvals,
-                        LLValue *sretPointer = nullptr);
 
 Type *stripModifiers(Type *type, bool transitive = false);
 

@@ -45,47 +45,6 @@ void CompoundAsmStatement_toIR(CompoundAsmStatement *stmt, IRState *p);
 
 //////////////////////////////////////////////////////////////////////////////
 
-// For sorting string switch cases lexicographically.
-namespace {
-bool compareCaseStrings(CaseStatement *lhs, CaseStatement *rhs) {
-  return lhs->exp->compare(rhs->exp) < 0;
-}
-}
-
-static LLValue *call_string_switch_runtime(llvm::Value *table, Expression *e) {
-  Type *dt = e->type->toBasetype();
-  Type *dtnext = dt->nextOf()->toBasetype();
-  TY ty = dtnext->ty;
-  const char *fname;
-  if (ty == Tchar) {
-    fname = "_d_switch_string";
-  } else if (ty == Twchar) {
-    fname = "_d_switch_ustring";
-  } else if (ty == Tdchar) {
-    fname = "_d_switch_dstring";
-  } else {
-    llvm_unreachable("not char/wchar/dchar");
-  }
-
-  llvm::Function *fn = getRuntimeFunction(e->loc, gIR->module, fname);
-
-  IF_LOG {
-    Logger::cout() << *table->getType() << '\n';
-    Logger::cout() << *fn->getFunctionType()->getParamType(0) << '\n';
-  }
-  assert(table->getType() == fn->getFunctionType()->getParamType(0));
-
-  DValue *val = toElemDtor(e);
-  LLValue *llval = DtoRVal(val);
-  assert(llval->getType() == fn->getFunctionType()->getParamType(1));
-
-  LLCallSite call = gIR->CreateCallOrInvoke(fn, table, llval);
-
-  return call.getInstruction();
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 class ToIRVisitor : public Visitor {
   IRState *irs;
 
@@ -99,7 +58,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(CompoundStatement *stmt) LLVM_OVERRIDE {
+  void visit(CompoundStatement *stmt) override {
     IF_LOG Logger::println("CompoundStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -116,7 +75,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ReturnStatement *stmt) LLVM_OVERRIDE {
+  void visit(ReturnStatement *stmt) override {
     IF_LOG Logger::println("ReturnStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -292,7 +251,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ExpStatement *stmt) LLVM_OVERRIDE {
+  void visit(ExpStatement *stmt) override {
     IF_LOG Logger::println("ExpStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -333,7 +292,7 @@ public:
     }
   }
 
-  void visit(IfStatement *stmt) LLVM_OVERRIDE {
+  void visit(IfStatement *stmt) override {
     IF_LOG Logger::println("IfStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -413,7 +372,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ScopeStatement *stmt) LLVM_OVERRIDE {
+  void visit(ScopeStatement *stmt) override {
     IF_LOG Logger::println("ScopeStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -429,7 +388,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(WhileStatement *stmt) LLVM_OVERRIDE {
+  void visit(WhileStatement *stmt) override {
     IF_LOG Logger::println("WhileStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -492,7 +451,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(DoStatement *stmt) LLVM_OVERRIDE {
+  void visit(DoStatement *stmt) override {
     IF_LOG Logger::println("DoStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -554,7 +513,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ForStatement *stmt) LLVM_OVERRIDE {
+  void visit(ForStatement *stmt) override {
     IF_LOG Logger::println("ForStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -649,7 +608,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(BreakStatement *stmt) LLVM_OVERRIDE {
+  void visit(BreakStatement *stmt) override {
     IF_LOG Logger::println("BreakStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -690,7 +649,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ContinueStatement *stmt) LLVM_OVERRIDE {
+  void visit(ContinueStatement *stmt) override {
     IF_LOG Logger::println("ContinueStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -725,7 +684,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(OnScopeStatement *stmt) LLVM_OVERRIDE {
+  void visit(OnScopeStatement *stmt) override {
     stmt->error("Internal Compiler Error: OnScopeStatement should have been "
                 "lowered by frontend.");
     fatal();
@@ -733,7 +692,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(TryFinallyStatement *stmt) LLVM_OVERRIDE {
+  void visit(TryFinallyStatement *stmt) override {
     IF_LOG Logger::println("TryFinallyStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -806,7 +765,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(TryCatchStatement *stmt) LLVM_OVERRIDE {
+  void visit(TryCatchStatement *stmt) override {
     IF_LOG Logger::println("TryCatchStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -848,7 +807,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ThrowStatement *stmt) LLVM_OVERRIDE {
+  void visit(ThrowStatement *stmt) override {
     IF_LOG Logger::println("ThrowStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
     assert(!irs->dcomputetarget);
@@ -879,7 +838,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(SwitchStatement *stmt) LLVM_OVERRIDE {
+  void visit(SwitchStatement *stmt) override {
     IF_LOG Logger::println("SwitchStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -893,9 +852,7 @@ public:
     emitCoverageLinecountInc(stmt->loc);
     llvm::BasicBlock *const oldbb = irs->scopebb();
 
-    // The cases of the switch statement, in codegen order. For string switches,
-    // we reorder them lexicographically later to match what the _d_switch_*
-    // druntime dispatch functions expect.
+    // The cases of the switch statement, in codegen order.
     auto cases = stmt->cases;
     const auto caseCount = cases->dim;
 
@@ -906,56 +863,22 @@ public:
     indices.reserve(caseCount);
     bool useSwitchInst = true;
 
-    // For string switches, sort the cases and emit the table data.
-    llvm::Value *stringTableSlice = nullptr;
-    const bool isStringSwitch = !stmt->condition->type->isintegral();
-    if (isStringSwitch) {
-      Logger::println("is string switch");
-      assert(!irs->dcomputetarget);
+    for (auto cs : *cases) {
+      // skip over casts
+      auto ce = cs->exp;
+      while (ce->op == TOKcast)
+        ce = static_cast<CastExp *>(ce)->e1;
 
-      // Sort the cases, taking care not to modify the original AST.
-      cases = cases->copy();
-      std::sort(cases->begin(), cases->end(), compareCaseStrings);
-
-      // Emit constants for the case values.
-      llvm::SmallVector<llvm::Constant *, 16> stringConsts;
-      stringConsts.reserve(caseCount);
-      for (size_t i = 0; i < caseCount; ++i) {
-        stringConsts.push_back(toConstElem((*cases)[i]->exp, irs));
-        indices.push_back(DtoConstUint(i));
-      }
-
-      // Create internal global with the data table.
-      const auto elemTy = DtoType(stmt->condition->type);
-      const auto arrTy = llvm::ArrayType::get(elemTy, stringConsts.size());
-      const auto arrInit = LLConstantArray::get(arrTy, stringConsts);
-      const auto arr = new llvm::GlobalVariable(
-          irs->module, arrTy, true, llvm::GlobalValue::InternalLinkage, arrInit,
-          ".string_switch_table_data");
-
-      // Create D slice to pass to runtime later.
-      const auto arrPtr =
-          llvm::ConstantExpr::getBitCast(arr, getPtrToType(elemTy));
-      const auto arrLen = DtoConstSize_t(stringConsts.size());
-      stringTableSlice = DtoConstSlice(arrLen, arrPtr);
-    } else {
-      for (auto cs : *cases) {
-        // skip over casts
-        auto ce = cs->exp;
-        while (ce->op == TOKcast)
-          ce = static_cast<CastExp *>(ce)->e1;
-
-        if (ce->op == TOKvar) {
-          const auto vd = static_cast<VarExp *>(ce)->var->isVarDeclaration();
-          if (vd && (!vd->_init || !vd->isConst())) {
-            indices.push_back(DtoRVal(toElemDtor(cs->exp)));
-            useSwitchInst = false;
-            continue;
-          }
+      if (ce->op == TOKvar) {
+        const auto vd = static_cast<VarExp *>(ce)->var->isVarDeclaration();
+        if (vd && (!vd->_init || !vd->isConst())) {
+          indices.push_back(DtoRVal(toElemDtor(cs->exp)));
+          useSwitchInst = false;
+          continue;
         }
-
-        indices.push_back(toConstElem(cs->exp, irs));
       }
+
+      indices.push_back(toConstElem(cs->exp, irs));
     }
     assert(indices.size() == caseCount);
 
@@ -987,12 +910,7 @@ public:
     irs->scope() = IRScope(oldbb);
     if (useSwitchInst) {
       // The case index value.
-      LLValue *condVal;
-      if (isStringSwitch) {
-        condVal = call_string_switch_runtime(stringTableSlice, stmt->condition);
-      } else {
-        condVal = DtoRVal(toElemDtor(stmt->condition));
-      }
+      LLValue *condVal = DtoRVal(toElemDtor(stmt->condition));
 
       // Create switch and add the cases.
       // For PGO instrumentation, we need to add counters /before/ the case
@@ -1118,7 +1036,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(CaseStatement *stmt) LLVM_OVERRIDE {
+  void visit(CaseStatement *stmt) override {
     IF_LOG Logger::println("CaseStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1149,7 +1067,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(DefaultStatement *stmt) LLVM_OVERRIDE {
+  void visit(DefaultStatement *stmt) override {
     IF_LOG Logger::println("DefaultStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1180,7 +1098,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(UnrolledLoopStatement *stmt) LLVM_OVERRIDE {
+  void visit(UnrolledLoopStatement *stmt) override {
     IF_LOG Logger::println("UnrolledLoopStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -1251,7 +1169,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ForeachStatement *stmt) LLVM_OVERRIDE {
+  void visit(ForeachStatement *stmt) override {
     IF_LOG Logger::println("ForeachStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1389,7 +1307,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ForeachRangeStatement *stmt) LLVM_OVERRIDE {
+  void visit(ForeachRangeStatement *stmt) override {
     IF_LOG Logger::println("ForeachRangeStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -1497,7 +1415,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(LabelStatement *stmt) LLVM_OVERRIDE {
+  void visit(LabelStatement *stmt) override {
     IF_LOG Logger::println("LabelStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1539,7 +1457,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(GotoStatement *stmt) LLVM_OVERRIDE {
+  void visit(GotoStatement *stmt) override {
     IF_LOG Logger::println("GotoStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1559,7 +1477,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(GotoDefaultStatement *stmt) LLVM_OVERRIDE {
+  void visit(GotoDefaultStatement *stmt) override {
     IF_LOG Logger::println("GotoDefaultStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -1584,7 +1502,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(GotoCaseStatement *stmt) LLVM_OVERRIDE {
+  void visit(GotoCaseStatement *stmt) override {
     IF_LOG Logger::println("GotoCaseStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -1610,7 +1528,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(WithStatement *stmt) LLVM_OVERRIDE {
+  void visit(WithStatement *stmt) override {
     IF_LOG Logger::println("WithStatement::toIR(): %s", stmt->loc.toChars());
     LOG_SCOPE;
 
@@ -1639,7 +1557,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(SwitchErrorStatement *stmt) LLVM_OVERRIDE {
+  void visit(SwitchErrorStatement *stmt) override {
     IF_LOG Logger::println("SwitchErrorStatement::toIR(): %s",
                            stmt->loc.toChars());
     LOG_SCOPE;
@@ -1650,7 +1568,7 @@ public:
 
     Module *const module = irs->func()->decl->getModule();
 
-    if (global.params.betterC) {
+    if (global.params.checkAction == CHECKACTION_C) {
       DtoCAssert(module, stmt->loc, DtoConstCString("no switch default"));
       return;
     }
@@ -1669,27 +1587,27 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(AsmStatement *stmt) LLVM_OVERRIDE {
+  void visit(AsmStatement *stmt) override {
     assert(!irs->dcomputetarget);
     AsmStatement_toIR(stmt, irs);
   }
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(CompoundAsmStatement *stmt) LLVM_OVERRIDE {
+  void visit(CompoundAsmStatement *stmt) override {
     assert(!irs->dcomputetarget);
     CompoundAsmStatement_toIR(stmt, irs);
   }
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(ImportStatement *stmt) LLVM_OVERRIDE {
+  void visit(ImportStatement *stmt) override {
     // Empty.
   }
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(Statement *stmt) LLVM_OVERRIDE {
+  void visit(Statement *stmt) override {
     error(stmt->loc, "Statement type Statement not implemented: `%s`",
           stmt->toChars());
     fatal();
@@ -1697,7 +1615,7 @@ public:
 
   //////////////////////////////////////////////////////////////////////////
 
-  void visit(PragmaStatement *stmt) LLVM_OVERRIDE {
+  void visit(PragmaStatement *stmt) override {
     error(stmt->loc, "Statement type PragmaStatement not implemented: `%s`",
           stmt->toChars());
     fatal();

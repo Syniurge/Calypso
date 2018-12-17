@@ -22,7 +22,7 @@
 #include "ir/irfunction.h"
 #include "ir/irtype.h"
 #include "ir/irtypefunction.h"
-#include "driver/cl_options.h"
+#include "driver/cl_options_instrumentation.h"
 #include "ldcbindings.h"
 #include "mars.h"
 #include "module.h"
@@ -165,6 +165,10 @@ llvm::Function *getRuntimeFunction(const Loc &loc, llvm::Module &target,
 //                            const char *msg)
 // Android: void __assert(const char *file, int line, const char *msg)
 // MSVC:    void  _assert(const char *msg, const char *file, unsigned line)
+// Solaris: void __assert_c99(const char *assertion, const char *filename, int line_num,
+//                            const char *funcname);
+// Musl:    void __assert_fail(const char *assertion, const char *filename, int line_num,
+//                             const char *funcname);
 // else:    void __assert(const char *msg, const char *file, unsigned line)
 
 static const char *getCAssertFunctionName() {
@@ -172,6 +176,10 @@ static const char *getCAssertFunctionName() {
     return "__assert_rtn";
   } else if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
     return "_assert";
+  } else if (global.params.targetTriple->isOSSolaris()) {
+    return "__assert_c99";
+  } else if (isMusl()) {
+    return "__assert_fail";
   }
   return "__assert";
 }
@@ -180,7 +188,8 @@ static std::vector<Type *> getCAssertFunctionParamTypes() {
   const auto voidPtr = Type::tvoidptr;
   const auto uint = Type::tuns32;
 
-  if (global.params.targetTriple->isOSDarwin()) {
+  if (global.params.targetTriple->isOSDarwin() ||
+      global.params.targetTriple->isOSSolaris() || isMusl()) {
     return {voidPtr, voidPtr, uint, voidPtr};
   }
   if (global.params.targetTriple->getEnvironment() == llvm::Triple::Android) {
@@ -383,12 +392,9 @@ static void buildRuntimeModule() {
   createFwdDecl(LINKc, voidTy, {"_d_assert_msg"}, {stringTy, stringTy, uintTy},
                 {}, Attr_Cold_NoReturn);
 
-  // void _d_assertm(immutable(ModuleInfo)* m, uint line)
-  // void _d_array_bounds(immutable(ModuleInfo)* m, uint line)
   // void _d_switch_error(immutable(ModuleInfo)* m, uint line)
-  createFwdDecl(
-      LINKc, voidTy, {"_d_assertm", "_d_array_bounds", "_d_switch_error"},
-      {moduleInfoPtrTy, uintTy}, {STCimmutable, 0}, Attr_Cold_NoReturn);
+  createFwdDecl(LINKc, voidTy, {"_d_switch_error"}, {moduleInfoPtrTy, uintTy},
+                {STCimmutable, 0}, Attr_Cold_NoReturn);
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -442,12 +448,9 @@ static void buildRuntimeModule() {
                 {typeInfoTy, voidArrayTy->arrayOf()}, {STCconst, 0});
 
   // Object _d_newclass(const ClassInfo ci)
-  createFwdDecl(LINKc, objectTy, {"_d_newclass"}, {classInfoTy}, {STCconst},
-                Attr_NoAlias);
-
   // Object _d_allocclass(const ClassInfo ci)
-  createFwdDecl(LINKc, objectTy, {"_d_allocclass"}, {classInfoTy}, {STCconst},
-                Attr_NoAlias);
+  createFwdDecl(LINKc, objectTy, {"_d_newclass", "_d_allocclass"},
+                {classInfoTy}, {STCconst}, Attr_NoAlias);
 
   // void* _d_newitemT (TypeInfo ti)
   // void* _d_newitemiT(TypeInfo ti)
@@ -564,38 +567,13 @@ static void buildRuntimeModule() {
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
 
-  // char[] _adReverseChar(char[] a)
-  // char[] _adSortChar(char[] a)
-  createFwdDecl(LINKc, stringTy, {"_adReverseChar", "_adSortChar"}, {stringTy});
-
-  // wchar[] _adReverseWchar(wchar[] a)
-  // wchar[] _adSortWchar(wchar[] a)
-  createFwdDecl(LINKc, wstringTy, {"_adReverseWchar", "_adSortWchar"},
-                {wstringTy});
-
-  // void[] _adReverse(void[] a, size_t szelem)
-  createFwdDecl(LINKc, wstringTy, {"_adReverse"}, {voidArrayTy, sizeTy}, {},
-                Attr_NoUnwind);
-
   // int _adEq2(void[] a1, void[] a2, TypeInfo ti)
-  // int _adCmp2(void[] a1, void[] a2, TypeInfo ti)
-  createFwdDecl(LINKc, intTy, {"_adEq2", "_adCmp2"},
+  createFwdDecl(LINKc, intTy, {"_adEq2"},
                 {voidArrayTy, voidArrayTy, typeInfoTy}, {}, Attr_ReadOnly);
 
-  // int _adCmpChar(void[] a1, void[] a2)
-  createFwdDecl(LINKc, intTy, {"_adCmpChar"}, {voidArrayTy, voidArrayTy}, {},
-                Attr_ReadOnly_NoUnwind);
-
-  // void[] _adSort(void[] a, TypeInfo ti)
-  createFwdDecl(LINKc, voidArrayTy, {"_adSort"}, {voidArrayTy, typeInfoTy});
-
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
-
-  // size_t _aaLen(in AA aa)
-  createFwdDecl(LINKc, sizeTy, {"_aaLen"}, {aaTy}, {STCin},
-                Attr_ReadOnly_NoUnwind_1_NoCapture);
 
   // void* _aaGetY(AA* aa, const TypeInfo aati, in size_t valuesize,
   //               in void* pkey)
@@ -612,29 +590,6 @@ static void buildRuntimeModule() {
   createFwdDecl(LINKc, boolTy, {"_aaDelX"}, {aaTy, typeInfoTy, voidPtrTy},
                 {0, STCin, STCin}, Attr_1_3_NoCapture);
 
-  // inout(void[]) _aaValues(inout AA aa, in size_t keysize,
-  //                         in size_t valuesize, const TypeInfo tiValueArray)
-  createFwdDecl(
-      LINKc, voidArrayTy, {"_aaValues"}, {aaTy, sizeTy, sizeTy, typeInfoTy},
-      {STCin | STCout, STCin, STCin, STCconst}, Attr_ReadOnly_1_3_NoCapture);
-
-  // void* _aaRehash(AA* paa, in TypeInfo keyti)
-  createFwdDecl(LINKc, voidPtrTy, {"_aaRehash"},
-                {aaTy->pointerTo(), typeInfoTy}, {0, STCin});
-
-  // inout(void[]) _aaKeys(inout AA aa, in size_t keysize,
-  //                       const TypeInfo tiKeyArray)
-  createFwdDecl(LINKc, voidArrayTy, {"_aaKeys"}, {aaTy, sizeTy, typeInfoTy},
-                {STCin | STCout, STCin, STCconst}, Attr_NoAlias_1_NoCapture);
-
-  // int _aaApply(AA aa, in size_t keysize, dg_t dg)
-  createFwdDecl(LINKc, intTy, {"_aaApply"}, {aaTy, sizeTy, rt_dg1()},
-                {0, STCin, 0}, Attr_1_NoCapture);
-
-  // int _aaApply2(AA aa, in size_t keysize, dg2_t dg)
-  createFwdDecl(LINKc, intTy, {"_aaApply2"}, {aaTy, sizeTy, rt_dg2()},
-                {0, STCin, 0}, Attr_1_NoCapture);
-
   // int _aaEqual(in TypeInfo tiRaw, in AA e1, in AA e2)
   createFwdDecl(LINKc, intTy, {"_aaEqual"}, {typeInfoTy, aaTy, aaTy},
                 {STCin, STCin, STCin}, Attr_1_2_NoCapture);
@@ -648,33 +603,9 @@ static void buildRuntimeModule() {
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
 
-  // void _moduleCtor()
-  // void _moduleDtor()
-  createFwdDecl(LINKc, voidTy, {"_moduleCtor", "_moduleDtor"}, {});
-
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-
   // void _d_throw_exception(Throwable o)
   createFwdDecl(LINKc, voidTy, {"_d_throw_exception"}, {throwableTy}, {},
                 Attr_Cold_NoReturn);
-
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-
-  // int _d_switch_string(char[][] table, char[] ca)
-  createFwdDecl(LINKc, intTy, {"_d_switch_string"},
-                {stringTy->arrayOf(), stringTy}, {}, Attr_ReadOnly);
-
-  // int _d_switch_ustring(wchar[][] table, wchar[] ca)
-  createFwdDecl(LINKc, intTy, {"_d_switch_ustring"},
-                {wstringTy->arrayOf(), wstringTy}, {}, Attr_ReadOnly);
-
-  // int _d_switch_dstring(dchar[][] table, dchar[] ca)
-  createFwdDecl(LINKc, intTy, {"_d_switch_dstring"},
-                {dstringTy->arrayOf(), dstringTy}, {}, Attr_ReadOnly);
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -787,6 +718,16 @@ static void buildRuntimeModule() {
       break;
     }
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
+  ////// DMD-style tracing calls
+
+  // extern(C) void trace_pro(char[] id)
+  createFwdDecl(LINKc, voidTy, {"trace_pro"}, {stringTy});
+
+  // extern(C) void _c_trace_epi()
+  createFwdDecl(LINKc, voidTy, {"_c_trace_epi"}, {});
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////

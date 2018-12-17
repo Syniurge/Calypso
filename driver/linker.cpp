@@ -20,15 +20,11 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-static llvm::cl::opt<llvm::cl::boolOrDefault>
-    staticFlag("static", llvm::cl::ZeroOrMore,
-               llvm::cl::desc("Create a statically linked binary, including "
-                              "all system dependencies"));
-
 #if LDC_WITH_LLD
 static llvm::cl::opt<bool>
     useInternalLinker("link-internally", llvm::cl::ZeroOrMore, llvm::cl::Hidden,
-                      llvm::cl::desc("Use internal LLD for linking"));
+                      llvm::cl::desc("Use internal LLD for linking"),
+                      llvm::cl::cat(opts::linkingCategory));
 #else
 constexpr bool useInternalLinker = false;
 #endif
@@ -64,9 +60,10 @@ static std::string getOutputName() {
   }
 
   // Infer output name from first object file.
-  std::string result = global.params.objfiles->dim
-                           ? FileName::removeExt((*global.params.objfiles)[0])
-                           : "a.out";
+  std::string result =
+      global.params.objfiles.dim
+          ? FileName::removeExt(FileName::name(global.params.objfiles[0]))
+          : "a.out";
 
   if (sharedLib && !triple.isWindowsMSVCEnvironment())
     result = "lib" + result;
@@ -76,9 +73,8 @@ static std::string getOutputName() {
     // after execution. Make sure the name does not collide with other files
     // from other processes by creating a unique filename.
     llvm::SmallString<128> tempFilename;
-    auto EC = llvm::sys::fs::createTemporaryFile(FileName::name(result.c_str()),
-                                                 extension ? extension : "",
-                                                 tempFilename);
+    auto EC = llvm::sys::fs::createTemporaryFile(
+        result, extension ? extension : "", tempFilename);
     if (!EC)
       result = tempFilename.str();
   } else if (extension) {
@@ -134,10 +130,10 @@ int linkObjToBinary() {
   createDirectoryForFileOrFail(gExePath);
 
   if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
-    return linkObjToBinaryMSVC(gExePath, useInternalLinker, staticFlag);
+    return linkObjToBinaryMSVC(gExePath, useInternalLinker, opts::staticFlag);
   }
 
-  return linkObjToBinaryGcc(gExePath, useInternalLinker, staticFlag);
+  return linkObjToBinaryGcc(gExePath, useInternalLinker, opts::staticFlag);
 }
 
 //////////////////////////////////////////////////////////////////////////////

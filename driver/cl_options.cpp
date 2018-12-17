@@ -21,6 +21,8 @@ namespace opts {
 // This vector is filled by parseCommandLine in main.cpp.
 llvm::SmallVector<const char *, 32> allArguments;
 
+cl::OptionCategory linkingCategory("Linking options");
+
 /* Option parser that defaults to zero when no explicit number is given.
  * i.e.:  -cov    --> value = 0
  *        -cov=9  --> value = 9
@@ -104,7 +106,7 @@ static cl::opt<bool, true> verbose_cg_ast("vcg-ast", cl::ZeroOrMore, cl::Hidden,
                                           cl::location(global.params.vcg_ast));
 
 static cl::opt<unsigned, true> errorLimit(
-    "verrors", cl::ZeroOrMore, cl::location(global.errorLimit),
+    "verrors", cl::ZeroOrMore, cl::location(global.params.errorLimit),
     cl::desc("Limit the number of error messages (0 means unlimited)"));
 
 static cl::opt<bool, true>
@@ -239,8 +241,8 @@ struct D_DebugStorage {
   void push_back(const std::string &str) {
     if (str.empty()) {
       // Bare "-d-debug" has a special meaning.
-      global.params.useAssert = true;
-      global.params.useArrayBounds = BOUNDSCHECKon;
+      global.params.useAssert = CHECKENABLEon;
+      global.params.useArrayBounds = CHECKENABLEon;
       global.params.useInvariants = true;
       global.params.useIn = true;
       global.params.useOut = true;
@@ -272,12 +274,13 @@ cl::list<std::string> transitions(
 
 cl::list<std::string>
     linkerSwitches("L", cl::desc("Pass <linkerflag> to the linker"),
-                   cl::value_desc("linkerflag"), cl::Prefix);
+                   cl::value_desc("linkerflag"), cl::cat(linkingCategory),
+                   cl::Prefix);
 
 cl::list<std::string>
     ccSwitches("Xcc", cl::CommaSeparated,
                cl::desc("Pass <ccflag> to GCC/Clang for linking"),
-               cl::value_desc("ccflag"));
+               cl::value_desc("ccflag"), cl::cat(linkingCategory));
 
 cl::opt<std::string>
     moduleDeps("deps", cl::ValueOptional, cl::ZeroOrMore,
@@ -285,6 +288,12 @@ cl::opt<std::string>
                cl::desc("Write module dependencies to filename (only imports). "
                         "'-deps' alone prints module dependencies "
                         "(imports/file/version/debug/lib)"));
+
+cl::opt<cl::boolOrDefault>
+    staticFlag("static", llvm::cl::ZeroOrMore,
+               llvm::cl::desc("Create a statically linked binary, including "
+                              "all system dependencies"),
+               cl::cat(linkingCategory));
 
 cl::opt<bool> m32bits("m32", cl::desc("32 bit target"), cl::ZeroOrMore);
 
@@ -306,18 +315,18 @@ static cl::list<std::string, StringsAdapter> modFileAliasStrings(
 
 FloatABI::Type floatABI; // Storage for the dynamically created float-abi option.
 
-static cl::opt<bool, true, FlagParser<bool>>
+static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>>
     asserts("asserts", cl::ZeroOrMore, cl::desc("(*) Enable assertions"),
             cl::value_desc("bool"), cl::location(global.params.useAssert),
-            cl::init(true));
+            cl::init(CHECKENABLEdefault));
 
-cl::opt<BOUNDSCHECK> boundsCheck(
+static cl::opt<CHECKENABLE, true> boundsCheck(
     "boundscheck", cl::ZeroOrMore, cl::desc("Array bounds check"),
-    cl::init(BOUNDSCHECKdefault),
-    clEnumValues(clEnumValN(BOUNDSCHECKoff, "off", "Disabled"),
-                 clEnumValN(BOUNDSCHECKsafeonly, "safeonly",
+    cl::location(global.params.useArrayBounds), cl::init(CHECKENABLEdefault),
+    clEnumValues(clEnumValN(CHECKENABLEoff, "off", "Disabled"),
+                 clEnumValN(CHECKENABLEsafeonly, "safeonly",
                             "Enabled for @safe functions only"),
-                 clEnumValN(BOUNDSCHECKon, "on", "Enabled for all functions")));
+                 clEnumValN(CHECKENABLEon, "on", "Enabled for all functions")));
 
 static cl::opt<bool, true, FlagParser<bool>>
     invariants("invariants", cl::ZeroOrMore, cl::desc("(*) Enable invariants"),
@@ -338,9 +347,8 @@ static cl::opt<MultiSetter, true, FlagParser<bool>>
     contracts("contracts", cl::ZeroOrMore, cl::location(ContractsSetter),
               cl::desc("(*) Enable function pre- and post-conditions"));
 
-bool nonSafeBoundsChecks = true;
-static MultiSetter ReleaseSetter(true, &global.params.useAssert,
-                                 &nonSafeBoundsChecks,
+bool invReleaseMode = true;
+static MultiSetter ReleaseSetter(true, &invReleaseMode,
                                  &global.params.useInvariants,
                                  &global.params.useOut, &global.params.useIn,
                                  nullptr);
@@ -364,7 +372,8 @@ cl::opt<bool> linkonceTemplates(
 
 cl::opt<bool> disableLinkerStripDead(
     "disable-linker-strip-dead", cl::ZeroOrMore,
-    cl::desc("Do not try to remove unused symbols during linking"));
+    cl::desc("Do not try to remove unused symbols during linking"),
+    cl::cat(linkingCategory));
 
 // Math options
 bool fFastMath; // Storage for the dynamically created ffast-math option.
@@ -398,6 +407,10 @@ cl::opt<bool> useDIP1000(
     "dip1000", cl::ZeroOrMore,
     cl::desc("Implement http://wiki.dlang.org/DIP1000 (experimental)"));
 
+cl::opt<bool, true> useDIP1008("dip1008", cl::ZeroOrMore,
+                               cl::location(global.params.ehnogc),
+                               cl::desc("Implement DIP1008 (experimental)"));
+
 cl::opt<bool, true> betterC(
     "betterC", cl::ZeroOrMore, cl::location(global.params.betterC),
     cl::desc("Omit generating some runtime information and helper functions"));
@@ -407,25 +420,6 @@ cl::opt<unsigned char, true, CoverageParser> coverageAnalysis(
     cl::desc("Compile-in code coverage analysis\n(use -cov=n for n% "
              "minimum required coverage)"),
     cl::ValueOptional, cl::init(127));
-
-#if LDC_WITH_PGO
-cl::opt<std::string>
-    genfileInstrProf("fprofile-instr-generate", cl::value_desc("filename"),
-                     cl::desc("Generate instrumented code to collect a runtime "
-                              "profile into default.profraw (overriden by "
-                              "'=<filename>' or LLVM_PROFILE_FILE env var)"),
-                     cl::ZeroOrMore, cl::ValueOptional);
-
-cl::opt<std::string> usefileInstrProf(
-    "fprofile-instr-use", cl::ZeroOrMore, cl::value_desc("filename"),
-    cl::desc("Use instrumentation data for profile-guided optimization"),
-    cl::ValueRequired);
-#endif
-
-cl::opt<bool>
-    instrumentFunctions("finstrument-functions", cl::ZeroOrMore,
-                        cl::desc("Instrument function entry and exit with "
-                                 "GCC-compatible profiling calls"));
 
 #if LDC_LLVM_VER >= 309
 cl::opt<LTOKind> ltoMode(
@@ -546,26 +540,29 @@ void createClashingOptions() {
 /// to be useful for end users from the -help output.
 void hideLLVMOptions() {
   static const char *const hiddenOptions[] = {
-      "arm-implicit-it", "asm-instrumentation", "asm-show-inst",
-      "atomic-counter-update-promote", "bounds-checking-single-trap",
-      "cppfname", "cppfor", "cppgen", "cvp-dont-process-add", "debug-counter",
-      "debugger-tune", "denormal-fp-math", "disable-debug-info-verifier",
+      "aarch64-neon-syntax", "arm-add-build-attributes", "arm-implicit-it",
+      "asm-instrumentation", "asm-show-inst", "atomic-counter-update-promoted",
+      "bounds-checking-single-trap", "code-model", "cppfname", "cppfor",
+      "cppgen", "cvp-dont-process-adds", "debug-counter", "debugger-tune",
+      "denormal-fp-math", "disable-debug-info-verifier",
       "disable-objc-arc-checkforcfghazards", "disable-spill-fusing",
       "do-counter-promotion", "emulated-tls", "enable-correct-eh-support",
       "enable-fp-mad", "enable-implicit-null-checks", "enable-load-pre",
       "enable-misched", "enable-name-compression", "enable-no-infs-fp-math",
-      "enable-no-nans-fp-math", "enable-no-trapping-fp-math",
-      "enable-objc-arc-annotations", "enable-objc-arc-opts", "enable-pie",
-      "enable-scoped-noalias", "enable-tbaa", "enable-unsafe-fp-math",
-      "exception-model", "exhaustive-register-search",
-      "fatal-assembler-warnings", "gpsize", "imp-null-check-page-size",
-      "imp-null-max-insts-to-consider", "incremental-linker-compatible",
-      "instcombine-maxarray-size", "internalize-public-api-file",
-      "internalize-public-api-list", "iterative-counter-promotion",
-      "join-liveintervals", "jump-table-type", "limit-float-precision",
-      "max-counter-promotions", "max-counter-promotions-per-loop",
-      "mc-relax-all", "mc-x86-disable-arith-relaxation", "meabi",
-      "memop-size-large", "memop-size-range", "merror-missing-parenthesis",
+      "enable-no-nans-fp-math", "enable-no-signed-zeros-fp-math",
+      "enable-no-trapping-fp-math", "enable-objc-arc-annotations",
+      "enable-objc-arc-opts", "enable-pie", "enable-scoped-noalias",
+      "enable-tbaa", "enable-unsafe-fp-math", "exception-model",
+      "exhaustive-register-search", "expensive-combines",
+      "fatal-assembler-warnings", "filter-print-funcs", "gpsize",
+      "imp-null-check-page-size", "imp-null-max-insts-to-consider",
+      "incremental-linker-compatible", "instcombine-maxarray-size",
+      "internalize-public-api-file", "internalize-public-api-list",
+      "iterative-counter-promotion", "join-liveintervals", "jump-table-type",
+      "limit-float-precision", "max-counter-promotions",
+      "max-counter-promotions-per-loop", "mc-relax-all",
+      "mc-x86-disable-arith-relaxation", "meabi", "memop-size-large",
+      "memop-size-range", "merror-missing-parenthesis",
       "merror-noncontigious-register", "mfuture-regs", "mips-compact-branches",
       "mips16-constant-islands", "mips16-hard-float", "mlsm", "mno-compound",
       "mno-fixup", "mno-ldc1-sdc1", "mno-pairing", "mwarn-missing-parenthesis",
@@ -580,6 +577,9 @@ void hideLLVMOptions() {
       "r600-ir-structurize", "rdf-dump", "rdf-limit", "recip", "regalloc",
       "relax-elf-relocations", "rewrite-map-file", "rng-seed",
       "safepoint-ir-verifier-print-only",
+      "sample-profile-check-record-coverage",
+      "sample-profile-check-sample-coverage",
+      "sample-profile-inline-hot-threshold",
       "sample-profile-max-propagate-iterations", "shrink-wrap", "simplify-mir",
       "speculative-counter-promotion-max-exiting",
       "speculative-counter-promotion-to-loop", "spiller", "spirv-debug",
@@ -592,8 +592,8 @@ void hideLLVMOptions() {
       "unit-at-a-time", "use-ctors", "verify-debug-info", "verify-dom-info",
       "verify-loop-info", "verify-loop-lcssa", "verify-machine-dom-info",
       "verify-regalloc", "verify-region-info", "verify-scev",
-      "verify-scev-maps", "x86-early-ifcvt", "x86-recip-refinement-steps",
-      "x86-use-vzeroupper",
+      "verify-scev-maps", "vp-counters-per-site", "vp-static-alloc",
+      "x86-early-ifcvt", "x86-recip-refinement-steps", "x86-use-vzeroupper",
 
       // We enable -fdata-sections/-ffunction-sections by default where it makes
       // sense for reducing code size, so hide them to avoid confusion.
