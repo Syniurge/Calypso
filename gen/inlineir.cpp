@@ -83,6 +83,8 @@ void DtoCheckInlineIRPragma(Identifier *ident, Dsymbol *s) {
     if (valid_params) {
       for (d_size_t i = 0; i < (params.dim - 2); ++i) {
         TemplateValueParameter *p0 = params[i]->isTemplateValueParameter();
+        if (!p0->valType->deco)
+            p0->valType = typeSemantic(p0->valType, p0->loc, td->_scope); // CALYPSO /* LDC 1.8 NOTE/TODO: reconsider? */
         valid_params = valid_params && p0 && p0->valType == Type::tstring;
       }
     }

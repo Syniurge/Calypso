@@ -9,6 +9,11 @@ module dmd.parsetimevisitor;
 extern (C++) class ParseTimeVisitor(AST)
 {
 public:
+    const(void)* _typeid() const // CALYPSO: enable overrides of DMD's visitors by cpp::XXX::accept()
+    {
+        return null; // visitors of interest return (D's) typeid(typeof(this))
+    }
+
     void visit(AST.Dsymbol) { assert(0); }
     void visit(AST.Parameter) { assert(0); }
     void visit(AST.Statement) { assert(0); }
