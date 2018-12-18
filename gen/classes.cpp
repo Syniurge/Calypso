@@ -279,7 +279,7 @@ void DtoFinalizeScopeClass(Loc &loc, LLValue *inst, ClassDeclaration *cd) {
   assert(!cd->isCPPclass());
 
   bool hasDtor = false;
-  for (; cd; cd = cd->baseClass) {
+  for (; cd; cd = isClassDeclarationOrNull(cd->baseClass)) {
     if (cd->dtor) {
       hasDtor = true;
       break;
@@ -404,10 +404,10 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
     return DtoAggregateDValue(_to->toBasetype(), v); // CALYPSO
   }
 
-  if (fc->sym->classKind == ClassKind::cpp) {
+  if (fc->sym->classKind == ClassKind::ck_cpp) {
     Logger::println("C++ class/interface cast");
     auto tcd = tsym->isClassDeclaration();
-    LLValue *v = tcd && tcd->classKind == ClassKind::cpp // CALYPSO
+    LLValue *v = tcd && tcd->classKind == ClassKind::ck_cpp // CALYPSO
                      ? DtoBitCast(DtoRVal(val), toType)
                      : LLConstant::getNullValue(toType);
     return new DImValue(_to, v);

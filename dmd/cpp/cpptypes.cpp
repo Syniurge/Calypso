@@ -1938,7 +1938,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
         } else if (scSemImplicitImports) {
             auto dst = Package::resolve(im->packages, nullptr, &im->pkg);
             if (!dst->lookup(im->id)) {
-                semantic(im, scSemImplicitImports);
+                dsymbolSemantic(im, scSemImplicitImports);
                 semantic2(im, scSemImplicitImports);
             }
         }

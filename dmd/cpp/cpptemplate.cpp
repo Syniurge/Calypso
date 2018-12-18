@@ -297,7 +297,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
         {
             // Try to fix forward reference. Ungag errors while doing so.
             Ungag ungag = ungagSpeculative();
-            semantic(this, _scope);
+            dsymbolSemantic(this, _scope);
         }
         if (semanticRun == PASSinit)
         {

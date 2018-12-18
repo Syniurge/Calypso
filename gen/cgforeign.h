@@ -2,7 +2,7 @@
 
 #include "llvm.h"
 
-#include "ddmd/declaration.h"
+#include "declaration.h"
 #include "ir/irtypeaggr.h"
 
 class Type;
