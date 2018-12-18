@@ -4121,9 +4121,9 @@ void catchSemantic(Catch c, Scope* sc)
         c.errors = true;
     else
     {
+        StorageClass stc;
         if (c.onlyCatchThrowableOrCppClass()) // CALYPSO
         {
-        StorageClass stc;
         auto cd = c.type.toBasetype().isClassHandle();
         if (!cd)
         {
@@ -4163,7 +4163,7 @@ void catchSemantic(Catch c, Scope* sc)
 
         if (c.ident)
         {
-            c.var = c.createVar(stc); // CALYPSO /* LDC 1.8 NOTE/FIXME: stc was a new argument in the vanilla ctor call, needs createVar update (btw next line was also new) */
+            c.var = c.createVar(/+stc+/); // CALYPSO /* LDC 1.8 NOTE/FIXME: stc was a new argument in the vanilla ctor call, needs createVar update (btw next line was also new) */
             c.var.iscatchvar = true;
             c.var.dsymbolSemantic(sc);
             sc.insert(c.var);

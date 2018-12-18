@@ -633,7 +633,7 @@ static const clangCG::CGFunctionInfo &arrangeFunctionCall(
 }
 
 DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval, 
-                                   const std::vector<DValue *> &argvals, llvm::Value *retvar)
+                                   Expressions *arguments, llvm::Value *retvar)
 {
     updateCGFInsertPoint();
     
@@ -645,7 +645,6 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     // get callee llvm value
     LLValue* callable = DtoCallableValue(fnval);
-    LLFunctionType* callableTy = DtoExtractFunctionType(callable->getType());
     assert(callableTy);
 
     clangCG::RValue RV;
@@ -682,10 +681,10 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     }
 
     size_t n = Parameter::dim(tf->parameters);
-    for (size_t i=0; i<n; ++i) {
+    for (size_t i = 0; i < n; ++i) {
         Parameter* fnarg = Parameter::getNth(tf->parameters, i);
         assert(fnarg);
-        DValue* argval = argvals[i];
+        DValue* argval = toElem((*arguments)[i]);
 
         auto argty = fnarg->type;
         auto ArgTy = TypeMapper().toType(loc, argty,

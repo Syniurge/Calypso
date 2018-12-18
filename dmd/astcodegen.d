@@ -80,7 +80,7 @@ struct ASTCodegen
     alias STCfuture                 = dmd.declaration.STCfuture;
     alias STCalias                  = dmd.declaration.STCalias;
     alias STClocal                  = dmd.declaration.STClocal;
-    alias STCimplicit               = ddmd.declaration.STCimplicit; // CALYPSO
+    alias STCimplicit               = dmd.declaration.STCimplicit; // CALYPSO
 
     alias Dsymbol                   = dmd.dsymbol.Dsymbol;
     alias Dsymbols                  = dmd.dsymbol.Dsymbols;
@@ -100,5 +100,5 @@ struct ASTCodegen
     alias isExpression              = dmd.dtemplate.isExpression;
     alias isTuple                   = dmd.dtemplate.isTuple;
 
-    alias langPlugins               = ddmd.dimport.langPlugins; // CALYPSO
+    alias langPlugins               = dmd.dimport.langPlugins; // CALYPSO
 }

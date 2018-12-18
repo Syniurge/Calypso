@@ -204,7 +204,7 @@ public:
     bool toIsReturnInArg(CallExp* ce) override;
     LLValue *toVirtualFunctionPointer(DValue* inst, ::FuncDeclaration* fdecl, const char* name) override;
     DValue* toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
-                                   const std::vector<DValue *> &argvals, llvm::Value *retvar) override;
+                           Expressions *arguments, llvm::Value *retvar) override;
 
     bool toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expression *rhs) override;
 

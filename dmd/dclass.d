@@ -1005,7 +1005,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
     {
         if (auto bcd = isClassDeclarationOrNull(baseClass))
         {
-            if (cldec.classKind == ClassKind.cpp && bcd.vtbl.dim == 0)
+            if (classKind == ClassKind.cpp && bcd.vtbl.dim == 0)
             {
                 error("C++ base class %s needs at least one virtual function", baseClass.toChars());
             }

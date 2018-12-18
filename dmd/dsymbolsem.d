@@ -6002,10 +6002,8 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
                     cldec.com = true;
                 if (bcd.isCPPclass())
                     cldec.classKind = ClassKind.cpp;
-                if (cldec.baseClass.stack)
+                if (bcd.stack)
                     cldec.stack = true;
-                if (bcd.isscope)
-                    cldec.isscope = true;
                 }
                 cldec.enclosing = cldec.baseClass.enclosing;
                 cldec.storage_class |= cldec.baseClass.storage_class & STC_TYPECTOR;
@@ -6733,7 +6731,7 @@ void templateInstanceSemantic(TemplateInstance tempinst, Scope* sc, Expressions*
         if (auto foreignInst = tempdecl.foreignInstance(tempinst, sc))  // CALYPSO
         {
             tempinst.inst = foreignInst;
-            foreignInst.semantic(sc);
+            foreignInst.dsymbolSemantic(sc);
         }
     }
     if (!tempinst.inst)
