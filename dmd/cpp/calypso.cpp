@@ -1089,7 +1089,7 @@ void LangPlugin::codegenModules()
 {
     for (auto m: cpp::Module::amodules) {
         m->checkAndAddOutputFile(m->objfile);
-        global.params.objfiles->push(m->objfile->name->str);
+        global.params.objfiles.push(m->objfile->name->str);
     }
     ::codegenModules(cpp::Module::amodules, false);
 }

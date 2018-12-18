@@ -1021,7 +1021,7 @@ extern (C++) abstract class Type : RootObject
         return null;
     }
 
-    ushort sizeType() // CALYPSO
+    ushort sizeType() nothrow // CALYPSO
     {
         return sizeTy[ty];
     }

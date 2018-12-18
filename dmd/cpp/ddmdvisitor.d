@@ -1,7 +1,7 @@
 // Contributed by Elie Morisse, same license DMD uses
 
-import ddmd.dsymbolsem;
-import ddmd.dmangle;
+import dmd.dsymbolsem;
+import dmd.dmangle;
 
 shared static this()
 {

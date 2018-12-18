@@ -529,7 +529,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 
     // On aggregate destruction the GC looks for a "__xdtor" member
     auto _alias = new_AliasDeclaration(Loc(), Id::__xdtor, ad->dtors[0]);
-    semantic(_alias, sc);
+    dsymbolSemantic(_alias, sc);
     ad->members->push(_alias);
     _alias->addMember(sc, ad); // add to symbol table
 
@@ -607,7 +607,7 @@ template <typename AggTy>
                 assert(isCPP(vd));
 
                 if (vd->_scope)
-                    semantic(vd, nullptr);
+                    dsymbolSemantic(vd, nullptr);
 
                 auto c_vd = static_cast<VarDeclaration*>(vd);
                 auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);

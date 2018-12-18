@@ -1135,7 +1135,7 @@ extern (C++) Expression valueNoDtor(Expression e)
  * Input:
  *      sc      just used to specify the scope of created temporary variable
  */
-private Expression callCpCtor(Scope* sc, Expression e)
+Expression callCpCtor(Scope* sc, Expression e) // CALYPSO
 {
     Type tv = e.type.baseElemOf();
     if (tv.isAggregateValue) // CALYPSO

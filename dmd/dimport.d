@@ -322,11 +322,12 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
     }
 }
 
-import ddmd.aggregate;
-import ddmd.dinterpret;
-import ddmd.dstruct;
-import ddmd.func;
-import ddmd.statement;
+import dmd.aggregate;
+import dmd.attrib;
+import dmd.dinterpret;
+import dmd.dstruct;
+import dmd.func;
+import dmd.statement;
 
 alias ForeignCodeGen = void*;
 
@@ -396,6 +397,6 @@ public:
     bool needsCodegen(Module m);
 }
 
-import ddmd.root.array;
+import dmd.root.array;
 alias LangPlugins = Array!(LangPlugin);
 extern (C++) __gshared LangPlugins langPlugins; // CALYPSO (1.1 NOTE: moved from globals.d to prevent cycles)

@@ -274,7 +274,7 @@ enum ClassKind
     /// the class is a d(efault) class
     d,
     /// the class is a C++ interface
-    cpp,
+    ck_cpp, // CALYPSO renamed from "cpp" to preserve Calypso's cpp namespace
     /// the class is an Objective-C class/interface
     objc
 };

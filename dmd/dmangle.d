@@ -166,7 +166,7 @@ private void MODtoDecoBuffer(OutBuffer* buf, MOD mod)
     }
 }
 
-private extern (C++) final class Mangler : Visitor
+extern (C++) final class Mangler : Visitor // CALYPSO
 {
     alias visit = Visitor.visit;
 public:

@@ -244,7 +244,7 @@ void AliasDeclaration::doSemantic()
         return;
 
     isUsed = true;
-    semantic(this, _scope);
+    dsymbolSemantic(this, _scope);
 }
 
 Dsymbol *AliasDeclaration::toAlias()
@@ -392,7 +392,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         auto td = static_cast<cpp::TemplateDeclaration*>(s);
         if (td->semanticRun == PASSinit) {
             assert(td->_scope);
-            semantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
+            dsymbolSemantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
         }
 
         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
@@ -419,7 +419,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             assert(false && "DeclReferencer semanticTiargs failed");
 
         td->makeForeignInstance(tempinst);
-        semantic(tempinst, sc);
+        dsymbolSemantic(tempinst, sc);
 
         s = tempinst->toAlias();
     }
@@ -505,7 +505,7 @@ bool NestedDeclMapper::TraverseCXXRecordDecl(const clang::CXXRecordDecl *D)
 
     if (auto a = dref.mapper.VisitRecordDecl(D))
         for (auto s: *a)
-            semantic(s, dref.sc);
+            dsymbolSemantic(s, dref.sc);
 
     return true;
 }

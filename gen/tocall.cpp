@@ -826,7 +826,7 @@ DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
 
   if (dfnval)
     if (auto lp = dfnval->func->langPlugin())
-        return lp->codegen()->toCallFunction(loc, resulttype, fnval, argvals, sretPointer); // CALYPSO
+        return lp->codegen()->toCallFunction(loc, resulttype, fnval, arguments, sretPointer); // CALYPSO
 
   // make sure the D callee type has been processed
   DtoType(fnval->type); // CALYPSO FIXME: moved here from the beginning of DtoCallFunction because class value types aren't handled properly by TargetABI::rewriteFunctionType

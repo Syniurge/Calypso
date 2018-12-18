@@ -211,7 +211,7 @@ public:
     }
 }
 
-private struct InterState
+struct InterState // CALYPSO
 {
     InterState* caller;     // calling function's InterState
     FuncDeclaration fd;     // function being interpreted
