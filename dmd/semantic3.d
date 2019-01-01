@@ -83,7 +83,7 @@ extern(C++) void semantic3(Dsymbol dsym, Scope* sc)
     dsym.accept(v);
 }
 
-private extern(C++) final class Semantic3Visitor : Visitor
+extern(C++) final class Semantic3Visitor : Visitor
 {
     alias visit = Visitor.visit;
 
@@ -1319,8 +1319,8 @@ else
             return;
         }
 
-        if (ad.semanticRun <= PASSsemantic3) // CALYPSO
-            ad.semanticRun = PASSsemantic3;
+        if (ad.semanticRun <= PASS.semantic3) // CALYPSO
+            ad.semanticRun = PASS.semantic3;
 
         auto sc2 = ad.newScope(sc);
 

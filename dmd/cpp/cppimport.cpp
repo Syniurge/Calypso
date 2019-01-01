@@ -68,7 +68,7 @@ void GlobalImport::load(Scope *sc)
     if (loaded)
         return;
 
-    sc->scopesym->importScope(pkg, {PROTprivate, nullptr});
+    sc->scopesym->importScope(pkg, {Prot::private_, nullptr});
     loaded = true;
 }
 

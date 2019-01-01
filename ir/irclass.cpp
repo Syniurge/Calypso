@@ -264,7 +264,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtblSymbol(BaseClass *b,
   ClassDeclaration *cd = aggrdecl->isClassDeclaration();
   assert(cd && "not a class aggregate");
 
-  llvm::Type *vtblType = LLArrayType::get(getVoidPtrType(), b->sym->vtbl.dim);
+  llvm::Type *vtblType = LLArrayType::get(getVoidPtrType(), cb->vtbl.dim);
 
   // Thunk prefix
   char thunkPrefix[16];
@@ -287,7 +287,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtblSymbol(BaseClass *b,
       declareGlobal(cd->loc, gIR->module, vtblType, irMangle, /*isConstant=*/true);
 
   // insert into the vtbl map
-  interfaceVtblMap.insert({{b->sym, interfaces_index}, gvar});
+  interfaceVtblMap.insert({{cb, interfaces_index}, gvar});
 
   return gvar;
 }

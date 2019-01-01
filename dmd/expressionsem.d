@@ -602,7 +602,7 @@ private bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type tthis,
                 arg = inlineCopy(arg, sc);
                 // __FILE__, __LINE__, __MODULE__, __FUNCTION__, and __PRETTY_FUNCTION__
                 arg = arg.resolveLoc(loc, sc);
-                if (arg.op == TOKcall && sc.isD()) // CALYPSO (semantic isn't called on default arguments)
+                if (arg.op == TOK.call && sc.isD()) // CALYPSO (semantic isn't called on default arguments)
                     markCalleeReferenced(cast(CallExp)arg);
                 arguments.push(arg);
                 nargs++;
@@ -790,7 +790,7 @@ private bool functionParameters(Loc loc, Scope* sc, TypeFunction tf, Type tthis,
             }
             if (p.storageClass & STC.ref_)
             {
-                if (!(p.storageClass & STCscope)) // CALYPSO
+                if (!(p.storageClass & STC.scope_)) // CALYPSO
                     arg = arg.toLvalue(sc, arg);
 
                 // Look for mutable misaligned pointer, etc., in @safe mode
@@ -3052,7 +3052,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                     result = e;
                     return;
                 }
-                else if (exp.e1.op == TOKtype && sd.langPlugin()) // CALYPSO HACK
+                else if (exp.e1.op == TOK.type && sd.langPlugin()) // CALYPSO HACK
                     goto Lx;
                 // No constructor, look for overload of opCall
                 if (search_function(sd, Id.call))
@@ -7237,7 +7237,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
         Expression e2x = exp.e2;
         Type t2 = e2x.type.toBasetype();
 
-        if (exp.op != TOKconstruct && isAggregateValue(t2) && getAggregateSym(t2).langPlugin()) // CALYPSO HACK: (needs to be re-evaluated). In assignments DMD doesn't call addDtorHook, because if RHS is a struct with a dtor then it gets overloaded to opAssign, which calls the dtor itself on exit. But C++ record arguments are exempted of dtor calls by D callees (see D20180120T151603), and they may have a dtor but no operator=, so we have to call dtor on rvalues here
+        if (exp.op != TOK.construct && isAggregateValue(t2) && getAggregateSym(t2).langPlugin()) // CALYPSO HACK: (needs to be re-evaluated). In assignments DMD doesn't call addDtorHook, because if RHS is a struct with a dtor then it gets overloaded to opAssign, which calls the dtor itself on exit. But C++ record arguments are exempted of dtor calls by D callees (see D20180120T151603), and they may have a dtor but no operator=, so we have to call dtor on rvalues here
             e2x = e2x.addDtorHook(sc);
 
         // If it is a array, get the element type. Note that it may be

@@ -41,7 +41,7 @@ public:
     Module(const char *filename, Identifier *ident, Identifiers *packages);
 
     static Module *load(Loc loc, Identifiers *packages, Identifier *ident, bool& isTypedef);
-    Dsymbol *search(Loc loc, Identifier *ident, int flags = IgnoreNone) override;
+    Dsymbol *search(const Loc& loc, Identifier *ident, int flags = IgnoreNone) override;
     void addPreambule() override;
     const char *manglePrefix() override { return "_Cpp"; }
     bool isCodegen() override { return true; } // §cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted

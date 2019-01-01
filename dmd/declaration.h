@@ -656,7 +656,7 @@ public:
     void printGCUsage(const Loc &loc, const char *warn);
     bool isolateReturn();
     bool parametersIntersect(Type *t);
-    virtual bool isNested();
+    virtual bool isNested() const; // CALYPSO (missing const)
     AggregateDeclaration *isThis();
     bool needThis();
     bool isVirtualMethod();
@@ -725,7 +725,7 @@ public:
     bool deferToObj;
 
     Dsymbol *syntaxCopy(Dsymbol *);
-    bool isNested();
+    bool isNested() const; // CALYPSO (missing const)
     AggregateDeclaration *isThis();
     bool isVirtual() const;
     bool addPreInvariant();

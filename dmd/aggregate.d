@@ -976,11 +976,11 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     final CtorDeclaration hasImplicitCtor(Expression farg)
     {
-        if (farg.op == TOKcomment) // do not go beyond depth of 1
+        if (farg.op == TOK.comment) // do not go beyond depth of 1
             return null;
 
         size(loc);
-        assert(sizeok == SIZEOKdone); // forward ref
+        assert(sizeok == Sizeok.done); // forward ref
 
         if (!ctor)
             return null;
@@ -991,7 +991,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         auto fargs = new Expressions;
         fargs.push(e);
         FuncDeclaration fd = resolveFuncCall(farg.loc, null, ctor, null, null, fargs, 1|4);
-        if (fd && (fd.storage_class & STCimplicit)) // explicitly enabled @implicit constructor calls
+        if (fd && (fd.storage_class & STC.implicit)) // explicitly enabled @implicit constructor calls
         {
             assert(fd.isCtorDeclaration());
             return cast(CtorDeclaration) fd;
@@ -1033,7 +1033,7 @@ extern(C++) class NoImplicitCtorExp : TaggedExp
 public:
     final extern(D) this(Loc loc, Expression e1)
     {
-        super(loc, TOKcomment, NoImplicitCtorExp.sizeof, e1);
+        super(loc, TOK.comment, NoImplicitCtorExp.sizeof, e1);
     }
 }
 

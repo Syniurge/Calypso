@@ -6124,7 +6124,7 @@ extern (C++) final class TypeFunction : TypeNext
                             targ = toad.getType();
                         }
                     }
-                    else if (m > MATCH.nomatch && p.storageClass & STCmove) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
+                    else if (m > MATCH.nomatch && p.storageClass & STC.move) // CALYPSO SEMI-HACK, or is it the proper solution to make DMD aware of C++ rvalue refs?..
                         if (arg.isLvalue())
                             m = MATCH.nomatch;
                 }
@@ -6138,7 +6138,7 @@ extern (C++) final class TypeFunction : TypeNext
                     Type tp = tprm;
                     //printf("fparam[%d] ta = %s, tp = %s\n", u, ta.toChars(), tp.toChars());
 
-                    if (m && !(p.storageClass & STCscope) && !arg.isLvalue()) // CALYPSO
+                    if (m && !(p.storageClass & STC.scope_) && !arg.isLvalue()) // CALYPSO
                     {
                         if (p.storageClass & STC.out_)
                         {
@@ -8145,7 +8145,7 @@ extern (C++) final class TypeClass : Type
     {
         if (byRef())
             return super.alignsize();
-        sym.size(Loc());               // give error for forward references
+        sym.size(Loc.initial);               // give error for forward references
         return sym.alignsize;
     }
 
@@ -8154,7 +8154,7 @@ extern (C++) final class TypeClass : Type
         if (byRef())
             return super.alignment();
         if (sym.alignment == 0)
-            sym.size(Loc());
+            sym.size(Loc.initial);
         return sym.alignment;
     }
 

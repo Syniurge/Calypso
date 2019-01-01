@@ -578,17 +578,14 @@ macro(build_runtime_libs druntime_o druntime_bc phobos2_o phobos2_bc calypsort_o
 
     add_library(calypso-ldc${target_suffix} ${library_type}
         ${calypsort_o} ${cpp_monolith_o})
+    set_common_library_properties(calypso-ldc${target_suffix}
+        calypso-ldc${lib_suffix} ${output_path}
+        "${c_flags}" "${ld_flags} ${calypso_extra_link_flags}" ${is_shared}
+    )
     set_target_properties(
         calypso-ldc${target_suffix} PROPERTIES
-        OUTPUT_NAME                 calypso-ldc${lib_suffix}
-        ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
-        LIBRARY_OUTPUT_DIRECTORY    ${output_path}
-        RUNTIME_OUTPUT_DIRECTORY    ${output_path}
-        COMPILE_FLAGS               "${c_flags}"
-        LINK_FLAGS                  "${ld_flags} ${calypso_extra_link_flags}"
         STATIC_LIBRARY_FLAGS        "${calypso_extra_link_flags}"
     )
-    set_common_library_properties(calypso-ldc${target_suffix} "${is_shared}")
 
     if("${is_shared}" STREQUAL "ON")
         target_link_libraries(calypso-ldc${target_suffix}

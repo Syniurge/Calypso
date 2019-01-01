@@ -54,13 +54,13 @@
 #include <cctype>
 #include <cstring>
 
-extern llvm::cl::opt<bool> linkDebugLib;
+extern llvm::cl::opt<bool> linkDefaultLibDebug;
 void codegenModules(Modules &modules, bool oneobj);
 
-void log_verbose(const std::string& header, const std::string& msg){
+void log_verbose(const std::string& header, const std::string& msg) {
     // to look aligned with other -v printed lines
     int prefix_width = 9; // TODO: adjust upwards as needed
-    fprintf(global.stdmsg, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
+    fprintf(stderr, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
 }
 
 namespace cpp
@@ -1067,7 +1067,7 @@ void LangPlugin::semanticModules()
     {
         auto m = cpp::Module::amodules[i];
         if (global.params.verbose)
-            fprintf(global.stdmsg, "semantic2 %s\n", m->toChars());
+            fprintf(stderr, "semantic2 %s\n", m->toChars());
         semantic2(m, nullptr);
     }
     if (global.errors)
@@ -1077,7 +1077,7 @@ void LangPlugin::semanticModules()
     {
         auto m = cpp::Module::amodules[i];
         if (global.params.verbose)
-            fprintf(global.stdmsg, "semantic3 %s\n", m->toChars());
+            fprintf(stderr, "semantic3 %s\n", m->toChars());
         semantic3(m, nullptr);
     }
     Module::runDeferredSemantic3();
@@ -1177,7 +1177,7 @@ void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
             calypso_ldc_debug = calypso_ldc_debug.substr(2) + ".lib";
         }
 
-        if (linkDebugLib)
+        if (linkDefaultLibDebug)
             args.insert(it_druntime, calypso_ldc_debug);
         else
             args.insert(it_druntime, calypso_ldc);

@@ -3966,7 +3966,7 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
             sd._scope = scx ? scx : sc.copy();
             sd._scope.setNoFree();
             sd._scope._module.addDeferredSemantic(sd);
-            sd.semanticRun = PASSsemantic;
+            sd.semanticRun = PASS.semantic;
             //printf("\tdeferring %s\n", toChars());
             return;
         }

@@ -2561,7 +2561,7 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
             else if (shared_this && !shared_dtor && tthis_fd !is null)
                 tf.mod = tthis_fd.mod;
         }
-        MATCH mfa = tf.callMatch(tthis_fd, fargs, 0, pMessage, callMatchFlags); // CALYPSO
+        MATCH mfa = tf.callMatch(tthis_fd, fargs, callMatchFlags, pMessage); // CALYPSO
         //printf("test1: mfa = %d\n", mfa);
         if (mfa > MATCH.nomatch)
         {
@@ -6178,7 +6178,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
 
     override Dsymbol syntaxCopy(Dsymbol s)
     {
-        if (semanticRun != PASSinit)
+        if (semanticRun != PASS.init)
         {
             assert(!s);
             return this;

@@ -1721,7 +1721,7 @@ class Lexer
                 t.ustring = cast(const(char)*)mem.xmalloc(stringbuffer.offset);
                 memcpy(cast(void*)t.ustring, stringbuffer.data, stringbuffer.offset);
                 stringPostfix(t);
-                t.value = TOKstring;
+                t.value = TOK.string_;
                 return t.value;
             case 0:
             case 0x1A:
@@ -1730,7 +1730,7 @@ class Lexer
                 t.ustring = cast(const(char)*) "";
                 t.len = 0;
                 t.postfix = 0;
-                return TOKstring;
+                return TOK.string_;
             default:
                 if (pendingSpace)
                 {

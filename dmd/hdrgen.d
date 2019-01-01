@@ -3250,7 +3250,7 @@ extern (C++) const(char)* stcToChars(ref StorageClass stc)
         SCstring(STC.pure_, TOK.pure_),
         SCstring(STC.ref_, TOK.ref_),
         SCstring(STC.return_, TOK.return_),
-        SCstring(STC.move, TOKat, "move"), // CALYPSO
+        SCstring(STC.move, TOK.at, "move"), // CALYPSO
         SCstring(STC.tls),
         SCstring(STC.gshared, TOK.gshared),
         SCstring(STC.nogc, TOK.at, "@nogc"),

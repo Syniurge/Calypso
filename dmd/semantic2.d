@@ -82,7 +82,7 @@ extern(C++) void semantic2(Dsymbol dsym, Scope* sc)
     dsym.accept(v);
 }
 
-private extern(C++) final class Semantic2Visitor : Visitor
+extern(C++) final class Semantic2Visitor : Visitor
 {
     alias visit = Visitor.visit;
     Scope* sc;
@@ -585,8 +585,8 @@ private extern(C++) final class Semantic2Visitor : Visitor
             return;
         }
 
-        if (ad.semanticRun <= PASSsemantic2) // CALYPSO
-            ad.semanticRun = PASSsemantic2;
+        if (ad.semanticRun <= PASS.semantic2) // CALYPSO
+            ad.semanticRun = PASS.semantic2;
 
         auto sc2 = ad.newScope(sc);
 
@@ -601,7 +601,7 @@ private extern(C++) final class Semantic2Visitor : Visitor
 
         sc2.pop();
 
-        if (ad.semanticRun <= PASSsemantic2done) // CALYPSO
-            ad.semanticRun = PASSsemantic2done;
+        if (ad.semanticRun <= PASS.semantic2done) // CALYPSO
+            ad.semanticRun = PASS.semantic2done;
     }
 }

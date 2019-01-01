@@ -111,7 +111,7 @@ llvm::GlobalVariable *LangPlugin::toCatchScopeType(IRState& irs, Type *t)
 
         assert(type_info_ptr);
 
-        RTTIBuilder b(type_info_ptr);
+        RTTIBuilder b(type_info_ptr->getType());
         b.push(TypeInfo);
 
         auto initType = cast<llvm::StructType>(static_cast<IrTypeClass*>(type_info_ptr->type->ctype)->getMemoryLLType());
@@ -122,8 +122,8 @@ llvm::GlobalVariable *LangPlugin::toCatchScopeType(IRState& irs, Type *t)
         CGM->getCXXABI().getMangleContext().mangleCXXRTTI(ThrowType, Out);
         InitName.append("7__tiwrap");
 
-        wrapper = getOrCreateGlobal(irs.func()->decl->loc,
-            gIR->module, initType, true, llvm::GlobalValue::LinkOnceODRLinkage, finalinit, InitName);
+        wrapper = defineGlobal(irs.func()->decl->loc, gIR->module, InitName, finalinit,
+                               llvm::GlobalValue::LinkOnceODRLinkage, /*isConstant=*/true);
         wrapper->setAlignment(DtoAlignment(type_info_ptr->type));
     }
 

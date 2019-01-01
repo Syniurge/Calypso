@@ -104,9 +104,8 @@ static inline llvm::GlobalVariable *getDCXXVTable(::ClassDeclaration *cd,
     if (!BaseOffset.isZero())
         initname.append(std::to_string(BaseOffset.getQuantity()));
 
-    auto dcxxVTable = getOrCreateGlobal(cd->loc,
-        gIR->module, VTStructType, false,
-        llvm::GlobalValue::ExternalLinkage, NULL, initname);
+    auto dcxxVTable = declareGlobal(cd->loc,
+        gIR->module, VTStructType, initname, false);
 
     return dcxxVTable;
 }
@@ -244,7 +243,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
 
     fthunk->importAll(callee->_scope);
     dsymbolSemantic(fthunk, callee->_scope);
-    fthunk->protection = {PROTprivate, nullptr};  // HACK NOTE: setting the prot to private will bypass the invariant checks
+    fthunk->protection = {Prot::private_, nullptr};  // HACK NOTE: setting the prot to private will bypass the invariant checks
     semantic2(fthunk, callee->_scope);
     semantic3(fthunk, callee->_scope);
     //fprintf(stderr, "%s", fthunk->fbody->toChars());

@@ -563,7 +563,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
                         STCdeprecated | STCoverride |
                         STC_TYPECTOR | STCfinal | STCtls | STCgshared | STCref | STCreturn |
                         STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
-        sc2->protection = {PROTpublic, nullptr};
+        sc2->protection = {Prot::public_, nullptr};
         sc2->explicitProtection = 0;
         sc2->aligndecl = NULL;
         sc2->flags = sc->flags & ~SCOPEcontract;

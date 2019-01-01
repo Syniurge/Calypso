@@ -2,6 +2,8 @@
 
 import dmd.dsymbolsem;
 import dmd.dmangle;
+import dmd.semantic2;
+import dmd.semantic3;
 
 shared static this()
 {

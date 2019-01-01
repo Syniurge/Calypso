@@ -173,7 +173,7 @@ class DeclMapper : public TypeMapper
 public:
     DeclMapper(Module *mod, bool isGlobal = false) : TypeMapper(mod, isGlobal) {}
 
-    inline PROTKIND toProt(clang::AccessSpecifier AS);
+    inline Prot::Kind toProt(clang::AccessSpecifier AS);
 
     // Declarations
     Dsymbols *VisitDeclContext(const clang::DeclContext *DC);

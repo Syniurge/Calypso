@@ -3213,7 +3213,7 @@ final class Parser(AST) : Lexer
         L1:
             nextToken();
             // parse the import tree if specified // CALYPSO
-            if (token.value == TOKlparen)
+            if (token.value == TOK.leftParentheses)
             {
                 parenthesedSpecialToken(&token);    // WARNING: is bypassing scan() ok?
                 if (!token.len)
@@ -5879,7 +5879,7 @@ final class Parser(AST) : Lexer
                     AST.LangPlugin langPlugin; // CALYPSO
                     Token *tk = peek(&token);
 
-                    if (token.value == TOK.leftCurly || token.value != TOK.leftParentheses)
+                    if (tk.value == TOK.leftCurly || tk.value != TOK.leftParentheses)
                     {
                         nextToken();
                         t = null;
@@ -5901,7 +5901,7 @@ final class Parser(AST) : Lexer
                                 }
                             }
                             if (langPlugin is null)
-                                error("no language plugin was found to support language %s in try block", token.toChars());
+                                error("no language plugin was found to support language `%s` in try block", token.toChars());
                         }
                         else
                             nextToken();

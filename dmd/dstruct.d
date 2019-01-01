@@ -390,7 +390,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     override void finalizeSize() // CALYPSO (made non final)
     {
         //printf("StructDeclaration::finalizeSize() %s\n", toChars());
-        assert(sizeok != SIZEOKdone);
+        assert(sizeok != Sizeok.done);
 
         if (!buildLayout()) // CALYPSO
             return;

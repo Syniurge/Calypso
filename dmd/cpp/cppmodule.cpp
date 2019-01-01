@@ -111,7 +111,7 @@ Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
         objfile = setOutCalypsoFile(/*global.params.objname, */global.params.objdir, arg, objExt);
 }
 
-Dsymbol *Module::search(Loc loc, Identifier *ident, int flags)
+Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
 {
     auto result = ::Module::search(loc, ident, flags);
 
@@ -199,17 +199,17 @@ void Module::saveEmittedSymbolList()
 // {
 // }
 
-inline PROTKIND DeclMapper::toProt(clang::AccessSpecifier AS)
+inline Prot::Kind DeclMapper::toProt(clang::AccessSpecifier AS)
 {
     switch(AS) {
         case clang::AS_public:
-            return PROTpublic;
+            return Prot::public_;
         case clang::AS_protected:
-            return PROTprotected;
+            return Prot::protected_;
         case clang::AS_private:
-            return PROTprivate;
+            return Prot::private_;
         case clang::AS_none:
-            return PROTnone;
+            return Prot::none;
     }
 }
 

@@ -858,9 +858,9 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
                 {
                     auto tref = cast(TypeReference)fparam.type;
                     fparam.type = fparam.type.nextOf();
-                    fparam.storageClass |= STCscope | STCref;
+                    fparam.storageClass |= STC.scope_ | STC.ref_;
                     if (tref.isRvalRef())
-                        fparam.storageClass |= STCmove;
+                        fparam.storageClass |= STC.move;
                 }
 
                 Type t = fparam.type.toBasetype();
@@ -993,7 +993,7 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
                     e = e.implicitCastTo(argsc, fparam.type);
 
                     // default arg must be an lvalue
-                    if (fparam.storageClass & (STC.out_ | STC.ref_))
+                    if (fparam.storageClass & (STC.out_ | STC.ref_)
                             && !(fparam.storageClass & STC.scope_)) // CALYPSO
                         e = e.toLvalue(argsc, e);
 

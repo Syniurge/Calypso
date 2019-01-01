@@ -430,13 +430,6 @@ static void resolveObjectAndClassInfoClasses() {
   getObjectType();
   getClassInfoType();
 
-  AggregateDeclaration* adfrom = getAggregateHandle(val->type);
-  AggregateDeclaration* adto = getAggregateHandle(_to->toBasetype());
-  if (auto lp = adto->langPlugin())
-      return lp->codegen()->toDynamicCast(loc, val, _to); // CALYPSO
-  if (auto lp = adfrom->langPlugin())
-      val = lp->codegen()->adjustForDynamicCast(loc, val, _to); // CALYPSO
-
   DtoResolveClass(ClassDeclaration::object);
   DtoResolveClass(Type::typeinfoclass);
 }
@@ -444,6 +437,13 @@ static void resolveObjectAndClassInfoClasses() {
 DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
   // call:
   // Object _d_dynamic_cast(Object o, ClassInfo c)
+
+  AggregateDeclaration* adfrom = getAggregateHandle(val->type);
+  AggregateDeclaration* adto = getAggregateHandle(_to->toBasetype());
+  if (auto lp = adto->langPlugin())
+      return lp->codegen()->toDynamicCast(loc, val, _to); // CALYPSO
+  if (auto lp = adfrom->langPlugin())
+      val = lp->codegen()->adjustForDynamicCast(loc, val, _to); // CALYPSO
 
   llvm::Function *func =
       getRuntimeFunction(loc, gIR->module, "_d_dynamic_cast");
