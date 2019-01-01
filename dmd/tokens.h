@@ -1,7 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (c) 1999-2017 by Digital Mars
- * All Rights Reserved
+ * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -102,7 +101,7 @@ enum TOK
         TOKquestion,    TOKandand,      TOKoror,
         TOKpreplusplus, TOKpreminusminus,
 
-// 111
+// 113
         // Numeric literals
         TOKint32v, TOKuns32v,
         TOKint64v, TOKuns64v,
@@ -131,7 +130,7 @@ enum TOK
         TOKcomplex32, TOKcomplex64, TOKcomplex80,
         TOKchar, TOKwchar, TOKdchar, TOKbool,
 
-// 158
+// 160
         // Aggregates
         TOKstruct, TOKclass, TOKinterface, TOKunion, TOKenum, TOKimport,
         TOKalias, TOKoverride, TOKdelegate, TOKfunction,
@@ -151,7 +150,7 @@ enum TOK
         TOKon_scope_exit, TOKon_scope_failure, TOKon_scope_success,
 
         // Contracts
-        TOKbody, TOKinvariant,
+        TOKinvariant,
 
         // Testing
         TOKunittest,
@@ -201,8 +200,8 @@ struct Token
     union
     {
         // Integers
-        d_int64 int64value;
-        d_uns64 uns64value;
+        sinteger_t intvalue;
+        uinteger_t unsvalue;
 
         // Floats
         real_t floatvalue;

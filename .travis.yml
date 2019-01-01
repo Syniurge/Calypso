@@ -6,10 +6,16 @@ matrix:
   include:
     - os: linux
       d: ldc
-      env: LLVM_VERSION=5.0.1 OPTS="-DLIB_SUFFIX=64"
+      env: LLVM_VERSION=6.0.0
     - os: linux
       d: ldc-beta
+      env: LLVM_VERSION=5.0.1 OPTS="-DLIB_SUFFIX=64"
+    - os: linux
+      d: ldc
       env: LLVM_VERSION=5.0.1 OPTS="-DBUILD_SHARED_LIBS=ON"
+    - os: linux
+      d: ldc-beta
+      env: LLVM_VERSION=5.0.1 OPTS="-DBUILD_SHARED_LIBS=ON -DLIB_SUFFIX=64"
     - os: linux
       d: ldc-0.17.5
       env: LLVM_VERSION=5.0.1 OPTS="-DBUILD_SHARED_LIBS=OFF -DLIB_SUFFIX=64"
@@ -18,17 +24,20 @@ matrix:
       env: LLVM_VERSION=5.0.1 OPTS="-DTEST_COVERAGE=ON"
     #- os: osx
       #d: ldc-beta
-      #env: LLVM_VERSION=6.0.0-5 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
+      #env: LLVM_VERSION=6.0.0 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
     - os: osx
       osx_image: xcode9.3beta
       d: ldc
       env: LLVM_VERSION=5.0.1 OPTS="-DBUILD_SHARED_LIBS=ON"
-  allow_failures:
-    - env: LLVM_VERSION=6.0.0-5 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
+  #allow_failures:
+    #- env: LLVM_VERSION=4.0.1 OPTS="-DBUILD_SHARED_LIBS=ON"
+    #- env: LLVM_VERSION=3.9.1 OPTS="-DBUILD_SHARED_LIBS=ON -DLIB_SUFFIX=64"
+    #- env: LLVM_VERSION=6.0.0 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
 
 cache:
   directories:
-    - llvm-spirv-6.0.0-5
+    - llvm-spirv-6.0.0
+    - llvm-6.0.0
     - llvm-5.0.1
     - llvm-4.0.1
     - llvm-4.0.0
@@ -53,7 +62,7 @@ before_install:
   -
     if [ ! -e "$LLVM_ROOT_DIR/bin/llvm-config" ]; then
       if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then
-        wget -O llvm.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0svn-Darwin.tar.bz2;
+        wget -O llvm.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0-Darwin.tar.bz2;
       else
         if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
           if [ "${LLVM_VERSION}" = "4.0.1" ]; then
@@ -106,8 +115,8 @@ script:
   # Invoke CMake to generate the Ninja build files.
   - cmake -G Ninja -DLLVM_ROOT_DIR=$LLVM_ROOT_DIR -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" $OPTS ..
   # Build LDC and stdlib unittest runners.
-  # [Compiling the std.regex.internal.tests unittests eats large amounts of memory.]
-  - ninja -j2 all runtime/objects-unittest-debug/std/regex/internal/tests.o runtime/objects-unittest/std/regex/internal/tests.o
+  # [Some unittest modules eat large amounts of memory during compilation => -j2.]
+  - ninja -j2 all runtime/objects-unittest/std/algorithm/searching.o runtime/objects-unittest-debug/std/algorithm/searching.o runtime/objects-unittest/std/range/package.o runtime/objects-unittest-debug/std/range/package.o runtime/objects-unittest/std/regex/internal/tests.o runtime/objects-unittest-debug/std/regex/internal/tests.o
   - ninja -j3 all-test-runners
   # Output some environment info, plus make sure we only run the test suite
   # if we could actually build the executable.

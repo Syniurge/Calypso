@@ -2,15 +2,15 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (c) 1999-2017 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/objc.d, _objc.d)
+ * Documentation:  https://dlang.org/phobos/dmd_objc.html
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/objc.d
  */
 
 module dmd.objc;
-
-// Online documentation: https://dlang.org/phobos/dmd_objc.html
 
 import dmd.aggregate;
 import dmd.arraytypes;
@@ -118,6 +118,11 @@ struct ObjcSelector
         buf.writeByte('\0');
         return lookup(cast(const(char)*)buf.data, buf.size, pcount);
     }
+
+    extern (D) final const(char)[] toString() const pure
+    {
+        return stringvalue[0 .. stringlen];
+    }
 }
 
 private __gshared Objc _objc;
@@ -150,6 +155,8 @@ extern(C++) private final class Unsupported : Objc
 {
     extern(D) final this()
     {
+        version(IN_LLVM) {} else
+        ObjcGlue.initialize();
     }
 
     override void setObjc(ClassDeclaration cd)
@@ -184,7 +191,14 @@ extern(C++) private final class Supported : Objc
     {
         VersionCondition.addPredefinedGlobalIdent("D_ObjectiveC");
 
-        objc_initSymbols();
+        version(IN_LLVM)
+        {
+            objc_initSymbols();
+        }
+        else
+        {
+            ObjcGlue.initialize();
+        }
         ObjcSelector._init();
     }
 
@@ -210,14 +224,14 @@ extern(C++) private final class Supported : Objc
         {
             Expression uda = (*udas)[i];
             assert(uda);
-            if (uda.op != TOKtuple)
+            if (uda.op != TOK.tuple)
                 continue;
             Expressions* exps = (cast(TupleExp)uda).exps;
             for (size_t j = 0; j < exps.dim; j++)
             {
                 Expression e = (*exps)[j];
                 assert(e);
-                if (e.op != TOKstructliteral)
+                if (e.op != TOK.structLiteral)
                     continue;
                 StructLiteralExp literal = cast(StructLiteralExp)e;
                 assert(literal.sd);
@@ -249,7 +263,7 @@ extern(C++) private final class Supported : Objc
 
     override void checkLinkage(FuncDeclaration fd)
     {
-        if (fd.linkage != LINKobjc && fd.selector)
+        if (fd.linkage != LINK.objc && fd.selector)
             fd.error("must have Objective-C linkage to attach a selector");
     }
 

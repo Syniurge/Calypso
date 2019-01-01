@@ -1,6 +1,6 @@
 //===-- cl_options-llvm.cpp -----------------------------------------------===//
 //
-//                         LDC – the LLVM D compiler
+//                         LDC â€“ the LLVM D compiler
 //
 // This file is distributed under the BSD-style LDC license. See the LICENSE
 // file for details.
@@ -11,7 +11,9 @@
 
 // Pull in command-line options and helper functions from special LLVM header
 // shared by multiple LLVM tools.
-#if LDC_LLVM_VER >= 600
+#if LDC_LLVM_VER >= 700
+#include "llvm/CodeGen/CommandFlags.inc"
+#elif LDC_LLVM_VER >= 600
 #include "llvm/CodeGen/CommandFlags.def"
 #else
 #include "llvm/CodeGen/CommandFlags.h"
@@ -33,7 +35,11 @@ Optional<Reloc::Model> getRelocModel() { return ::getRelocModel(); }
 Reloc::Model getRelocModel() { return ::RelocModel; }
 #endif
 
+#if LDC_LLVM_VER >= 600
+Optional<CodeModel::Model> getCodeModel() { return ::getCodeModel(); }
+#else
 CodeModel::Model getCodeModel() { return ::CMModel; }
+#endif
 
 cl::boolOrDefault disableFPElim() {
   return ::DisableFPElim.getNumOccurrences() == 0
@@ -67,6 +73,16 @@ TargetOptions InitTargetOptionsFromCodeGenFlags() {
   return ::InitTargetOptionsFromCodeGenFlags();
 }
 
-CodeModel::Model GetCodeModelFromCMModel() { return CMModel; }
+#if LDC_LLVM_VER >= 600
+Optional<CodeModel::Model> GetCodeModelFromCMModel() {
+  return ::getCodeModel();
+}
+#else
+CodeModel::Model GetCodeModelFromCMModel() { return ::CMModel; }
+#endif
+
+#if LDC_LLVM_VER >= 700
+std::string GetCPUStr() { return ::getCPUStr(); }
+#endif
 }
 #endif // LDC_WITH_LLD && LDC_LLVM_VER >= 500

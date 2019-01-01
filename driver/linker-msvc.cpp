@@ -13,13 +13,18 @@
 #include "driver/cl_options_instrumentation.h"
 #include "driver/cl_options_sanitizers.h"
 #include "driver/exe_path.h"
+#include "driver/linker.h"
 #include "driver/tool.h"
 #include "gen/logger.h"
 
 #include "llvm/Support/FileSystem.h"
 
 #if LDC_WITH_LLD
+#if LDC_LLVM_VER >= 600
+#include "lld/Common/Driver.h"
+#else
 #include "lld/Driver/Driver.h"
+#endif
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -34,12 +39,12 @@ static llvm::cl::opt<std::string>
 
 namespace {
 
-void addMscrtLibs(std::vector<std::string> &args,
-                  llvm::cl::boolOrDefault fullyStaticFlag) {
+void addMscrtLibs(std::vector<std::string> &args) {
   llvm::StringRef mscrtlibName = mscrtlib;
   if (mscrtlibName.empty()) {
     // default to static release variant
-    mscrtlibName = fullyStaticFlag != llvm::cl::BOU_FALSE ? "libcmt" : "msvcrt";
+    mscrtlibName =
+        linkFullyStatic() != llvm::cl::BOU_FALSE ? "libcmt" : "msvcrt";
   }
 
   args.push_back(("/DEFAULTLIB:" + mscrtlibName).str());
@@ -55,8 +60,9 @@ void addMscrtLibs(std::vector<std::string> &args,
 }
 
 void addLibIfFound(std::vector<std::string> &args, const llvm::Twine &name) {
-  if (llvm::sys::fs::exists(exe_path::prependLibDir(name)))
-    args.push_back(name.str());
+  std::string candidate = exe_path::prependLibDir(name);
+  if (llvm::sys::fs::exists(candidate))
+    args.push_back(std::move(candidate));
 }
 
 void addSanitizerLibs(std::vector<std::string> &args) {
@@ -71,8 +77,8 @@ void addSanitizerLibs(std::vector<std::string> &args) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
-                        llvm::cl::boolOrDefault fullyStaticFlag) {
+int linkObjToBinaryMSVC(llvm::StringRef outputPath,
+                        const std::vector<std::string> &defaultLibNames) {
   if (!opts::ccSwitches.empty()) {
     error(Loc(), "-Xcc is not supported for MSVC");
     fatal();
@@ -108,7 +114,7 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
   }
 
   // add C runtime libs
-  addMscrtLibs(args, fullyStaticFlag);
+  addMscrtLibs(args);
 
   // specify creation of DLL
   if (global.params.dll) {
@@ -164,11 +170,18 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
     addSwitch(str);
   }
 
+  // default libs
+  for (const auto &name : defaultLibNames) {
+    args.push_back(name + ".lib");
+  }
+
+  // libs added via pragma(lib, libname) - should be empty due to embedded
+  // references in object file
   for (auto ls : global.params.linkswitches) {
     addSwitch(ls);
   }
 
-  // default libs
+  // default platform libs
   // TODO check which libaries are necessary
   args.push_back("kernel32.lib");
   args.push_back("user32.lib");
@@ -194,11 +207,15 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath, bool useInternalLinker,
   logstr << "\n"; // FIXME where's flush ?
 
 #if LDC_WITH_LLD
-  if (useInternalLinker) {
+  if (useInternalLLDForLinking()) {
     const auto fullArgs =
         getFullArgs("lld-link.exe", args, global.params.verbose);
 
+#if LDC_LLVM_VER >= 600
+    const bool success = lld::coff::link(fullArgs, /*CanExitEarly=*/false);
+#else
     const bool success = lld::coff::link(fullArgs);
+#endif
     if (!success)
       error(Loc(), "linking with LLD failed");
 

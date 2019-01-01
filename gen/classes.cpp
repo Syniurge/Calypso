@@ -160,7 +160,7 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     llvm::Function *fn =
         getRuntimeFunction(loc, gIR->module, "_d_allocclass");
     LLConstant *ci = DtoBitCast(getIrAggr(tc->sym)->getClassInfoSymbol(),
-                                DtoType(Type::typeinfoclass->type));
+                                DtoType(getClassInfoType()));
     mem =
         gIR->CreateCallOrInvoke(fn, ci, ".newclass_gc_alloc").getInstruction();
     mem = DtoBitCast(mem, DtoClassHandleType(tc), ".newclass_gc"); // CALYPSO
@@ -425,9 +425,10 @@ DValue *DtoCastClass(Loc &loc, DValue *val, Type *_to) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
-  // call:
-  // Object _d_dynamic_cast(Object o, ClassInfo c)
+static void resolveObjectAndClassInfoClasses() {
+  // check declarations in object.d
+  getObjectType();
+  getClassInfoType();
 
   AggregateDeclaration* adfrom = getAggregateHandle(val->type);
   AggregateDeclaration* adto = getAggregateHandle(_to->toBasetype());
@@ -438,10 +439,17 @@ DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
 
   DtoResolveClass(ClassDeclaration::object);
   DtoResolveClass(Type::typeinfoclass);
+}
+
+DValue *DtoDynamicCastObject(Loc &loc, DValue *val, Type *_to) {
+  // call:
+  // Object _d_dynamic_cast(Object o, ClassInfo c)
 
   llvm::Function *func =
       getRuntimeFunction(loc, gIR->module, "_d_dynamic_cast");
   LLFunctionType *funcTy = func->getFunctionType();
+
+  resolveObjectAndClassInfoClasses();
 
   // Object o
   LLValue *obj = DtoRVal(val);
@@ -474,12 +482,11 @@ DValue *DtoDynamicCastInterface(Loc &loc, DValue *val, Type *_to) {
   // call:
   // Object _d_interface_cast(void* p, ClassInfo c)
 
-  DtoResolveClass(ClassDeclaration::object);
-  DtoResolveClass(Type::typeinfoclass);
-
   llvm::Function *func =
       getRuntimeFunction(loc, gIR->module, "_d_interface_cast");
   LLFunctionType *funcTy = func->getFunctionType();
+
+  resolveObjectAndClassInfoClasses();
 
   // void* p
   LLValue *ptr = DtoRVal(val);
@@ -698,7 +705,8 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   assert(cd->type->ty == Tclass);
 
   IrAggr *ir = getIrAggr(cd);
-  ClassDeclaration *cinfo = Type::typeinfoclass;
+  Type *const cinfoType = getClassInfoType(); // check declaration in object.d
+  ClassDeclaration *const cinfo = Type::typeinfoclass;
 
   if (cinfo->fields.dim != 12) {
     error(Loc(), "Unexpected number of fields in `object.ClassInfo`; "
@@ -707,7 +715,7 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   }
 
   // use the rtti builder
-  RTTIBuilder b(cinfo);
+  RTTIBuilder b(cinfoType);
 
   LLConstant *c;
 
@@ -748,7 +756,7 @@ LLConstant *DtoDefineClassInfo(ClassDeclaration *cd) {
   if (isClassDeclarationOrNull(cd->baseClass) && !cd->isInterfaceDeclaration()) { // CALYPSO
     b.push_classinfo(static_cast<ClassDeclaration*>(cd->baseClass));
   } else {
-    b.push_null(cinfo->type);
+    b.push_null(cinfoType);
   }
 
   // destructor

@@ -39,6 +39,7 @@ typedef enum {
   Reg_EDI,
   Reg_EBP,
   Reg_ESP,
+  Reg_EIP,
   Reg_ST,
   Reg_ST1,
   Reg_ST2,
@@ -160,9 +161,9 @@ typedef enum {
   Reg_TR7
 } Reg;
 
-static const int N_Regs = /*gp*/ 8 + /*fp*/ 8 + /*mmx*/ 8 + /*sse*/ 8 +
+static const int N_Regs = /*gp*/ 8 + /*EIP*/ 1 + /*fp*/ 8 + /*mmx*/ 8 + /*sse*/ 8 +
                           /*seg*/ 6 + /*16bit*/ 8 + /*8bit*/ 8 + /*sys*/ 4 + 6 +
-                          5 + /*flags*/ +1
+                          5 + /*flags*/ 1
 #ifdef ASM_X86_64
                           + 8 /*RAX, etc*/
                           + 8 /*R8-15*/
@@ -193,6 +194,7 @@ static struct {
     {"EDI", NULL_TREE, nullptr, 4, Reg_EDI},
     {"EBP", NULL_TREE, nullptr, 4, Reg_EBP},
     {"ESP", NULL_TREE, nullptr, 4, Reg_ESP},
+    {"EIP", NULL_TREE, nullptr, 4, Reg_EIP},
     {"ST", NULL_TREE, nullptr, 10, Reg_ST},
     {"ST(1)", NULL_TREE, nullptr, 10, Reg_ST1},
     {"ST(2)", NULL_TREE, nullptr, 10, Reg_ST2},
@@ -2320,10 +2322,9 @@ struct AsmProcessor {
   static bool prependExtraUnderscore(LINK link) {
     return global.params.targetTriple->getOS() == llvm::Triple::MacOSX ||
            global.params.targetTriple->getOS() == llvm::Triple::Darwin ||
-           // Win32: C symbols only
+           // Win32: all symbols except for MSVC++ ones
            (global.params.targetTriple->isOSWindows() &&
-            global.params.targetTriple->isArch32Bit() && link != LINKcpp &&
-            link != LINKd && link != LINKdefault);
+            global.params.targetTriple->isArch32Bit() && link != LINKcpp);
   }
 
   void addOperand(const char *fmt, AsmArgType type, Expression *e,
@@ -2558,12 +2559,7 @@ struct AsmProcessor {
         type_suffix = 'l';
         break;
       case Extended_Ptr:
-        // MS C runtime: real = 64-bit double
-        if (global.params.targetTriple->isWindowsMSVCEnvironment()) {
-          type_suffix = 'l';
-        } else {
-          type_suffix = 't';
-        }
+        type_suffix = 't';
         break;
       default:
         return false;
@@ -3195,7 +3191,8 @@ struct AsmProcessor {
           // Tfloat64
           TY ty = v->type->toBasetype()->ty;
           operand->dataSizeHint =
-              ty == Tfloat80 || ty == Timaginary80
+              (ty == Tfloat80 || ty == Timaginary80) &&
+                      !global.params.targetTriple->isWindowsMSVCEnvironment()
                   ? Extended_Ptr
                   : static_cast<PtrType>(v->type->size(Loc()));
         }
@@ -3616,7 +3613,9 @@ struct AsmProcessor {
     case TOKfloat64:
       return Double_Ptr;
     case TOKfloat80:
-      return Extended_Ptr;
+      return global.params.targetTriple->isWindowsMSVCEnvironment()
+                 ? Double_Ptr
+                 : Extended_Ptr;
     case TOKidentifier:
       for (int i = 0; i < N_PtrNames; i++) {
         if (tok->ident == ptrTypeIdentTable[i]) {
@@ -3704,9 +3703,9 @@ struct AsmProcessor {
 // semantic here?
 #ifndef ASM_X86_64
       // %% for tok64 really should use 64bit type
-      e = createIntegerExp(stmt->loc, token->uns64value, Type::tint32);
+      e = createIntegerExp(stmt->loc, token->unsvalue, Type::tint32);
 #else
-      e = createIntegerExp(stmt->loc, token->uns64value, Type::tint64);
+      e = createIntegerExp(stmt->loc, token->unsvalue, Type::tint64);
 #endif
       nextToken();
       break;
@@ -3761,8 +3760,8 @@ struct AsmProcessor {
               case TOKuns32v:
               case TOKint64v:
               case TOKuns64v:
-                if (token->uns64value < 8) {
-                  e = newRegExp(static_cast<Reg>(Reg_ST + token->uns64value));
+                if (token->unsvalue < 8) {
+                  e = newRegExp(static_cast<Reg>(Reg_ST + token->unsvalue));
                 } else {
                   stmt->error("invalid floating point register index");
                   e = Handled;
@@ -3909,13 +3908,13 @@ struct AsmProcessor {
             token->value == TOKint64v || token->value == TOKuns64v) {
           // As per usual with GNU, assume at least 32-bit host
           if (op != Op_dl) {
-            insnTemplate->printf("%u", (d_uns32) token->uns64value);
+            insnTemplate->printf("%u", (d_uns32) token->unsvalue);
           } else {
             // Output two .longS.  GAS has .quad, but would have to rely on 'L'
             // format ..
             // just need to use HOST_WIDE_INT_PRINT_DEC
-            insnTemplate->printf("%u,%u", (d_uns32) token->uns64value,
-                                 (d_uns32) (token->uns64value >> 32));
+            insnTemplate->printf("%u,%u", (d_uns32) token->unsvalue,
+                                 (d_uns32) (token->unsvalue >> 32));
           }
         } else {
           stmt->error("expected integer constant");

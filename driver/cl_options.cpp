@@ -195,6 +195,9 @@ cl::opt<std::string> jsonFile("Xf", cl::desc("Write JSON file to <filename>"),
                               cl::value_desc("filename"), cl::Prefix,
                               cl::ZeroOrMore);
 
+// supported by DMD, but still undocumented
+cl::list<std::string> jsonFields("Xi", cl::ReallyHidden, cl::value_desc("field"));
+
 // Header generation options
 static cl::opt<bool, true>
     doHdrGen("H", cl::desc("Generate 'header' file"), cl::ZeroOrMore,
@@ -289,12 +292,6 @@ cl::opt<std::string>
                         "'-deps' alone prints module dependencies "
                         "(imports/file/version/debug/lib)"));
 
-cl::opt<cl::boolOrDefault>
-    staticFlag("static", llvm::cl::ZeroOrMore,
-               llvm::cl::desc("Create a statically linked binary, including "
-                              "all system dependencies"),
-               cl::cat(linkingCategory));
-
 cl::opt<bool> m32bits("m32", cl::desc("32 bit target"), cl::ZeroOrMore);
 
 cl::opt<bool> m64bits("m64", cl::desc("64 bit target"), cl::ZeroOrMore);
@@ -313,7 +310,13 @@ static cl::list<std::string, StringsAdapter> modFileAliasStrings(
     cl::value_desc("<package.module>=<filespec>"),
     cl::location(modFileAliasStringsStore));
 
-FloatABI::Type floatABI; // Storage for the dynamically created float-abi option.
+cl::list<std::string> includeModulePatterns(
+    "i", cl::desc("Include imported modules in the compilation"),
+    cl::value_desc("pattern"),
+    cl::ValueOptional); // DMD allows omitting a value with special meaning
+
+// Storage for the dynamically created float-abi option.
+FloatABI::Type floatABI;
 
 static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>>
     asserts("asserts", cl::ZeroOrMore, cl::desc("(*) Enable assertions"),
@@ -542,9 +545,9 @@ void hideLLVMOptions() {
   static const char *const hiddenOptions[] = {
       "aarch64-neon-syntax", "arm-add-build-attributes", "arm-implicit-it",
       "asm-instrumentation", "asm-show-inst", "atomic-counter-update-promoted",
-      "bounds-checking-single-trap", "code-model", "cppfname", "cppfor",
-      "cppgen", "cvp-dont-process-adds", "debug-counter", "debugger-tune",
-      "denormal-fp-math", "disable-debug-info-verifier",
+      "bounds-checking-single-trap", "code-model", "cost-kind", "cppfname",
+      "cppfor", "cppgen", "cvp-dont-process-adds", "debug-counter",
+      "debugger-tune", "denormal-fp-math", "disable-debug-info-verifier",
       "disable-objc-arc-checkforcfghazards", "disable-spill-fusing",
       "do-counter-promotion", "emulated-tls", "enable-correct-eh-support",
       "enable-fp-mad", "enable-implicit-null-checks", "enable-load-pre",
@@ -556,13 +559,13 @@ void hideLLVMOptions() {
       "exhaustive-register-search", "expensive-combines",
       "fatal-assembler-warnings", "filter-print-funcs", "gpsize",
       "imp-null-check-page-size", "imp-null-max-insts-to-consider",
-      "incremental-linker-compatible", "instcombine-maxarray-size",
-      "internalize-public-api-file", "internalize-public-api-list",
-      "iterative-counter-promotion", "join-liveintervals", "jump-table-type",
-      "limit-float-precision", "max-counter-promotions",
-      "max-counter-promotions-per-loop", "mc-relax-all",
-      "mc-x86-disable-arith-relaxation", "meabi", "memop-size-large",
-      "memop-size-range", "merror-missing-parenthesis",
+      "import-all-index", "incremental-linker-compatible",
+      "instcombine-maxarray-size", "internalize-public-api-file",
+      "internalize-public-api-list", "iterative-counter-promotion",
+      "join-liveintervals", "jump-table-type", "limit-float-precision",
+      "max-counter-promotions", "max-counter-promotions-per-loop",
+      "mc-relax-all", "mc-x86-disable-arith-relaxation", "meabi",
+      "memop-size-large", "memop-size-range", "merror-missing-parenthesis",
       "merror-noncontigious-register", "mfuture-regs", "mips-compact-branches",
       "mips16-constant-islands", "mips16-hard-float", "mlsm", "mno-compound",
       "mno-fixup", "mno-ldc1-sdc1", "mno-pairing", "mwarn-missing-parenthesis",
@@ -571,7 +574,7 @@ void hideLLVMOptions() {
       "objc-arc-annotation-target-identifier", "pie-copy-relocations",
       "polly-dump-after", "polly-dump-after-file", "polly-dump-before",
       "polly-dump-before-file", "pre-RA-sched", "print-after-all",
-      "print-before-all", "print-machineinstrs",
+      "print-before-all", "print-machineinstrs", "print-module-scope",
       "profile-estimator-loop-weight", "profile-estimator-loop-weight",
       "profile-file", "profile-info-file", "profile-verifier-noassert",
       "r600-ir-structurize", "rdf-dump", "rdf-limit", "recip", "regalloc",
@@ -584,16 +587,17 @@ void hideLLVMOptions() {
       "speculative-counter-promotion-max-exiting",
       "speculative-counter-promotion-to-loop", "spiller", "spirv-debug",
       "spirv-erase-cl-md", "spirv-mem2reg", "spvbool-validate",
-      "stack-alignment", "stack-symbol-ordering", "stackmap-version",
-      "static-func-full-module-prefix", "static-func-strip-dirname-prefix",
-      "stats", "stats-json", "strip-debug", "struct-path-tbaa", "summary-file",
-      "tailcallopt", "thread-model", "time-passes",
-      "unfold-element-atomic-memcpy-max-elements", "unique-section-names",
-      "unit-at-a-time", "use-ctors", "verify-debug-info", "verify-dom-info",
-      "verify-loop-info", "verify-loop-lcssa", "verify-machine-dom-info",
-      "verify-regalloc", "verify-region-info", "verify-scev",
-      "verify-scev-maps", "vp-counters-per-site", "vp-static-alloc",
-      "x86-early-ifcvt", "x86-recip-refinement-steps", "x86-use-vzeroupper",
+      "stack-alignment", "stack-size-section", "stack-symbol-ordering",
+      "stackmap-version", "static-func-full-module-prefix",
+      "static-func-strip-dirname-prefix", "stats", "stats-json", "strip-debug",
+      "struct-path-tbaa", "summary-file", "tailcallopt", "thread-model",
+      "time-passes", "unfold-element-atomic-memcpy-max-elements",
+      "unique-section-names", "unit-at-a-time", "use-ctors",
+      "verify-debug-info", "verify-dom-info", "verify-loop-info",
+      "verify-loop-lcssa", "verify-machine-dom-info", "verify-regalloc",
+      "verify-region-info", "verify-scev", "verify-scev-maps",
+      "vp-counters-per-site", "vp-static-alloc", "x86-early-ifcvt",
+      "x86-recip-refinement-steps", "x86-use-vzeroupper",
 
       // We enable -fdata-sections/-ffunction-sections by default where it makes
       // sense for reducing code size, so hide them to avoid confusion.

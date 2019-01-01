@@ -2,15 +2,15 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (c) 1999-2017 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/denum.d, _denum.d)
+ * Documentation:  https://dlang.org/phobos/dmd_denum.html
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/denum.d
  */
 
 module dmd.denum;
-
-// Online documentation: https://dlang.org/phobos/dmd_denum.html
 
 import dmd.gluelayer;
 import dmd.declaration;
@@ -24,7 +24,6 @@ import dmd.id;
 import dmd.identifier;
 import dmd.init;
 import dmd.mtype;
-import dmd.semantic;
 import dmd.tokens;
 import dmd.typesem;
 import dmd.visitor;
@@ -51,14 +50,14 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
     bool added;
     int inuse;
 
-    extern (D) this(Loc loc, Identifier id, Type memtype)
+    extern (D) this(const ref Loc loc, Identifier id, Type memtype)
     {
         super(id);
         //printf("EnumDeclaration() %s\n", toChars());
         this.loc = loc;
         type = new TypeEnum(this);
         this.memtype = memtype;
-        protection = Prot(PROTundefined);
+        protection = Prot(Prot.Kind.undefined);
     }
 
     override Dsymbol syntaxCopy(Dsymbol s)
@@ -106,7 +105,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
 
     override void setScope(Scope* sc)
     {
-        if (semanticRun > PASSinit)
+        if (semanticRun > PASS.init)
             return;
         ScopeDsymbol.setScope(sc);
     }
@@ -128,7 +127,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
         return "enum";
     }
 
-    override Dsymbol search(Loc loc, Identifier ident, int flags = SearchLocalsOnly)
+    override Dsymbol search(const ref Loc loc, Identifier ident, int flags = SearchLocalsOnly)
     {
         //printf("%s.EnumDeclaration::search('%s')\n", toChars(), ident.toChars());
         if (_scope)
@@ -169,7 +168,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
      * Returns:
      *      corresponding value of .max/.min
      */
-    final Expression getMaxMinValue(Loc loc, Identifier id) // CALYPSO
+    final Expression getMaxMinValue(const ref Loc loc, Identifier id) // CALYPSO
     {
         //printf("EnumDeclaration::getMaxValue()\n");
         bool first = true;
@@ -194,7 +193,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
             dsymbolSemantic(this, _scope);
         if (errors)
             return errorReturn();
-        if (semanticRun == PASSinit || !members)
+        if (semanticRun == PASS.init || !members)
         {
             error("is forward referenced looking for `.%s`", id.toChars());
             return errorReturn();
@@ -231,7 +230,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
                  *   if (e > maxval)
                  *      maxval = e;
                  */
-                Expression ec = new CmpExp(id == Id.max ? TOKgt : TOKlt, em.loc, e, *pval);
+                Expression ec = new CmpExp(id == Id.max ? TOK.greaterThan : TOK.lessThan, em.loc, e, *pval);
                 inuse++;
                 ec = ec.expressionSemantic(em._scope);
                 inuse--;
@@ -242,7 +241,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
         }
     Ldone:
         Expression e = *pval;
-        if (e.op != TOKerror)
+        if (e.op != TOK.error)
         {
             e = e.copy();
             e.loc = loc;
@@ -250,7 +249,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
         return e;
     }
 
-    final Expression getDefaultValue(Loc loc) // CALYPSO
+    final Expression getDefaultValue(const ref Loc loc) // CALYPSO
     {
         //printf("EnumDeclaration::getDefaultValue() %p %s\n", this, toChars());
         if (defaultval)
@@ -260,7 +259,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
             dsymbolSemantic(this, _scope);
         if (errors)
             goto Lerrors;
-        if (semanticRun == PASSinit || !members)
+        if (semanticRun == PASS.init || !members)
         {
             error(loc, "forward reference of `%s.init`", toChars());
             goto Lerrors;
@@ -281,17 +280,18 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
         return defaultval;
     }
 
-    final Type getMemtype(Loc loc) // CALYPSO
+    final Type getMemtype(const ref Loc loc) // CALYPSO
     {
-        if (loc.linnum == 0)
-            loc = this.loc;
         if (_scope)
         {
             /* Enum is forward referenced. We don't need to resolve the whole thing,
              * just the base type
              */
             if (memtype)
-                memtype = memtype.typeSemantic(loc, _scope);
+            {
+                Loc locx = loc.isValid() ? loc : this.loc;
+                memtype = memtype.typeSemantic(locx, _scope);
+            }
             else
             {
                 if (!isAnonymous() && members)
@@ -304,7 +304,8 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
                 memtype = Type.tint32;
             else
             {
-                error(loc, "is forward referenced looking for base type");
+                Loc locx = loc.isValid() ? loc : this.loc;
+                error(locx, "is forward referenced looking for base type");
                 return Type.terror;
             }
         }
@@ -344,7 +345,7 @@ extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
 
     EnumDeclaration ed;
 
-    extern (D) this(Loc loc, Identifier id, Expression value, Type origType)
+    extern (D) this(const ref Loc loc, Identifier id, Expression value, Type origType)
     {
         super(loc, null, id ? id : Id.empty, new ExpInitializer(loc, value));
         this.origValue = value;
@@ -362,7 +363,7 @@ extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
         return "enum member";
     }
 
-    final Expression getVarExp(Loc loc, Scope* sc) // CALYPSO
+    final Expression getVarExp(const ref Loc loc, Scope* sc) // CALYPSO
     {
         dsymbolSemantic(this, sc);
         if (errors)

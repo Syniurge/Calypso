@@ -2,15 +2,15 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (c) 1999-2017 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dimport.d, _dimport.d)
+ * Documentation:  https://dlang.org/phobos/dmd_dimport.html
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/dimport.d
  */
 
 module dmd.dimport;
-
-// Online documentation: https://dlang.org/phobos/dmd_dimport.html
 
 import dmd.arraytypes;
 import dmd.declaration;
@@ -23,7 +23,6 @@ import dmd.expression;
 import dmd.globals;
 import dmd.identifier;
 import dmd.mtype;
-import dmd.semantic;
 import dmd.visitor;
 
 /***********************************************************
@@ -70,7 +69,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         this.id = id;
         this.aliasId = aliasId;
         this.isstatic = isstatic;
-        this.protection = PROTprivate; // default to private
+        this.protection = Prot.Kind.private_; // default to private
         setSymIdent(); // CALYPSO
     }
 
@@ -106,7 +105,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
 
     override const(char)* kind() const
     {
-        return isstatic ? cast(char*)"static import" : cast(char*)"import";
+        return isstatic ? "static import" : "import";
     }
 
     override Prot prot()
@@ -135,7 +134,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         {
             if (pkg && pkg.isModule())
             {
-                .error(loc, "can only import from a module, not from a member of module %s. Did you mean `import %s : %s`?", pkg.toChars(), pkg.toPrettyChars(), id.toChars());
+                .error(loc, "can only import from a module, not from a member of module `%s`. Did you mean `import %s : %s`?", pkg.toChars(), pkg.toPrettyChars(), id.toChars());
                 mod = pkg.isModule(); // Error recovery - treat as import of that module
                 return;
             }
@@ -149,19 +148,19 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
             {
                 if (s.isAliasDeclaration())
                 {
-                    .error(loc, "%s %s conflicts with %s", s.kind(), s.toPrettyChars(), id.toChars());
+                    .error(loc, "%s `%s` conflicts with `%s`", s.kind(), s.toPrettyChars(), id.toChars());
                 }
                 else if (Package p = s.isPackage())
                 {
-                    if (p.isPkgMod == PKGunknown)
+                    if (p.isPkgMod == PKG.unknown)
                     {
                         mod = loadModule(sc); // CALYPSO
                         if (!mod)
-                            p.isPkgMod = PKGpackage;
+                            p.isPkgMod = PKG.package_;
                         else
                         {
                             // mod is a package.d, or a normal module which conflicts with the package name.
-                            assert(mod.isPackageFile == (p.isPkgMod == PKGmodule));
+                            assert(mod.isPackageFile == (p.isPkgMod == PKG.module_));
                             if (mod.isPackageFile)
                                 mod.tag = p.tag; // reuse the same package tag
                         }
@@ -172,16 +171,16 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
                     }
                     if (!mod)
                     {
-                        .error(loc, "can only import from a module, not from package %s.%s", p.toPrettyChars(), id.toChars());
+                        .error(loc, "can only import from a module, not from package `%s.%s`", p.toPrettyChars(), id.toChars());
                     }
                 }
                 else if (pkg)
                 {
-                    .error(loc, "can only import from a module, not from package %s.%s", pkg.toPrettyChars(), id.toChars());
+                    .error(loc, "can only import from a module, not from package `%s.%s`", pkg.toPrettyChars(), id.toChars());
                 }
                 else
                 {
-                    .error(loc, "can only import from a module, not from package %s", id.toChars());
+                    .error(loc, "can only import from a module, not from package `%s`", id.toChars());
                 }
             }
         }
@@ -278,7 +277,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         }
     }
 
-    override Dsymbol search(Loc loc, Identifier ident, int flags = SearchLocalsOnly)
+    override Dsymbol search(const ref Loc loc, Identifier ident, int flags = SearchLocalsOnly)
     {
         //printf("%s.Import.search(ident = '%s', flags = x%x)\n", toChars(), ident.toChars(), flags);
         if (!pkg)

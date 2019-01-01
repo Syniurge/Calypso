@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.4.3)
+if(POLICY CMP0025)
+  cmake_policy(SET CMP0025 NEW)
+endif()
+
 project(ldc)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
@@ -9,6 +13,7 @@ include(CheckIncludeFileCXX)
 include(CheckLibraryExists)
 include(CheckCXXCompilerFlag)
 include(CheckDSourceCompiles)
+include(CheckLinkFlag)
 
 # The script currently only supports the DMD-style commandline interface
 if (NOT D_COMPILER_DMD_COMPAT)
@@ -20,11 +25,16 @@ endif()
 #
 
 find_package(LLVM 5 REQUIRED
-    all-targets analysis asmparser asmprinter bitreader bitwriter codegen core coverage debuginfocodeview debuginfodwarf debuginfomsf debuginfopdb globalisel instcombine ipa ipo instrumentation irreader libdriver linker lto mc mcdisassembler mcparser objcarcopts object option profiledata scalaropts selectiondag support tablegen target transformutils vectorize ${EXTRA_LLVM_MODULES})
+    all-targets analysis asmparser asmprinter bitreader bitwriter codegen core
+    debuginfocodeview debuginfodwarf debuginfomsf debuginfopdb globalisel
+    instcombine ipa ipo instrumentation irreader libdriver linker lto mc
+    mcdisassembler mcparser objcarcopts object option profiledata scalaropts
+    selectiondag support tablegen target transformutils vectorize
+    windowsmanifest ${EXTRA_LLVM_MODULES} coverage) # CALYPSO
 math(EXPR LDC_LLVM_VER ${LLVM_VERSION_MAJOR}*100+${LLVM_VERSION_MINOR})
 # Remove LLVMTableGen library from list of libraries
-string(REGEX MATCH "^-.*LLVMTableGen[^;]*;|;-.*LLVMTableGen[^;]*" LLVM_TABLEGEN_LIBRARY "${LLVM_LIBRARIES}")
-string(REGEX REPLACE "^-.*LLVMTableGen[^;]*;|;-.*LLVMTableGen[^;]*" "" LLVM_LIBRARIES "${LLVM_LIBRARIES}")
+string(REGEX MATCH "[^;]*LLVMTableGen[^;]*" LLVM_TABLEGEN_LIBRARY "${LLVM_LIBRARIES}")
+string(REGEX REPLACE "[^;]*LLVMTableGen[^;]*;?" "" LLVM_LIBRARIES "${LLVM_LIBRARIES}")
 
 # Information about which targets LLVM was built to target
 foreach(LLVM_SUPPORTED_TARGET ${LLVM_TARGETS_TO_BUILD})
@@ -52,11 +62,11 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.8.0") # May be overridden by git hash tag
+set(LDC_VERSION "1.9.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   78)
-set(DMDFE_FIX_LEVEL       3) # Comment out if not used
+set(DMDFE_PATCH_VERSION   79)
+set(DMDFE_FIX_LEVEL       1) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
 if(DEFINED DMDFE_FIX_LEVEL)
@@ -174,7 +184,7 @@ string(STRIP "${DDMD_DFLAGS}" DDMD_DFLAGS)
 # as enabling warnings on the DMD frontend only leads to a lot of clutter in
 # the output (LLVM_CXXFLAGS sometimes already includes -Wall).
 set(LDC_CXXFLAGS)
-if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang"))
+if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
     # Disable some noisy warnings:
     #  * -Wunused-parameter triggers for LLVM headers
     #  * -Wmissing-field-initializer leads to reams of warnings in gen/asm-*.h
@@ -186,7 +196,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ($
     #  * -Wgnu-redeclared-enum triggers for various frontend headers.
     append("-fno-rtti" LDC_CXXFLAGS) # CALYPSO
     append("-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-non-virtual-dtor" LDC_CXXFLAGS)
-    if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang"))
+    if ((${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
         append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum" LDC_CXXFLAGS)
         if(CMAKE_BUILD_TYPE MATCHES "Debug")
             append("-fstandalone-debug" LDC_CXXFLAGS)
@@ -227,7 +237,7 @@ endif()
 set(SANITIZE_CXXFLAGS)
 set(SANITIZE_LDFLAGS)
 if(SANITIZE)
-    if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
+    if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
         append("-fsanitize=address" SANITIZE_CXXFLAGS)
         append("-fsanitize=address" SANITIZE_LDFLAGS)
     else()
@@ -237,6 +247,11 @@ endif()
 append("${SANITIZE_CXXFLAGS}" LDC_CXXFLAGS)
 # LLVM_CXXFLAGS may contain -Werror which causes compile errors with dmd source
 string(REPLACE "-Werror " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
+# LLVM_CXXFLAGS may contain -Werror=unguarded-availability-new which requires
+# more recent gcc versions (not supported by 4.9)
+if(CMAKE_COMPILER_IS_GNUCXX)
+    string(REPLACE "-Werror=unguarded-availability-new " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
+endif()
 if (UNIX AND NOT "${LLVM_LDFLAGS}" STREQUAL "")
     # LLVM_LDFLAGS may contain -l-lld which is a wrong library reference (AIX)
     string(REPLACE "-l-lld " "-lld " LLVM_LDFLAGS ${LLVM_LDFLAGS})
@@ -263,7 +278,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 endif()
 # LLVM_CXXFLAGS may contain -Wno-maybe-uninitialized
 # which is gcc-only options
-if((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     string(REPLACE "-Wno-maybe-uninitialized " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
 endif()
 
@@ -399,11 +414,11 @@ if(LDC_DYNAMIC_COMPILE STREQUAL "AUTO")
     set(LDC_DYNAMIC_COMPILE False)  # must be a valid Python boolean constant (case sensitive)
     if (NOT (LDC_LLVM_VER LESS 500))
         set(LDC_DYNAMIC_COMPILE True)
-        message(STATUS "Building LDC with dynamic compilation support")
         add_definitions(-DLDC_DYNAMIC_COMPILE)
         add_definitions(-DLDC_DYNAMIC_COMPILE_API_VERSION=1)
     endif()
 endif()
+message(STATUS "Building LDC with dynamic compilation support: ${LDC_DYNAMIC_COMPILE} (LDC_DYNAMIC_COMPILE=${LDC_DYNAMIC_COMPILE})")
 
 #
 # Includes, defines.
@@ -434,6 +449,7 @@ append("-DOPAQUE_VTBLS" LDC_CXXFLAGS)
 append("\"-DLDC_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}\"" LDC_CXXFLAGS)
 append("-DLDC_LLVM_VER=${LDC_LLVM_VER}" LDC_CXXFLAGS)
 append("\"-DLDC_LIBDIR_SUFFIX=\\\"${LIB_SUFFIX}\\\"\"" LDC_CXXFLAGS)
+append("-DLDC_HOST_FE_VER=${D_COMPILER_FE_VERSION}" LDC_CXXFLAGS)
 
 if(GENERATE_OFFTI)
     append("-DGENERATE_OFFTI" LDC_CXXFLAGS)
@@ -449,17 +465,27 @@ if(NOT DEFINED LDC_WITH_LLD)
             set(CMAKE_REQUIRED_FLAGS -std=c++11)
         endif()
         set(CMAKE_REQUIRED_INCLUDES ${LLVM_INCLUDE_DIRS})
-        CHECK_INCLUDE_FILE_CXX(lld/Driver/Driver.h LDC_WITH_LLD)
+        if(NOT (LDC_LLVM_VER LESS 600))
+            CHECK_INCLUDE_FILE_CXX(lld/Common/Driver.h LDC_WITH_LLD)
+        else()
+            CHECK_INCLUDE_FILE_CXX(lld/Driver/Driver.h LDC_WITH_LLD)
+        endif()
         unset(CMAKE_REQUIRED_FLAGS)
         unset(CMAKE_REQUIRED_INCLUDES)
+        # translate 1/0 to ON/OFF
+        if(LDC_WITH_LLD)
+            set(LDC_WITH_LLD ON)
+        else()
+            set(LDC_WITH_LLD OFF)
+        endif()
     else()
         set(LDC_WITH_LLD OFF)
     endif()
 endif()
 if(LDC_WITH_LLD)
-    message(STATUS "Building LDC with LLD support")
     append("-DLDC_WITH_LLD" LDC_CXXFLAGS)
 endif()
+message(STATUS "Building LDC with integrated LLD: ${LDC_WITH_LLD} (LDC_WITH_LLD=${LDC_WITH_LLD})")
 
 #
 # Enable building with riscv-llvm, for full RISC-V support.
@@ -514,7 +540,7 @@ endif()
 #
 set(TEST_COVERAGE OFF CACHE BOOL "instrument compiler for code coverage analysis")
 if(TEST_COVERAGE)
-    if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
+    if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
         append("-O0 -g -fprofile-arcs -ftest-coverage" EXTRA_CXXFLAGS)
         list(APPEND LLVM_LDFLAGS "-lgcov")
     else()
@@ -675,12 +701,24 @@ add_custom_target(${LDMD_EXE} ALL DEPENDS ${LDMD_EXE_FULL})
 
 # Figure out how to link the main LDC executable, for which we need to take the
 # LLVM flags into account.
-set(LDC_LINKERFLAG_LIST "${SANITIZE_LDFLAGS};${LLVM_LIBRARIES};${LLVM_LDFLAGS}")
+set(LDC_LINKERFLAG_LIST ${SANITIZE_LDFLAGS} ${LLVM_LIBRARIES} ${LLVM_LDFLAGS})
 if(LDC_WITH_LLD)
-    if(MSVC)
-        list(APPEND LDC_LINKERFLAG_LIST lldCOFF.lib lldCore.lib lldDriver.lib)
+    # ELF and Mach-O formats supported since LLD 6.0.0, otherwise just Windows COFF
+    if(NOT (LDC_LLVM_VER LESS 600))
+        if(MSVC)
+            list(APPEND LDC_LINKERFLAG_LIST lldDriver.lib lldCOFF.lib lldELF.lib lldMachO.lib lldYAML.lib lldReaderWriter.lib lldCommon.lib lldCore.lib)
+        else()
+            set(LDC_LINKERFLAG_LIST -llldDriver -llldCOFF -llldELF -llldMachO -llldYAML -llldReaderWriter -llldCommon -llldCore ${LDC_LINKERFLAG_LIST})
+        endif()
+        if(APPLE) # bug, should be fixed in LLVM 6.0.1
+            list(APPEND LDC_LINKERFLAG_LIST -lxml2)
+        endif()
     else()
-        set(LDC_LINKERFLAG_LIST "-llldCOFF;-llldCore;-llldDriver;${LDC_LINKERFLAG_LIST}")
+        if(MSVC)
+            list(APPEND LDC_LINKERFLAG_LIST lldCOFF.lib lldCore.lib lldDriver.lib)
+        else()
+            set(LDC_LINKERFLAG_LIST -llldCOFF -llldCore -llldDriver ${LDC_LINKERFLAG_LIST})
+        endif()
     endif()
 endif()
 
@@ -692,18 +730,23 @@ else()
 endif()
 set(LDC_ENABLE_PLUGINS ${LDC_ENABLE_PLUGINS_DEFAULT} CACHE BOOL "Build LDC with plugin support (increases binary size)")
 if(LDC_ENABLE_PLUGINS)
-    message(STATUS "Building LDC with plugin support (LDC_ENABLE_PLUGINS=ON)")
     add_definitions(-DLDC_ENABLE_PLUGINS)
-    # For plugin support, we need to link with --export-dynamic on Unix.
-    if(UNIX AND NOT APPLE)
-        set(LDC_LINKERFLAG_LIST "${LDC_LINKERFLAG_LIST};-Wl,--export-dynamic")
+
+    if(APPLE)
+        # No extra link flags needed.
+    elseif(UNIX)
+        # For plugin support, we need to link with --export-dynamic on Unix.
+        # Make sure the linker supports --export-dynamic (on Solaris it is not supported and also not needed).
+        CHECK_LINK_FLAG("--export-dynamic" LINKER_ACCEPTS_EXPORT_DYNAMIC_FLAG)
+        if(LINKER_ACCEPTS_EXPORT_DYNAMIC_FLAG)
+            set(LDC_LINKERFLAG_LIST "${LDC_LINKERFLAG_LIST};-Wl,--export-dynamic")
+        endif()
     endif()
-else()
-    message(STATUS "Building LDC without plugin support (LDC_ENABLE_PLUGINS=OFF)")
 endif()
+message(STATUS "Building LDC with plugin support: ${LDC_ENABLE_PLUGINS} (LDC_ENABLE_PLUGINS=${LDC_ENABLE_PLUGINS})")
 
 set(LDC_LINK_MANUALLY OFF)
-if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR (${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")))
+if(UNIX AND (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")))
     # On Unix-like systems, DMD and LDC will use the C compiler for linking, but
     # will pass on -L options prefixed by -Xlinker to directly forward them to
     # the underlying ld. Since there are some flags the GCC driver handles itself
@@ -870,7 +913,7 @@ if (NOT (LDC_LLVM_VER LESS 309) AND LDC_INSTALL_LTOPLUGIN)
         set(LDC_LTO_BINARY_NAME LLVMgold-ldc.so)
     endif()
     if(EXISTS ${LLVM_LTO_BINARY})
-        message(STATUS "Also installing LTO binary: ${LLVM_LTO_BINARY}")
+        message(STATUS "Also installing LTO binary: ${LLVM_LTO_BINARY} (LDC_INSTALL_LTOPLUGIN=${LDC_INSTALL_LTOPLUGIN})")
         copy_and_rename_file(${LLVM_LTO_BINARY} ${PROJECT_BINARY_DIR}/lib${LIB_SUFFIX}/${LDC_LTO_BINARY_NAME})
         install(PROGRAMS ${PROJECT_BINARY_DIR}/lib${LIB_SUFFIX}/${LDC_LTO_BINARY_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX})
     else()
