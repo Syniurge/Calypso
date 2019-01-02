@@ -118,7 +118,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         sc2.stc &= STC.safe | STC.trusted | STC.system;
         sc2.parent = this;
         if (isUnionDeclaration())
-            sc2.inunion = 1;
+            sc2.inunion = true;
         sc2.protection = Prot(Prot.Kind.public_);
         sc2.explicitProtection = 0;
         sc2.aligndecl = null;
@@ -406,6 +406,19 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                 t = t.addMod(stype.mod);
             Type origType = t;
             Type tb = t.toBasetype();
+
+            const hasPointers = tb.hasPointers();
+            if (hasPointers)
+            {
+                if ((stype.alignment() < Target.ptrsize ||
+                     (v.offset & (Target.ptrsize - 1))) &&
+                    (sc.func && sc.func.setUnsafe()))
+                {
+                    .error(loc, "field `%s.%s` cannot assign to misaligned pointers in `@safe` code",
+                        toChars(), v.toChars());
+                    return false;
+                }
+            }
 
             /* Look for case of initializing a static array with a too-short
              * string literal, such as:

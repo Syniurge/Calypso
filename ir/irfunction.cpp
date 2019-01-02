@@ -16,12 +16,15 @@
 #include "gen/tollvm.h"
 #include "ir/irdsymbol.h"
 
-IrFunction::IrFunction(FuncDeclaration *fd) : FMF(opts::defaultFMF) {
+IrFunction::IrFunction(FuncDeclaration *fd)
+    : irFty(nullptr /*set immediately below*/), FMF(opts::defaultFMF) {
   decl = fd;
 
   Type *t = fd->type->toBasetype();
   assert(t->ty == Tfunction);
   type = static_cast<TypeFunction *>(t);
+
+  irFty.type = type;
 }
 
 void IrFunction::setNeverInline() {

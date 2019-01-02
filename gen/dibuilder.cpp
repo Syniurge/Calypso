@@ -246,6 +246,10 @@ ldc::DIType ldc::DIBuilder::CreateEnumType(Type *type) {
   llvm::Type *T = DtoType(type);
   TypeEnum *te = static_cast<TypeEnum *>(type);
 
+  if (te->sym->isSpecial()) {
+    return CreateBasicType(te->sym->memtype);
+  }
+
   llvm::SmallVector<LLMetadata *, 8> subscripts;
   for (auto m : *te->sym->members) {
     EnumMember *em = m->isEnumMember();
@@ -482,7 +486,12 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type) {
                                    getNullDIType(), // VTableHolder
                                    nullptr,         // TemplateParms
                                    uniqueIdent(t)); // UniqueIdentifier
-      auto dt = DBuilder.createInheritance(fwd, derivedFrom, 0,
+      auto dt = DBuilder.createInheritance(fwd,
+                                           derivedFrom, // base class type
+                                           0,           // offset of base class
+#if LDC_LLVM_VER >= 700
+                                           0, // offset of virtual base pointer
+#endif
                                            DIFlags::FlagPublic);
       elems.push_back(dt);
     }
@@ -1058,7 +1067,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
 
   const bool isRefOrOut = vd->isRef() || vd->isOut(); // incl. special-ref vars
 
-  // For MSVC x64 targets, declare params rewritten by ExplicitByvalRewrite as
+  // For MSVC x64 targets, declare params rewritten by IndirectByvalRewrite as
   // DI references, as if they were ref parameters.
   const bool isPassedExplicitlyByval =
       isTargetMSVCx64 && !isRefOrOut && isaArgument(ll) && addr.empty();

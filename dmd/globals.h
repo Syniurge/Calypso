@@ -89,11 +89,7 @@ struct Param
     bool vcg_ast;       // write-out codegen-ast
     bool showColumns;   // print character (column) numbers in diagnostics
     bool vtls;          // identify thread local variables
-#if !IN_LLVM
-    char vgc;           // identify gc usage
-#else
     bool vgc;           // identify gc usage
-#endif
     bool vfield;        // identify non-mutable field variables
     bool vcomplex;      // identify complex/imaginary type usage
 #if !IN_LLVM
@@ -326,6 +322,11 @@ struct Global
     void increaseErrorCount();
 
     void _init();
+
+    /**
+    Returns: the version as the number that would be returned for __VERSION__
+    */
+    unsigned versionNumber();
 };
 
 extern Global global;
@@ -333,7 +334,7 @@ extern Global global;
 // Because int64_t and friends may be any integral type of the
 // correct size, we have to explicitly ask for the correct
 // integer type to get the correct mangling with dmd
-#if __LP64__
+#if __LP64__ && !(__APPLE__ && LDC_HOST_DigitalMars && LDC_HOST_FE_VER >= 2079)
 // Be careful not to care about sign when using dinteger_t
 // use this instead of integer_t to
 // avoid conflicts with system #include's

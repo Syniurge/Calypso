@@ -169,6 +169,22 @@ void iterateFuncInstructions(llvm::Function &func, F &&handler) {
   }     // for (auto &&bb : fun)
 }
 
+template<typename I>
+void stripDeclarations(llvm::iterator_range<I> range) {
+  for (auto it = range.begin(); it != range.end();) {
+    auto elem = &(*it);
+    ++it;
+    if (elem->isDeclaration() && elem->use_empty()) {
+      elem->eraseFromParent();
+    }
+  }
+}
+
+void stripModule(llvm::Module &module) {
+  stripDeclarations(module.functions());
+  stripDeclarations(module.globals());
+}
+
 void fixRtModule(llvm::Module &newModule,
                  const decltype(IRState::dynamicCompiledFunctions) &funcs) {
   std::unordered_map<std::string, std::string> thunkVar2func;
@@ -224,6 +240,8 @@ void fixRtModule(llvm::Module &newModule,
       }
     }
   }
+
+  stripModule(newModule);
 }
 
 void removeFunctionsTargets(IRState *irs, llvm::Module &module) {
@@ -710,6 +728,8 @@ void createThunkFunc(llvm::Module &module, const llvm::Function *src,
     args.push_back(&arg);
   }
   auto ret = builder.CreateCall(thunkPtr, args);
+  ret->setCallingConv(src->getCallingConv());
+  ret->setAttributes(src->getAttributes());
   if (dst->getReturnType()->isVoidTy()) {
     builder.CreateRetVoid();
   } else {
@@ -794,7 +814,7 @@ void addDynamicCompiledVar(IRState *irs, IrGlobal *var) {
   }
 
   if (var->V->isThreadlocal()) {
-    error(Loc(), "Runtime compiled variable \"%s\" cannot be thread local",
+    error(Loc(), "Dynamic compile const variable \"%s\" cannot be thread local",
           var->V->toChars());
     fatal();
   }

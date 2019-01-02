@@ -287,19 +287,26 @@ private int tryMain(size_t argc, const(char)** argv)
      */
     sections.push("Environment");
     parseConfFile(&environment, global.inifilename, inifilepath, inifile.len, inifile.buffer, &sections);
-    Strings dflags;
-    getenv_setargv(readFromEnv(&environment, "DFLAGS"), &dflags);
-    environment.reset(7); // erase cached environment updates
+
     const(char)* arch = global.params.is64bit ? "64" : "32"; // use default
     arch = parse_arch_arg(&arguments, arch);
-    arch = parse_arch_arg(&dflags, arch);
+
+    // parse architecture from DFLAGS read from [Environment] section
+    {
+        Strings dflags;
+        getenv_setargv(readFromEnv(&environment, "DFLAGS"), &dflags);
+        environment.reset(7); // erase cached environment updates
+        arch = parse_arch_arg(&dflags, arch);
+    }
+
     bool is64bit = arch[0] == '6';
 
     version(Windows) // delete LIB entry in [Environment] (necessary for optlink) to allow inheriting environment for MS-COFF
         if (is64bit || strcmp(arch, "32mscoff") == 0)
             environment.update("LIB", 3).ptrvalue = null;
 
-    char[80] envsection;
+    // read from DFLAGS in [Environment{arch}] section
+    char[80] envsection = void;
     sprintf(envsection.ptr, "Environment%s", arch);
     sections.push(envsection.ptr);
     parseConfFile(&environment, global.inifilename, inifilepath, inifile.len, inifile.buffer, &sections);
@@ -574,6 +581,8 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
         message("config    %s", global.inifilename ? global.inifilename : "(none)");
         // Print DFLAGS environment variable
         {
+            Strings dflags;
+            getenv_setargv(readFromEnv(&environment, "DFLAGS"), &dflags);
             OutBuffer buf;
             foreach (flag; dflags.asDArray)
             {
@@ -755,7 +764,7 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
         /* At this point, name is the D source file name stripped of
          * its path and extension.
          */
-        auto id = Identifier.idPool(name, strlen(name));
+        auto id = Identifier.idPool(name, cast(uint)strlen(name));
         auto m = new Module(files[i], id, global.params.doDocComments, global.params.doHdrGeneration);
         modules.push(m);
       version (IN_LLVM)
@@ -1061,6 +1070,11 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     Library library = null;
     if (global.params.lib)
     {
+        if (global.params.objfiles.dim == 0)
+        {
+            error(Loc.initial, "no input files");
+            return EXIT_FAILURE;
+        }
         library = Library.factory();
         library.setFilename(global.params.objdir, global.params.libname);
         // Add input object and input library files to output library
@@ -2704,7 +2718,7 @@ private void parseModulePattern(const(char)* modulePattern, MatcherNode* dst, us
                 if (*modulePattern == '.')
                 {
                     assert(modulePattern > idStart, "empty module pattern");
-                    *dst = MatcherNode(Identifier.idPool(idStart, modulePattern - idStart));
+                    *dst = MatcherNode(Identifier.idPool(idStart, cast(uint)(modulePattern - idStart)));
                     modulePattern++;
                     idStart = modulePattern;
                     break;
@@ -2716,7 +2730,7 @@ private void parseModulePattern(const(char)* modulePattern, MatcherNode* dst, us
             if (*modulePattern == '\0')
             {
                 assert(modulePattern > idStart, "empty module pattern");
-                *lastNode = MatcherNode(Identifier.idPool(idStart, modulePattern - idStart));
+                *lastNode = MatcherNode(Identifier.idPool(idStart, cast(uint)(modulePattern - idStart)));
                 break;
             }
         }

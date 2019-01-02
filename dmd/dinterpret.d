@@ -3243,7 +3243,7 @@ public:
             Expression agg1 = getAggregateFromPointer(e1, &ofs1);
             Expression agg2 = getAggregateFromPointer(e2, &ofs2);
             //printf("agg1 = %p %s, agg2 = %p %s\n", agg1, agg1.toChars(), agg2, agg2.toChars());
-            int cmp = comparePointers(e.loc, e.op, e.type, agg1, ofs1, agg2, ofs2);
+            int cmp = comparePointers(e.op, agg1, ofs1, agg2, ofs2);
             if (cmp == -1)
             {
                 char dir = (e.op == TOK.greaterThan || e.op == TOK.greaterOrEqual) ? '<' : '>';
@@ -4683,7 +4683,7 @@ public:
         TOK cmpop = ex.op;
         if (nott)
             cmpop = reverseRelation(cmpop);
-        int cmp = comparePointers(e.loc, cmpop, e.e1.type, agg1, ofs1, agg2, ofs2);
+        int cmp = comparePointers(cmpop, agg1, ofs1, agg2, ofs2);
         // We already know this is a valid comparison.
         assert(cmp >= 0);
         if (e.op == TOK.andAnd && cmp == 1 || e.op == TOK.orOr && cmp == 0)
@@ -4829,17 +4829,23 @@ public:
             {
                 assert(e.arguments.dim == 1);
                 Expression ea = (*e.arguments)[0];
-                //printf("1 ea = %s %s\n", ea.type.toChars(), ea.toChars());
+                // printf("1 ea = %s %s\n", ea.type.toChars(), ea.toChars());
                 if (ea.op == TOK.slice)
                     ea = (cast(SliceExp)ea).e1;
                 if (ea.op == TOK.cast_)
                     ea = (cast(CastExp)ea).e1;
 
-                //printf("2 ea = %s, %s %s\n", ea.type.toChars(), Token::toChars(ea.op), ea.toChars());
+                // printf("2 ea = %s, %s %s\n", ea.type.toChars(), Token.toChars(ea.op), ea.toChars());
                 if (ea.op == TOK.variable || ea.op == TOK.symbolOffset)
                     result = getVarExp(e.loc, istate, (cast(SymbolExp)ea).var, ctfeNeedRvalue);
                 else if (ea.op == TOK.address)
                     result = interpret((cast(AddrExp)ea).e1, istate);
+
+                // https://issues.dlang.org/show_bug.cgi?id=18871
+                // https://issues.dlang.org/show_bug.cgi?id=18819
+                else if (ea.op == TOK.arrayLiteral)
+                    result = interpret(cast(ArrayLiteralExp)ea, istate);
+
                 else
                     assert(0);
                 if (CTFEExp.isCantExp(result))

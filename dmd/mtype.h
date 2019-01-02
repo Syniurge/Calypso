@@ -334,15 +334,11 @@ public:
 
     virtual Type *toHeadMutable();
     virtual ClassDeclaration *isClassHandle();
-    virtual Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
-    virtual Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     virtual structalign_t alignment();
-    Expression *noMember(Scope *sc, Expression *e, Identifier *ident, int flag);
     virtual Expression *defaultInit(const Loc &loc = Loc());
     virtual Expression *defaultInitLiteral(const Loc &loc);
     virtual bool isZeroInit(const Loc &loc = Loc());                // if initializer is 0
     Identifier *getTypeInfoIdent();
-    virtual void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     void resolveExp(Expression *e, Type **pt, Expression **pe, Dsymbol **ps);
     virtual int hasWild() const;
     virtual bool hasPointers();
@@ -369,8 +365,6 @@ public:
     Type *syntaxCopy();
 
     d_uns64 size(const Loc &loc);
-    Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc);
     void accept(Visitor *v) { v->visit(this); }
@@ -414,8 +408,6 @@ public:
 #if IN_LLVM
     structalign_t alignment();
 #endif
-    Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isintegral();
     bool isfloating() /*const*/;
     bool isreal() /*const*/;
@@ -437,13 +429,11 @@ class TypeVector : public Type
 public:
     Type *basetype;
 
-    static TypeVector *create(Loc loc, Type *basetype);
+    static TypeVector *create(Type *basetype);
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc);
     unsigned alignsize();
-    Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isintegral();
     bool isfloating();
     bool isscalar();
@@ -475,8 +465,6 @@ public:
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc);
     unsigned alignsize();
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isString();
     bool isZeroInit(const Loc &loc);
     structalign_t alignment();
@@ -499,8 +487,6 @@ public:
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc) /*const*/;
     unsigned alignsize() /*const*/;
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isString();
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
@@ -522,8 +508,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc);
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
@@ -561,7 +545,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc) /*const*/;
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     void accept(Visitor *v) { v->visit(this); }
@@ -661,7 +644,6 @@ public:
     Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool hasPointers() /*const*/;
 
     void accept(Visitor *v) { v->visit(this); }
@@ -697,7 +679,6 @@ public:
 
     const char *kind() const;
     Type *syntaxCopy();
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Dsymbol *toDsymbol(Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -711,7 +692,6 @@ public:
 
     const char *kind() const;
     Type *syntaxCopy();
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     Dsymbol *toDsymbol(Scope *sc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -725,7 +705,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     d_uns64 size(const Loc &loc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -736,7 +715,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -765,7 +743,6 @@ public:
     unsigned alignsize();
     Type *syntaxCopy();
     Dsymbol *toDsymbol(Scope *sc);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     bool isBaseOf(Type *t, int *poffset); // CALYPSO
     structalign_t alignment();
     Expression *defaultInit(const Loc &loc);
@@ -795,8 +772,6 @@ public:
     d_uns64 size(const Loc &loc);
     unsigned alignsize();
     Dsymbol *toDsymbol(Scope *sc);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
-    Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
     bool isintegral();
     bool isfloating();
     bool isreal();
@@ -834,7 +809,6 @@ public:
     unsigned alignsize(); // CALYPSO
     structalign_t alignment(); // CALYPSO
     Dsymbol *toDsymbol(Scope *sc);
-    Expression *dotExp(Scope *sc, Expression *e, Identifier *ident, int flag);
     ClassDeclaration *isClassHandle();
     bool byRef() const; // CALYPSO
     bool isBaseOf(Type *t, int *poffset);
@@ -861,7 +835,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     bool equals(RootObject *o);
-    Expression *getProperty(const Loc &loc, Identifier *ident, int flag);
     Expression *defaultInit(const Loc &loc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -874,7 +847,6 @@ public:
 
     const char *kind() const;
     Type *syntaxCopy();
-    void resolve(const Loc &loc, Scope *sc, Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -921,7 +893,7 @@ public:
 };
 
 bool arrayTypeCompatible(Loc loc, Type *t1, Type *t2);
-bool arrayTypeCompatibleWithoutCasting(Loc loc, Type *t1, Type *t2);
+bool arrayTypeCompatibleWithoutCasting(Type *t1, Type *t2);
 
 // CALYPSO
 AggregateDeclaration *getAggregateSym(Type *t);

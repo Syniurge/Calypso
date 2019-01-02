@@ -43,18 +43,13 @@ bool DtoIsInMemoryOnly(Type *type) {
   return (t == Tstruct || isClassValue(typ) || t == Tsarray); // CALYPSO
 }
 
-RET retStyle(TypeFunction *tf) {
-  bool sret = gABI->returnInArg(tf);
-  return sret ? RETstack : RETregs;
-}
-
 bool DtoIsReturnInArg(CallExp *ce) {
   if (ce->f && ce->f->langPlugin()) // CALYPSO
     return ce->f->langPlugin()->codegen()->toIsReturnInArg(ce);
 
-  TypeFunction *tf = static_cast<TypeFunction *>(ce->e1->type->toBasetype());
-  if (tf->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f))) {
-    return retStyle(tf) == RETstack;
+  Type *t = ce->e1->type->toBasetype();
+  if (t->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f))) {
+    return gABI->returnInArg(static_cast<TypeFunction *>(t));
   }
   return false;
 }

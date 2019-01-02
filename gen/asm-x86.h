@@ -2066,19 +2066,19 @@ struct AsmProcessor {
         }
         regInfo[i].gccName = std::string(buf, p - buf);
         if ((i <= Reg_ST || i > Reg_ST7) && i != Reg_EFLAGS) {
-          regInfo[i].ident = Identifier::idPool(regInfo[i].name.data(),
-                                                regInfo[i].name.size());
+          regInfo[i].ident =
+              Identifier::idPool(regInfo[i].name.data(),
+                                 static_cast<unsigned>(regInfo[i].name.size()));
         }
       }
 
       for (int i = 0; i < N_PtrNames; i++) {
-        ptrTypeIdentTable[i] = Identifier::idPool(
-            ptrTypeNameTable[i], std::strlen(ptrTypeNameTable[i]));
+        ptrTypeIdentTable[i] = Identifier::idPool(ptrTypeNameTable[i]);
       }
 
       Handled = createExpression(Loc(), TOKvoid, sizeof(Expression));
 
-      ident_seg = Identifier::idPool("seg", std::strlen("seg"));
+      ident_seg = Identifier::idPool("seg");
 
       eof_tok.value = TOKeof;
       eof_tok.next = nullptr;
@@ -3032,7 +3032,7 @@ struct AsmProcessor {
               stmt->error("dollar labels are not supported");
               asmcode->dollarLabel = 1;
             } else if (e->op == TOKdsymbol) {
-              LabelDsymbol *lbl = (LabelDsymbol *)((DsymbolExp *)e)->s;
+              LabelDsymbol *lbl = static_cast<DsymbolExp *>(e)->s->isLabel();
               stmt->isBranchToLabel = lbl;
 
               use_star = false;

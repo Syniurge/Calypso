@@ -34,7 +34,7 @@
 struct Win64TargetABI : TargetABI {
 private:
   const bool isMSVC;
-  ExplicitByvalRewrite byvalRewrite;
+  IndirectByvalRewrite byvalRewrite;
   IntegerRewrite integerRewrite;
 
   bool isX87(Type *t) const {
@@ -42,44 +42,79 @@ private:
            && (t->ty == Tfloat80 || t->ty == Timaginary80);
   }
 
-  // Returns true if the D type is passed byval (the callee getting a pointer
-  // to a dedicated hidden copy).
-  bool isPassedWithByvalSemantics(Type *t) const {
-    return
-        // * aggregates which can NOT be rewritten as integers
-        //   (size > 8 bytes or not a power of 2)
-        (isAggregate(t) && !canRewriteAsInt(t)) ||
-        // * 80-bit real and ireal
-        isX87(t);
+  bool passPointerToHiddenCopy(Type *t, bool isReturnValue, LINK linkage) const {
+    // Pass magic C++ structs directly as LL aggregate with a single i32/double
+    // element, which LLVM handles as if it was a scalar.
+    if (isMagicCppStruct(t))
+      return false;
+
+    // 80-bit real/ireal:
+    // * returned on the x87 stack (for DMD inline asm compliance and what LLVM
+    //   defaults to)
+    // * passed by ref to hidden copy
+    if (isX87(t))
+      return !isReturnValue;
+
+    const bool isMSVCpp = isMSVC && linkage == LINKcpp;
+
+    if (isReturnValue) {
+      // MSVC++ enforces sret for non-PODs, incl. aggregates with ctors
+      // (which by itself doesn't make it a non-POD for D).
+      const bool excludeStructsWithCtor = isMSVCpp;
+      if (!isPOD(t, excludeStructsWithCtor))
+        return true;
+    } else {
+      // Contrary to return values, POD-ness is ignored for arguments.
+      // MSVC++ seems to enforce by-ref passing only for aggregates with
+      // copy ctor (incl. `= delete`).
+      if (isMSVCpp && t->ty == Tstruct) {
+        StructDeclaration *sd = static_cast<TypeStruct *>(t)->sym;
+        assert(sd);
+        if (sd->postblit)
+          return true;
+      }
+    }
+
+    // Remaining aggregates which can NOT be rewritten as integers (size > 8
+    // bytes or not a power of 2) are passed by ref to hidden copy.
+    return isAggregate(t) && !canRewriteAsInt(t);
   }
 
 public:
   Win64TargetABI()
       : isMSVC(global.params.targetTriple->isWindowsMSVCEnvironment()) {}
 
+  llvm::CallingConv::ID callingConv(LINK l, TypeFunction *tf = nullptr,
+                                    FuncDeclaration *fd = nullptr) override {
+    // Use the vector calling convention for extern(D) (except for variadics)
+    // => let LLVM pass vectors in registers instead of passing a ref to a
+    // hidden copy (both cases handled by LLVM automatically for LL vectors
+    // which we don't rewrite).
+    return l == LINKd && !(tf && tf->varargs == 1)
+               ? llvm::CallingConv::X86_VectorCall
+               : llvm::CallingConv::C;
+  }
+
+  std::string mangleFunctionForLLVM(std::string name, LINK l) override {
+    if (l == LINKd) {
+      // Prepend a 0x1 byte to prevent LLVM from applying vectorcall/stdcall
+      // mangling: _D… => _D…@<paramssize>
+      name.insert(name.begin(), '\1');
+    }
+    return name;
+  }
+
   bool returnInArg(TypeFunction *tf) override {
     if (tf->isref)
       return false;
 
-    Type *rt = tf->next->toBasetype();
-
-    // let LLVM return
-    // * magic C++ structs directly as LL aggregate with a single i32/double
-    //   element, which LLVM handles as if it was a scalar
-    // * 80-bit real/ireal on the x87 stack, for DMD inline asm compliance
-    if (isMagicCppStruct(rt) || isX87(rt))
-      return false;
-
-    // force sret for non-POD structs
-    const bool excludeStructsWithCtor = (isMSVC && tf->linkage == LINKcpp);
-    if (!isPOD(rt, excludeStructsWithCtor))
-      return true;
-
     // * all POD types of a power-of-2 size <= 8 bytes (incl. 2x32-bit cfloat)
     //   are returned in a register (RAX, or XMM0 for single float/ifloat/
     //   double/idouble)
+    // * 80-bit real/ireal are returned on the x87 stack
     // * all other types are returned via sret
-    return isPassedWithByvalSemantics(rt);
+    Type *rt = tf->next->toBasetype();
+    return passPointerToHiddenCopy(rt, /*isReturnValue=*/true, tf->linkage);
   }
 
   bool passByVal(Type *t) override {
@@ -92,13 +127,11 @@ public:
     return tf->linkage == LINKcpp;
   }
 
-  void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) override {
+  void rewriteFunctionType(IrFuncTy &fty) override {
     // return value
     const auto rt = fty.ret->type->toBasetype();
     if (!fty.ret->byref && rt->ty != Tvoid) {
-      // 80-bit real/ireal are returned on the x87 stack (but passed in memory)
-      if (!isX87(rt))
-        rewriteArgument(fty, *fty.ret);
+      rewrite(fty, *fty.ret, /*isReturnValue=*/true);
     }
 
     // explicit parameters
@@ -106,11 +139,6 @@ public:
       if (!arg->byref) {
         rewriteArgument(fty, *arg);
       }
-    }
-
-    // extern(D): reverse parameter order for non variadics, for DMD-compliance
-    if (tf->linkage == LINKd && tf->varargs != 1 && fty.args.size() > 1) {
-      fty.reverseParams = true;
     }
   }
 
@@ -128,30 +156,21 @@ public:
   }
 
   void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override {
+    rewrite(fty, arg, /*isReturnValue=*/false);
+  }
+
+  void rewrite(IrFuncTy &fty, IrFuncTyArg &arg, bool isReturnValue) {
     Type *t = arg.type->toBasetype();
+    LLType *originalLType = arg.ltype;
 
-    if (isMagicCppStruct(t)) {
-      // pass directly as LL aggregate
-    } else if (isPassedWithByvalSemantics(t)) {
-      // these types are passed byval:
-      // the caller allocates a copy and then passes a pointer to the copy
-      arg.rewrite = &byvalRewrite;
-
-      // the copy is treated as a local variable of the callee
-      // hence add the NoAlias and NoCapture attributes
-      arg.attrs.clear()
-          .add(LLAttribute::NoAlias)
-          .add(LLAttribute::NoCapture)
-          .addAlignment(byvalRewrite.alignment(arg.type));
-    } else if (isAggregate(t) && canRewriteAsInt(t) &&
-               !IntegerRewrite::isObsoleteFor(arg.ltype)) {
-      arg.rewrite = &integerRewrite;
+    if (passPointerToHiddenCopy(t, isReturnValue, fty.type->linkage)) {
+      // the caller allocates a hidden copy and passes a pointer to that copy
+      byvalRewrite.applyTo(arg);
+    } else if (isAggregate(t) && canRewriteAsInt(t) && !isMagicCppStruct(t)) {
+      integerRewrite.applyToIfNotObsolete(arg);
     }
 
     if (arg.rewrite) {
-      LLType *originalLType = arg.ltype;
-      arg.ltype = arg.rewrite->type(arg.type);
-
       IF_LOG {
         Logger::println("Rewriting argument type %s", t->toChars());
         LOG_SCOPE;

@@ -140,7 +140,13 @@ test_script:
   - set DMD_TESTSUITE_MAKE_ARGS=-j2
   - ctest -V -R "dmd-testsuite"
   # Run stdlib unittests
-  - ctest -j2 --output-on-failure -E "dmd-testsuite|lit-tests|ldc2-unittest"
+  - ps: |
+        If ($Env:APPVEYOR_JOB_ARCH -eq 'x64') {
+          # Exclude std.random unittests with enabled optimizations.
+          ctest -j2 --output-on-failure -E 'dmd-testsuite|lit-tests|ldc2-unittest|^std\.random$'
+        } Else {
+          ctest -j2 --output-on-failure -E 'dmd-testsuite|lit-tests|ldc2-unittest'
+        }
 
 #---------------------------------#
 #     deployment configuration    #
@@ -226,7 +232,7 @@ after_test:
             ren lib lib32
             (cat etc\ldc2.conf).replace('%%ldcbinarypath%%/../lib', '%%ldcbinarypath%%/../lib64') | Set-Content etc\ldc2.conf
             $conf32 = cat ..\ldc2-x86\etc\ldc2.conf -Raw
-            $conf32 = "`r`ni686-pc-windows-msvc:" + $conf32.Substring($conf32.IndexOf("`r`ndefault:") + 10)
+            $conf32 = "`r`n""i[3-6]86-.*-windows-msvc"":" + $conf32.Substring($conf32.IndexOf("`r`ndefault:") + 10)
             $conf32 = $conf32.Replace('%%ldcbinarypath%%/../lib', '%%ldcbinarypath%%/../lib32')
             Add-Content etc\ldc2.conf $conf32
             cd ..

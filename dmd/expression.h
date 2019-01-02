@@ -240,6 +240,7 @@ public:
     dinteger_t value;
 
     static IntegerExp *create(Loc loc, dinteger_t value, Type *type);
+    static IntegerExp *createi(Loc loc, int value, Type *type);
     bool equals(RootObject *o);
     dinteger_t toInteger();
     real_t toReal();
@@ -853,6 +854,7 @@ public:
     static CallExp *create(Loc loc, Expression *e, Expressions *exps);
     static CallExp *create(Loc loc, Expression *e);
     static CallExp *create(Loc loc, Expression *e, Expression *earg1);
+    static CallExp *create(Loc loc, FuncDeclaration *fd, Expression *earg1);
 
     Expression *syntaxCopy();
     bool isLvalue();
@@ -1431,6 +1433,13 @@ public:
 };
 
 /****************************************************************/
+
+class ObjcClassReferenceExp : public Expression
+{
+    ClassDeclaration* classDeclaration;
+
+    void accept(Visitor *v) { v->visit(this); }
+};
 
 /* Special values used by the interpreter
  */

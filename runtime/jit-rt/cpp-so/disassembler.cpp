@@ -12,24 +12,24 @@
 #include <algorithm>
 #include <unordered_map>
 
-#include <llvm/ADT/Triple.h>
-#include <llvm/MC/MCAsmBackend.h>
-#include <llvm/MC/MCAsmInfo.h>
-#include <llvm/MC/MCCodeEmitter.h>
-#include <llvm/MC/MCContext.h>
-#include <llvm/MC/MCDisassembler/MCDisassembler.h>
-#include <llvm/MC/MCDisassembler/MCSymbolizer.h>
-#include <llvm/MC/MCInst.h>
-#include <llvm/MC/MCInstPrinter.h>
-#include <llvm/MC/MCInstrAnalysis.h>
-#include <llvm/MC/MCObjectFileInfo.h>
-#include <llvm/MC/MCRegisterInfo.h>
-#include <llvm/MC/MCStreamer.h>
-#include <llvm/MC/MCSubtargetInfo.h>
-#include <llvm/Object/ObjectFile.h>
-#include <llvm/Support/Error.h>
-#include <llvm/Support/TargetRegistry.h>
-#include <llvm/Target/TargetMachine.h>
+#include "llvm/ADT/Triple.h"
+#include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDisassembler/MCDisassembler.h"
+#include "llvm/MC/MCDisassembler/MCSymbolizer.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstPrinter.h"
+#include "llvm/MC/MCInstrAnalysis.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCStreamer.h"
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Target/TargetMachine.h"
 
 namespace {
 template <typename T> std::unique_ptr<T> unique(T *ptr) {
@@ -119,8 +119,10 @@ void printFunction(const llvm::MCDisassembler &disasm,
          pos += size) {
       llvm::MCInst inst;
 
+      std::string comment;
+      llvm::raw_string_ostream commentStream(comment);
       auto status = disasm.getInstruction(inst, size, data.slice(pos), pos,
-                                          llvm::nulls(), llvm::nulls());
+                                          llvm::nulls(), commentStream);
 
       switch (status) {
       case llvm::MCDisassembler::Fail:
@@ -142,6 +144,11 @@ void printFunction(const llvm::MCDisassembler &disasm,
         } else if (Stage::Emit == stage) {
           if (auto label = symTable.getTargetLabel(pos)) {
             streamer.EmitLabel(label);
+          }
+          commentStream.flush();
+          if (!comment.empty()) {
+            streamer.AddComment(comment);
+            comment.clear();
           }
           streamer.EmitInstruction(inst, sti);
         }
@@ -193,10 +200,15 @@ public:
     return false;
   }
 
-  virtual void tryAddingPcLoadReferenceComment(llvm::raw_ostream & /*cStream*/,
-                                               int64_t /*Value*/,
+  virtual void tryAddingPcLoadReferenceComment(llvm::raw_ostream &cStream,
+                                               int64_t Value,
                                                uint64_t /*Address*/) override {
-    // Nothing
+    if (Value >= 0) {
+      if (auto sym =
+              symTable.getExternalSymbolRel(static_cast<uint64_t>(Value))) {
+        cStream << sym->getName();
+      }
+    }
   }
 };
 
@@ -262,11 +274,6 @@ void disassemble(const llvm::TargetMachine &tm,
     return;
   }
 
-  auto mce = unique(target.createMCCodeEmitter(*mii, *mri, ctx));
-  if (nullptr == mce) {
-    return;
-  }
-
   llvm::MCTargetOptions opts;
   auto mab = unique(target.createMCAsmBackend(
 #if LDC_LLVM_VER >= 600
@@ -279,10 +286,16 @@ void disassemble(const llvm::TargetMachine &tm,
     return;
   }
 
-  // Streamer takes ownership of mip mce mab
+  // Streamer takes ownership of mip mab
   auto asmStreamer = unique(target.createAsmStreamer(
-      ctx, llvm::make_unique<llvm::formatted_raw_ostream>(os), false, true,
-      mip.release(), mce.release(), mab.release(), false));
+      ctx, llvm::make_unique<llvm::formatted_raw_ostream>(os), true, true,
+      mip.release(), nullptr,
+#if LDC_LLVM_VER >= 700
+      std::move(mab),
+#else
+      mab.release(),
+#endif
+      false));
   if (nullptr == asmStreamer) {
     return;
   }

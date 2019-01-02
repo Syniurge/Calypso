@@ -620,21 +620,22 @@ void fixupUClibcEnv()
 /// Also defines D_HardFloat or D_SoftFloat depending if FPU should be used
 void registerPredefinedFloatABI(const char *soft, const char *hard,
                                 const char *softfp = nullptr) {
-  // Use target floating point unit instead of s/w float routines
-  // FIXME: This is a semantic change!
-  bool useFPU = gTargetMachine->Options.FloatABIType == llvm::FloatABI::Hard;
-  VersionCondition::addPredefinedGlobalIdent(useFPU ? "D_HardFloat"
-                                                    : "D_SoftFloat");
-
-  if (gTargetMachine->Options.FloatABIType == llvm::FloatABI::Soft) {
-    VersionCondition::addPredefinedGlobalIdent(useFPU && softfp ? softfp
-                                                                : soft);
-  } else if (gTargetMachine->Options.FloatABIType == llvm::FloatABI::Hard) {
-    assert(useFPU && "Should be using the FPU if using float-abi=hard");
+  switch (floatABI) {
+  case FloatABI::Soft:
+    VersionCondition::addPredefinedGlobalIdent(soft);
+    break;
+  case FloatABI::SoftFP:
+    VersionCondition::addPredefinedGlobalIdent(softfp ? softfp : soft);
+    break;
+  case FloatABI::Hard:
     VersionCondition::addPredefinedGlobalIdent(hard);
-  } else {
-    assert(0 && "FloatABIType neither Soft or Hard");
+    break;
+  default:
+    llvm_unreachable("Unknown float ABI");
   }
+
+  VersionCondition::addPredefinedGlobalIdent(
+      floatABI == FloatABI::Soft ? "D_SoftFloat" : "D_HardFloat");
 }
 
 /// Registers the predefined versions specific to the current target triple
@@ -763,16 +764,16 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("D_PIC");
   }
 
-  /* LDC doesn't support DMD's core.simd interface.
   if (arch == llvm::Triple::x86 || arch == llvm::Triple::x86_64) {
+    /* LDC doesn't support DMD's core.simd interface.
     if (traitsTargetHasFeature("sse2"))
       VersionCondition::addPredefinedGlobalIdent("D_SIMD");
+    */
     if (traitsTargetHasFeature("avx"))
       VersionCondition::addPredefinedGlobalIdent("D_AVX");
     if (traitsTargetHasFeature("avx2"))
       VersionCondition::addPredefinedGlobalIdent("D_AVX2");
   }
-  */
 
   // parse the OS out of the target triple
   // see http://gcc.gnu.org/install/specific.html for details
@@ -1002,6 +1003,7 @@ int cppmain(int argc, char **argv) {
   // check and fix environment for uClibc
   fixupUClibcEnv();
 
+  // create target machine and finalize floatABI
   gTargetMachine = createTargetMachine(
       mTargetTriple, arch, opts::getCPUStr(), opts::getFeaturesStr(), bitness,
       floatABI, relocModel, opts::getCodeModel(), codeGenOptLevel(),
@@ -1024,6 +1026,7 @@ int cppmain(int argc, char **argv) {
     global.params.isWindows = triple->isOSWindows();
     global.params.isFreeBSD = triple->isOSFreeBSD();
     global.params.isOpenBSD = triple->isOSOpenBSD();
+    global.params.isDragonFlyBSD = triple->isOSDragonFly();
     global.params.isSolaris = triple->isOSSolaris();
     global.params.isLP64 = gDataLayout->getPointerSizeInBits() == 64;
     global.params.is64bit = triple->isArch64Bit();

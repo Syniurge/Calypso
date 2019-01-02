@@ -62,10 +62,10 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.9.0") # May be overridden by git hash tag
+set(LDC_VERSION "1.10.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   79)
+set(DMDFE_PATCH_VERSION   80)
 set(DMDFE_FIX_LEVEL       1) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
@@ -195,9 +195,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
     #  * -Wgnu-anonymous-struct and -Wnested-anon-types trigger for tokens.h.
     #  * -Wgnu-redeclared-enum triggers for various frontend headers.
     append("-fno-rtti" LDC_CXXFLAGS) # CALYPSO
+    #  * -Wunused-private-field triggers for expression.h.
     append("-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-non-virtual-dtor" LDC_CXXFLAGS)
     if ((${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
-        append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum" LDC_CXXFLAGS)
+        append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum -Wno-unused-private-field" LDC_CXXFLAGS)
         if(CMAKE_BUILD_TYPE MATCHES "Debug")
             append("-fstandalone-debug" LDC_CXXFLAGS)
         endif()
@@ -449,6 +450,7 @@ append("-DOPAQUE_VTBLS" LDC_CXXFLAGS)
 append("\"-DLDC_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}\"" LDC_CXXFLAGS)
 append("-DLDC_LLVM_VER=${LDC_LLVM_VER}" LDC_CXXFLAGS)
 append("\"-DLDC_LIBDIR_SUFFIX=\\\"${LIB_SUFFIX}\\\"\"" LDC_CXXFLAGS)
+append("-DLDC_HOST_${D_COMPILER_ID}=1" LDC_CXXFLAGS)
 append("-DLDC_HOST_FE_VER=${D_COMPILER_FE_VERSION}" LDC_CXXFLAGS)
 
 if(GENERATE_OFFTI)
@@ -1063,11 +1065,13 @@ if(MSVC)
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    find_package(bash-completion QUIET)
-    if(NOT BASH_COMPLETION_FOUND)
-        set(BASH_COMPLETION_COMPLETIONSDIR "${CONF_INST_DIR}/bash_completion.d")
-        if(LINUX_DISTRIBUTION_IS_GENTOO AND CMAKE_INSTALL_PREFIX STREQUAL "/usr")
-            set(BASH_COMPLETION_COMPLETIONSDIR "/usr/share/bash-completion")
+    if(NOT DEFINED BASH_COMPLETION_COMPLETIONSDIR)
+        find_package(bash-completion QUIET)
+        if((NOT BASH_COMPLETION_FOUND) OR (NOT BASH_COMPLETION_PREFIX STREQUAL CMAKE_INSTALL_PREFIX))
+            set(BASH_COMPLETION_COMPLETIONSDIR "${CONF_INST_DIR}/bash_completion.d")
+            if(LINUX_DISTRIBUTION_IS_GENTOO AND CMAKE_INSTALL_PREFIX STREQUAL "/usr")
+                set(BASH_COMPLETION_COMPLETIONSDIR "/usr/share/bash-completion")
+            endif()
         endif()
     endif()
     install(DIRECTORY bash_completion.d/ DESTINATION ${BASH_COMPLETION_COMPLETIONSDIR})
