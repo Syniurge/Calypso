@@ -7379,7 +7379,6 @@ extern (C++) final class PrettyFuncInitExp : DefaultInitExp
     }
 }
 
-=======
 /**
  * Objective-C class reference expression.
  *

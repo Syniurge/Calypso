@@ -645,7 +645,6 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     // get callee llvm value
     LLValue* callable = DtoCallableValue(fnval);
-    assert(callableTy);
 
     clangCG::RValue RV;
     clangCG::CallArgList Args;

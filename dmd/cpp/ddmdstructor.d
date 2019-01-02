@@ -170,7 +170,7 @@ FuncInitExp new_FuncInitExp(Loc loc) { return new FuncInitExp(loc); }
 PrettyFuncInitExp new_PrettyFuncInitExp(Loc loc) { return new PrettyFuncInitExp(loc); }
 TypeError new_TypeError() { return new TypeError(); }
 TypeBasic new_TypeBasic(TY ty) { return new TypeBasic(ty); }
-TypeVector new_TypeVector(Loc loc, Type basetype) { return new TypeVector(loc, basetype); }
+TypeVector new_TypeVector(Type basetype) { return new TypeVector(basetype); }
 TypeArray new_TypeArray(TY ty, Type next) { return new TypeArray(ty, next); }
 TypeSArray new_TypeSArray(Type t, Expression dim) { return new TypeSArray(t, dim); }
 TypeDArray new_TypeDArray(Type t) { return new TypeDArray(t); }

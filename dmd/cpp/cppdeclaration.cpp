@@ -570,7 +570,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
         sc2->flags &= ~SCOPEcompile;
         sc2->tf = NULL;
         sc2->os = NULL;
-        sc2->noctor = 0;
+        sc2->inLoop = 0;
         sc2->userAttribDecl = NULL;
         sc2->fieldinit = NULL;
         sc2->fieldinit_dim = 0;

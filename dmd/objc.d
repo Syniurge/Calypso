@@ -394,7 +394,7 @@ extern(C++) private final class Supported : Objc
         if (!classDeclaration.objc.metaclass && classDeclaration.objc.isMeta)
         {
             if (classDeclaration.baseClass)
-                return getRuntimeMetaclass(classDeclaration.baseClass);
+                return getRuntimeMetaclass(cast(ClassDeclaration)classDeclaration.baseClass); // CALYPSO
             else
                 return classDeclaration;
         }
@@ -438,7 +438,7 @@ private void setMetaclass(alias newMetaclass, T)(T classDeclaration)
 
         foreach (base ; baseclasses.opSlice)
         {
-            auto baseCd = base.sym;
+            auto baseCd = cast(ClassDeclaration)base.sym; // CALYPSO
             assert(baseCd);
 
             if (baseCd.classKind == ClassKind.objc)

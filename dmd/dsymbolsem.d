@@ -4541,7 +4541,7 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
                 if (!sym || (!cldec.allowMultipleInheritance() && !sym.isInterfaceDeclaration()))
                 {
                     // It's a class
-                    if (tc)
+                    if (sym)
                     {
                         if (!multiClassError)
                         {
@@ -4550,7 +4550,7 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
                             multiClassError = true;
                         }
 
-                        if (tc.sym.fields.dim)
+                        if (sym.fields.dim)
                             errorSupplemental(cldec.loc,"`%s` has fields, consider making it a member of `%s`",
                                               b.type.toChars(), cldec.type.toChars());
                         else

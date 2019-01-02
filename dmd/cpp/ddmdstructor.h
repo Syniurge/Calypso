@@ -139,7 +139,7 @@ FuncInitExp* new_FuncInitExp(Loc loc);
 PrettyFuncInitExp* new_PrettyFuncInitExp(Loc loc);
 TypeError* new_TypeError();
 TypeBasic* new_TypeBasic(TY ty);
-TypeVector* new_TypeVector(Loc loc, Type *basetype);
+TypeVector* new_TypeVector(Type *basetype);
 TypeArray* new_TypeArray(TY ty, Type *next);
 TypeSArray* new_TypeSArray(Type *t, Expression *dim);
 TypeDArray* new_TypeDArray(Type *t);

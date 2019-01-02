@@ -484,7 +484,7 @@ Type* TypeMapper::FromType::fromTypeVector(const clang::VectorType* T)
         return nullptr;
     auto dim = new_IntegerExp(T->getNumElements());
 
-    return new_TypeVector(loc, new_TypeSArray(t, dim));
+    return new_TypeVector(new_TypeSArray(t, dim));
 }
 
 Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
