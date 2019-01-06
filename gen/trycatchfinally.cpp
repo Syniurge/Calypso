@@ -172,11 +172,13 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
   for (const auto &p : cbPrototypes) {
     auto branchWeights =
         PGO.createProfileWeights(p.catchCount, p.uncaughtCount);
+
     LLGlobalVariable *ci;
     if (auto lp = (*c_it)->langPlugin()) // CALYPSO
       ci = lp->codegen()->toCatchScopeType(irs, p.t);
     else { // CALYPSO
     ClassDeclaration *cd = p.t->isClassHandle();
+    DtoResolveClass(cd);
     if (cd->isCPPclass()) {
       // Wrap std::type_info pointers inside a __cpp_type_info_ptr class
       // instance so that the personality routine may differentiate C++ catch
