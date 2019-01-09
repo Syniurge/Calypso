@@ -863,7 +863,7 @@ else
         auto paramsym = new ScopeDsymbol();
         paramsym.parent = _scope.parent;
         Scope* paramscope = _scope.push(paramsym);
-        paramscope.tinst = ti;
+        paramscope.tinst = ti.isDummy ? null : ti;
         paramscope.minst = sc.minst;
         paramscope.callsc = sc;
         paramscope.stc = 0;
@@ -1050,6 +1050,7 @@ else
             tiargs.push(p);
         }
         scope TemplateInstance ti = new TemplateInstance(Loc.initial, ident, tiargs); // create dummy template instance
+        ti.isDummy = true;
 
         // Temporary Array to hold deduced types
         Objects dedtypes;
@@ -1148,7 +1149,7 @@ else
         auto paramsym = new ScopeDsymbol();
         paramsym.parent = _scope.parent; // should use hasnestedArgs and enclosing?
         Scope* paramscope = _scope.push(paramsym);
-        paramscope.tinst = ti;
+        paramscope.tinst = ti.isDummy ? null : ti;
         paramscope.minst = sc.minst;
         paramscope.callsc = sc;
         paramscope.stc = 0;
@@ -2010,7 +2011,7 @@ else
             sc2 = sc2.push(paramsym);
             sc2 = sc2.push(ti);
             sc2.parent = ti;
-            sc2.tinst = ti;
+            sc2.tinst = ti.isDummy ? null : ti;
             sc2.minst = sc.minst;
 
             fd = doHeaderInstantiation(ti, sc2, fd, tthis, fargs);
@@ -6156,6 +6157,8 @@ extern (C++) class TemplateInstance : ScopeDsymbol
     TemplateInstance tinst;     // enclosing template instance
     TemplateInstance tnext;     // non-first instantiated instances
     Module minst;               // the top module that instantiated this instance
+
+    bool isDummy;               // if true, this TemplateInstance may be allocated on stack (CALYPSO DMD BUG FIX)
 
     extern (D) this(const ref Loc loc, Identifier ident, Objects* tiargs)
     {

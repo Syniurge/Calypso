@@ -158,7 +158,7 @@ extern(C++) final class Semantic2Visitor : Visitor
             assert(sc);
             sc = sc.push(tempinst.argsym);
             sc = sc.push(tempinst);
-            sc.tinst = tempinst;
+            sc.tinst = tempinst.isDummy ? null : tempinst;
             sc.minst = tempinst.minst;
 
             int needGagging = (tempinst.gagged && !global.gag);

@@ -322,6 +322,8 @@ public:
     TemplateInstance *tnext;            // non-first instantiated instances
     Module *minst;                      // the top module that instantiated this instance
 
+    bool isDummy;                       // if true, this TemplateInstance may be allocated on stack (CALYPSO DMD BUG FIX)
+
     virtual void _key(); // CALYPSO
     static Objects *arraySyntaxCopy(Objects *objs);
     Dsymbol *syntaxCopy(Dsymbol *);

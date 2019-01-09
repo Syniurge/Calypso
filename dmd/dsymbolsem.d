@@ -5519,7 +5519,7 @@ void templateInstanceSemantic(TemplateInstance tempinst, Scope* sc, Expressions*
     tempinst.argsym = new ScopeDsymbol();
     tempinst.argsym.parent = _scope.parent;
     _scope = _scope.push(tempinst.argsym);
-    _scope.tinst = tempinst;
+    _scope.tinst = tempinst.isDummy ? null : tempinst;
     _scope.minst = tempinst.minst;
     //scope.stc = 0;
 
@@ -5599,7 +5599,7 @@ void templateInstanceSemantic(TemplateInstance tempinst, Scope* sc, Expressions*
     sc2 = _scope.push(tempinst);
     //printf("enclosing = %d, sc.parent = %s\n", enclosing, sc.parent.toChars());
     sc2.parent = tempinst;
-    sc2.tinst = tempinst;
+    sc2.tinst = tempinst.isDummy ? null : tempinst;
     sc2.minst = tempinst.minst;
 
     tempinst.tryExpandMembers(sc2);
