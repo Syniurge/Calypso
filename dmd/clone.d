@@ -769,11 +769,11 @@ extern (C++) FuncDeclaration buildXtoHash(StructDeclaration sd, Scope* sc)
      * hash value will also contain the result of parent class's toHash().
      */
     const(char)* code =
-        ".object.size_t h = 0;" ~ // CALYPSO qualify size_t
+        ".object.size_t h = 0;" ~ // CALYPSO qualify size_t and Object
         "foreach (i, T; typeof(p.tupleof))" ~
         // workaround https://issues.dlang.org/show_bug.cgi?id=17968
-        "    static if(is(T* : const(Object)*)) " ~
-        "        h = h * 33 + typeid(const(Object)).getHash(cast(const void*)&p.tupleof[i]);" ~
+        "    static if(is(T* : const(.object.Object)*)) " ~
+        "        h = h * 33 + typeid(const(.object.Object)).getHash(cast(const void*)&p.tupleof[i]);" ~
         "    else " ~
         "        h = h * 33 + typeid(T).getHash(cast(const void*)&p.tupleof[i]);" ~
         "return h;";
