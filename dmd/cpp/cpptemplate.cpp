@@ -354,7 +354,7 @@ Objects* TemplateDeclaration::tdtypesFromInst(TemplateInstUnion Inst, bool forFo
         cpptdtypes->shift(spec.toTemplateArg(loc));
 
     if (isVariadic() && cpptdtypes->dim == parameters->dim - 1)
-        cpptdtypes->push(new Tuple);
+        cpptdtypes->push(new_Tuple());
     if (cpptdtypes->dim == parameters->dim + 1) { // might happen for explicit spec where the pack has zero argument. This feels like a hack, needs cleanup.
         auto tup = isTuple(cpptdtypes->data[0]);
         assert(tup && tup->objects.dim == 0);

@@ -34,6 +34,7 @@ import core.stdc.string;
 extern(C++):
 
 RootObject new_RootObject() { return new RootObject(); }
+Tuple new_Tuple() { return new Tuple(); }
 StoppableVisitor new_StoppableVisitor() { return new StoppableVisitor(); }
 Dsymbol new_Dsymbol() { return new Dsymbol(); }
 Dsymbol new_Dsymbol(Identifier arg0) { return new Dsymbol(arg0); }

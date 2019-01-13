@@ -2,7 +2,10 @@
 
 #include "expression.h"
 
+class Tuple;
+
 RootObject* new_RootObject();
+Tuple* new_Tuple();
 StoppableVisitor* new_StoppableVisitor();
 Dsymbol* new_Dsymbol();
 Dsymbol* new_Dsymbol(Identifier *arg0);

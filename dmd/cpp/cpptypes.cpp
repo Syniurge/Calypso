@@ -560,7 +560,7 @@ template<bool wantTuple>
             case clang::TemplateArgument::Pack:
                 if (wantTuple)
                 {
-                    auto tup = new Tuple;
+                    auto tup = new_Tuple();
                     for (auto& PackArg: Arg->pack_elements())
                         addArg(&PackArg, &tup->objects);
                     tiarg = tup;
