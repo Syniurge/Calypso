@@ -62,7 +62,7 @@ void main()
     // CHECK: writing second vector with iterator: 567
 
     write("inserting character into first vector: ");
-    v.insert(v.begin, '#');
+    v.insert(v.cbegin, '#');
     writeln(to!string(v.data));
     // CHECK: inserting character into first vector: #Europ
 }
