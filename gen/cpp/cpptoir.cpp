@@ -690,7 +690,24 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                                         fd->_scope, fnarg->storageClass);
 
         auto ad = getAggregateSym(argval->type);
-        llvm::Value* val = (fnarg->storageClass & STCref || DtoIsInMemoryOnly(argval->type))
+
+        llvm::Value* val;
+        if ((fnarg->storageClass & STCref) && argval->isRVal())
+        {
+            auto PointeeTy = cast<clang::ReferenceType>(ArgTy)->getPointeeType();
+            auto Tmp = CGF()->CreateMemTemp(PointeeTy, "ref.tmp");
+            clangCG::LValue RefTempDst = CGF()->MakeAddrLValue(Tmp, PointeeTy,
+                                clangCG::LValueBaseInfo(clangCG::AlignmentSource::Decl, false));
+
+            auto RVal = clangCG::RValue::get(DtoRVal(argval));
+            CGF()->EmitStoreThroughLValue(RVal, RefTempDst, true);
+
+            val = RefTempDst.getPointer();
+            // IMPORTANT FIXME RefTempDst needs to be cleaned up, and this should appear within the AST
+            //  with something akin to MaterializeTemporaryExpr
+        }
+        else
+            val = (fnarg->storageClass & STCref || DtoIsInMemoryOnly(argval->type))
                     ? DtoLVal(argval) : DtoRVal(argval);
 
         if (isa<clang::MemberPointerType>(ArgTy) && ad->fields.dim == 1)
