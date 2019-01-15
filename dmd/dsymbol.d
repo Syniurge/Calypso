@@ -1215,7 +1215,7 @@ extern (C++) class Dsymbol : RootObject
         return null;
     }
 
-    inout(StructDeclaration) isStructDeclaration() inout
+    inout(StructDeclaration) isStructDeclaration() inout pure // CALYPSO needed for findFieldIndexByName assert
     {
         return null;
     }

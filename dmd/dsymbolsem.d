@@ -3819,11 +3819,12 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
             {
                 if (auto cldec = ad.isClassDeclaration())
                 {
+                    auto bcd = isClassDeclarationOrNull(cldec.baseClass); // CALYPSO
                     assert (cldec.cppDtorVtblIndex == -1); // double-call check already by dd.type
-                    if (cldec.baseClass && cldec.baseClass.cppDtorVtblIndex != -1)
+                    if (bcd && bcd.cppDtorVtblIndex != -1)
                     {
                         // override the base virtual
-                        cldec.cppDtorVtblIndex = cldec.baseClass.cppDtorVtblIndex;
+                        cldec.cppDtorVtblIndex = bcd.cppDtorVtblIndex;
                     }
                     else if (!dd.isFinal())
                     {

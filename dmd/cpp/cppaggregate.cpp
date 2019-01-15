@@ -522,7 +522,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     return expressionSemantic(e, sc);
 }
 
-::FuncDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
+::DtorDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
 {
     assert(ad->dtors.dim < 2);
 

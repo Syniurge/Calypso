@@ -503,7 +503,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         return new VarExp(this.loc, d);
     }
 
-    override final inout(StructDeclaration) isStructDeclaration() inout
+    override final inout(StructDeclaration) isStructDeclaration() inout pure // CALYPSO needed for findFieldIndexByName assert
     {
         return this;
     }

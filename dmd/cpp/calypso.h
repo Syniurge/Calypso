@@ -147,7 +147,7 @@ public:
 
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 
-    ::FuncDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
+    ::DtorDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
     ::FuncDeclaration *buildOpAssign(::StructDeclaration *sd, Scope *sc) override;
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
