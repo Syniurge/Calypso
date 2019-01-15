@@ -130,11 +130,11 @@ public:
 
     // ==== LangPlugin ====
 
-    // returns -1 if said tree isn't handled by this plugin, or its id number
+    // returns -1 if said lang isn't handled by this plugin, or its id number
     // to be passed to createImport otherwise
-    int doesHandleImport(const char* tree) override;
+    int doesHandleImport(const char* lang) override;
 
-    ::Import *createImport(int treeId,
+    ::Import *createImport(int langId,
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) override;
 

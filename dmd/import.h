@@ -78,11 +78,11 @@ public:
 
     // ===== - - - - - ===== //
 
-    // returns -1 if said tree isn't handled by this plugin, or its id number
+    // returns -1 if said lang isn't handled by this plugin, or its id number
     // to be passed to createImport otherwise
-    virtual int doesHandleImport(const char* tree) = 0;
+    virtual int doesHandleImport(const char* lang) = 0;
 
-    virtual Import *createImport(int treeId,
+    virtual Import *createImport(int langId,
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) = 0;
 

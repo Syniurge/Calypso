@@ -3221,7 +3221,7 @@ final class Parser(AST) : Lexer
 
         int isstatic = token.value == TOK.static_;
         AST.LangPlugin lp; // CALYPSO
-        int treeId = -1;  // id returned by the plugin // CALYPSO
+        int langId = -1;  // id returned by the plugin
         if (isstatic)
             nextToken();
 
@@ -3233,24 +3233,24 @@ final class Parser(AST) : Lexer
             // parse the import tree if specified // CALYPSO
             if (token.value == TOK.leftParentheses)
             {
-                parenthesedSpecialToken(&token);    // WARNING: is bypassing scan() ok?
+                parenthesedSpecialToken(&token);
                 if (!token.len)
-                    error("import tree expected");
+                    error("import language identifier expected");
                 else if (strcmp(token.toChars(), "D") == 0)
                 {}
                 else
                 {
                     foreach (plugin; AST.langPlugins)
                     {
-                        treeId = plugin.doesHandleImport(token.ustring);
-                        if (treeId != -1)
+                        langId = plugin.doesHandleImport(token.ustring);
+                        if (langId != -1)
                         {
                             lp = plugin;
                             break;
                         }
                     }
                     if (lp is null)
-                        error("no language plugin was found to support import tree %s", token.toChars());
+                        error("no language plugin was found to support import language %s", token.toChars());
                 }
                 nextToken();
             }
@@ -3285,10 +3285,10 @@ final class Parser(AST) : Lexer
             }
 
             AST.Import s;
-            if (treeId == -1) // CALYPSO
+            if (langId == -1) // CALYPSO
                 s = new AST.Import(loc, a, id, aliasid, isstatic);
             else
-                s = lp.createImport(treeId, loc, a, id, aliasid, isstatic);
+                s = lp.createImport(langId, loc, a, id, aliasid, isstatic);
             decldefs.push(s);
 
             /* Look for
@@ -6146,7 +6146,22 @@ final class Parser(AST) : Lexer
                  * See if the next token after `import` is a `(`; if so,
                  * then it is an import expression.
                  */
-                if (peekNext() == TOK.leftParentheses)
+                Token* t = peek(&token); // CALYPSO HACK/FIXME The above issue was fixed in LDC 1.11 and broke Calypso's import (C++) statements
+                                         //  if we want (C++) to be preserved so `import` looks like `extern`, the lexer should probably be extended
+                                         //  to support some sort of state push/pop
+                bool isImportStatement = true;
+
+                if (t.value == TOK.leftParentheses)
+                {
+                    const(char)* orig = p;
+                    Token tok;
+                    parenthesedSpecialToken(&tok);
+                    p = orig; // rewind the lexer
+                    import core.stdc.string : strcmp;
+                    if (strcmp(tok.ustring, "C") != 0 && strcmp(tok.ustring, "C++") != 0)
+                        isImportStatement = false;
+                }
+                if (!isImportStatement)
                 {
                     AST.Expression e = parseExpression();
                     check(TOK.semicolon);

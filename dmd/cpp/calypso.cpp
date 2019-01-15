@@ -1105,16 +1105,16 @@ bool LangPlugin::needsCodegen(::Module *m)
     return c_m->needGen || !genModSet.count(objName);
 }
 
-int LangPlugin::doesHandleImport(const char* tree)
+int LangPlugin::doesHandleImport(const char* lang)
 {
-    if (strcmp((const char *) tree, "C") == 0
-        || strcmp((const char *) tree, "C++") == 0)
+    if (strcmp((const char *) lang, "C") == 0
+        || strcmp((const char *) lang, "C++") == 0)
         return 0;
 
     return -1;
 }
 
-::Import* LangPlugin::createImport(int treeId, Loc loc, Identifiers* packages,
+::Import* LangPlugin::createImport(int langId, Loc loc, Identifiers* packages,
                                    Identifier* id, Identifier* aliasId, int isstatic)
 {
     return new Import(loc,
