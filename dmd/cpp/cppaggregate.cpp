@@ -140,6 +140,7 @@ void StructDeclaration::accept(Visitor *v)
     if (v_ti == TI_DsymbolSem1Visitor) { // semantic
         v->visit(this);
         const_cast<clang::RecordDecl*>(RD)->dsym = this;
+        tidtor = dtor;
     } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
         if (isUsed)
             MarkAggregateReferencedImpl(this);
@@ -199,6 +200,7 @@ void ClassDeclaration::accept(Visitor *v)
     if (v_ti == TI_DsymbolSem1Visitor) { // semantic
         v->visit(this);
         const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
+        tidtor = dtor;
     } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
         if (isUsed)
             MarkAggregateReferencedImpl(this);

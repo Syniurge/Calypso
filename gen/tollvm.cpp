@@ -49,7 +49,8 @@ bool DtoIsReturnInArg(CallExp *ce) {
 
   Type *t = ce->e1->type->toBasetype();
   if (t->ty == Tfunction && (!ce->f || !DtoIsIntrinsic(ce->f))) {
-    return gABI->returnInArg(static_cast<TypeFunction *>(t));
+    return gABI->returnInArg(static_cast<TypeFunction *>(t),
+                             ce->f && ce->f->needThis());
   }
   return false;
 }
@@ -235,7 +236,15 @@ LinkageWithCOMDAT DtoLinkage(Dsymbol *sym) {
 }
 
 bool supportsCOMDAT() {
-  return !global.params.targetTriple->isOSBinFormatMachO();
+  const auto &triple = *global.params.targetTriple;
+  return !(triple.isOSBinFormatMachO() ||
+#if LDC_LLVM_VER >= 500
+           triple.isOSBinFormatWasm()
+#else
+           triple.getArch() == llvm::Triple::wasm32 ||
+           triple.getArch() == llvm::Triple::wasm64
+#endif
+  );
 }
 
 void setLinkage(LinkageWithCOMDAT lwc, llvm::GlobalObject *obj) {

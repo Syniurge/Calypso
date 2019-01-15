@@ -40,9 +40,6 @@ commonSteps: &commonSteps
           pip install --user lit
     - checkout
     - run:
-        name: Checkout git submodules
-        command: git submodule update --init
-    - run:
         name: Install LDC-flavoured LLVM
         command: |
           cd ..
@@ -76,9 +73,21 @@ commonSteps: &commonSteps
           HOST_LDMD=$PWD/ldc2-$HOST_LDC_VERSION/bin/ldmd2
           mkdir bootstrap
           cd bootstrap
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DBUILD_SHARED_LIBS=OFF -DD_COMPILER=$HOST_LDMD $BOOTSTRAP_CMAKE_FLAGS $CIRCLE_WORKING_DIRECTORY
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DD_COMPILER=$HOST_LDMD $BOOTSTRAP_CMAKE_FLAGS $CIRCLE_WORKING_DIRECTORY
           ninja -j3
           bin/ldc2 -version
+          cd ..
+    - run:
+        name: Checkout git submodules
+        command: git submodule update --init
+    - run:
+        name: Build bootstrap stdlib
+        command: |
+          cd ..
+          HOST_LDMD=$PWD/ldc2-$HOST_LDC_VERSION/bin/ldmd2
+          cd bootstrap
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ROOT_DIR=$PWD/../llvm-$LLVM_VERSION -DBUILD_SHARED_LIBS=OFF -DD_COMPILER=$HOST_LDMD $BOOTSTRAP_CMAKE_FLAGS $CIRCLE_WORKING_DIRECTORY
+          ninja -j3
           cd ..
     - run:
         name: Build LDC and stdlib unittest runners
@@ -263,10 +272,10 @@ jobs:
       - image: ubuntu:14.04
     environment:
       - CI_OS: linux
-      - LLVM_VERSION: 6.0.0
-      - HOST_LDC_VERSION: 1.8.0
+      - LLVM_VERSION: 6.0.1-2
+      - HOST_LDC_VERSION: 1.10.0
       - EXTRA_CMAKE_FLAGS: "-DMULTILIB=ON -DBUILD_LTO_LIBS=ON -DD_FLAGS='-w;-flto=thin' -DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -DLDC_INSTALL_LTOPLUGIN=ON -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON"
-      - DUB_VERSION: v1.8.1
+      - DUB_VERSION: v1.9.0
   build-osx:
     <<: *commonSteps
     macos:
@@ -275,11 +284,11 @@ jobs:
       - CI_OS: osx
       - MACOSX_DEPLOYMENT_TARGET: 10.8
       - USE_LIBCPP: true
-      - LLVM_VERSION: 6.0.0
-      - HOST_LDC_VERSION: 1.8.0
+      - LLVM_VERSION: 6.0.1-2
+      - HOST_LDC_VERSION: 1.10.0
       - BOOTSTRAP_CMAKE_FLAGS: "-DCMAKE_CXX_FLAGS='-stdlib=libc++' -DCMAKE_EXE_LINKER_FLAGS=-lc++"
       - EXTRA_CMAKE_FLAGS: "-DMULTILIB=ON -DBUILD_LTO_LIBS=ON -DD_FLAGS='-w;-flto=thin' -DCMAKE_CXX_FLAGS='-stdlib=libc++' -DCMAKE_EXE_LINKER_FLAGS=-lc++"
-      - DUB_VERSION: v1.8.1
+      - DUB_VERSION: v1.9.0
 
 workflows:
   version: 2

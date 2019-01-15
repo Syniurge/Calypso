@@ -139,14 +139,14 @@ void createDirectoryForFileOrFail(llvm::StringRef fileName) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<const char *> getFullArgs(const std::string &tool,
+std::vector<const char *> getFullArgs(const char *tool,
                                       const std::vector<std::string> &args,
                                       bool printVerbose) {
   std::vector<const char *> fullArgs;
   fullArgs.reserve(args.size() +
                    2); // executeToolAndWait() appends an additional null
 
-  fullArgs.push_back(tool.c_str());
+  fullArgs.push_back(tool);
   for (const auto &arg : args)
     fullArgs.push_back(arg.c_str());
 
@@ -173,14 +173,23 @@ int executeToolAndWait(const std::string &tool_,
     return -1;
   }
 
-  // Construct real argument list.
-  // First entry is the tool itself, last entry must be NULL.
-  auto realargs = getFullArgs(tool, args, verbose);
-  realargs.push_back(nullptr);
+  // Construct real argument list; first entry is the tool itself.
+  auto realargs = getFullArgs(tool.c_str(), args, verbose);
+#if LDC_LLVM_VER >= 700
+  std::vector<llvm::StringRef> argv;
+  argv.reserve(realargs.size());
+  for (auto &&arg : realargs)
+    argv.push_back(arg);
+  auto envVars = llvm::None;
+#else
+  realargs.push_back(nullptr); // terminate with null
+  auto argv = &realargs[0];
+  auto envVars = nullptr;
+#endif
 
   // Execute tool.
   std::string errstr;
-  if (int status = llvm::sys::ExecuteAndWait(tool, &realargs[0], nullptr,
+  if (int status = llvm::sys::ExecuteAndWait(tool, argv, envVars,
 #if LDC_LLVM_VER >= 600
                                              {},
 #else

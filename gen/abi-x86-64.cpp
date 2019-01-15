@@ -217,15 +217,16 @@ struct ImplicitByvalRewrite : ABIRewrite {
 struct X86_64TargetABI : TargetABI {
   X86_64_C_struct_rewrite struct_rewrite;
   ImplicitByvalRewrite byvalRewrite;
+  IndirectByvalRewrite indirectByvalRewrite;
 
-  bool returnInArg(TypeFunction *tf) override;
+  bool returnInArg(TypeFunction *tf, bool needsThis) override;
 
-  bool passByVal(Type *t) override;
+  bool passByVal(TypeFunction *tf, Type *t) override;
 
   void rewriteFunctionType(IrFuncTy &fty) override;
   void rewriteVarargs(IrFuncTy &fty, std::vector<IrFuncTyArg *> &args) override;
   void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override;
-  void rewriteArgument(IrFuncTyArg &arg, RegCount &regCount);
+  void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg, RegCount &regCount);
 
   LLValue *prepareVaStart(DLValue *ap) override;
 
@@ -247,16 +248,20 @@ private:
 // The public getter for abi.cpp
 TargetABI *getX86_64TargetABI() { return new X86_64TargetABI; }
 
-bool X86_64TargetABI::returnInArg(TypeFunction *tf) {
+bool X86_64TargetABI::returnInArg(TypeFunction *tf, bool) {
   if (tf->isref) {
     return false;
   }
 
-  Type *rt = tf->next;
-  return passByVal(rt);
+  Type *rt = tf->next->toBasetype();
+  return dmd_abi::passByVal(rt);
 }
 
-bool X86_64TargetABI::passByVal(Type *t) {
+bool X86_64TargetABI::passByVal(TypeFunction *tf, Type *t) {
+  // indirectly by-value for extern(C++) functions and non-POD args
+  if (tf->linkage == LINKcpp && !isPOD(t))
+    return false;
+
   return dmd_abi::passByVal(t->toBasetype());
 }
 
@@ -264,9 +269,20 @@ void X86_64TargetABI::rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) {
   llvm_unreachable("Please use the other overload explicitly.");
 }
 
-void X86_64TargetABI::rewriteArgument(IrFuncTyArg &arg, RegCount &regCount) {
+void X86_64TargetABI::rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg,
+                                      RegCount &regCount) {
   LLType *originalLType = arg.ltype;
   Type *t = arg.type->toBasetype();
+
+  // indirectly by-value for extern(C++) functions and non-POD args
+  if (fty.type->linkage == LINKcpp && !isPOD(t)) {
+    indirectByvalRewrite.applyTo(arg);
+    if (regCount.int_regs > 0) {
+      regCount.int_regs--;
+    }
+
+    return;
+  }
 
   LLType *abiTy = getAbiType(t);
   if (abiTy && !LLTypeMemoryLayout::typesAreEquivalent(abiTy, originalLType)) {
@@ -280,11 +296,12 @@ void X86_64TargetABI::rewriteArgument(IrFuncTyArg &arg, RegCount &regCount) {
   }
 
   if (regCount.trySubtract(arg) == RegCount::ArgumentWouldFitInPartially) {
-    // pass LL structs implicitly ByVal, otherwise LLVM passes
-    // them partially in registers, partially in memory
+    // pass the LL struct with byval attribute to prevent LLVM from passing it
+    // partially in registers, partially in memory
     assert(originalLType->isStructTy());
-    IF_LOG Logger::cout() << "Passing implicitly ByVal: " << arg.type->toChars()
-                          << " (" << *originalLType << ")\n";
+    IF_LOG Logger::cout() << "Passing byval to prevent register/memory mix: "
+                          << arg.type->toChars() << " (" << *originalLType
+                          << ")\n";
     byvalRewrite.applyTo(arg);
   }
 }
@@ -298,7 +315,7 @@ void X86_64TargetABI::rewriteFunctionType(IrFuncTy &fty) {
     Logger::println("x86-64 ABI: Transforming return type");
     LOG_SCOPE;
     RegCount dummy;
-    rewriteArgument(*fty.ret, dummy);
+    rewriteArgument(fty, *fty.ret, dummy);
   }
 
   // IMPLICIT PARAMETERS
@@ -336,7 +353,7 @@ void X86_64TargetABI::rewriteFunctionType(IrFuncTy &fty) {
       continue;
     }
 
-    rewriteArgument(arg, regCount);
+    rewriteArgument(fty, arg, regCount);
   }
 
   // regCount (fty.tag) is now in the state after all implicit & formal args,
@@ -351,7 +368,7 @@ void X86_64TargetABI::rewriteVarargs(IrFuncTy &fty,
 
   for (auto arg : args) {
     if (!arg->byref) { // don't rewrite ByVal arguments
-      rewriteArgument(*arg, regCount);
+      rewriteArgument(fty, *arg, regCount);
     }
   }
 }
@@ -359,9 +376,9 @@ void X86_64TargetABI::rewriteVarargs(IrFuncTy &fty,
 /**
  * The System V AMD64 ABI uses a special native va_list type - a 24-bytes struct
  * passed by reference.
- * In druntime, the struct is defined as core.stdc.stdarg.__va_list; the
- * actually used core.stdc.stdarg.va_list type is a raw char* pointer though to
- * achieve byref semantics.
+ * In druntime, the struct is defined as object.__va_list_tag; the actually used
+ * core.stdc.stdarg.va_list type is a __va_list_tag* pointer though to achieve
+ * byref semantics.
  * This requires a little bit of compiler magic in the following
  * implementations.
  */
@@ -370,7 +387,7 @@ LLType *X86_64TargetABI::getValistType() {
   LLType *uintType = LLType::getInt32Ty(gIR->context());
   LLType *voidPointerType = getVoidPtrType();
 
-  std::vector<LLType *> parts;      // struct __va_list {
+  std::vector<LLType *> parts;      // struct __va_list_tag {
   parts.push_back(uintType);        //   uint gp_offset;
   parts.push_back(uintType);        //   uint fp_offset;
   parts.push_back(voidPointerType); //   void* overflow_arg_area;
@@ -380,8 +397,8 @@ LLType *X86_64TargetABI::getValistType() {
 }
 
 LLValue *X86_64TargetABI::prepareVaStart(DLValue *ap) {
-  // Since the user only created a char* pointer (ap) on the stack before
-  // invoking va_start, we first need to allocate the actual __va_list struct
+  // Since the user only created a __va_list_tag* pointer (ap) on the stack before
+  // invoking va_start, we first need to allocate the actual __va_list_tag struct
   // and set `ap` to its address.
   LLValue *valistmem = DtoRawAlloca(getValistType(), 0, "__va_list_mem");
   DtoStore(valistmem,
@@ -391,20 +408,20 @@ LLValue *X86_64TargetABI::prepareVaStart(DLValue *ap) {
 }
 
 void X86_64TargetABI::vaCopy(DLValue *dest, DValue *src) {
-  // Analog to va_start, we first need to allocate a new __va_list struct on the
-  // stack and set `dest` to its address.
+  // Analog to va_start, we first need to allocate a new __va_list_tag struct on
+  // the stack and set `dest` to its address.
   LLValue *valistmem = DtoRawAlloca(getValistType(), 0, "__va_list_mem");
   DtoStore(valistmem,
            DtoBitCast(DtoLVal(dest), getPtrToType(valistmem->getType())));
   // Then fill the new struct with a bitcopy of the source struct.
-  // `src` is a char* pointer to the source struct.
+  // `src` is a __va_list_tag* pointer to the source struct.
   DtoMemCpy(valistmem, DtoRVal(src));
 }
 
 LLValue *X86_64TargetABI::prepareVaArg(DLValue *ap) {
-  // Pass a i8* pointer to the actual __va_list struct to LLVM's va_arg
+  // Pass a i8* pointer to the actual __va_list_tag struct to LLVM's va_arg
   // intrinsic.
-  return DtoRVal(ap);
+  return DtoBitCast(DtoRVal(ap), getVoidPtrType());
 }
 
 Type *X86_64TargetABI::vaListType() {

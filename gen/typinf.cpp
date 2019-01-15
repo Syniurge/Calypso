@@ -383,6 +383,9 @@ public:
         if (sd->dtor && sd->dtor->semanticRun >= PASSsemantic3) {
           Declaration_codegen(sd->dtor);
         }
+        if (sd->tidtor && sd->tidtor->semanticRun >= PASSsemantic3) {
+          Declaration_codegen(sd->tidtor);
+        }
       }
     }
 
@@ -423,7 +426,7 @@ public:
     b.push_uint(hasptrs);
 
     // function xdtor/xdtorti
-    auto dtor = sd->dtor;
+    auto dtor = sd->tidtor;
     if (dtor && dtor->langPlugin() && !dtor->langPlugin()->codegen()->isEmitted(dtor))
         dtor = nullptr; // CALYPSO HACK
     b.push_funcptr(dtor);

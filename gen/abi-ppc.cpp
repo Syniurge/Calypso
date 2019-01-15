@@ -35,7 +35,7 @@ struct PPCTargetABI : TargetABI {
 
   explicit PPCTargetABI(const bool Is64Bit) : Is64Bit(Is64Bit) {}
 
-  bool returnInArg(TypeFunction *tf) override {
+  bool returnInArg(TypeFunction *tf, bool) override {
     if (tf->isref) {
       return false;
     }
@@ -49,7 +49,7 @@ struct PPCTargetABI : TargetABI {
     return rt->ty == Tsarray || rt->ty == Tstruct;
   }
 
-  bool passByVal(Type *t) override {
+  bool passByVal(TypeFunction *, Type *t) override {
     // On ppc, aggregates are always passed as an indirect value.
     // On ppc64, they are always passed by value. However, clang
     // used byval for type > 64 bytes.

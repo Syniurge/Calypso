@@ -28,7 +28,7 @@ struct PPC64LETargetABI : TargetABI {
 
   explicit PPC64LETargetABI() : hfaToArray(8) {}
 
-  bool returnInArg(TypeFunction *tf) override {
+  bool returnInArg(TypeFunction *tf, bool) override {
     if (tf->isref) {
       return false;
     }
@@ -38,10 +38,10 @@ struct PPC64LETargetABI : TargetABI {
     if (!isPOD(rt))
       return true;
 
-    return passByVal(rt);
+    return passByVal(tf, rt);
   }
 
-  bool passByVal(Type *t) override {
+  bool passByVal(TypeFunction *, Type *t) override {
     t = t->toBasetype();
     return t->ty == Tsarray || (t->ty == Tstruct && t->size() > 16 &&
                                 !isHFA((TypeStruct *)t, nullptr, 8));

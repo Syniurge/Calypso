@@ -90,6 +90,25 @@ private void logo()
     printf("DMD%llu D Compiler %s\n%s %s\n", cast(ulong)size_t.sizeof * 8, global._version, global.copyright, global.written);
 }
 
+/**
+Print DMD's logo with more debug information and error-reporting pointers.
+
+Params:
+    stream = output stream to print the information on
+*/
+extern(C) void printInternalFailure(FILE* stream)
+{
+    fputs(("---\n" ~
+    "ERROR: This is a compiler bug.\n" ~
+            "Please report it via https://issues.dlang.org/enter_bug.cgi\n" ~
+            "with, preferably, a reduced, reproducible example and the information below.\n" ~
+    "DustMite (https://github.com/CyberShadow/DustMite/wiki) can help with the reduction.\n" ~
+    "---\n").ptr, stream);
+    stream.fprintf("DMD %s\n", global._version);
+    stream.printPredefinedVersions;
+    stream.printGlobalConfigs();
+    fputs("---\n".ptr, stream);
+}
 
 /**
  * Print DMD's usage message on stdout
@@ -563,51 +582,16 @@ extern (C++) int mars_mainBody(ref Strings files, ref Strings libmodules)
     foreach (lp; langPlugins)
         lp._init(); // CALYPSO
 
-  version (IN_LLVM)
-  {
-    // LDC prints binary/version/config before entering this function.
-    // DMD prints the predefined versions as part of addDefaultVersionIdentifiers().
-    // Let's do it here after initialization, as e.g. Objc.init() may add `D_ObjectiveC`.
-    printPredefinedVersions();
-  }
-  else
-  {
-    printPredefinedVersions();
-
     if (global.params.verbose)
     {
-        message("binary    %s", global.params.argv0);
-        message("version   %s", global._version);
-        message("config    %s", global.inifilename ? global.inifilename : "(none)");
-        // Print DFLAGS environment variable
+        stdout.printPredefinedVersions();
+        version (IN_LLVM)
         {
-            Strings dflags;
-            getenv_setargv(readFromEnv(&environment, "DFLAGS"), &dflags);
-            OutBuffer buf;
-            foreach (flag; dflags.asDArray)
-            {
-                bool needsQuoting;
-                for (auto flagp = flag; flagp; flagp++)
-                {
-                    auto c = flagp[0];
-                    if (!(isalnum(c) || c == '_'))
-                    {
-                        needsQuoting = true;
-                        break;
-                    }
-                }
-
-                if (flag.strchr(' '))
-                    buf.printf("'%s' ", flag);
-                else
-                    buf.printf("%s ", flag);
-            }
-
-            auto res = buf.peekSlice() ? buf.peekSlice()[0 .. $ - 1] : "(none)";
-            message("DFLAGS    %.*s", res.length, res.ptr);
+            // LDC prints binary/version/config before entering this function.
         }
+        else
+            stdout.printGlobalConfigs();
     }
-  }
     //printf("%d source files\n",files.dim);
 
     // Build import search path
@@ -1328,6 +1312,8 @@ int main()
         dmd_coverSetMerge(true);
     }
 
+    scope(failure) stderr.printInternalFailure;
+
     auto args = Runtime.cArgs();
     return tryMain(args.argc, cast(const(char)**)args.argv);
 }
@@ -1642,9 +1628,9 @@ void addDefaultVersionIdentifiers()
 
 } // !IN_LLVM
 
-private void printPredefinedVersions()
+private void printPredefinedVersions(FILE* stream)
 {
-    if (global.params.verbose && global.versionids)
+    if (global.versionids)
     {
         OutBuffer buf;
         foreach (const str; *global.versionids)
@@ -1652,10 +1638,48 @@ private void printPredefinedVersions()
             buf.writeByte(' ');
             buf.writestring(str.toChars());
         }
-        message("predefs  %s", buf.peekString());
+        stream.fprintf("predefs  %s\n", buf.peekString());
     }
 }
 
+version (IN_LLVM) {} else
+{
+
+extern(C) void printGlobalConfigs(FILE* stream)
+{
+    stream.fprintf("binary    %s\n", global.params.argv0);
+    stream.fprintf("version   %s\n", global._version);
+    stream.fprintf("config    %s\n", global.inifilename ? global.inifilename : "(none)");
+    // Print DFLAGS environment variable
+    {
+        StringTable environment;
+        environment._init(0);
+        Strings dflags;
+        getenv_setargv(readFromEnv(&environment, "DFLAGS"), &dflags);
+        environment.reset(1);
+        OutBuffer buf;
+        foreach (flag; dflags[])
+        {
+            bool needsQuoting;
+            foreach (c; flag[0 .. strlen(flag)])
+            {
+                if (!(isalnum(c) || c == '_'))
+                {
+                    needsQuoting = true;
+                    break;
+                }
+            }
+
+            if (flag.strchr(' '))
+                buf.printf("'%s' ", flag);
+            else
+                buf.printf("%s ", flag);
+        }
+
+        auto res = buf.peekSlice() ? buf.peekSlice()[0 .. $ - 1] : "(none)";
+        stream.fprintf("DFLAGS    %.*s\n", res.length, res.ptr);
+    }
+}
 
 /****************************************
  * Determine the instruction set to be used.
@@ -1665,7 +1689,6 @@ private void printPredefinedVersions()
  *      value to generate code for
  */
 
-version (IN_LLVM) {} else
 private CPU setTargetCPU(CPU cpu)
 {
     // Determine base line for target
@@ -1721,7 +1744,6 @@ private CPU setTargetCPU(CPU cpu)
  *      true if errors in command line
  */
 
-version (IN_LLVM) {} else
 private bool parseCommandLine(const ref Strings arguments, const size_t argc, ref Param params, ref Strings files)
 {
     bool errors;
@@ -2469,6 +2491,8 @@ private bool parseCommandLine(const ref Strings arguments, const size_t argc, re
     }
     return errors;
 }
+
+} // !IN_LLVM
 
 
 // IN_LLVM: `private` replaced by `extern(C++)`

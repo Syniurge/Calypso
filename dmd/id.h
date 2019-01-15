@@ -87,6 +87,7 @@ public:
     static Identifier *udaCompute;
     static Identifier *udaDynamicCompile;
     static Identifier *udaDynamicCompileConst;
+    static Identifier *udaDynamicCompileEmit;
 
     // CALYPSO (every missing entry was automatically generated from id.d)
     static Identifier *IUnknown;

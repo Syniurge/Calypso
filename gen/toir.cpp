@@ -741,10 +741,11 @@ public:
       FuncDeclaration *fdecl = dve->var->isFuncDeclaration();
       assert(fdecl);
       DtoDeclareFunction(fdecl);
-      LLValue* vthis = DtoIsInMemoryOnly(dve->e1->type)
-                           ? DtoLVal(dve->e1)
-                           : DtoRVal(dve->e1); // CALYPSO
-      fnval = new DFuncValue(fdecl, DtoCallee(fdecl), vthis);
+      Expression *thisExp = dve->e1;
+      LLValue *thisArg = isClassReference(thisExp->type->toBasetype()) // CALYPSO
+                             ? DtoRVal(thisExp)
+                             : DtoLVal(thisExp); // when calling a struct method
+      fnval = new DFuncValue(fdecl, DtoCallee(fdecl), thisArg);
     } else {
       fnval = toElem(e->e1);
     }

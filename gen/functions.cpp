@@ -59,8 +59,7 @@ static bool isMainFunction(FuncDeclaration *fd) {
 }
 
 llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
-                                    Type *nesttype, bool isMain, bool isCtor,
-                                    bool isIntrinsic, bool hasSel) {
+                                    Type *nesttype, FuncDeclaration *fd) {
   IF_LOG Logger::println("DtoFunctionType(%s)", type->toChars());
   LOG_SCOPE
 
@@ -75,7 +74,7 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     return irFty.funcType;
   }
 
-  TargetABI *abi = (isIntrinsic ? TargetABI::getIntrinsic() : gABI);
+  TargetABI *abi = fd && DtoIsIntrinsic(fd) ? TargetABI::getIntrinsic() : gABI;
 
   // Do not modify irFty yet; this function may be called recursively if any
   // of the argument types refer to this type.
@@ -84,6 +83,7 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
   // The index of the next argument on the LLVM level.
   unsigned nextLLArgIdx = 0;
 
+  const bool isMain = fd && isMainFunction(fd);
   if (isMain) {
     // D and C main functions always return i32, even if declared as returning
     // void.
@@ -93,7 +93,7 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     const bool byref = f->isref && rt->toBasetype()->ty != Tvoid;
     AttrBuilder attrs;
 
-    if (abi->returnInArg(f)) {
+    if (abi->returnInArg(f, fd && fd->needThis())) {
       // sret return
       newIrFty.arg_sret = new IrFuncTyArg(
           rt, true,
@@ -114,7 +114,7 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     // Add the this pointer for member functions
     AttrBuilder attrs;
     attrs.add(LLAttribute::NonNull);
-    if (isCtor) {
+    if (fd && fd->isCtorDeclaration()) {
       attrs.add(LLAttribute::Returned);
     }
     Type *tb = thistype->toBasetype();
@@ -129,7 +129,15 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
     ++nextLLArgIdx;
   }
 
-  if (hasSel) {
+  bool hasObjCSelector = false;
+  if (fd && fd->linkage == LINKobjc && thistype) {
+    if (fd->selector) {
+      hasObjCSelector = true;
+    } else if (fd->parent->isClassDeclaration()) {
+      fd->error("Objective-C `@selector` is missing");
+    }
+  }
+  if (hasObjCSelector) {
     // TODO: make arg_objcselector to match dmd type
     newIrFty.arg_objcSelector = new IrFuncTyArg(Type::tvoidptr, false);
     ++nextLLArgIdx;
@@ -179,7 +187,7 @@ llvm::FunctionType *DtoFunctionType(Type *type, IrFuncTy &irFty, Type *thistype,
       // ref/out
       attrs.addDereferenceable(loweredDType->size());
     } else {
-      if (abi->passByVal(loweredDType)) {
+      if (abi->passByVal(f, loweredDType)) {
         // LLVM ByVal parameters are pointers to a copy in the function
         // parameters stack. The caller needs to provide a pointer to the
         // original argument.
@@ -284,7 +292,6 @@ llvm::FunctionType *DtoFunctionType(FuncDeclaration *fdecl) {
   }
 
   Type *dthis = nullptr, *dnest = nullptr;
-  bool hasSel = false;
 
   if (fdecl->ident == Id::ensure || fdecl->ident == Id::require) {
     FuncDeclaration *p = fdecl->parent->isFuncDeclaration();
@@ -311,18 +318,8 @@ llvm::FunctionType *DtoFunctionType(FuncDeclaration *fdecl) {
     dnest = Type::tvoid->pointerTo();
   }
 
-  if (fdecl->linkage == LINKobjc && dthis) {
-    if (fdecl->selector) {
-      hasSel = true;
-    } else if (fdecl->parent->isClassDeclaration()) {
-      fdecl->error("Objective-C `@selector` is missing");
-    }
-  }
-
-  LLFunctionType *functype =
-      DtoFunctionType(fdecl->type, getIrFunc(fdecl, true)->irFty, dthis, dnest,
-                      isMainFunction(fdecl), fdecl->isCtorDeclaration(),
-                      DtoIsIntrinsic(fdecl), hasSel);
+  LLFunctionType *functype = DtoFunctionType(
+      fdecl->type, getIrFunc(fdecl, true)->irFty, dthis, dnest, fdecl);
 
   return functype;
 }
@@ -385,7 +382,7 @@ void DtoResolveFunction(FuncDeclaration *fdecl) {
           fdecl->llvmInternal = LLVMva_arg;
           fdecl->ir->setDefined();
           return; // this gets mapped to an instruction so a declaration makes
-                  // no sence
+                  // no sense
         }
         if (tempdecl->llvmInternal == LLVMva_start) {
           Logger::println("magic va_start found");
@@ -604,7 +601,7 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
   applyTargetMachineAttributes(*func, *gTargetMachine);
   applyFuncDeclUDAs(fdecl, irFunc);
 
-  if(irFunc->dynamicCompile) {
+  if(irFunc->isDynamicCompiled()) {
     declareDynamicCompiledFunction(gIR, irFunc);
   }
 
@@ -614,9 +611,9 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
   }
 
   // main
-  if (isMainFunction(fdecl)) {
-    // Detect multiple main functions, which is disallowed. DMD checks this
-    // in the glue code, so we need to do it here as well.
+  if (isMainFunction(fdecl) && fdecl->fbody) {
+    // Detect multiple main function definitions, which is disallowed.
+    // DMD checks this in the glue code, so we need to do it here as well.
     if (gIR->mainFunc) {
       error(fdecl->loc, "only one `main` function allowed");
     }
@@ -847,6 +844,18 @@ void emitDMDStyleFunctionTrace(IRState &irs, FuncDeclaration *fd,
   }
 }
 
+// If the specified block is trivially unreachable, erases it and returns true.
+// This is a common case because it happens when 'return' is the last statement
+// in a function.
+bool eraseDummyAfterReturnBB(llvm::BasicBlock *bb) {
+  if (pred_begin(bb) == pred_end(bb) &&
+      bb != &bb->getParent()->getEntryBlock()) {
+    bb->eraseFromParent();
+    return true;
+  }
+  return false;
+}
+
 } // anonymous namespace
 
 void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
@@ -1001,7 +1010,7 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
   }
 
   SCOPE_EXIT {
-    if (irFunc->dynamicCompile) {
+    if (irFunc->isDynamicCompiled()) {
       defineDynamicCompiledFunction(gIR, irFunc);
     }
   };
@@ -1059,6 +1068,9 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
       llvm::BasicBlock::Create(gIR->context(), "", func);
 
   gIR->scopes.push_back(IRScope(beginbb));
+  SCOPE_EXIT {
+    gIR->scopes.pop_back();
+  };
 
 // Set the FastMath options for this function scope.
 #if LDC_LLVM_VER >= 308
@@ -1066,6 +1078,18 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
 #else
   gIR->scopes.back().builder.SetFastMathFlags(irFunc->FMF);
 #endif
+
+  // @naked: emit body and return, no prologue/epilogue
+  if (func->hasFnAttribute(llvm::Attribute::Naked)) {
+    Statement_toIR(fd->fbody, gIR);
+    const bool wasDummy = eraseDummyAfterReturnBB(gIR->scopebb());
+    if (!wasDummy && !gIR->scopereturned()) {
+      // this is what clang does to prevent LLVM complaining about
+      // non-terminated function
+      gIR->ir->CreateUnreachable();
+    }
+    return;
+  }
 
   // create alloca point
   // this gets erased when the function is complete, so alignment etc does not
@@ -1191,14 +1215,8 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     funcGen.scopes.popCleanups(0);
   }
 
-  llvm::BasicBlock *bb = gIR->scopebb();
-  if (pred_begin(bb) == pred_end(bb) &&
-      bb != &bb->getParent()->getEntryBlock()) {
-    // This block is trivially unreachable, so just delete it.
-    // (This is a common case because it happens when 'return'
-    // is the last statement in a function)
-    bb->eraseFromParent();
-  } else if (!gIR->scopereturned()) {
+  const bool wasDummy = eraseDummyAfterReturnBB(gIR->scopebb());
+  if (!wasDummy && !gIR->scopereturned()) {
     // llvm requires all basic blocks to end with a TerminatorInst but DMD does
     // not put a return statement in automatically, so we do it here.
 
@@ -1232,8 +1250,6 @@ void DtoDefineFunction(FuncDeclaration *fd, bool linkageAvailableExternally) {
     allocaPoint->eraseFromParent();
     allocaPoint = nullptr;
   }
-
-  gIR->scopes.pop_back();
 
   if (gIR->dcomputetarget && hasKernelAttr(fd)) {
     auto fn = gIR->module.getFunction(fd->mangleString);

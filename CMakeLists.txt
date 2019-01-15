@@ -62,11 +62,11 @@ endfunction()
 #
 
 # Version information
-set(LDC_VERSION "1.10.0") # May be overridden by git hash tag
+set(LDC_VERSION "1.11.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
-set(DMDFE_PATCH_VERSION   80)
-set(DMDFE_FIX_LEVEL       1) # Comment out if not used
+set(DMDFE_PATCH_VERSION   81)
+set(DMDFE_FIX_LEVEL       2) # Comment out if not used
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
 if(DEFINED DMDFE_FIX_LEVEL)
@@ -167,13 +167,19 @@ if(MSVC)
     if(${LLVM_CXXFLAGS} MATCHES "(^| )/MDd?( |$)")
         message(FATAL_ERROR "LLVM must be built with CMake option LLVM_USE_CRT_<CMAKE_BUILD_TYPE>=MT[d]")
     endif()
+    set(llvm_ob_flag)
+    string(REGEX MATCH "/Ob[0-2]" llvm_ob_flag "${LLVM_CXXFLAGS}")
     foreach(flag_var
             CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO
             CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
         string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
-        # CMake defaults to /W3, LLVM uses /W4 => MS compiler warns about cmdline mismatch.
+        # CMake defaults to /W3, LLVM uses /W4 => MS compiler warns about overridden option.
         # Simply replace with /W4.
         string(REGEX REPLACE "/W[0-3]" "/W4" ${flag_var} "${${flag_var}}")
+        # Some CMake configs default to /Ob1, LLVM uses /Ob2. Replace with LLVM's option.
+        if(NOT llvm_ob_flag STREQUAL "")
+            string(REGEX REPLACE "/Ob[0-2]" "${llvm_ob_flag}" ${flag_var} "${${flag_var}}")
+        endif()
     endforeach()
 endif()
 
@@ -199,6 +205,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
     append("-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-non-virtual-dtor" LDC_CXXFLAGS)
     if ((${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
         append("-Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-gnu-redeclared-enum -Wno-unused-private-field" LDC_CXXFLAGS)
+        # clang trying to eagerly anticipate linker errors wrt. static class template
+        # members leads to false positives (e.g., instantiated/defined in D):
+        # 'instantiation of variable required here, but no definition is available'
+        append("-Wno-undefined-var-template" LDC_CXXFLAGS)
         if(CMAKE_BUILD_TYPE MATCHES "Debug")
             append("-fstandalone-debug" LDC_CXXFLAGS)
         endif()
@@ -705,12 +715,12 @@ add_custom_target(${LDMD_EXE} ALL DEPENDS ${LDMD_EXE_FULL})
 # LLVM flags into account.
 set(LDC_LINKERFLAG_LIST ${SANITIZE_LDFLAGS} ${LLVM_LIBRARIES} ${LLVM_LDFLAGS})
 if(LDC_WITH_LLD)
-    # ELF and Mach-O formats supported since LLD 6.0.0, otherwise just Windows COFF
+    # ELF, Mach-O, MinGW and WebAssembly formats supported since LLD 6.0.0, otherwise just Windows COFF
     if(NOT (LDC_LLVM_VER LESS 600))
         if(MSVC)
-            list(APPEND LDC_LINKERFLAG_LIST lldDriver.lib lldCOFF.lib lldELF.lib lldMachO.lib lldYAML.lib lldReaderWriter.lib lldCommon.lib lldCore.lib)
+            list(APPEND LDC_LINKERFLAG_LIST lldDriver.lib lldMinGW.lib lldCOFF.lib lldELF.lib lldMachO.lib lldWasm.lib lldYAML.lib lldReaderWriter.lib lldCommon.lib lldCore.lib)
         else()
-            set(LDC_LINKERFLAG_LIST -llldDriver -llldCOFF -llldELF -llldMachO -llldYAML -llldReaderWriter -llldCommon -llldCore ${LDC_LINKERFLAG_LIST})
+            set(LDC_LINKERFLAG_LIST -llldDriver -llldMinGW -llldCOFF -llldELF -llldMachO -llldWasm -llldYAML -llldReaderWriter -llldCommon -llldCore ${LDC_LINKERFLAG_LIST})
         endif()
         if(APPLE) # bug, should be fixed in LLVM 6.0.1
             list(APPEND LDC_LINKERFLAG_LIST -lxml2)
@@ -1027,13 +1037,18 @@ add_test(NAME build-ldc2-unittest COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_BIN
 add_test(NAME ldc2-unittest COMMAND ${LDC_UNITTEST_EXE_FULL} --version)
 set_tests_properties(ldc2-unittest PROPERTIES DEPENDS build-ldc2-unittest)
 
-add_subdirectory(runtime)
+if(EXISTS "${PROJECT_SOURCE_DIR}/runtime/druntime/src/object.d")
+    add_subdirectory(runtime)
+else()
+    message(STATUS "Runtime file runtime/druntime/src/object.d not found, will build ldc binaries but not the standard library.")
+endif()
 if(D_VERSION EQUAL 2)
     add_subdirectory(tests/d2)
 endif()
 add_subdirectory(tests)
 
 # ldc-build-runtime tool
+configure_file(${PROJECT_SOURCE_DIR}/runtime/ldc-build-runtime.d.in ${PROJECT_BINARY_DIR}/ldc-build-runtime.d @ONLY)
 set(LDC_BUILD_RUNTIME_EXE_FULL ${PROJECT_BINARY_DIR}/bin/ldc-build-runtime${CMAKE_EXECUTABLE_SUFFIX})
 build_d_executable(
     "${LDC_BUILD_RUNTIME_EXE_FULL}"

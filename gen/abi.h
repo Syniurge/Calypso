@@ -120,13 +120,15 @@ struct TargetABI {
   }
 
   /// Returns true if the D function uses sret (struct return).
+  /// `needsThis` is true if the function type is for a non-static member
+  /// function.
   ///
   /// A LL sret function doesn't really return a struct (in fact, it returns
   /// void); it merely just sets a struct which has been pre-allocated by the
   /// caller.
   /// The address is passed as additional function parameter using the StructRet
   /// attribute.
-  virtual bool returnInArg(TypeFunction *tf) = 0;
+  virtual bool returnInArg(TypeFunction *tf, bool needsThis) = 0;
 
   /// Returns true if the D type is passed using the LLVM ByVal attribute.
   ///
@@ -137,7 +139,7 @@ struct TargetABI {
   /// parameter.
   /// The LL caller needs to pass a pointer to the original argument (the memcpy
   /// source).
-  virtual bool passByVal(Type *t) = 0;
+  virtual bool passByVal(TypeFunction *tf, Type *t) = 0;
 
   /// Returns true if the 'this' argument is to be passed before the 'sret'
   /// argument.

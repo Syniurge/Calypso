@@ -24,6 +24,7 @@ struct X86TargetABI : TargetABI {
   const bool isMSVC;
   bool returnStructsInRegs;
   IntegerRewrite integerRewrite;
+  IndirectByvalRewrite indirectByvalRewrite;
 
   X86TargetABI()
       : isOSX(global.params.targetTriple->isMacOSX()),
@@ -44,7 +45,7 @@ struct X86TargetABI : TargetABI {
     case LINKobjc:
       return llvm::CallingConv::C;
     case LINKcpp:
-      return isMSVC && fdecl && fdecl->isThis()
+      return isMSVC && fdecl && fdecl->needThis()
                  ? llvm::CallingConv::X86_ThisCall
                  : llvm::CallingConv::C;
     case LINKd:
@@ -82,7 +83,7 @@ struct X86TargetABI : TargetABI {
     return name;
   }
 
-  bool returnInArg(TypeFunction *tf) override {
+  bool returnInArg(TypeFunction *tf, bool needsThis) override {
     if (tf->isref)
       return false;
 
@@ -108,8 +109,15 @@ struct X86TargetABI : TargetABI {
     if (!externD && !returnStructsInRegs)
       return true;
 
+    const bool isMSVCpp = isMSVC && tf->linkage == LINKcpp;
+
+    // for non-static member functions, MSVC++ enforces sret for all structs
+    if (isMSVCpp && needsThis && rt->ty == Tstruct) {
+      return true;
+    }
+
     // force sret for non-POD structs
-    const bool excludeStructsWithCtor = (isMSVC && tf->linkage == LINKcpp);
+    const bool excludeStructsWithCtor = isMSVCpp;
     if (!isPOD(rt, excludeStructsWithCtor))
       return true;
 
@@ -118,7 +126,11 @@ struct X86TargetABI : TargetABI {
     return !canRewriteAsInt(rt);
   }
 
-  bool passByVal(Type *t) override {
+  bool passByVal(TypeFunction *tf, Type *t) override {
+    // indirectly by-value for extern(C++) functions and non-POD args on Posix
+    if (!isMSVC && tf->linkage == LINKcpp && !isPOD(t))
+      return false;
+
     // pass all structs and static arrays with the LLVM byval attribute
     return DtoIsInMemoryOnly(t);
   }
@@ -181,6 +193,13 @@ struct X86TargetABI : TargetABI {
       }
 
       // all other arguments are passed on the stack, don't rewrite
+    }
+    // extern(C++) on Posix: non-POD args are passed indirectly by-value
+    else if (!isMSVC && fty.type->linkage == LINKcpp) {
+      for (auto arg : fty.args) {
+        if (!arg->byref && !isPOD(arg->type))
+          indirectByvalRewrite.applyTo(*arg);
+      }
     }
 
     workaroundIssue1356(fty.args);

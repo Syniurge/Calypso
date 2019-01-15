@@ -25,7 +25,7 @@ struct MIPS64TargetABI : TargetABI {
 
   explicit MIPS64TargetABI(const bool Is64Bit) : Is64Bit(Is64Bit) {}
 
-  bool returnInArg(TypeFunction *tf) override {
+  bool returnInArg(TypeFunction *tf, bool) override {
     if (tf->isref) {
       return false;
     }
@@ -42,7 +42,7 @@ struct MIPS64TargetABI : TargetABI {
     return (rt->ty == Tstruct || rt->ty == Tsarray);
   }
 
-  bool passByVal(Type *t) override {
+  bool passByVal(TypeFunction *, Type *t) override {
     TY ty = t->toBasetype()->ty;
     return ty == Tstruct || ty == Tsarray;
   }

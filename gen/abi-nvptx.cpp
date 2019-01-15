@@ -24,7 +24,7 @@ struct NVPTXTargetABI : TargetABI {
     else
         return llvm::CallingConv::PTX_Device;
   }
-  bool passByVal(Type *t) override {
+  bool passByVal(TypeFunction *, Type *t) override {
     t = t->toBasetype();
     return ((t->ty == Tsarray || t->ty == Tstruct) && t->size() > 64);
   }
@@ -35,7 +35,7 @@ struct NVPTXTargetABI : TargetABI {
         rewriteArgument(fty, *arg);
     }
   }
-  bool returnInArg(TypeFunction *tf) override {
+  bool returnInArg(TypeFunction *tf, bool) override {
     return !tf->isref && DtoIsInMemoryOnly(tf->next);
   }
   void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override {
