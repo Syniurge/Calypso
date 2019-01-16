@@ -25,6 +25,7 @@ import dmd.gluelayer;
 import dmd.dclass;
 import dmd.declaration;
 import dmd.denum;
+import dmd.dimport;
 import dmd.dmangle;
 import dmd.dscope;
 import dmd.dstruct;

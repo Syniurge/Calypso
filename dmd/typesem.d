@@ -4519,9 +4519,9 @@ private extern(C++) final class DefaultInitVisitor : Visitor
         {
             printf("TypeStruct::defaultInit() '%s'\n", mt.toChars());
         }
-        auto e = sym.defaultInit(loc); // CALYPSO
+        auto e = mt.sym.defaultInit(loc); // CALYPSO
         if (e.type)
-            e.type = this; // restore the type qualifiers if any
+            e.type = mt; // restore the type qualifiers if any
                 // NOTE: the cpp:: version of TypeStruct::defaultInit creates a CallExp(TypeExp) that needs its .type set to null (LDC 1.5 FIXME: is this still true?)
         result = e;
     }
@@ -4546,9 +4546,9 @@ private extern(C++) final class DefaultInitVisitor : Visitor
         {
             printf("TypeClass::defaultInit() '%s'\n", mt.toChars());
         }
-        auto e = sym.defaultInit(loc); // CALYPSO
+        auto e = mt.sym.defaultInit(loc); // CALYPSO
         if (e.type)
-            e.type = this; // restore type qualifiers
+            e.type = mt; // restore type qualifiers
                 // NOTE: the cpp:: version of TypeClass::defaultInit creates a CallExp(TypeExp) that needs its .type set to null
         result = e;
     }

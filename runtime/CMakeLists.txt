@@ -453,12 +453,13 @@ macro(compile_phobos2 d_flags lib_suffix path_suffix emit_bc all_at_once outlist
 endmacro()
 
 # CALYPSO
-macro(compile_calypsort d_flags lib_suffix path_suffix all_at_once outlist_o outlist_bc calypsort_cppdir)
+macro(compile_calypsort d_flags lib_suffix path_suffix emit_bc all_at_once outlist_o outlist_bc calypsort_cppdir)
     get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
     dc("${CALYPSORT_D}"
         ${CALYPSORT_DIR}
         "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR};-I${CALYPSORT_DIR};-cpp-cachedir=${calypsort_cppdir}"
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"
+       "${emit_bc}"
        "${all_at_once}"
         ${outlist_o}
         ${outlist_bc}
@@ -636,7 +637,7 @@ macro(build_runtime_variant d_flags c_flags ld_flags lib_suffix path_suffix all_
     set(calypsort_bc "")
     set(calypsort_cppdir "${CMAKE_CURRENT_BINARY_DIR}/calypso-ldc${lib_suffix}-cpp")
     file(MAKE_DIRECTORY ${calypsort_cppdir})
-    compile_calypsort("${calypsort_d_flags}" "${lib_suffix}" "${path_suffix}" "${all_d_files_at_once}" calypsort_o calypsort_bc ${calypsort_cppdir})
+    compile_calypsort("${calypsort_d_flags}" "${lib_suffix}" "${path_suffix}" "${emit_bc}" "${all_d_files_at_once}" calypsort_o calypsort_bc ${calypsort_cppdir})
 
     # static druntime/Phobos
     if(NOT ${BUILD_SHARED_LIBS} STREQUAL "ON")

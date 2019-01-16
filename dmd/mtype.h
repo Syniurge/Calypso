@@ -242,7 +242,7 @@ public:
     virtual const char *kind() const;
     Type *copy();
     virtual Type *syntaxCopy();
-    bool equals(RootObject *o);
+    bool equals(RootObject *o) const;
     bool equivalent(Type *t);
     // kludge for template.isType()
     DYNCAST dyncast() const { return DYNCAST_TYPE; }

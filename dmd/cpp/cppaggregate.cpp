@@ -562,7 +562,7 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
                 /* extern(C++) const bool opEquals(scope ref const S s);
                 */
                 Parameters *parameters = new Parameters;
-                parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL));
+                parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL, NULL));
                 tfeqptr = new_TypeFunction(parameters, Type::tbool, 0, LINKcpp);
                 tfeqptr->mod = MODconst;
                 tfeqptr = (TypeFunction *)typeSemantic(tfeqptr, Loc(), scx);

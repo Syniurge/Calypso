@@ -9,6 +9,7 @@
 #include "cpp/ddmdstructor.h"
 #include "cpp/ddmdvisitor.h"
 #include "aggregate.h"
+#include "expression.h"
 #include "init.h"
 #include "scope.h"
 
@@ -190,7 +191,7 @@ void EnumDeclaration::accept(Visitor *v)
         const_cast<clang::EnumDecl*>(ED)->dsym = this;
 
         if (!defaultval && !members)
-            defaultval = memtype->defaultInit(); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
+            defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
     }
 }
 

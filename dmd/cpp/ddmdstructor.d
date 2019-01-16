@@ -65,10 +65,9 @@ StringExp new_StringExp(const ref Loc loc, void *s, size_t len, char postfix) { 
 TupleExp new_TupleExp(const ref Loc loc, Expression e0, Expressions *exps) { return new TupleExp(loc, e0, exps); }
 TupleExp new_TupleExp(const ref Loc loc, Expressions *exps) { return new TupleExp(loc, exps); }
 TupleExp new_TupleExp(const ref Loc loc, TupleDeclaration tup) { return new TupleExp(loc, tup); }
-ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Expressions *elements) { return new ArrayLiteralExp(loc, elements); }
-ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Expression e) { return new ArrayLiteralExp(loc, e); }
-ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Expression basis, Expressions *elements) { return new ArrayLiteralExp(loc, basis, elements); }
-// ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Expression basis, size_t dim) { return new ArrayLiteralExp(loc, basis, dim); }
+ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Type type, Expressions *elements) { return new ArrayLiteralExp(loc, type, elements); }
+ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Type type, Expression e) { return new ArrayLiteralExp(loc, type, e); }
+ArrayLiteralExp new_ArrayLiteralExp(const ref Loc loc, Type type, Expression basis, Expressions *elements) { return new ArrayLiteralExp(loc, type, basis, elements); }
 AssocArrayLiteralExp new_AssocArrayLiteralExp(const ref Loc loc, Expressions *keys, Expressions *values) { return new AssocArrayLiteralExp(loc, keys, values); }
 StructLiteralExp new_StructLiteralExp(const ref Loc loc, AggregateDeclaration sd, Expressions *elements, Type stype) { return new StructLiteralExp(loc, sd, elements, stype); }
 TypeExp new_TypeExp(const ref Loc loc, Type type) { return new TypeExp(loc, type); }
@@ -194,7 +193,7 @@ TypeTuple new_TypeTuple(Type t1) { return new TypeTuple(t1); }
 TypeTuple new_TypeTuple(Type t1, Type t2) { return new TypeTuple(t1, t2); }
 TypeSlice new_TypeSlice(Type next, Expression lwr, Expression upr) { return new TypeSlice(next, lwr, upr); }
 TypeNull new_TypeNull() { return new TypeNull(); }
-Parameter new_Parameter(StorageClass storageClass, Type type, Identifier ident, Expression defaultArg) { return new Parameter(storageClass, type, ident, defaultArg); }
+Parameter new_Parameter(StorageClass storageClass, Type type, Identifier ident, Expression defaultArg, UserAttributeDeclaration userAttribDecl) { return new Parameter(storageClass, type, ident, defaultArg, userAttribDecl); }
 TupleDeclaration new_TupleDeclaration(const ref Loc loc, Identifier ident, Objects *objects) { return new TupleDeclaration(loc, ident, objects); }
 AliasDeclaration new_AliasDeclaration(const ref Loc loc, Identifier ident, Type type) { return new AliasDeclaration(loc, ident, type); }
 AliasDeclaration new_AliasDeclaration(const ref Loc loc, Identifier ident, Dsymbol s) { return new AliasDeclaration(loc, ident, s); }

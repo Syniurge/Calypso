@@ -139,7 +139,7 @@ Expression *LangPlugin::semanticTraits(TraitsExp *e, Scope *sc)
         // results in "Error: cannot resolve type for tuple(true, true, true)"
         // So returning an ArrayLiteralExp instead of a TupleExp for now..
 
-        Expression* ex = new_ArrayLiteralExp(e->loc, exps);
+        Expression* ex = new_ArrayLiteralExp(e->loc, Type::tbool, exps);
         return expressionSemantic(ex, sc);
     }
     assert(0);

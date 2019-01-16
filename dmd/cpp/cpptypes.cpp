@@ -1813,7 +1813,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
             PI++;
         }
 
-        params->push(new_Parameter(stc, at, ident, defaultArg));
+        params->push(new_Parameter(stc, at, ident, defaultArg, nullptr));
     }
 
     StorageClass stc = STCundefined;

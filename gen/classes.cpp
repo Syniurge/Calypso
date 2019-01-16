@@ -200,7 +200,7 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
     DFuncValue dfn(newexp->member, DtoCallee(newexp->member), mem);
     // ignore ctor return value (C++ ctors on Posix may not return `this`)
     DtoCallFunction(newexp->loc, tc, &dfn, newexp->arguments);
-    return new DImValue(tc, mem); // CALYPSO LDC 1.12 TEMPORARY NOTE: this may work without Calypso-specific changes (TODO: check and remove this comment)
+    return result; // CALYPSO
   }
 
   assert(newexp->argprefix == NULL);

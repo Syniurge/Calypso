@@ -4418,7 +4418,6 @@ extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public
 
         if (!sd.langPlugin()) // CALYPSO
             markAggregateReferenced(sd);
-        assert(sd.type.ty != Tstruct || (cast(TypeStruct)sd.type).sym == sd); // CALYPSO retain this assert from pre-1.11 LDC, it helped uncover critical bugs with type decos
     }
 
     void interfaceSemantic(ClassDeclaration cd)
