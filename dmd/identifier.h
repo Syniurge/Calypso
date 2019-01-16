@@ -38,6 +38,7 @@ public:
     DYNCAST dyncast() const;
 
     static StringTable stringtable;
+    static StringTable fullPathStringTable;
     static Identifier *generateId(const char *prefix);
     static Identifier *generateId(const char *prefix, size_t i);
     static Identifier *idPool(const char *s, unsigned len);

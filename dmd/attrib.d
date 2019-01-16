@@ -22,6 +22,7 @@ import dmd.dscope;
 import dmd.dsymbol;
 import dmd.dsymbolsem;
 import dmd.expression;
+import dmd.expressionsem;
 import dmd.func;
 import dmd.globals;
 import dmd.hdrgen;
@@ -602,7 +603,7 @@ extern (C++) final class ProtDeclaration : AttribDeclaration
         return buf.extractString();
     }
 
-    override final inout(ProtDeclaration) isProtDeclaration() inout
+    override inout(ProtDeclaration) isProtDeclaration() inout
     {
         return this;
     }
@@ -758,7 +759,7 @@ extern (C++) class AnonDeclaration : AttribDeclaration // CALYPSO (made non fina
         return (isunion ? "anonymous union" : "anonymous struct");
     }
 
-    override final inout(AnonDeclaration) isAnonDeclaration() inout
+    override inout(AnonDeclaration) isAnonDeclaration() inout
     {
         return this;
     }
@@ -987,7 +988,7 @@ extern (C++) final class StaticIfDeclaration : ConditionalDeclaration
         onStack = true;
         scope(exit) onStack = false;
 
-        if (condition.inc == 0)
+        if (sc && condition.inc == 0)
         {
             assert(scopesym); // addMember is already done
             assert(_scope); // setScope is already done
@@ -1091,7 +1092,7 @@ extern (C++) final class StaticForeachDeclaration : AttribDeclaration
             Dsymbol.arraySyntaxCopy(decl));
     }
 
-    override final bool oneMember(Dsymbol* ps, Identifier ident)
+    override bool oneMember(Dsymbol* ps, Identifier ident)
     {
         // Required to support IFTI on a template that contains a
         // `static foreach` declaration.  `super.oneMember` calls
@@ -1156,7 +1157,7 @@ extern (C++) final class StaticForeachDeclaration : AttribDeclaration
         this.scopesym = sds;
     }
 
-    override final void addComment(const(char)* comment)
+    override void addComment(const(char)* comment)
     {
         // do nothing
         // change this to give semantics to documentation comments on static foreach declarations
@@ -1294,6 +1295,7 @@ extern (C++) final class CompileDeclaration : AttribDeclaration
 
 /***********************************************************
  * User defined attributes look like:
+ *      @foo(args, ...)
  *      @(args, ...)
  */
 extern (C++) final class UserAttributeDeclaration : AttribDeclaration

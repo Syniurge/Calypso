@@ -47,7 +47,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
     // corresponding AliasDeclarations for alias=name pairs
     AliasDeclarations aliasdecls;
 
-    extern (D) this(Loc loc, Identifiers* packages, Identifier id, Identifier aliasId, int isstatic)
+    extern (D) this(const ref Loc loc, Identifiers* packages, Identifier id, Identifier aliasId, int isstatic)
     {
         super(null);
         assert(id);
@@ -125,10 +125,16 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         return si;
     }
 
-    void load(Scope* sc)
+    /*******************************
+     * Load this module.
+     * Returns:
+     *  true for errors, false for success
+     */
+    bool load(Scope* sc)
     {
         //printf("Import::load('%s') %p\n", toPrettyChars(), this);
         // See if existing module
+        const errors = global.errors;
         DsymbolTable dst = Package.resolve(packages, null, &pkg);
         version (none)
         {
@@ -136,7 +142,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
             {
                 .error(loc, "can only import from a module, not from a member of module `%s`. Did you mean `import %s : %s`?", pkg.toChars(), pkg.toPrettyChars(), id.toChars());
                 mod = pkg.isModule(); // Error recovery - treat as import of that module
-                return;
+                return true;
             }
         }
         Dsymbol s = dst.lookup(id);
@@ -199,6 +205,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         if (!pkg)
             pkg = mod;
         //printf("-Import::load('%s'), pkg = %p\n", toChars(), pkg);
+        return global.errors != errors;
     }
 
     override void importAll(Scope* sc)

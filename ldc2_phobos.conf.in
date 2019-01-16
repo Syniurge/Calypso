@@ -26,7 +26,10 @@ default:
         "-I@JITRT_DIR@/d",
         "-I@CALYPSORT_DIR@",
         "-I@PHOBOS2_DIR@",
-        "-L-L@CMAKE_BINARY_DIR@/lib@LIB_SUFFIX@",@MULTILIB_ADDITIONAL_PATH@
+    ];
+    // default directories to be searched for libraries when linking
+    lib-dirs = [
+        "@CMAKE_BINARY_DIR@/lib@LIB_SUFFIX@",@MULTILIB_ADDITIONAL_PATH@
     ];
     // default rpath when linking against the shared default libs
     rpath = "@SHARED_LIBS_RPATH@";
@@ -35,10 +38,7 @@ default:
 "^wasm(32|64)-":
 {
     switches = [
-        "-defaultlib=phobos2-ldc,druntime-ldc",@WASM_DEFAULT_LDC_SWITCHES@
+        "-defaultlib=",@WASM_DEFAULT_LDC_SWITCHES@
     ];
-    post-switches = [
-        "-I@RUNTIME_DIR@/src",
-        "-I@PHOBOS2_DIR@",
-    ];
+    lib-dirs = [];
 };

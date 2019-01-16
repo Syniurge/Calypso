@@ -70,11 +70,6 @@ static cl::opt<ubyte, true> useDeprecated(
                             "Warn about the use of deprecated features")),
     cl::location(global.params.useDeprecated), cl::init(2));
 
-cl::opt<bool, true>
-    enforcePropertySyntax("property", cl::desc("Enforce property syntax"),
-                          cl::ZeroOrMore, cl::ReallyHidden,
-                          cl::location(global.params.enforcePropertySyntax));
-
 cl::opt<bool> compileOnly("c", cl::desc("Do not link"), cl::ZeroOrMore);
 
 static cl::opt<bool, true> createStaticLib("lib", cl::ZeroOrMore,
@@ -543,11 +538,12 @@ void createClashingOptions() {
 /// to be useful for end users from the -help output.
 void hideLLVMOptions() {
   static const char *const hiddenOptions[] = {
-      "aarch64-neon-syntax", "arm-add-build-attributes", "arm-implicit-it",
-      "asm-instrumentation", "asm-show-inst", "atomic-counter-update-promoted",
-      "bounds-checking-single-trap", "code-model", "cost-kind", "cppfname",
-      "cppfor", "cppgen", "cvp-dont-process-adds", "debug-counter",
-      "debugger-tune", "denormal-fp-math", "disable-debug-info-verifier",
+      "aarch64-neon-syntax", "addrsig", "arm-add-build-attributes",
+      "arm-implicit-it", "asm-instrumentation", "asm-show-inst",
+      "atomic-counter-update-promoted", "bounds-checking-single-trap",
+      "code-model", "cost-kind", "cppfname", "cppfor", "cppgen",
+      "cvp-dont-process-adds", "debug-counter", "debugger-tune",
+      "denormal-fp-math", "disable-debug-info-verifier",
       "disable-objc-arc-checkforcfghazards", "disable-spill-fusing",
       "do-counter-promotion", "emulated-tls", "enable-correct-eh-support",
       "enable-fp-mad", "enable-implicit-null-checks", "enable-load-pre",
@@ -560,6 +556,7 @@ void hideLLVMOptions() {
       "fatal-assembler-warnings", "filter-print-funcs", "gpsize",
       "imp-null-check-page-size", "imp-null-max-insts-to-consider",
       "import-all-index", "incremental-linker-compatible",
+      "instcombine-guard-widening-window", "instcombine-max-num-phis",
       "instcombine-maxarray-size", "internalize-public-api-file",
       "internalize-public-api-list", "iterative-counter-promotion",
       "join-liveintervals", "jump-table-type", "limit-float-precision",

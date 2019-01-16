@@ -140,9 +140,7 @@ llvm::JITSymbol JITContext::findSymbol(const std::string &name) {
   return compileLayer.findSymbol(name, false);
 }
 
-void JITContext::clearSymMap() {
-  symMap.clear();
-}
+void JITContext::clearSymMap() { symMap.clear(); }
 
 void JITContext::addSymbol(std::string &&name, void *value) {
   symMap.emplace(std::make_pair(std::move(name), value));
@@ -154,6 +152,25 @@ void JITContext::reset() {
     moduleHandle = {};
     compiled = false;
   }
+}
+
+void JITContext::registerBind(void *handle, void *originalFunc,
+                              void *exampleFunc,
+                              const llvm::ArrayRef<ParamSlice> &params) {
+  assert(bindInstances.count(handle) == 0);
+  BindDesc::ParamsVec vec(params.begin(), params.end());
+  bindInstances.insert({handle, {originalFunc, exampleFunc, std::move(vec)}});
+}
+
+void JITContext::unregisterBind(void *handle) {
+  assert(bindInstances.count(handle) == 1);
+  bindInstances.erase(handle);
+}
+
+bool JITContext::hasBindFunction(const void *handle) const {
+  assert(handle != nullptr);
+  auto it = bindInstances.find(const_cast<void *>(handle));
+  return it != bindInstances.end();
 }
 
 void JITContext::removeModule(const ModuleHandleT &handle) {

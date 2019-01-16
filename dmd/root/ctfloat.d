@@ -89,6 +89,7 @@ extern (C++) struct CTFloat
         static real_t log2(real_t x) { return real_t(cast(double)core.stdc.math.log2l(cast(double)x)); }
         static real_t log10(real_t x) { return real_t(cast(double)core.stdc.math.log10l(cast(double)x)); }
         static real_t pow(real_t x, real_t y) { return real_t(cast(double)core.stdc.math.powl(cast(double)x, cast(double)y)); }
+        static real_t exp(real_t x) { return real_t(cast(double)core.stdc.math.expl(cast(double)x)); }
         static real_t expm1(real_t x) { return real_t(cast(double)core.stdc.math.expm1l(cast(double)x)); }
         static real_t exp2(real_t x) { return real_t(cast(double)core.stdc.math.exp2l(cast(double)x)); }
         static real_t copysign(real_t x, real_t s) { return real_t(cast(double)core.stdc.math.copysignl(cast(double)x, cast(double)s)); }
@@ -103,6 +104,7 @@ extern (C++) struct CTFloat
         static real_t log2(real_t x) { return core.stdc.math.log2l(x); }
         static real_t log10(real_t x) { return core.stdc.math.log10l(x); }
         static real_t pow(real_t x, real_t y) { return core.stdc.math.powl(x, y); }
+        static real_t exp(real_t x) { return core.stdc.math.expl(x); }
         static real_t expm1(real_t x) { return core.stdc.math.expm1l(x); }
         static real_t exp2(real_t x) { return core.stdc.math.exp2l(x); }
         static real_t copysign(real_t x, real_t s) { return core.stdc.math.copysignl(x, s); }
@@ -119,13 +121,11 @@ extern (C++) struct CTFloat
 
     static if (!is(real_t == real))
     {
-        static real_t exp(real_t x) { return real_t(cast(double)core.stdc.math.expl(cast(double)x)); }
         static real_t rint(real_t x) { return real_t(cast(double)std.math.rint(cast(double)x)); }
         static real_t nearbyint(real_t x) { return real_t(cast(double)std.math.nearbyint(cast(double)x)); }
     }
     else
     {
-        static real_t exp(real_t x) { return core.stdc.math.expl(x); }
         static real_t rint(real_t x) { return std.math.rint(x); }
         static real_t nearbyint(real_t x) { return std.math.nearbyint(x); }
     }
@@ -240,28 +240,31 @@ else
     }
 
     // Constant real values 0, 1, -1 and 0.5.
-    static __gshared real_t zero;
-    static __gshared real_t one;
-    static __gshared real_t minusone;
-    static __gshared real_t half;
+    __gshared real_t zero;
+    __gshared real_t one;
+    __gshared real_t minusone;
+    __gshared real_t half;
   version(IN_LLVM)
   {
     // Initialized via LLVM in C++.
-    static __gshared real_t initVal;
-    static __gshared real_t nan;
-    static __gshared real_t infinity;
+    __gshared real_t initVal;
+    __gshared real_t nan;
+    __gshared real_t infinity;
   }
 
-    shared static this()
+    static void initialize()
     {
-      version(IN_LLVM)
-      {
-        CTFloat._init();
-      }
-
         zero = real_t(0);
         one = real_t(1);
         minusone = real_t(-1);
         half = real_t(0.5);
+    }
+}
+
+version(IN_LLVM)
+{
+    shared static this()
+    {
+        CTFloat._init();
     }
 }

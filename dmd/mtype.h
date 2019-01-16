@@ -335,7 +335,6 @@ public:
     virtual Type *toHeadMutable();
     virtual ClassDeclaration *isClassHandle();
     virtual structalign_t alignment();
-    virtual Expression *defaultInit(const Loc &loc = Loc());
     virtual Expression *defaultInitLiteral(const Loc &loc);
     virtual bool isZeroInit(const Loc &loc = Loc());                // if initializer is 0
     Identifier *getTypeInfoIdent();
@@ -365,7 +364,6 @@ public:
     Type *syntaxCopy();
 
     d_uns64 size(const Loc &loc);
-    Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc);
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -416,7 +414,6 @@ public:
     bool isscalar() /*const*/;
     bool isunsigned() /*const*/;
     MATCH implicitConvTo(Type *to);
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
 
     // For eliminating dynamic_cast
@@ -440,7 +437,6 @@ public:
     bool isunsigned();
     bool isBoolean() /*const*/;
     MATCH implicitConvTo(Type *to);
-    Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc);
     TypeBasic *elementType();
     bool isZeroInit(const Loc &loc);
@@ -470,7 +466,6 @@ public:
     structalign_t alignment();
     MATCH constConv(Type *to);
     MATCH implicitConvTo(Type *to);
-    Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc);
     bool hasPointers();
     bool needsDestruction();
@@ -491,7 +486,6 @@ public:
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
     MATCH implicitConvTo(Type *to);
-    Expression *defaultInit(const Loc &loc);
     bool hasPointers() /*const*/;
 
     void accept(Visitor *v) { v->visit(this); }
@@ -508,7 +502,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc);
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
     bool hasPointers() /*const*/;
@@ -529,7 +522,6 @@ public:
     MATCH implicitConvTo(Type *to);
     MATCH constConv(Type *to);
     bool isscalar() /*const*/;
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool hasPointers() /*const*/;
     bool isTransitive(); // CALYPSO
@@ -545,7 +537,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     d_uns64 size(const Loc &loc) /*const*/;
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -624,7 +615,6 @@ public:
     MATCH callMatch(Type *tthis, Expressions *toargs, int flag = 0);
     bool checkRetType(const Loc &loc);
 
-    Expression *defaultInit(const Loc &loc) /*const*/;
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -641,7 +631,6 @@ public:
     d_uns64 size(const Loc &loc) /*const*/;
     unsigned alignsize() /*const*/;
     MATCH implicitConvTo(Type *to);
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isBoolean() /*const*/;
     bool hasPointers() /*const*/;
@@ -662,11 +651,6 @@ public:
     void addInst(TemplateInstance *inst);
     void addIndex(RootObject *expr);
     d_uns64 size(const Loc &loc);
-
-    void resolveTupleIndex(const Loc &loc, Scope *sc, Dsymbol *s,
-        Expression **pe, Type **pt, Dsymbol **ps, RootObject *oindex);
-    void resolveHelper(const Loc &loc, Scope *sc, Dsymbol *s, Dsymbol *scopesym,
-        Expression **pe, Type **pt, Dsymbol **ps, bool intypeid = false);
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -745,7 +729,6 @@ public:
     Dsymbol *toDsymbol(Scope *sc);
     bool isBaseOf(Type *t, int *poffset); // CALYPSO
     structalign_t alignment();
-    Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc);
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isAssignable();
@@ -787,7 +770,6 @@ public:
     MATCH implicitConvTo(Type *to);
     MATCH constConv(Type *to);
     Type *toBasetype();
-    Expression *defaultInit(const Loc &loc);
     bool isZeroInit(const Loc &loc);
     bool hasPointers();
     bool hasVoidInitPointers();
@@ -816,7 +798,6 @@ public:
     MATCH constConv(Type *to);
     unsigned char deduceWild(Type *t, bool isRef);
     Type *toHeadMutable();
-    Expression *defaultInit(const Loc &loc);
     Expression *defaultInitLiteral(const Loc &loc); // CALYPSO
     bool isZeroInit(const Loc &loc) /*const*/;
     bool isscope() /*const*/;
@@ -835,7 +816,6 @@ public:
     const char *kind() const;
     Type *syntaxCopy();
     bool equals(RootObject *o);
-    Expression *defaultInit(const Loc &loc);
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -860,7 +840,6 @@ public:
     bool isBoolean() /*const*/;
 
     d_uns64 size(const Loc &loc) /*const*/;
-    Expression *defaultInit(const Loc &loc) /*const*/;
     void accept(Visitor *v) { v->visit(this); }
 };
 
@@ -876,8 +855,10 @@ public:
     Type *type;
     Identifier *ident;
     Expression *defaultArg;
+    UserAttributeDeclaration *userAttribDecl;   // user defined attributes
 
-    static Parameter *create(StorageClass storageClass, Type *type, Identifier *ident, Expression *defaultArg);
+    static Parameter *create(StorageClass storageClass, Type *type, Identifier *ident,
+                             Expression *defaultArg, UserAttributeDeclaration *userAttribDecl);
     Parameter *syntaxCopy();
     Type *isLazyArray();
     // kludge for template.isType()

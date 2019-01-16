@@ -125,6 +125,13 @@ extern (C++) Expression eval_log10(Loc loc, FuncDeclaration fd, Expressions* arg
     return new RealExp(loc, CTFloat.log10(arg0.toReal()), arg0.type);
 }
 
+extern (C++) Expression eval_exp(Loc loc, FuncDeclaration fd, Expressions* arguments)
+{
+    Expression arg0 = (*arguments)[0];
+    assert(arg0.op == TOK.float64);
+    return new RealExp(loc, CTFloat.exp(arg0.toReal()), arg0.type);
+}
+
 extern (C++) Expression eval_expm1(Loc loc, FuncDeclaration fd, Expressions* arguments)
 {
     Expression arg0 = (*arguments)[0];
@@ -688,9 +695,6 @@ else
     add_builtin("_D4core4math5atan2FNaNbNiNfeeZe", &eval_unimp);
     if (CTFloat.yl2x_supported)
     {
-        version(IN_LLVM) // @trusted
-            add_builtin("_D4core4math4yl2xFNaNbNiNeeeZe", &eval_yl2x);
-        else
         add_builtin("_D4core4math4yl2xFNaNbNiNfeeZe", &eval_yl2x);
     }
     else
@@ -699,9 +703,6 @@ else
     }
     if (CTFloat.yl2xp1_supported)
     {
-        version(IN_LLVM) // @trusted
-            add_builtin("_D4core4math6yl2xp1FNaNbNiNeeeZe", &eval_yl2xp1);
-        else
         add_builtin("_D4core4math6yl2xp1FNaNbNiNfeeZe", &eval_yl2xp1);
     }
     else
@@ -723,6 +724,7 @@ else
     add_builtin("_D3std4math3tanFNaNbNiNeeZe", &eval_tan);
     add_builtin("_D3std4math4sqrtFNaNbNiNeeZe", &eval_sqrt);
     add_builtin("_D3std4math4fabsFNaNbNiNeeZe", &eval_fabs);
+    add_builtin("_D3std4math3expFNaNbNiNeeZe", &eval_exp);
     add_builtin("_D3std4math5expm1FNaNbNiNeeZe", &eval_expm1);
     add_builtin("_D3std4math4exp2FNaNbNiNeeZe", &eval_exp2);
     // @safe @nogc pure nothrow double function(double)

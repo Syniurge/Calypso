@@ -69,7 +69,7 @@ The compiler uses the official DMD frontend to support the latest
 version of D2, and relies on the LLVM Core libraries for code
 generation.
 
-LDC is fully Open Source; the parts of the code not taken/adapted from
+LDC is fully Open Source; the parts of the source code not taken/adapted from
 other projects are BSD-licensed (see the LICENSE file for details).
 
 Please consult the D wiki for further information:
@@ -84,14 +84,13 @@ Installation
 
 ### From a pre-built package
 
-#### Linux and OS X
-
-For several platforms, there are stand-alone binary builds available at the
+Portable stand-alone binary builds for common platforms (incl. Linux,
+macOS and Windows) are available at the
 [GitHub release page](https://github.com/ldc-developers/ldc/releases).
 
 For bleeding-edge users, we also provide the [latest successful
 Continuous Integration builds](https://github.com/ldc-developers/ldc/releases/tag/CI)
-with enabled LLVM & LDC assertions (significantly increasing compile times).
+with enabled LLVM & LDC assertions (increasing compile times by roughly 50%).
 
 The [dlang.org install script](https://dlang.org/install.html)
 can also be used to install LDC:
@@ -102,6 +101,7 @@ In addition, LDC is available from various package managers:
 
 |              | Command                                      |
 | ------------ | -------------------------------------------- |
+| **Android**  | in [Termux app](https://play.google.com/store/apps/details?id=com.termux&hl=en): `pkg install ldc` |
 | Arch Linux   | `pacman -S ldc`                              |
 | Debian       | `apt install ldc`                            |
 | Fedora       | `dnf install ldc`                            |
@@ -116,15 +116,7 @@ In addition, LDC is available from various package managers:
 Note that these packages **might be outdated** as they are not
 currently integrated into the project release process.
 
-
-#### Windows
-
-The latest official releases can be downloaded from the
-[GitHub release page](https://github.com/ldc-developers/ldc/releases).
-
-For bleeding-edge users, we also provide the [latest successful
-Continuous Integration builds](https://github.com/ldc-developers/ldc/releases/tag/CI)
-with enabled LLVM & LDC assertions (significantly increasing compile times).
+#### Notes on Windows
 
 LDC for Windows relies on the Microsoft linker and runtime libraries,
 which can be obtained by either installing
@@ -132,12 +124,16 @@ which can be obtained by either installing
 with Visual C++, or the stand-alone
 [Visual C++ Build Tools](http://landinghub.visualstudio.com/visual-cpp-build-tools).
 
+#### Targeting Android
+
+You can find full instructions on cross-compiling or natively compiling
+for Android [on the wiki](https://wiki.dlang.org/Build_D_for_Android).
 
 ### Building from source
 
 In-depth material on building and installing LDC and the standard
 libraries is available on the project wiki for
-[Linux and macOS](http://wiki.dlang.org/Building_LDC_from_source) and
+[Linux, macOS, BSD, and Android](http://wiki.dlang.org/Building_LDC_from_source) and
 [Windows](http://wiki.dlang.org/Building_and_hacking_LDC_on_Windows_using_MSVC).
 
 If you have a working C++/D build environment, CMake, and a current LLVM
@@ -152,6 +148,12 @@ are up to date:
 purposes, LDC 0.17, the last version not to require a D compiler, is
 maintained in the `ltsmaster` branch).
 
+### Cross-compiling
+
+We've recently added a cross-compilation tool to make it easier to build the D
+runtime and standard library for other platforms, `ldc-build-runtime`. Full
+instructions and example invocations are provided
+[on its wiki page](https://wiki.dlang.org/Building_LDC_runtime_libraries).
 
 Contact
 -------

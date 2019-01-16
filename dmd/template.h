@@ -139,7 +139,7 @@ public:
  * For this-parameter:
  *  template Foo(this ident)
  */
-class TemplateParameter
+class TemplateParameter : public RootObject
 {
 public:
     Loc loc;
@@ -163,6 +163,7 @@ public:
 
     virtual TemplateParameter *syntaxCopy() = 0;
     virtual bool declareParameter(Scope *sc) = 0;
+    using RootObject::print; // LDC: suppresses hidden overloaded virtual function 'RootObject::print' warning
     virtual void print(RootObject *oarg, RootObject *oded) = 0;
     virtual RootObject *specialization() = 0;
     virtual RootObject *defaultArg(Loc instLoc, Scope *sc) = 0;
@@ -388,8 +389,9 @@ Dsymbol *isDsymbol(RootObject *o);
 Type *isType(RootObject *o);
 Tuple *isTuple(RootObject *o);
 Parameter *isParameter(RootObject *o);
-bool arrayObjectIsError(Objects *args);
-bool isError(const RootObject * const o);
+TemplateParameter *isTemplateParameter(RootObject *o);
+bool arrayObjectIsError(const Objects *args);
+bool isError(const RootObject *const o);
 Type *getType(RootObject *o);
 Dsymbol *getDsymbol(RootObject *o);
 

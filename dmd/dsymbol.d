@@ -1626,7 +1626,7 @@ public:
         version (none)
         {
             // Finish
-            static __gshared TypeFunction tfgetmembers;
+            __gshared TypeFunction tfgetmembers;
             if (!tfgetmembers)
             {
                 Scope sc;

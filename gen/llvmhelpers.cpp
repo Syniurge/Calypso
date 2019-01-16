@@ -906,8 +906,10 @@ void DtoResolveVariable(VarDeclaration *vd) {
     // If a const/immutable value has a proper initializer (not "= void"),
     // it cannot be assigned again in a static constructor. Thus, we can
     // emit it as read-only data.
-    const bool isLLConst = (vd->isConst() || vd->isImmutable()) && vd->_init &&
-                           !vd->_init->isVoidInitializer();
+    // We also do so for forward-declared (extern) globals, just like clang.
+    const bool isLLConst = (vd->isConst() || vd->isImmutable()) &&
+                           ((vd->_init && !vd->_init->isVoidInitializer()) ||
+                            (vd->storage_class & STCextern));
 
     assert(!vd->ir->isInitialized());
     if (gIR->dmodule) {
@@ -1166,7 +1168,7 @@ LLConstant *DtoConstInitializer(Loc &loc, Type *type, Initializer *init) {
   LLConstant *_init = nullptr; // may return zero
   if (!init) {
     IF_LOG Logger::println("const default initializer for %s", type->toChars());
-    Expression *initExp = type->defaultInit();
+    Expression *initExp = defaultInit(type, loc);
     _init = DtoConstExpInit(loc, type, initExp);
   } else if (ExpInitializer *ex = init->isExpInitializer()) {
     Logger::println("const expression initializer");
@@ -1757,7 +1759,7 @@ llvm::Constant *buildStringLiteralConstant(StringExp *se, bool zeroTerm) {
   return LLConstantArray::get(at, vals);
 }
 
-static std::string llvmTypeToString(llvm::Type *type) {
+std::string llvmTypeToString(llvm::Type *type) {
   std::string result;
   llvm::raw_string_ostream stream(result);
   stream << *type;

@@ -14,6 +14,7 @@ module dmd.denum;
 
 import core.stdc.stdio;
 
+import dmd.attrib;
 import dmd.gluelayer;
 import dmd.declaration;
 import dmd.dscope;
@@ -263,7 +264,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
      * Returns:
      *  true if special
      */
-    final bool isSpecial() const nothrow @nogc
+    bool isSpecial() const nothrow @nogc
     {
         return (ident == Id.__c_long ||
                 ident == Id.__c_ulong ||
@@ -382,10 +383,25 @@ extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
         this.origType = origType;
     }
 
+    extern(D) this(Loc loc, Identifier id, Expression value, Type memtype,
+        StorageClass stc, UserAttributeDeclaration uad, DeprecatedDeclaration dd)
+    {
+        this(loc, id, value, memtype);
+        storage_class = stc;
+        userAttribDecl = uad;
+        depdecl = dd;
+    }
+
     override Dsymbol syntaxCopy(Dsymbol s)
     {
         assert(!s);
-        return new EnumMember(loc, ident, value ? value.syntaxCopy() : null, origType ? origType.syntaxCopy() : null);
+        return new EnumMember(
+            loc, ident,
+            value ? value.syntaxCopy() : null,
+            origType ? origType.syntaxCopy() : null,
+            storage_class,
+            userAttribDecl ? cast(UserAttributeDeclaration)userAttribDecl.syntaxCopy(s) : null,
+            depdecl ? cast(DeprecatedDeclaration)depdecl.syntaxCopy(s) : null);
     }
 
     override const(char)* kind() const
@@ -396,6 +412,9 @@ extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
     final Expression getVarExp(const ref Loc loc, Scope* sc) // CALYPSO
     {
         dsymbolSemantic(this, sc);
+        if (errors)
+            return new ErrorExp();
+        checkDisabled(loc, sc);
         if (errors)
             return new ErrorExp();
         Expression e = new VarExp(loc, this);
