@@ -264,7 +264,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
      * Returns:
      *  true if special
      */
-    bool isSpecial() const nothrow @nogc
+    final bool isSpecial() const nothrow @nogc
     {
         return (ident == Id.__c_long ||
                 ident == Id.__c_ulong ||
