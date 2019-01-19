@@ -7,7 +7,7 @@
 #pragma once
 #endif /* __DMC__ */
 
-#include "root.h"
+#include "root/root.h"
 #include "dsymbol.h"
 #include "enum.h"
 #include "cpp/calypso.h"

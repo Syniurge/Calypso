@@ -178,7 +178,7 @@ extern (C++) class Package : ScopeDsymbol
      *      *pparent        the rightmost package, i.e. pkg2, or NULL if no packages
      *      *ppkg           the leftmost package, i.e. pkg1, or NULL if no packages
      */
-    extern (D) static DsymbolTable resolve(Identifiers* packages, Dsymbol* pparent, Package* ppkg)
+    static DsymbolTable resolve(Identifiers* packages, Dsymbol* pparent, Package* ppkg) // CALYPSO
     {
         DsymbolTable dst = Module.modules;
         Dsymbol parent = null;
@@ -567,7 +567,7 @@ else
     }
 
     /// Ditto
-    extern(D) File* setOutfile(const(char)[] name, const(char)[] dir, const(char)[] arg, const(char)[] ext)
+    extern(D) final File* setOutfile(const(char)[] name, const(char)[] dir, const(char)[] arg, const(char)[] ext) // CALYPSO (missing final => vtable mismatch)
     {
         const(char)[] docfilename;
         if (name)

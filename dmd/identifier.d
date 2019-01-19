@@ -125,7 +125,7 @@ nothrow:
 
     final size_t length() const // CALYPSO
     {
-        return len;
+        return name.length;
     }
 
     override DYNCAST dyncast() const

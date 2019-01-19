@@ -950,7 +950,7 @@ DINamespace DIBuilder::EmitNamespace(Dsymbol *sym, llvm::StringRef name) {
 }
 
 void DIBuilder::EmitImport(Import *im) {
-  if (!mustEmitFullDebugInfo()) {
+  if (!mustEmitFullDebugInfo() || !im->mod) { // CALYPSO (im may be GlobalImport)
     return;
   }
 

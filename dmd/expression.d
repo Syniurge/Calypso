@@ -735,7 +735,7 @@ extern (C++) /* IN_LLVM abstract */ class Expression : RootObject
     /**********************************
      * Combine e1 and e2 by CommaExp if both are not NULL.
      */
-    extern (D) static Expression combine(Expression e1, Expression e2)
+    static Expression combine(Expression e1, Expression e2) // CALYPSO
     {
         if (e1)
         {

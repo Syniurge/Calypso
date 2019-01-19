@@ -92,7 +92,7 @@ StorageClass mergeFuncAttrs(StorageClass s1, const FuncDeclaration f) pure
  * Returns:
  *      if found, returns FuncDeclaration of opAssign, otherwise null
  */
-FuncDeclaration hasIdentityOpAssign(AggregateDeclaration ad, Scope* sc)
+extern (C++) FuncDeclaration hasIdentityOpAssign(AggregateDeclaration ad, Scope* sc) // CALYPSO
 {
     Dsymbol assign = search_function(ad, Id.assign);
     if (assign)

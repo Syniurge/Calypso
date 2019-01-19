@@ -114,6 +114,8 @@ struct Scope
     AA *anchorCounts;           // lookup duplicate anchor name count
     Identifier *prevAnchor;     // qualified symbol name of last doc anchor
 
+    static Scope *alloc(); // CALYPSO
+
     Scope();
 
     Scope *copy();

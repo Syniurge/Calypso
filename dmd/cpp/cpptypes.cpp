@@ -11,6 +11,7 @@
 #include "cpp/ddmdvisitor.h"
 #include "driver/cl_options.h"
 #include "id.h"
+#include "identifier.h"
 #include "module.h"
 #include "template.h"
 

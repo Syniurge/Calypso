@@ -1705,7 +1705,7 @@ Expression build_overload(const ref Loc loc, Scope* sc, Expression ethis, Expres
 /***************************************
  * Search for function funcid in aggregate ad.
  */
-Dsymbol search_function(ScopeDsymbol ad, Identifier funcid)
+extern (C++) Dsymbol search_function(ScopeDsymbol ad, Identifier funcid) // CALYPSO
 {
     Dsymbol s = ad.search(Loc.initial, funcid);
     if (s)

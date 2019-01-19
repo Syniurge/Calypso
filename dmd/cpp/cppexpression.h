@@ -7,7 +7,7 @@
 #pragma once
 #endif /* __DMC__ */
 
-#include "root.h"
+#include "root/root.h"
 #include "expression.h"
 #include "cpp/calypso.h"
 #include "cpp/cpptypes.h"

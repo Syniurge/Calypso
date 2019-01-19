@@ -8,24 +8,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/tollvm.h"
-<<<<<<< HEAD
-#include "aggregate.h"
-#include "declaration.h"
-#include "dsymbol.h"
-#include "id.h"
-#include "import.h"
-#include "init.h"
-#include "module.h"
-=======
 
 #include "dmd/aggregate.h"
 #include "dmd/declaration.h"
 #include "dmd/dsymbol.h"
 #include "dmd/expression.h"
 #include "dmd/id.h"
+#include "dmd/import.h"
 #include "dmd/init.h"
 #include "dmd/module.h"
->>>>>>> v1.13.0
 #include "gen/abi.h"
 #include "gen/arrays.h"
 #include "gen/cgforeign.h"

@@ -16,6 +16,8 @@
 #include "clang/AST/Decl.h"
 #include "clang/Sema/Sema.h"
 
+int overloadApply(Dsymbol *fstart, void *param, int (*fp)(void *, Dsymbol *));
+
 namespace cpp
 {
 

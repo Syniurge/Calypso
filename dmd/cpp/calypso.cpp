@@ -15,6 +15,7 @@
 #include "cond.h"
 #include "declaration.h"
 #include "expression.h"
+#include "identifier.h"
 #include "id.h"
 #include "scope.h"
 
@@ -595,7 +596,7 @@ void PCH::add(const char* header, ::Module *from)
         using namespace llvm::sys::path;
 
         auto headerFn = new llvm::SmallString<64>(
-                            parent_path(from->srcfile->name->str));
+                            parent_path(from->srcfile->name.toChars()));
         append(*headerFn, llvm::StringRef(header));
 
         file_status result;
@@ -1042,7 +1043,7 @@ void LangPlugin::GenModSet::parse()
 
 void LangPlugin::GenModSet::add(::Module *m)
 {
-    auto& objName = m->objfile->name->str;
+    auto objName = m->objfile->name.toChars();
     assert(parsed);
     if (count(objName))
         return;
@@ -1089,7 +1090,7 @@ void LangPlugin::codegenModules()
 {
     for (auto m: cpp::Module::amodules) {
         m->checkAndAddOutputFile(m->objfile);
-        global.params.objfiles.push(m->objfile->name->str);
+        global.params.objfiles.push(m->objfile->name.toChars());
     }
     ::codegenModules(cpp::Module::amodules, false);
 }
@@ -1101,7 +1102,7 @@ bool LangPlugin::needsCodegen(::Module *m)
 
     genModSet.parse();
 
-    auto& objName = m->objfile->name->str;
+    auto objName = m->objfile->name.toChars();
     return c_m->needGen || !genModSet.count(objName);
 }
 

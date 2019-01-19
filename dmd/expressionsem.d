@@ -8039,7 +8039,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                             }
                         }
 
-                        Expression einit = new BlitExp(exp.loc, e1x, getInitExp(sd, exp.loc, sc, t1));
+                        Expression einit = new BlitExp(exp.loc, e1x, getInitExp(cast(StructDeclaration)sd, exp.loc, sc, t1)); // CALYPSO
                         einit.type = e1x.type;
 
                         Expression e;

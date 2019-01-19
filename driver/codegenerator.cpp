@@ -11,6 +11,7 @@
 
 #include "dmd/compiler.h"
 #include "dmd/id.h"
+#include "dmd/import.h"
 #include "dmd/mars.h"
 #include "dmd/module.h"
 #include "dmd/scope.h"

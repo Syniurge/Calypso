@@ -6189,7 +6189,8 @@ final class Parser(AST) : Lexer
                         {
                             AST.Identifiers* idents = null;
                             CPPMANGLE cppmangle;
-                            auto lang = parseLinkage(&idents, cppmangle);
+                            bool cppMangleOnly = false;
+                            auto lang = parseLinkage(&idents, cppmangle, cppMangleOnly);
                             foreach (plugin; AST.langPlugins)
                             {
                                 if (plugin.doesHandleCatch(lang))

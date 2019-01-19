@@ -86,7 +86,7 @@ TraitsExp new_TraitsExp(const ref Loc loc, Identifier ident, Objects *args) { re
 HaltExp new_HaltExp(const ref Loc loc) { return new HaltExp(loc); }
 IsExp new_IsExp(const ref Loc loc, Type targ, Identifier id, TOK tok, Type tspec, TOK tok2, TemplateParameters *parameters) { return new IsExp(loc, targ, id, tok, tspec, tok2, parameters); }
 BinAssignExp new_BinAssignExp(const ref Loc loc, TOK op, int size, Expression e1, Expression e2) { return new BinAssignExp(loc, op, size, e1, e2); }
-CompileExp new_CompileExp(const ref Loc loc, Expression e) { return new CompileExp(loc, e); }
+CompileExp new_CompileExp(const ref Loc loc, Expressions *exps) { return new CompileExp(loc, exps); }
 ImportExp new_ImportExp(const ref Loc loc, Expression e) { return new ImportExp(loc, e); }
 AssertExp new_AssertExp(const ref Loc loc, Expression e, Expression msg) { return new AssertExp(loc, e, msg); }
 DotIdExp new_DotIdExp(const ref Loc loc, Expression e, Identifier ident) { return new DotIdExp(loc, e, ident); }

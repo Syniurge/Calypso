@@ -7,9 +7,9 @@
 #pragma once
 #endif /* __DMC__ */
 
-#include "../mars.h"
-#include "../import.h"
-#include "../gen/cgforeign.h"
+#include "mars.h"
+#include "import.h"
+#include "gen/cgforeign.h"
 
 #include <memory>
 #include <string>

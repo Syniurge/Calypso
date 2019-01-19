@@ -21,6 +21,15 @@
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/StringExtras.h"
 
+FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
+        Objects *tiargs,
+        Type *tthis,
+        Expressions *arguments,
+        int flags = 0);
+Expression *resolveProperties(Scope *sc, Expression *e);
+FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
+Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
+
 namespace cpp
 {
 
@@ -89,7 +98,7 @@ void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer 
     Str += "$_";
     Str += llvm::utostr(AnonStructId);
 
-    buf->printf("%llu", (ulonglong)Str.size());
+    buf->printf("%llu", (unsigned long long)Str.size());
     buf->writestring(Str.c_str());
 }
 

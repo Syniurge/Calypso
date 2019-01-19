@@ -873,7 +873,7 @@ public:
 
         if (auto prefix = m.manglePrefix())
             buf.writestring(prefix);
-        toBuffer(m.ident.toChars(), m);
+        toBuffer(m.ident.toString(), m);
     }
 
     override void visit(Dsymbol s)

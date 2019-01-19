@@ -7,10 +7,10 @@
 #pragma once
 #endif /* __DMC__ */
 
-#include "root.h"
-#include "calypso.h"
-#include "../aggregate.h"
-#include "../attrib.h"
+#include "root/root.h"
+#include "cpp/calypso.h"
+#include "aggregate.h"
+#include "attrib.h"
 
 namespace clang
 {

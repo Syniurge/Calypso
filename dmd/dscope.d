@@ -132,7 +132,7 @@ version (IN_LLVM)
 
     extern (D) __gshared Scope* freelist;
 
-    extern (D) static Scope* alloc()
+    extern (C++) static Scope* alloc() // CALYPSO
     {
         if (freelist)
         {

@@ -46,3 +46,13 @@ void TemplateInstance::_key() {}
 void Catch::_key() {}
 void AttribDeclaration::_key() {}
 void AnonDeclaration::_key() {}
+
+// Define RootObject::toString() to make the vtable generation possible by C++ compilers
+// Keep in mind that this is the function that ends up in vtables of C++ classes derived from D ones
+DArray<const char> RootObject::toString()
+{
+    DArray<const char> result;
+    result.ptr = this->toChars();
+    result.length = strlen(result.ptr);
+    return result;
+}

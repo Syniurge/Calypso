@@ -102,6 +102,8 @@ public:
     void warning(const char *format, ...) const;
     void deprecation(const char *format, ...) const;
 
+    static Expression *combine(Expression *e1, Expression *e2); // CALYPSO
+
     virtual dinteger_t toInteger();
     virtual uinteger_t toUInteger();
     virtual real_t toReal();

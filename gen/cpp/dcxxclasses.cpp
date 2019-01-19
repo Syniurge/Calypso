@@ -16,6 +16,8 @@
 #include "clang/lib/CodeGen/CodeGenTypes.h"
 #include "clang/lib/CodeGen/CGCXXABI.h"
 
+void mangleToBuffer(Dsymbol* s, OutBuffer* buf);
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace clang {

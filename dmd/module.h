@@ -45,6 +45,8 @@ public:
     virtual void _key(); // CALYPSO
     const char *kind() const;
 
+    static DsymbolTable *resolve(Identifiers *packages, Dsymbol **pparent, Package **ppkg); // CALYPSO
+
     Package *isPackage() { return this; }
 
     bool isAncestorPackageOf(const Package * const pkg) const;
@@ -123,7 +125,6 @@ public:
     static Module *load(Loc loc, Identifiers *packages, Identifier *ident);
 
     const char *kind() const;
-    File *setOutfile(const char *name, const char *dir, const char *arg, const char *ext);
     void setDocfile();
     bool read(Loc loc); // read file, returns 'true' if succeed, 'false' otherwise.
     Module *parse();    // syntactic parse

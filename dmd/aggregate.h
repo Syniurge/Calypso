@@ -259,12 +259,8 @@ struct ClassFlags
         hasTypeInfo = 0x20,
         isAbstract = 0x40,
         isCPPclass = 0x80,
-<<<<<<< HEAD
         hasDtor = 0x100,
-        byVal = 0x200,  // CALYPSO
-=======
-        hasDtor = 0x100
->>>>>>> v1.13.0
+        byVal = 0x200  // CALYPSO
     };
 };
 

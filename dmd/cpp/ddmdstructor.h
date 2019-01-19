@@ -57,7 +57,7 @@ TraitsExp* new_TraitsExp(const Loc& loc, Identifier *ident, Objects *args);
 HaltExp* new_HaltExp(const Loc& loc);
 IsExp* new_IsExp(const Loc& loc, Type *targ, Identifier *id, TOK tok, Type *tspec, TOK tok2, TemplateParameters *parameters);
 BinAssignExp* new_BinAssignExp(const Loc& loc, TOK op, int size, Expression *e1, Expression *e2);
-CompileExp* new_CompileExp(const Loc& loc, Expression *e);
+CompileExp* new_CompileExp(const Loc& loc, Expressions *exps);
 ImportExp* new_ImportExp(const Loc& loc, Expression *e);
 AssertExp* new_AssertExp(const Loc& loc, Expression *e, Expression *msg);
 DotIdExp* new_DotIdExp(const Loc& loc, Expression *e, Identifier *ident);
