@@ -63,13 +63,18 @@ env_cxx = os.environ.get('CXX', '')
 if env_cxx:
     config.environment['CXX'] = env_cxx
 
+if (platform.system() == 'Windows'):
+    config.environment['VSINSTALLDIR'] = os.environ['VSINSTALLDIR']
+    config.environment['PATH'] = os.environ['PATH']
+    config.environment['LIB'] = os.environ['LIB']
+
 # Define available features so that we can disable tests depending on LLVM version
 config.available_features.add("llvm%d" % config.llvm_version)
-# LLVM version history: 3.8, 3.9, 4.0, 5.0, ...
-# config.llvm_version: 308, 309, 400, 500, ...
-# plusoneable_llvmversion: 38, 39, 40, 50, ...
+# LLVM version history: 3.9, 4.0, 5.0, ...
+# config.llvm_version: 309, 400, 500, ...
+# plusoneable_llvmversion: 39, 40, 50, ...
 plusoneable_llvmversion = config.llvm_version // 10  + config.llvm_version%10
-for version in range(37, plusoneable_llvmversion+1):
+for version in range(39, plusoneable_llvmversion+1):
     config.available_features.add("atleast_llvm%d0%d" % (version//10, version%10))
 for version in range(plusoneable_llvmversion, 91):
     config.available_features.add("atmost_llvm%d0%d" % (version//10, version%10))
@@ -96,27 +101,26 @@ if (config.ldc_host_arch != ''):
 # Add "LTO" feature if linker support and LTO plugin are available
 # (LTO is supported from LLVM 3.9)
 canDoLTO = False
-if (config.llvm_version >= 309):
-    if (platform.system() == 'Darwin'):
-        command = ['ld', '-v']
-        p = subprocess.Popen(command, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, universal_newlines=True)
-        text = p.stderr.read()
-        if ("LTO support" in text and os.path.isfile(config.ldc2_lib_dir + '/libLTO-ldc.dylib')):
+if (platform.system() == 'Darwin'):
+    command = ['ld', '-v']
+    p = subprocess.Popen(command, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, universal_newlines=True)
+    text = p.stderr.read()
+    if ("LTO support" in text and os.path.isfile(config.ldc2_lib_dir + '/libLTO-ldc.dylib')):
+        canDoLTO = True
+elif (platform.system() == 'Linux'):
+    command = ['ld', '-plugin']
+    p = subprocess.Popen(command, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, universal_newlines=True)
+    text = p.stderr.read()
+    if ("plugin: missing argument" in text and os.path.isfile(config.ldc2_lib_dir + '/LLVMgold-ldc.so')):
+        canDoLTO = True
+elif (platform.system() == 'Windows'):
+    try:
+        if (subprocess.call(["lld-link.exe", "--version"]) == 0):
             canDoLTO = True
-    elif (platform.system() == 'Linux'):
-        command = ['ld', '-plugin']
-        p = subprocess.Popen(command, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, universal_newlines=True)
-        text = p.stderr.read()
-        if ("plugin: missing argument" in text and os.path.isfile(config.ldc2_lib_dir + '/LLVMgold-ldc.so')):
-            canDoLTO = True
-    elif (platform.system() == 'Windows'):
-        try:
-            if (subprocess.call(["lld-link.exe", "--version"]) == 0):
-                canDoLTO = True
-        except OSError:
-            pass
+    except OSError:
+        pass
 if canDoLTO:
     config.available_features.add('LTO')
 
@@ -152,11 +156,16 @@ if (platform.system() == 'Windows'):
     config.substitutions.append( ('%obj', '.obj') )
     config.substitutions.append( ('%exe', '.exe') )
     config.substitutions.append( ('%lib', '.lib') )
+    config.substitutions.append( ('%so', '.dll') )
     config.substitutions.append( ('%diff_binary ', 'fc /b ') )
 else:
     config.substitutions.append( ('%obj', '.o') )
     config.substitutions.append( ('%exe', '') )
     config.substitutions.append( ('%lib', '.a') )
+    if (platform.system() == 'Darwin'):
+        config.substitutions.append( ('%so', '.dylib') )
+    else:
+        config.substitutions.append( ('%so', '.so') )
     config.substitutions.append( ('%diff_binary ', 'cmp -s ') )
 
 # Add cdb substitution
@@ -184,4 +193,7 @@ if lit.util.which('gdb', config.environment['PATH']):
         gdb_version = m.group(1)
         if LooseVersion(gdb_version) < LooseVersion('7.8'):
             gdb_dflags = '-dwarf-version=2'
+        elif LooseVersion(gdb_version) >= LooseVersion('8.0'):
+            config.available_features.add('atleast_gdb80')
+
     config.substitutions.append( ('%_gdb_dflags', gdb_dflags) )

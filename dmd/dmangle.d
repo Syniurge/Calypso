@@ -537,11 +537,6 @@ public:
     /************************************************************
      * Write length prefixed string to buf.
      */
-    void toBuffer(const(char)* id, Dsymbol s)
-    {
-        toBuffer(id[0 .. strlen(id)], s);
-    }
-
     extern (D) void toBuffer(const(char)[] id, Dsymbol s)
     {
         const len = id.length;
@@ -894,7 +889,7 @@ public:
         if (s.ident)
             mangleIdentifier(s.ident, s);
         else
-            toBuffer(s.toChars(), s);
+            toBuffer(s.toString(), s);
         //printf("Dsymbol.mangle() %s = %s\n", s.toChars(), id);
     }
 

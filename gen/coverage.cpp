@@ -9,8 +9,8 @@
 
 #include "gen/coverage.h"
 
-#include "mars.h"
-#include "module.h"
+#include "dmd/mars.h"
+#include "dmd/module.h"
 #include "gen/irstate.h"
 #include "gen/logger.h"
 
@@ -21,7 +21,7 @@ void emitCoverageLinecountInc(Loc &loc) {
   // module
   // (for example, 'inlined' methods from other source files should be skipped).
   if (!global.params.cov || !loc.linnum || !loc.filename || !m->d_cover_data ||
-      strcmp(m->srcfile->name->toChars(), loc.filename) != 0) {
+      strcmp(m->srcfile->name.toChars(), loc.filename) != 0) {
     return;
   }
 
@@ -39,12 +39,7 @@ void emitCoverageLinecountInc(Loc &loc) {
 
   // Do an atomic increment, so this works when multiple threads are executed.
   gIR->ir->CreateAtomicRMW(llvm::AtomicRMWInst::Add, ptr, DtoConstUint(1),
-#if LDC_LLVM_VER >= 309
-                           llvm::AtomicOrdering::Monotonic
-#else
-                           llvm::Monotonic
-#endif
-  );
+                           llvm::AtomicOrdering::Monotonic);
 
   unsigned num_sizet_bits = gDataLayout->getTypeSizeInBits(DtoSize_t());
   unsigned idx = line / num_sizet_bits;

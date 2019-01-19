@@ -305,13 +305,9 @@ void outputIR2ObjRelevantCmdlineArgs(llvm::raw_ostream &hash_os) {
   hash_os << opts::getCPUStr();
   hash_os << opts::getFeaturesStr();
   hash_os << opts::floatABI;
-#if LDC_LLVM_VER >= 309
   const auto relocModel = opts::getRelocModel();
   if (relocModel.hasValue())
     hash_os << relocModel.getValue();
-#else
-  hash_os << opts::getRelocModel();
-#endif
 #if LDC_LLVM_VER >= 600
   const auto codeModel = opts::getCodeModel();
   if (codeModel.hasValue())
@@ -481,7 +477,13 @@ void recoverObjectFile(llvm::StringRef cacheObjectHash,
       fatal();
     }
 
-    if (llvm::sys::fs::setLastModificationAndAccessTime(FD, getTimeNow())) {
+#if LDC_LLVM_VER < 800
+#define SET_LAST_ACCESS_AND_MOD_TIME setLastModificationAndAccessTime
+#else
+#define SET_LAST_ACCESS_AND_MOD_TIME setLastAccessAndModificationTime
+#endif
+
+    if (llvm::sys::fs::SET_LAST_ACCESS_AND_MOD_TIME(FD, getTimeNow())) {
       error(Loc(), "Failed to set the cached file modification time: %s",
             cacheFile.c_str());
       fatal();

@@ -1,4 +1,4 @@
-// REQUIRES: atleast_llvm309
+
 // REQUIRES: Windows
 // REQUIRES: cdb
 // RUN: %ldc -g -of=%t.exe %s
@@ -26,7 +26,7 @@ int main(string[] args)
 // CDB: bp `baseclass_cdb.d:28`
 // CDB: g
     return 0;
-// CHECK: !D main
+// CHECK: !baseclass_cdb.D main
 
 // CDB: ?? dc
 // cdb doesn't show base class info, but lists their members

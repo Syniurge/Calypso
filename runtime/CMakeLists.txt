@@ -40,7 +40,7 @@ set(BUILD_SHARED_LIBS     AUTO                                CACHE STRING "Whet
 set(D_FLAGS               -w                                  CACHE STRING "Runtime D compiler flags, separated by ';'")
 set(D_FLAGS_DEBUG         -g;-link-defaultlib-debug           CACHE STRING "Runtime D compiler flags (debug libraries), separated by ';'")
 set(D_FLAGS_RELEASE       -O3;-release                        CACHE STRING "Runtime D compiler flags (release libraries), separated by ';'")
-set(COMPILE_ALL_D_FILES_AT_ONCE ON                            CACHE BOOL   "Compile all D files for a lib in a single command line instead of separately")
+set(COMPILE_ALL_D_FILES_AT_ONCE ON                            CACHE BOOL   "Compile all D files for the runtime libs in a single command line instead of separately. Disabling this is useful for many CPU cores and/or iterative development.")
 set(RT_ARCHIVE_WITH_LDC   ON                                  CACHE STRING "Whether to archive the static runtime libs via LDC instead of CMake archiver")
 set(RT_CFLAGS             ""                                  CACHE STRING "Runtime extra C compiler flags, separated by ' '")
 set(LD_FLAGS              ""                                  CACHE STRING "Runtime extra C linker flags, separated by ' '")
@@ -311,6 +311,9 @@ if("${TARGET_SYSTEM}" MATCHES "MSVC")
     # We want to be able to link against all 4 C runtime variants (libcmt[d] / msvcrt[d]).
     string(REGEX REPLACE "(^| )[/-]M[TD]d?( |$)" "\\2" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
     append("/MT /Zl" CMAKE_C_FLAGS_RELEASE)
+    # Disable buffer overflow checks to prevent dependencies on special C symbols
+    # not available in the MinGW-w64 libs.
+    append("/GS-" CMAKE_C_FLAGS_RELEASE)
     # warning C4100: unreferenced formal parameter
     # warning C4127: conditional expression is constant
     # warning C4131: uses old-style declarator
@@ -481,6 +484,7 @@ function(set_common_library_properties target name output_dir c_flags ld_flags i
         ARCHIVE_OUTPUT_DIRECTORY    ${output_dir}
         LIBRARY_OUTPUT_DIRECTORY    ${output_dir}
         RUNTIME_OUTPUT_DIRECTORY    ${output_dir}
+        COMPILE_DEFINITIONS         "LDC=1"
         COMPILE_FLAGS               "${c_flags}"
         LINK_FLAGS                  "${ld_flags}"
         VERSION                     ${DMDFE_VERSION}
@@ -613,7 +617,7 @@ macro(build_runtime_variant d_flags c_flags ld_flags lib_suffix path_suffix all_
     # If a shared Phobos lib is generated (too), compile explicitly with `-relocation-model=pic`.
     set(phobos2_d_flags "${d_flags}")
     if(NOT ${BUILD_SHARED_LIBS} STREQUAL "OFF")
-        list(APPEND ${phobos2_d_flags} -relocation-model=pic)
+        list(APPEND phobos2_d_flags -relocation-model=pic)
     endif()
 
     set(phobos2_o "")
@@ -828,9 +832,10 @@ endif()
 
 set(DRUNTIME_PACKAGES core etc ldc)
 
-install(FILES ${RUNTIME_DIR}/src/object.d DESTINATION ${INCLUDE_INSTALL_DIR}/ldc)
+install(FILES ${RUNTIME_DIR}/src/object.d DESTINATION ${INCLUDE_INSTALL_DIR})
 foreach(p ${DRUNTIME_PACKAGES})
-    install(DIRECTORY ${RUNTIME_DIR}/src/${p} DESTINATION ${INCLUDE_INSTALL_DIR})
+    install(DIRECTORY ${RUNTIME_DIR}/src/${p} DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.d")
+    install(DIRECTORY ${RUNTIME_DIR}/src/${p} DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.di")
 endforeach()
 if(PHOBOS2_DIR)
     install(DIRECTORY ${PHOBOS2_DIR}/std DESTINATION ${INCLUDE_INSTALL_DIR} FILES_MATCHING PATTERN "*.d")

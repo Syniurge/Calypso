@@ -7,33 +7,34 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/ADT/SmallString.h"
-#ifndef NDEBUG
-#include "llvm/Support/raw_ostream.h"
-#endif
-
-#include "aggregate.h"
-#include "declaration.h"
-#include "hdrgen.h" // for parametersTypeToChars()
-#include "mtype.h"
-#include "target.h"
+#include "dmd/aggregate.h"
+#include "dmd/declaration.h"
+#include "dmd/hdrgen.h" // for parametersTypeToChars()
+#include "dmd/identifier.h"
+#include "dmd/mangle.h"
+#include "dmd/mtype.h"
+#include "dmd/target.h"
+#include "gen/abi.h"
+#include "gen/arrays.h"
 #include "gen/funcgenstate.h"
+#include "gen/functions.h"
 #include "gen/irstate.h"
 #include "gen/logger.h"
-#include "gen/tollvm.h"
 #include "gen/llvmhelpers.h"
-#include "gen/arrays.h"
+#include "gen/mangling.h"
 #include "gen/metadata.h"
 #include "gen/runtime.h"
-#include "gen/functions.h"
-#include "gen/abi.h"
-#include "gen/mangling.h"
-
+#include "gen/tollvm.h"
 #include "ir/iraggr.h"
 #include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+
+#ifndef NDEBUG
+#include "llvm/Support/raw_ostream.h"
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -391,13 +392,8 @@ void IrAggr::defineInterfaceVtbl(BaseClass *b, bool new_instance,
       setLinkage(lwc, thunk);
       thunk->copyAttributesFrom(callee);
 
-// Thunks themselves don't have an identity, only the target
-// function has.
-#if LDC_LLVM_VER >= 309
+      // Thunks themselves don't have an identity, only the target function has.
       thunk->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-#else
-      thunk->setUnnamedAddr(true);
-#endif
 
       // thunks don't need exception handling themselves
       thunk->setPersonalityFn(nullptr);
@@ -419,6 +415,7 @@ void IrAggr::defineInterfaceVtbl(BaseClass *b, bool new_instance,
       gIR->funcGenStates.emplace_back(new FuncGenState(*thunkFunc, *gIR));
 
       // debug info
+      thunkFunc->diSubprogram = nullptr;
       thunkFunc->diSubprogram = gIR->DBuilder.EmitThunk(thunk, thunkFd);
 
       // create entry and end blocks

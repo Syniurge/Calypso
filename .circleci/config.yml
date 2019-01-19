@@ -19,7 +19,7 @@ commonSteps: &commonSteps
             echo "export CC=gcc-6" >> $BASH_ENV
             echo "export CXX=g++-6" >> $BASH_ENV
             # install CMake
-            curl -L -o cmake-x64.tar.gz https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.tar.gz
+            curl -L -o cmake-x64.tar.gz https://github.com/Kitware/CMake/releases/download/v3.13.2/cmake-3.13.2-Linux-x86_64.tar.gz
             mkdir cmake-x64
             tar -xf cmake-x64.tar.gz --strip 1 -C cmake-x64
             echo "export PATH=$PWD/cmake-x64/bin:$PATH" >> $BASH_ENV
@@ -27,7 +27,7 @@ commonSteps: &commonSteps
             update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 99
           else
             # install CMake
-            curl -L -o cmake-x64.tar.gz https://cmake.org/files/v3.10/cmake-3.10.0-Darwin-x86_64.tar.gz
+            curl -L -o cmake-x64.tar.gz https://github.com/Kitware/CMake/releases/download/v3.13.2/cmake-3.13.2-Darwin-x86_64.tar.gz
             mkdir cmake-x64
             tar -xf cmake-x64.tar.gz --strip 3 -C cmake-x64
             # install Ninja
@@ -166,8 +166,7 @@ commonSteps: &commonSteps
           LDC_INSTALL_DIR=$PWD/ldc2-x64
           perl -pi -e s?$LDC_INSTALL_DIR/?%%ldcbinarypath%%/../?g $LDC_INSTALL_DIR/etc/ldc2.conf
           cp project/LICENSE $LDC_INSTALL_DIR
-          git clone https://github.com/ldc-developers/ldc-scripts.git
-          cp ldc-scripts/ldc2-packaging/pkgfiles/README $LDC_INSTALL_DIR
+          cp project/packaging/README $LDC_INSTALL_DIR
           # Now rename the installation dir to test portability.
           NEW_LDC_INSTALL_DIR=$PWD/ldc2-install
           mv $LDC_INSTALL_DIR $NEW_LDC_INSTALL_DIR
@@ -201,7 +200,7 @@ commonSteps: &commonSteps
           export DMD=$LDC_INSTALL_DIR/bin/ldmd2
           git clone --recursive https://github.com/dlang/dub.git
           cd dub
-          git checkout $DUB_VERSION
+          git checkout "$(cat ../project/packaging/dub_version)"
           if [ -z "$CIRCLE_TAG" ]; then
             # FIXME: dub is built with `-g -O`, which leads to issue #2361 with enabled
             # assertions, at least on Linux. So strip `-g` for untagged builds.
@@ -229,7 +228,7 @@ commonSteps: &commonSteps
           cd ..
           mkdir artifacts
           if [ -z "$CIRCLE_TAG" ]; then
-            artifactBasename="ldc2-${CIRCLE_SHA1:0:8}-$CI_OS-x86_64-$(date "+%Y%m%d")"
+            artifactBasename="ldc2-${CIRCLE_SHA1:0:8}-$CI_OS-x86_64"
           else
             artifactBasename="ldc2-${CIRCLE_TAG:1}-$CI_OS-x86_64"
           fi
@@ -279,10 +278,9 @@ jobs:
       - image: ubuntu:14.04
     environment:
       - CI_OS: linux
-      - LLVM_VERSION: 7.0.0
+      - LLVM_VERSION: 7.0.1
       - HOST_LDC_VERSION: 1.10.0
       - EXTRA_CMAKE_FLAGS: "-DMULTILIB=ON -DBUILD_LTO_LIBS=ON -DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -DLDC_INSTALL_LTOPLUGIN=ON -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON"
-      - DUB_VERSION: v1.11.0
   build-osx:
     <<: *commonSteps
     macos:
@@ -291,11 +289,10 @@ jobs:
       - CI_OS: osx
       - MACOSX_DEPLOYMENT_TARGET: 10.8
       - USE_LIBCPP: true
-      - LLVM_VERSION: 7.0.0
+      - LLVM_VERSION: 7.0.1
       - HOST_LDC_VERSION: 1.10.0
       - BOOTSTRAP_CMAKE_FLAGS: "-DCMAKE_CXX_FLAGS='-stdlib=libc++' -DCMAKE_EXE_LINKER_FLAGS=-lc++"
       - EXTRA_CMAKE_FLAGS: "-DMULTILIB=ON -DBUILD_LTO_LIBS=ON -DCMAKE_CXX_FLAGS='-stdlib=libc++' -DCMAKE_EXE_LINKER_FLAGS=-lc++"
-      - DUB_VERSION: v1.11.0
 
 workflows:
   version: 2

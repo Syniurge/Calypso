@@ -7,6 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "dmd/ctfe.h"
+#include "dmd/import.h"
+#include "dmd/template.h"
 #include "gen/arrays.h"
 #include "gen/binops.h"
 #include "gen/cgforeign.h"
@@ -22,10 +25,6 @@
 #include "ir/irfunction.h"
 #include "ir/irtypeclass.h"
 #include "ir/irtypestruct.h"
-#include "template.h"
-// Needs other includes.
-#include "ctfe.h"
-#include "import.h"
 
 /// Emits an LLVM constant corresponding to the expression.
 ///
@@ -191,11 +190,7 @@ public:
           llvm::GlobalValue::PrivateLinkage;
       gvar = new llvm::GlobalVariable(gIR->module, _init->getType(), true,
                                       _linkage, _init, ".str");
-#if LDC_LLVM_VER >= 309
       gvar->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-#else
-      gvar->setUnnamedAddr(true);
-#endif
       (*stringLiteralCache)[key] = gvar;
     }
 
@@ -525,12 +520,8 @@ public:
     auto gvar = new llvm::GlobalVariable(
         gIR->module, initval->getType(), canBeConst,
         llvm::GlobalValue::InternalLinkage, initval, ".dynarrayStorage");
-#if LDC_LLVM_VER >= 309
     gvar->setUnnamedAddr(canBeConst ? llvm::GlobalValue::UnnamedAddr::Global
                                     : llvm::GlobalValue::UnnamedAddr::None);
-#else
-    gvar->setUnnamedAddr(canBeConst);
-#endif
     llvm::Constant *store = DtoBitCast(gvar, getPtrToType(arrtype));
 
     if (bt->ty == Tpointer) {

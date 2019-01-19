@@ -7,17 +7,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "module.h"
-#include "errors.h"
-#include "id.h"
-#include "hdrgen.h"
-#include "json.h"
-#include "mars.h"
-#include "mtype.h"
-#include "identifier.h"
-#include "rmem.h"
-#include "root.h"
-#include "scope.h"
+#include "dmd/compiler.h"
+#include "dmd/cond.h"
+#include "dmd/errors.h"
+#include "dmd/id.h"
+#include "dmd/identifier.h"
+#include "dmd/hdrgen.h"
+#include "dmd/json.h"
+#include "dmd/mars.h"
+#include "dmd/module.h"
+#include "dmd/mtype.h"
+#include "dmd/root/rmem.h"
+#include "dmd/root/root.h"
+#include "dmd/scope.h"
 #include "dmd/target.h"
 #include "driver/cache.h"
 #include "cpp/calypso.h"
@@ -33,6 +35,7 @@
 #include "driver/linker.h"
 #include "driver/plugins.h"
 #include "driver/targetmachine.h"
+#include "gen/abi.h"
 #include "gen/cl_helpers.h"
 #include "gen/irstate.h"
 #include "gen/ldctraits.h"
@@ -47,36 +50,32 @@
 #include "gen/passes/Passes.h"
 #include "gen/runtime.h"
 #include "gen/uda.h"
-#include "gen/abi.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/LinkAllIR.h"
 #include "llvm/LinkAllPasses.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
-#if LDC_LLVM_VER >= 308
 #include "llvm/Support/StringSaver.h"
-#endif
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
+#include <assert.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #if LDC_LLVM_VER >= 600
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #else
 #include "llvm/Target/TargetSubtargetInfo.h"
 #endif
-#include "llvm/LinkAllIR.h"
-#include "llvm/IR/LLVMContext.h"
-#include <assert.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
+
 #if _WIN32
 #include <windows.h>
 #endif
-
-// Needs Type already declared.
-#include "cond.h"
 
 // From druntime/src/core/runtime.d.
 extern "C" {
@@ -87,8 +86,6 @@ int rt_init();
 void gendocfile(Module *m);
 
 // In dmd/mars.d
-extern bool includeImports;
-extern Strings includeModulePatterns;
 void generateJson(Modules *modules);
 
 using namespace opts;
@@ -182,32 +179,39 @@ void processTransitions(std::vector<std::string> &list) {
     if (i == "?") {
       printf("\n"
              "Language changes listed by -transition=id:\n"
-             "  =all           list information on all language changes\n"
-             "  =checkimports  give deprecation messages about 10378 "
-             "anomalies\n"
-             "  =complex,14488 list all usages of complex or imaginary types\n"
-             "  =field,3449    list all non-mutable fields which occupy an "
+             "  =all              list information on all language changes\n"
+             "  =field,3449       list all non-mutable fields which occupy an "
              "object instance\n"
-             "  =import,10378  revert to single phase name lookup\n"
+             "  =import,10378     revert to single phase name lookup\n"
+             "  =dtorfields,14246 destruct fields of partially constructed "
+             "objects\n"
+             "  =checkimports     give deprecation messages about 10378 "
+             "anomalies\n"
+             "  =complex,14488    give deprecation messages about all usages "
+             "of complex or imaginary types\n"
              "  =intpromote,16997 fix integral promotions for unary + - ~ "
              "operators\n"
-             "  =tls           list all variables going into thread local "
+             "  =tls              list all variables going into thread local "
              "storage\n");
       exit(EXIT_SUCCESS);
     } else if (i == "all") {
-      global.params.vtls = true;
       global.params.vfield = true;
-      global.params.vcomplex = true;
-      global.params.bug10378 = true;   // not set in DMD
-      global.params.check10378 = true; // not set in DMD
-    } else if (i == "checkimports") {
+      global.params.bug10378 = true;
+      global.params.dtorFields = true;
       global.params.check10378 = true;
-    } else if (i == "complex" || i == "14488") {
       global.params.vcomplex = true;
+      global.params.fix16997 = true;
+      global.params.vtls = true;
     } else if (i == "field" || i == "3449") {
       global.params.vfield = true;
     } else if (i == "import" || i == "10378") {
       global.params.bug10378 = true;
+    } else if (i == "dtorfields" || i == "14246") {
+      global.params.dtorFields = true;
+    } else if (i == "checkimports") {
+      global.params.check10378 = true;
+    } else if (i == "complex" || i == "14488") {
+      global.params.vcomplex = true;
     } else if (i == "intpromote" || i == "16997") {
       global.params.fix16997 = true;
     } else if (i == "tls") {
@@ -274,7 +278,6 @@ tryGetExplicitTriple(const llvm::SmallVectorImpl<const char *> &args) {
 
 void expandResponseFiles(llvm::BumpPtrAllocator &A,
                          llvm::SmallVectorImpl<const char *> &args) {
-#if LDC_LLVM_VER >= 308
   llvm::StringSaver Saver(A);
   cl::ExpandResponseFiles(Saver,
 #ifdef _WIN32
@@ -284,7 +287,6 @@ void expandResponseFiles(llvm::BumpPtrAllocator &A,
 #endif
                           ,
                           args);
-#endif
 }
 
 /// Parses switches from the command line, any response files and the global
@@ -293,7 +295,8 @@ void expandResponseFiles(llvm::BumpPtrAllocator &A,
 /// Returns a list of source file names.
 void parseCommandLine(int argc, char **argv, Strings &sourceFiles,
                       bool &helpOnly) {
-  global.params.argv0 = exe_path::getExePath().data();
+  const auto &exePath = exe_path::getExePath();
+  global.params.argv0 = {exePath.length(), exePath.data()};
 
   // Set up `opts::allArguments`, the combined list of command line arguments.
   using opts::allArguments;
@@ -573,15 +576,10 @@ void initializePasses() {
   initializeInstrumentation(Registry);
   initializeAnalysis(Registry);
   initializeCodeGen(Registry);
-#if LDC_LLVM_VER >= 309
   initializeGlobalISel(Registry);
-#endif
   initializeTarget(Registry);
 
 // Initialize passes not included above
-#if LDC_LLVM_VER < 308
-  initializeIPA(Registry);
-#endif
 #if LDC_LLVM_VER >= 400
   initializeRewriteSymbolsLegacyPassPass(Registry);
 #else
@@ -794,6 +792,7 @@ void registerPredefinedTargetVersions() {
                                                                      : "Win32");
     if (triple.isWindowsMSVCEnvironment()) {
       VersionCondition::addPredefinedGlobalIdent("CRuntime_Microsoft");
+      VersionCondition::addPredefinedGlobalIdent("CppRuntime_Microsoft");
     }
     if (triple.isWindowsGNUEnvironment()) {
       VersionCondition::addPredefinedGlobalIdent(
@@ -818,6 +817,7 @@ void registerPredefinedTargetVersions() {
       VersionCondition::addPredefinedGlobalIdent("CRuntime_UClibc");
     } else {
       VersionCondition::addPredefinedGlobalIdent("CRuntime_Glibc");
+      VersionCondition::addPredefinedGlobalIdent("CppRuntime_Gcc");
     }
     break;
   case llvm::Triple::Haiku:
@@ -830,18 +830,22 @@ void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent(
         "darwin"); // For backwards compatibility.
     VersionCondition::addPredefinedGlobalIdent("Posix");
+    VersionCondition::addPredefinedGlobalIdent("CppRuntime_Clang");
     break;
   case llvm::Triple::FreeBSD:
     VersionCondition::addPredefinedGlobalIdent("FreeBSD");
     VersionCondition::addPredefinedGlobalIdent("Posix");
+    VersionCondition::addPredefinedGlobalIdent("CppRuntime_Clang");
     break;
   case llvm::Triple::Solaris:
     VersionCondition::addPredefinedGlobalIdent("Solaris");
     VersionCondition::addPredefinedGlobalIdent("Posix");
+    VersionCondition::addPredefinedGlobalIdent("CppRuntime_Sun");
     break;
   case llvm::Triple::DragonFly:
     VersionCondition::addPredefinedGlobalIdent("DragonFlyBSD");
     VersionCondition::addPredefinedGlobalIdent("Posix");
+    VersionCondition::addPredefinedGlobalIdent("CppRuntime_Gcc");
     break;
   case llvm::Triple::NetBSD:
     VersionCondition::addPredefinedGlobalIdent("NetBSD");
@@ -850,6 +854,7 @@ void registerPredefinedTargetVersions() {
   case llvm::Triple::OpenBSD:
     VersionCondition::addPredefinedGlobalIdent("OpenBSD");
     VersionCondition::addPredefinedGlobalIdent("Posix");
+    VersionCondition::addPredefinedGlobalIdent("CppRuntime_Gcc");
     break;
   case llvm::Triple::AIX:
     VersionCondition::addPredefinedGlobalIdent("AIX");
@@ -864,6 +869,8 @@ void registerPredefinedTargetVersions() {
     break;
   }
 }
+
+} // anonymous namespace
 
 /// Registers all predefined D version identifiers for the current
 /// configuration with VersionCondition.
@@ -936,14 +943,8 @@ void registerPredefinedVersions() {
 #undef STR
 }
 
-} // anonymous namespace
-
 int cppmain(int argc, char **argv) {
-#if LDC_LLVM_VER >= 309
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-#else
-  llvm::sys::PrintStackTraceOnErrorSignal();
-#endif
 
   cpp::calypso.Argv0 = argv[0];
   langPlugins.push_back(&cpp::calypso);
@@ -1005,11 +1006,7 @@ int cppmain(int argc, char **argv) {
   }
 
   auto relocModel = getRelocModel();
-#if LDC_LLVM_VER >= 309
   if (global.params.dll && !relocModel.hasValue()) {
-#else
-  if (global.params.dll && relocModel == llvm::Reloc::Default) {
-#endif
     relocModel = llvm::Reloc::PIC_;
   }
 
@@ -1024,12 +1021,8 @@ int cppmain(int argc, char **argv) {
 
   opts::setDefaultMathOptions(gTargetMachine->Options);
 
-#if LDC_LLVM_VER >= 308
   static llvm::DataLayout DL = gTargetMachine->createDataLayout();
   gDataLayout = &DL;
-#else
-  gDataLayout = gTargetMachine->getDataLayout();
-#endif
 
   {
     llvm::Triple *triple = new llvm::Triple(gTargetMachine->getTargetTriple());
@@ -1072,8 +1065,6 @@ int cppmain(int argc, char **argv) {
   return mars_mainBody(files, libmodules);
 }
 
-void addDefaultVersionIdentifiers() { registerPredefinedVersions(); }
-
 void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
   // Generate one or more object/IR/bitcode files/dcompute kernels.
   if (global.params.obj && !modules.empty()) {
@@ -1106,7 +1097,7 @@ void codegenModules(Modules &modules, bool oneobj) { // CALYPSO
         computeModules.push_back(m);
         if (atCompute == DComputeCompileFor::deviceOnly) {
           // Remove m's object file from list of object files
-          auto s = m->objfile->name->str;
+          auto s = m->objfile->name.toChars();
           for (size_t j = 0; j < global.params.objfiles.dim; j++) {
             if (s == global.params.objfiles[j]) {
               global.params.objfiles.remove(j);

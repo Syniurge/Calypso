@@ -49,7 +49,7 @@ enum LOG = false;
  * Do an implicit cast.
  * Issue error if it can't be done.
  */
-extern (C++) Expression implicitCastTo(Expression e, Scope* sc, Type t)
+Expression implicitCastTo(Expression e, Scope* sc, Type t)
 {
     extern (C++) final class ImplicitCastTo : Visitor
     {
@@ -178,7 +178,7 @@ extern (C++) Expression implicitCastTo(Expression e, Scope* sc, Type t)
  * Return MATCH level of implicitly converting e to type t.
  * Don't do the actual cast; don't change e.
  */
-extern (C++) MATCH implicitConvTo(Expression e, Type t)
+MATCH implicitConvTo(Expression e, Type t)
 {
     extern (C++) final class ImplicitConvTo : Visitor
     {
@@ -1387,7 +1387,7 @@ extern (C++) MATCH implicitConvTo(Expression e, Type t)
     return v.result;
 }
 
-extern (C++) Type toStaticArrayType(SliceExp e)
+Type toStaticArrayType(SliceExp e)
 {
     if (e.lwr && e.upr)
     {
@@ -1414,7 +1414,7 @@ extern (C++) Type toStaticArrayType(SliceExp e)
  * Do an explicit cast.
  * Assume that the 'this' expression does not have any indirections.
  */
-extern (C++) Expression castTo(Expression e, Scope* sc, Type t)
+Expression castTo(Expression e, Scope* sc, Type t)
 {
     extern (C++) final class CastTo : Visitor
     {
@@ -2493,7 +2493,7 @@ extern (C++) Expression castTo(Expression e, Scope* sc, Type t)
  *      t       Target type
  *      flag    1: don't put an error when inference fails
  */
-extern (C++) Expression inferType(Expression e, Type t, int flag = 0)
+Expression inferType(Expression e, Type t, int flag = 0)
 {
     extern (C++) final class InferType : Visitor
     {
@@ -2595,7 +2595,7 @@ extern (C++) Expression inferType(Expression e, Type t, int flag = 0)
 /****************************************
  * Scale addition/subtraction to/from pointer.
  */
-extern (C++) Expression scaleFactor(BinExp be, Scope* sc)
+Expression scaleFactor(BinExp be, Scope* sc)
 {
     Type t1b = be.e1.type.toBasetype();
     Type t2b = be.e2.type.toBasetype();
@@ -2687,7 +2687,7 @@ private bool isVoidArrayLiteral(Expression e, Type other)
  *      true    success
  *      false   failed
  */
-extern (C++) bool typeMerge(Scope* sc, TOK op, Type* pt, Expression* pe1, Expression* pe2)
+bool typeMerge(Scope* sc, TOK op, Type* pt, Expression* pe1, Expression* pe2)
 {
     //printf("typeMerge() %s op %s\n", pe1.toChars(), pe2.toChars());
 
@@ -2765,9 +2765,6 @@ Lagain:
         t2 = Type.basic[ty2];
         e1 = e1.castTo(sc, t1);
         e2 = e2.castTo(sc, t2);
-        //printf("after typeCombine():\n");
-        //print();
-        //printf("ty = %d, ty1 = %d, ty2 = %d\n", ty, ty1, ty2);
         goto Lret;
     }
 
@@ -3330,7 +3327,6 @@ Lret:
             printf("\tt2 = %s\n", e2.type.toChars());
         printf("\ttype = %s\n", t.toChars());
     }
-    //print();
     return true;
 
 Lt1:
@@ -3349,7 +3345,7 @@ Lt2:
  * Returns:
  *    null on success, ErrorExp if error occurs
  */
-extern (C++) Expression typeCombine(BinExp be, Scope* sc)
+Expression typeCombine(BinExp be, Scope* sc)
 {
     Expression errorReturn()
     {
@@ -3388,7 +3384,7 @@ extern (C++) Expression typeCombine(BinExp be, Scope* sc)
  * Do integral promotions (convertchk).
  * Don't convert <array of> to <pointer to>
  */
-extern (C++) Expression integralPromotions(Expression e, Scope* sc)
+Expression integralPromotions(Expression e, Scope* sc)
 {
     //printf("integralPromotions %s %s\n", e.toChars(), e.type.toChars());
     switch (e.type.toBasetype().ty)
@@ -3500,7 +3496,7 @@ extern (C++) bool arrayTypeCompatibleWithoutCasting(Type t1, Type t2)
  * This is used to determine if implicit narrowing conversions will
  * be allowed.
  */
-extern (C++) IntRange getIntRange(Expression e)
+IntRange getIntRange(Expression e)
 {
     extern (C++) final class IntRangeVisitor : Visitor
     {

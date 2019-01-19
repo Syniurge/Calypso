@@ -415,6 +415,11 @@ extern (C++) class EnumMember : VarDeclaration // CALYPSO (made non final)
         if (errors)
             return new ErrorExp();
         checkDisabled(loc, sc);
+
+        if (depdecl && !depdecl._scope)
+            depdecl._scope = sc;
+        checkDeprecated(loc, sc);
+
         if (errors)
             return new ErrorExp();
         Expression e = new VarExp(loc, this);

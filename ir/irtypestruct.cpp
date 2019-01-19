@@ -9,22 +9,20 @@
 
 #include "ir/irtypestruct.h"
 
-#include "llvm/IR/DerivedTypes.h"
-
-#include "aggregate.h"
-#include "declaration.h"
-#include "init.h"
-#include "mtype.h"
-#include "import.h"
-#include "template.h"
-
-#include "gen/irstate.h"
-#include "gen/tollvm.h"
-#include "gen/logger.h"
-#include "gen/llvmhelpers.h"
+#include "dmd/aggregate.h"
+#include "dmd/declaration.h"
+#include "dmd/import.h"
+#include "dmd/init.h"
+#include "dmd/mtype.h"
+#include "dmd/template.h"
+#include "gen/cgforeign.h"
 #include "gen/dcompute/target.h"
 #include "gen/dcompute/druntime.h"
-#include "gen/cgforeign.h"
+#include "gen/irstate.h"
+#include "gen/llvmhelpers.h"
+#include "gen/logger.h"
+#include "gen/tollvm.h"
+#include "llvm/IR/DerivedTypes.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////

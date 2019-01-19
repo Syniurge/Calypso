@@ -12,12 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_GEN_CL_HELPERS_H
-#define LDC_GEN_CL_HELPERS_H
+#pragma once
 
+#include "dmd/globals.h" // for CHECKENABLE enum
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
-#include "globals.h" // for CHECKENABLE enum
 
 #if LDC_LLVM_VER >= 500
 #define LLVM_END_WITH_NULL
@@ -137,11 +136,7 @@ public:
     return true;
   }
 
-#if LDC_LLVM_VER >= 308
   void getExtraOptionNames(llvm::SmallVectorImpl<llvm::StringRef> &Names) {
-#else
-  void getExtraOptionNames(llvm::SmallVectorImpl<const char *> &Names) {
-#endif
     for (auto I = switches.begin() + 1, E = switches.end(); I != E; ++I) {
       Names.push_back(I->first.data());
     }
@@ -205,6 +200,4 @@ llvm::cl::ValuesClass<DataType> clEnumValues(const char *Arg, DataType Val,
                                              OptsTy... Options) {
   return llvm::cl::values(Arg, Val, Desc, Options..., clEnumValEnd);
 }
-#endif
-
 #endif

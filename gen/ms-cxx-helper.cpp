@@ -7,20 +7,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if LDC_LLVM_VER >= 308
-
-#include "target.h"
 #include "gen/ms-cxx-helper.h"
+
+#include "dmd/target.h"
+#include "gen/irstate.h"
 #include "gen/llvm.h"
 #include "gen/llvmhelpers.h"
-#include "gen/irstate.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
-
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/IR/CFG.h"
 
 llvm::BasicBlock *getUnwindDest(llvm::Instruction *I) {
   if (auto II = llvm::dyn_cast<llvm::InvokeInst>(I))
@@ -63,12 +60,8 @@ void remapBlocks(std::vector<llvm::BasicBlock *> &blocks,
   for (llvm::BasicBlock *bb : blocks)
     for (auto &I : *bb) {
       llvm::RemapInstruction(&I, VMap,
-#if LDC_LLVM_VER == 308
-                             llvm::RF_IgnoreMissingEntries
-#else
-                             llvm::RF_IgnoreMissingLocals
-#endif
-                                 | llvm::RF_NoModuleLevelChanges);
+                             llvm::RF_IgnoreMissingLocals |
+                                 llvm::RF_NoModuleLevelChanges);
     }
 }
 
@@ -196,5 +189,3 @@ llvm::GlobalVariable *getTypeDescriptor(IRState &irs, ClassDeclaration *cd) {
 
   return Var;
 }
-
-#endif // LDC_LLVM_VER >= 308

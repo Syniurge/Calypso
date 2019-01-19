@@ -1,26 +1,26 @@
 #include "gen/inlineir.h"
 
+#include "dmd/declaration.h"
 #include "dmd/expression.h"
+#include "dmd/identifier.h"
 #include "dmd/mtype.h"
+#include "dmd/template.h"
 #include "gen/attributes.h"
-#include "gen/llvmhelpers.h"
-#include "declaration.h"
-#include "template.h"
 #include "gen/irstate.h"
+#include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/tollvm.h"
 #include "gen/to_string.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/SourceMgr.h"
 
 namespace {
 
 /// Sets LLVMContext::setDiscardValueNames(false) upon construction and restores
 /// the previous value upon destruction.
 struct TempDisableDiscardValueNames {
-#if LDC_LLVM_VER >= 309
   llvm::LLVMContext &ctx;
   bool previousValue;
 
@@ -30,9 +30,6 @@ struct TempDisableDiscardValueNames {
   }
 
   ~TempDisableDiscardValueNames() { ctx.setDiscardValueNames(previousValue); }
-#else
-  TempDisableDiscardValueNames(llvm::LLVMContext &context) {}
-#endif
 };
 
 /// Adds the idol's function attributes to the wannabe
@@ -215,11 +212,7 @@ DValue *DtoInlineIRExpr(Loc &loc, FuncDeclaration *fdecl,
 
     m->setDataLayout(gIR->module.getDataLayout());
 
-#if LDC_LLVM_VER >= 308
     llvm::Linker(gIR->module).linkInModule(std::move(m));
-#else
-    llvm::Linker(&gIR->module).linkInModule(m.get());
-#endif
   }
 
   // 2. Call the function that was just defined and return the returnvalue

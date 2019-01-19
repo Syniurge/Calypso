@@ -53,7 +53,7 @@ import dmd.visitor;
  * functions and may invoke a function that contains `ErrorStatement` in its body.
  * If that, the "CTFE failed because of previous errors" error is raised.
  */
-public extern (C++) Expression ctfeInterpret(Expression e)
+public Expression ctfeInterpret(Expression e)
 {
     if (e.op == TOK.error)
         return e;
@@ -82,7 +82,7 @@ public extern (C++) Expression ctfeInterpret(Expression e)
 /* Run CTFE on the expression, but allow the expression to be a TypeExp
  *  or a tuple containing a TypeExp. (This is required by pragma(msg)).
  */
-public extern (C++) Expression ctfeInterpretForPragmaMsg(Expression e)
+public Expression ctfeInterpretForPragmaMsg(Expression e)
 {
     if (e.op == TOK.error || e.op == TOK.type)
         return e;
@@ -337,7 +337,7 @@ struct InterState // CALYPSO
     Statement gotoTarget;
 }
 
-extern (C++) __gshared CtfeStack ctfeStack;
+private __gshared CtfeStack ctfeStack;
 
 /***********************************************************
  * CTFE-object code for a single function
@@ -3165,7 +3165,7 @@ public:
         }
     }
 
-    private void interpretCommon(BinExp e, fp_t fp)
+    extern (D) private void interpretCommon(BinExp e, fp_t fp)
     {
         debug (LOG)
         {
@@ -3265,7 +3265,7 @@ public:
             e.error("`%s` cannot be interpreted at compile time", e.toChars());
     }
 
-    private void interpretCompareCommon(BinExp e, fp2_t fp)
+    extern (D) private void interpretCompareCommon(BinExp e, fp2_t fp)
     {
         debug (LOG)
         {
@@ -3422,7 +3422,7 @@ public:
         return v;
     }
 
-    private void interpretAssignCommon(BinExp e, fp_t fp, int post = 0)
+    extern (D) private void interpretAssignCommon(BinExp e, fp_t fp, int post = 0)
     {
         debug (LOG)
         {

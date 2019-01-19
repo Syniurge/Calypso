@@ -7,11 +7,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "init.h"
-#include "mars.h"
-#include "module.h"
-#include "mtype.h"
-#include "port.h"
+#include "dmd/expression.h"
+#include "dmd/hdrgen.h"
+#include "dmd/id.h"
+#include "dmd/identifier.h"
+#include "dmd/import.h"
+#include "dmd/init.h"
+#include "dmd/mangle.h"
+#include "dmd/mars.h"
+#include "dmd/module.h"
+#include "dmd/mtype.h"
+#include "dmd/root/port.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
 #include "gen/classes.h"
@@ -25,7 +31,6 @@
 #include "gen/logger.h"
 #include "gen/runtime.h"
 #include "gen/tollvm.h"
-#include "id.h"
 #include "ir/irfunction.h"
 #include "ir/irmodule.h"
 #include "llvm/IR/CFG.h"
@@ -33,10 +38,6 @@
 #include <fstream>
 #include <math.h>
 #include <stdio.h>
-
-// Need to include this after the other DMD includes because of missing
-// dependencies.
-#include "hdrgen.h"
 
 //////////////////////////////////////////////////////////////////////////////
 // FIXME: Integrate these functions
@@ -249,32 +250,31 @@ public:
     // emit dwarf stop point
     irs->DBuilder.EmitStopPoint(stmt->loc);
 
-    emitCoverageLinecountInc(stmt->loc);
+    if (auto e = stmt->exp) {
+      if (e->hasCode())
+        emitCoverageLinecountInc(stmt->loc);
 
-    if (stmt->exp) {
-      elem *e;
+      DValue *elem;
       // a cast(void) around the expression is allowed, but doesn't require any
       // code
-      if (stmt->exp->op == TOKcast && stmt->exp->type == Type::tvoid) {
-        CastExp *cexp = static_cast<CastExp *>(stmt->exp);
-        e = toElemDtor(cexp->e1);
+      if (e->op == TOKcast && e->type == Type::tvoid) {
+        elem = toElemDtor(static_cast<CastExp *>(e)->e1);
       } else {
-        e = toElemDtor(stmt->exp);
+        elem = toElemDtor(e);
       }
-      delete e;
+      delete elem;
     }
   }
 
   //////////////////////////////////////////////////////////////////////////
-  
+
   bool dcomputeReflectMatches(CallExp *ce) {
     auto arg1 = (DComputeTarget::ID)(*ce->arguments)[0]->toInteger();
     auto arg2 = (*ce->arguments)[1]->toInteger();
     auto dct = irs->dcomputetarget;
     if (!dct) {
       return arg1 == DComputeTarget::Host;
-    }
-    else {
+    } else {
       return arg1 == dct->target &&
              (!arg2 || arg2 == static_cast<dinteger_t>(dct->tversion));
     }
@@ -1590,7 +1590,10 @@ public:
   //////////////////////////////////////////////////////////////////////////
 
   void visit(ImportStatement *stmt) override {
-    // Empty.
+    for (auto s : *stmt->imports) {
+      assert(s->isImport());
+      irs->DBuilder.EmitImport(static_cast<Import *>(s));
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////

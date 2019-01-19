@@ -97,7 +97,9 @@ can also be used to install LDC:
 
     curl -fsS https://dlang.org/install.sh | bash -s ldc
 
-In addition, LDC is available from various package managers:
+In addition, LDC is available from various package managers
+(but note that these packages **might be outdated** as they are
+not currently integrated into the project release process):
 
 |              | Command                                      |
 | ------------ | -------------------------------------------- |
@@ -113,17 +115,6 @@ In addition, LDC is available from various package managers:
 | Chocolatey   | `choco ldc`                                  |
 | Docker       | `docker pull dlanguage/ldc`                  |
 
-Note that these packages **might be outdated** as they are not
-currently integrated into the project release process.
-
-#### Notes on Windows
-
-LDC for Windows relies on the Microsoft linker and runtime libraries,
-which can be obtained by either installing
-[Visual Studio](https://www.visualstudio.com/downloads/) 2015 or 2017
-with Visual C++, or the stand-alone
-[Visual C++ Build Tools](http://landinghub.visualstudio.com/visual-cpp-build-tools).
-
 #### Targeting Android
 
 You can find full instructions on cross-compiling or natively compiling
@@ -137,7 +128,7 @@ libraries is available on the project wiki for
 [Windows](http://wiki.dlang.org/Building_and_hacking_LDC_on_Windows_using_MSVC).
 
 If you have a working C++/D build environment, CMake, and a current LLVM
-version (≥ 3.7) available, there should be no big surprises. Do not
+version (≥ 3.9) available, there should be no big surprises. Do not
 forget to make sure all the submodules (druntime, phobos, dmd-testsuite)
 are up to date:
 

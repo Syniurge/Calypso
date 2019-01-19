@@ -12,23 +12,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_GEN_IRSTATE_H
-#define LDC_GEN_IRSTATE_H
+#pragma once
 
-#include <deque>
-#include <memory>
-#include <set>
-#include <sstream>
-#include <vector>
-#include "aggregate.h"
-#include "root.h"
+#include "dmd/aggregate.h"
+#include "dmd/root/root.h"
 #include "gen/dibuilder.h"
 #include "gen/objcgen.h"
 #include "ir/iraggr.h"
 #include "ir/irvar.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ProfileData/InstrProfReader.h"
 #include "llvm/IR/CallSite.h"
+#include "llvm/ProfileData/InstrProfReader.h"
+#include <deque>
+#include <memory>
+#include <set>
+#include <sstream>
+#include <vector>
 
 namespace llvm {
 class LLVMContext;
@@ -240,11 +239,9 @@ public:
   llvm::SmallVector<llvm::Metadata *, 5> LinkerMetadataArgs;
 #endif
 
-#if LDC_LLVM_VER >= 308
   // MS C++ compatible type descriptors
   llvm::DenseMap<size_t, llvm::StructType *> TypeDescriptorTypeMap;
   llvm::DenseMap<llvm::Constant *, llvm::GlobalVariable *> TypeDescriptorMap;
-#endif
 
   // Target for dcompute. If not nullptr, it owns this.
   DComputeTarget *dcomputetarget = nullptr;
@@ -253,5 +250,3 @@ public:
 void Statement_toIR(Statement *s, IRState *irs);
 
 bool useMSVCEH();
-
-#endif // LDC_GEN_IRSTATE_H

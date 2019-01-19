@@ -5,22 +5,14 @@
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
  * http://www.boost.org/LICENSE_1_0.txt
- * https://github.com/dlang/dmd/blob/master/src/template.h
+ * https://github.com/dlang/dmd/blob/master/src/dmd/template.h
  */
 
-#ifndef DMD_TEMPLATE_H
-#define DMD_TEMPLATE_H
-
-#ifdef __DMC__
 #pragma once
-#endif /* __DMC__ */
 
-#include "root.h"
 #include "arraytypes.h"
 #include "dsymbol.h"
 
-
-struct OutBuffer;
 class Identifier;
 class TemplateInstance;
 class TemplateParameter;
@@ -31,14 +23,10 @@ class TemplateAliasParameter;
 class TemplateTupleParameter;
 class Type;
 class TypeQualified;
-class TypeTypeof;
 struct Scope;
 class Expression;
-class AliasDeclaration;
 class FuncDeclaration;
 class Parameter;
-enum MATCH;
-enum PASS;
 
 class Tuple : public RootObject
 {
@@ -107,10 +95,7 @@ public:
 
     virtual MATCH deduceFunctionTemplateMatch(TemplateInstance *ti, Scope *sc, FuncDeclaration *&fd, Type *tthis, Expressions *fargs); // CALYPSO
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);
-    FuncDeclaration *doHeaderInstantiation(TemplateInstance *ti, Scope *sc, FuncDeclaration *fd, Type *tthis, Expressions *fargs);
-    TemplateInstance *findExistingInstance(TemplateInstance *tithis, Expressions *fargs);
-    TemplateInstance *addInstance(TemplateInstance *ti);
-    void removeInstance(TemplateInstance *handle);
+    FuncDeclaration *doHeaderInstantiation(TemplateInstance *ti, Scope *sc, FuncDeclaration *fd, Type *tthis, Expressions *fargs); // CALYPSO
 
     // CALYPSO
     virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
@@ -163,7 +148,6 @@ public:
 
     virtual TemplateParameter *syntaxCopy() = 0;
     virtual bool declareParameter(Scope *sc) = 0;
-    using RootObject::print; // LDC: suppresses hidden overloaded virtual function 'RootObject::print' warning
     virtual void print(RootObject *oarg, RootObject *oded) = 0;
     virtual RootObject *specialization() = 0;
     virtual RootObject *defaultArg(Loc instLoc, Scope *sc) = 0;
@@ -186,11 +170,10 @@ public:
  */
 class TemplateTypeParameter : public TemplateParameter
 {
+    using TemplateParameter::matchArg;
 public:
     Type *specType;     // type parameter: if !=NULL, this is the type specialization
     Type *defaultType;
-
-    static Type *tdummy;
 
     TemplateTypeParameter *isTemplateTypeParameter();
     TemplateParameter *syntaxCopy();
@@ -220,6 +203,7 @@ public:
  */
 class TemplateValueParameter : public TemplateParameter
 {
+    using TemplateParameter::matchArg;
 public:
     Type *valType;
     Type *nonDependentValType;
@@ -243,12 +227,11 @@ public:
  */
 class TemplateAliasParameter : public TemplateParameter
 {
+    using TemplateParameter::matchArg;
 public:
     Type *specType;
     RootObject *specAlias;
     RootObject *defaultAlias;
-
-    static Dsymbol *sdummy;
 
     TemplateAliasParameter *isTemplateAliasParameter();
     TemplateParameter *syntaxCopy();
@@ -326,7 +309,6 @@ public:
     bool isDummy;                       // if true, this TemplateInstance may be allocated on stack (CALYPSO DMD BUG FIX)
 
     virtual void _key(); // CALYPSO
-    static Objects *arraySyntaxCopy(Objects *objs);
     Dsymbol *syntaxCopy(Dsymbol *);
     Dsymbol *toAlias();                 // resolve real symbol
     const char *kind() const;
@@ -340,21 +322,10 @@ public:
 
     bool needsCodegen();
 
-    // Internal
-    bool findTempDecl(Scope *sc, WithScopeSymbol **pwithsym);
-    bool updateTempDecl(Scope *sc, Dsymbol *s);
     TemplateDeclaration* firstTempDecl(); // CALYPSO returns the first overload
-    static bool semanticTiargs(const Loc &loc, Scope *sc, Objects *tiargs, int flags);
+    static bool semanticTiargs(const Loc &loc, Scope *sc, Objects *tiargs, int flags); // CALYPSO
     virtual bool semanticTiargs(Scope *sc); // CALYPSO
-    bool findBestMatch(Scope *sc, Expressions *fargs);
-    bool needsTypeInference(Scope *sc, int flag = 0);
-    bool hasNestedArgs(Objects *tiargs, bool isstatic);
-    Dsymbols *appendToModuleMember();
     virtual void declareParameters(Scope *sc); // CALYPSO
-    Identifier *genIdent(Objects *args);
-    void expandMembers(Scope *sc);
-    void tryExpandMembers(Scope *sc);
-    void trySemantic3(Scope *sc2);
 
     // CALYPSO variadic template generalization (pretty intrusive...)
     virtual size_t correspondingParamIdx(size_t argi);
@@ -378,8 +349,6 @@ public:
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
     const char *toChars();
 
-    bool findTempDecl(Scope *sc);
-
     TemplateMixin *isTemplateMixin() { return this; }
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -396,5 +365,3 @@ Type *getType(RootObject *o);
 Dsymbol *getDsymbol(RootObject *o);
 
 RootObject *objectSyntaxCopy(RootObject *o);
-
-#endif /* DMD_TEMPLATE_H */

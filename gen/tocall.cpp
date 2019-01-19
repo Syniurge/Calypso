@@ -7,12 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "declaration.h"
-#include "id.h"
-#include "import.h"
-#include "mtype.h"
-#include "target.h"
-#include "pragma.h"
+#include "dmd/compiler.h"
+#include "dmd/declaration.h"
+#include "dmd/expression.h"
+#include "dmd/id.h"
+#include "dmd/import.h"
+#include "dmd/mtype.h"
+#include "dmd/target.h"
 #include "gen/abi.h"
 #include "gen/cgforeign.h"
 #include "gen/classes.h"
@@ -24,6 +25,7 @@
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/nested.h"
+#include "gen/pragma.h"
 #include "gen/tollvm.h"
 #include "gen/runtime.h"
 #include "ir/irfunction.h"
@@ -893,14 +895,12 @@ DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
   LLCallSite call =
       gIR->funcGen().callOrInvoke(callable, args, "", tf->isnothrow);
 
-#if LDC_LLVM_VER >= 309
   // PGO: Insert instrumentation or attach profile metadata at indirect call
   // sites.
   if (!call.getCalledFunction()) {
     auto &PGO = gIR->funcGen().pgo;
     PGO.emitIndirectCallPGO(call.getInstruction(), callable);
   }
-#endif
 
   // get return value
   const int sretArgIndex =

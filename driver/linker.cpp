@@ -8,7 +8,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "driver/linker.h"
-#include "errors.h"
+
+#include "dmd/errors.h"
 #include "driver/cl_options.h"
 #include "driver/tool.h"
 #include "gen/llvm.h"
@@ -66,6 +67,12 @@ static cl::opt<cl::boolOrDefault>
                cl::desc("Create a statically linked binary, including "
                         "all system dependencies"),
                cl::cat(opts::linkingCategory));
+
+static llvm::cl::opt<std::string>
+    mscrtlib("mscrtlib", llvm::cl::ZeroOrMore,
+             llvm::cl::desc("MS C runtime library to link with"),
+             llvm::cl::value_desc("libcmt[d]|msvcrt[d]"),
+             llvm::cl::cat(opts::linkingCategory));
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -175,6 +182,29 @@ bool linkAgainstSharedDefaultLibs() {
 
 //////////////////////////////////////////////////////////////////////////////
 
+bool useInternalToolchainForMSVC() {
+#ifndef _WIN32
+  return true;
+#else
+  return !getenv("VSINSTALLDIR") && !getenv("LDC_VSDIR");
+#endif
+}
+
+llvm::StringRef getMscrtLibName() {
+  llvm::StringRef name = mscrtlib;
+  if (name.empty()) {
+    if (useInternalToolchainForMSVC()) {
+      name = "vcruntime140";
+    } else {
+      // default to static release variant
+      name = linkFullyStatic() != llvm::cl::BOU_FALSE ? "libcmt" : "msvcrt";
+    }
+  }
+  return name;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 /// Insert an LLVM bitcode file into the module
 static void insertBitcodeIntoModule(const char *bcFile, llvm::Module &M,
                                     llvm::LLVMContext &Context) {
@@ -187,11 +217,7 @@ static void insertBitcodeIntoModule(const char *bcFile, llvm::Module &M,
     error(Loc(), "Error when loading LLVM bitcode file: %s", bcFile);
     fatal();
   }
-#if LDC_LLVM_VER >= 308
   llvm::Linker(M).linkInModule(std::move(loadedModule));
-#else
-  llvm::Linker(&M).linkInModule(loadedModule.release());
-#endif
 }
 
 /// Insert LLVM bitcode files into the module

@@ -8,9 +8,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/cl_helpers.h"
-#include "mars.h"
-#include "rmem.h"
-#include "root.h"
+
+#include "dmd/mars.h"
+#include "dmd/root/rmem.h"
+#include "dmd/root/root.h"
 #include <algorithm>
 #include <cctype> // isupper, tolower
 #include <stdarg.h>
@@ -33,13 +34,7 @@ void initFromPathString(const char *&dest, const cl::opt<std::string> &src) {
   dest = nullptr;
   if (src.getNumOccurrences() != 0) {
     if (src.empty()) {
-      error(Loc(), "Expected argument to '-%s'",
-#if LDC_LLVM_VER >= 308
-            src.ArgStr.str().c_str()
-#else
-            src.ArgStr
-#endif
-      );
+      error(Loc(), "Expected argument to '-%s'", src.ArgStr.str().c_str());
     }
     dest = dupPathString(src);
   }

@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/tollvm.h"
+<<<<<<< HEAD
 #include "aggregate.h"
 #include "declaration.h"
 #include "dsymbol.h"
@@ -15,6 +16,16 @@
 #include "import.h"
 #include "init.h"
 #include "module.h"
+=======
+
+#include "dmd/aggregate.h"
+#include "dmd/declaration.h"
+#include "dmd/dsymbol.h"
+#include "dmd/expression.h"
+#include "dmd/id.h"
+#include "dmd/init.h"
+#include "dmd/module.h"
+>>>>>>> v1.13.0
 #include "gen/abi.h"
 #include "gen/arrays.h"
 #include "gen/cgforeign.h"
@@ -439,11 +450,7 @@ LLConstant *DtoConstCString(const char *str) {
     gvar = new llvm::GlobalVariable(gIR->module, init->getType(), true,
                                     llvm::GlobalValue::PrivateLinkage, init,
                                     ".str");
-#if LDC_LLVM_VER >= 309
     gvar->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-#else
-    gvar->setUnnamedAddr(true);
-#endif
     gIR->stringLiteral1ByteCache[s] = gvar;
   }
 

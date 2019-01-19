@@ -7,19 +7,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "gen/llvm.h"
-#include "aggregate.h"
-#include "declaration.h"
-#include "import.h"
-#include "init.h"
-#include "mtype.h"
-#include "target.h"
+#include "gen/classes.h"
+
+#include "dmd/aggregate.h"
+#include "dmd/declaration.h"
+#include "dmd/expression.h"
+#include "dmd/identifier.h"
+#include "dmd/import.h"
+#include "dmd/init.h"
+#include "dmd/mtype.h"
+#include "dmd/target.h"
 #include "gen/arrays.h"
 #include "gen/cgforeign.h"
-#include "gen/classes.h"
 #include "gen/dvalue.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
+#include "gen/llvm.h"
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/nested.h"
@@ -140,7 +143,10 @@ DValue *DtoNewClass(Loc &loc, TypeClass *tc, NewExp *newexp) {
   // allocate
   LLValue *mem;
   if (newexp->onstack) {
-    mem = DtoRawAlloca(DtoType(tc)->getContainedType(0), DtoAlignment(tc),
+    unsigned alignment = tc->sym->alignsize;
+    if (alignment == STRUCTALIGN_DEFAULT)
+      alignment = 0;
+    mem = DtoRawAlloca(DtoType(tc)->getContainedType(0), alignment,
                        ".newclass_alloca");
   }
   // custom allocator

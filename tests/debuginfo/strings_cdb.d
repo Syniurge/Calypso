@@ -1,4 +1,4 @@
-// REQUIRES: atleast_llvm309
+
 // REQUIRES: Windows
 // REQUIRES: cdb
 // RUN: %ldc -g -of=%t.exe %s
@@ -20,7 +20,7 @@ int main(string[] args)
 // CDB: bp `strings_cdb.d:22`
 // CDB: g
     return 0;
-// CHECK: !D main
+// CHECK: !strings_cdb.D main
 
 // CDB: dt string
 // CHECK: !string

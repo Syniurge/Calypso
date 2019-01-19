@@ -12,18 +12,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_IR_IRAGGR_H
-#define LDC_IR_IRAGGR_H
+#pragma once
 
+#include "dmd/aggregate.h"
 #include "llvm/ADT/SmallVector.h"
 #include <map>
 #include <vector>
 
-// DMD forward declarations
 class StructInitializer;
 
 namespace llvm {
 class Constant;
+class DIType;
+class GlobalVariable;
 class StructType;
 }
 
@@ -45,6 +46,10 @@ struct IrAggr {
 
   /// Aggregate D type.
   Type *type = nullptr;
+
+  /// Composite type debug description. This is not only to cache, but also
+  /// used for resolving forward references.
+  llvm::DIType *diCompositeType = nullptr;
 
   //////////////////////////////////////////////////////////////////////////
 
@@ -166,5 +171,3 @@ private:
 
 IrAggr *getIrAggr(AggregateDeclaration *decl, bool create = false);
 bool isIrAggrCreated(AggregateDeclaration *decl);
-
-#endif

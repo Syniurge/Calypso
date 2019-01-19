@@ -8,9 +8,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/rttibuilder.h"
-#include "aggregate.h"
-#include "import.h"
-#include "mtype.h"
+
+#include "dmd/aggregate.h"
+#include "dmd/import.h"
+#include "dmd/mangle.h"
+#include "dmd/mtype.h"
 #include "gen/arrays.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
@@ -20,6 +22,9 @@
 #include "gen/tollvm.h"
 #include "ir/iraggr.h"
 #include "ir/irfunction.h"
+
+// in dmd/opover.d:
+AggregateDeclaration *isAggregate(Type *t);
 
 RTTIBuilder::RTTIBuilder(Type *baseType) {
   const auto ad = isAggregate(baseType);
@@ -41,13 +46,8 @@ RTTIBuilder::RTTIBuilder(Type *baseType) {
 void RTTIBuilder::push(llvm::Constant *C) {
   // We need to explicitly zero any padding bytes as per TDPL §7.1.1 (and
   // also match the struct type lowering code here).
-  const uint64_t fieldStart =
-#if LDC_LLVM_VER >= 309
-    llvm::alignTo
-#else
-    llvm::RoundUpToAlignment
-#endif
-    (prevFieldEnd, gDataLayout->getABITypeAlignment(C->getType()));
+  const uint64_t fieldStart = llvm::alignTo(
+      prevFieldEnd, gDataLayout->getABITypeAlignment(C->getType()));
 
   const uint64_t paddingBytes = fieldStart - prevFieldEnd;
   if (paddingBytes) {

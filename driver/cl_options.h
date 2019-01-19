@@ -12,8 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_DRIVER_CL_OPTIONS_H
-#define LDC_DRIVER_CL_OPTIONS_H
+#pragma once
 
 #include "driver/cl_options-llvm.h"
 #include "driver/targetmachine.h"
@@ -78,6 +77,7 @@ extern cl::opt<std::string> mABI;
 extern FloatABI::Type floatABI;
 extern cl::opt<bool> linkonceTemplates;
 extern cl::opt<bool> disableLinkerStripDead;
+extern cl::opt<ubyte> defaultToHiddenVisibility;
 
 // Math options
 extern bool fFastMath;
@@ -98,7 +98,6 @@ extern std::vector<std::string> debugArgs;
 void createClashingOptions();
 void hideLLVMOptions();
 
-#if LDC_LLVM_VER >= 309
 // LTO options
 enum LTOKind {
   LTO_None,
@@ -108,10 +107,6 @@ enum LTOKind {
 extern cl::opt<LTOKind> ltoMode;
 inline bool isUsingLTO() { return ltoMode != LTO_None; }
 inline bool isUsingThinLTO() { return ltoMode == LTO_Thin; }
-#else
-inline bool isUsingLTO() { return false; }
-inline bool isUsingThinLTO() { return false; }
-#endif
 
 #if LDC_LLVM_VER >= 400
 extern cl::opt<std::string> saveOptimizationRecord;
@@ -128,4 +123,3 @@ extern cl::opt<bool> dynamicCompileTlsWorkaround;
 constexpr bool enableDynamicCompile = false;
 #endif
 }
-#endif

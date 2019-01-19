@@ -12,8 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_GEN_FUNCGENSTATE_H
-#define LDC_GEN_FUNCGENSTATE_H
+#pragma once
 
 #include "gen/irstate.h"
 #include "gen/pgo_ASTbased.h"
@@ -226,17 +225,11 @@ llvm::CallSite FuncGenState::callOrInvoke(llvm::Value *callee, const T &args,
       isNothrow ||
       (calleeFn && (calleeFn->isIntrinsic() || calleeFn->doesNotThrow()));
 
-#if LDC_LLVM_VER >= 308
   // calls inside a funclet must be annotated with its value
   llvm::SmallVector<llvm::OperandBundleDef, 2> BundleList;
-#endif
 
   if (doesNotThrow || scopes.empty()) {
-    llvm::CallInst *call = irs.ir->CreateCall(callee, args,
-#if LDC_LLVM_VER >= 308
-                                              BundleList,
-#endif
-                                              name);
+    llvm::CallInst *call = irs.ir->CreateCall(callee, args, BundleList, name);
     if (calleeFn) {
       call->setAttributes(calleeFn->getAttributes());
     }
@@ -246,12 +239,8 @@ llvm::CallSite FuncGenState::callOrInvoke(llvm::Value *callee, const T &args,
   llvm::BasicBlock *landingPad = scopes.getLandingPad();
 
   llvm::BasicBlock *postinvoke = irs.insertBB("postinvoke");
-  llvm::InvokeInst *invoke =
-      irs.ir->CreateInvoke(callee, postinvoke, landingPad, args,
-#if LDC_LLVM_VER >= 308
-                           BundleList,
-#endif
-                           name);
+  llvm::InvokeInst *invoke = irs.ir->CreateInvoke(
+      callee, postinvoke, landingPad, args, BundleList, name);
   if (calleeFn) {
     invoke->setAttributes(calleeFn->getAttributes());
   }
@@ -259,5 +248,3 @@ llvm::CallSite FuncGenState::callOrInvoke(llvm::Value *callee, const T &args,
   irs.scope() = IRScope(postinvoke);
   return invoke;
 }
-
-#endif
