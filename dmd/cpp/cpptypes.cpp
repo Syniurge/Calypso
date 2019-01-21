@@ -55,10 +55,22 @@ public:
     }
 
     bool isTransitive() override { return false; }
-    bool isMergeable() override { return false; }
+//     bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
 
     virtual bool isIncompleteArray() const { return false; }
+
+    void accept(Visitor *v) override
+    {
+        auto v_ti = v->_typeid();
+
+        if (v_ti == TI_Mangler) { // mangle
+            auto buf = static_cast<Mangler*>(v)->buf;
+            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
+            v->visit(this);
+        } else
+            v->visit(this);
+    }
 };
 
 // C array with unspecified size e.g int a[]
@@ -90,6 +102,7 @@ public:
         if (v_ti == TI_Mangler) { // mangle
             auto buf = static_cast<Mangler*>(v)->buf;
 
+            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
             v->visit(this);
             buf->writeByte('#');
             buf->writeByte('A');
@@ -126,7 +139,7 @@ public:
 
     bool isRvalRef() const override { return isRvalueRef; }
     bool isTransitive() override { return false; }
-    bool isMergeable() override { return false; }
+//     bool isMergeable() override { return false; }
     unsigned short sizeType() override { return sizeof(*this); }
 
     void accept(Visitor *v) override
@@ -134,9 +147,11 @@ public:
         auto v_ti = v->_typeid();
 
         if (v_ti == TI_Mangler) { // mangle
+            auto buf = static_cast<Mangler*>(v)->buf;
+            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
             if (isRvalueRef) {
                 v->visit(static_cast<Type*>(this)); // only 'R'
-                static_cast<Mangler*>(v)->buf->writeByte('#');
+                buf->writeByte('#');
             }
             v->visit(this);
         } else
