@@ -361,8 +361,7 @@ template <typename AggTy>
 
     if (ad->ctor)
     {
-        assert(ad->ctor->isDeclaration());
-        auto e1 = new_DotVarExp(loc, ve, static_cast<Declaration*>(ad->ctor));
+        auto e1 = new_DotIdExp(loc, ve, Id::ctor);
 
         if (!ce) {
             exp = expressionSemantic(exp, sc);
