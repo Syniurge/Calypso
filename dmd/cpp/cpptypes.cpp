@@ -1768,7 +1768,6 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     if (T->isVolatile())
         tm.volatileNumber++;
 
-    auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
     auto& Diags = calypso.getDiagnostics();
 
@@ -1856,7 +1855,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         }
     }
 
-    if (!clang::isUnresolvedExceptionSpec(T->getExceptionSpecType()) && T->isNothrow(Context, false))
+    if (!clang::isUnresolvedExceptionSpec(T->getExceptionSpecType()) && T->isNothrow(false))
         stc |= STCnothrow;
 
     LINK linkage = (FD && FD->isExternC()) ? LINKc : LINKcpp;

@@ -23,6 +23,7 @@
 #include "clang/lib/CodeGen/CGRecordLayout.h"
 #include "clang/lib/CodeGen/CodeGenFunction.h"
 #include "clang/lib/CodeGen/CodeGenTypes.h"
+#include "clang/lib/CodeGen/ConstantEmitter.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
@@ -378,7 +379,8 @@ llvm::Constant *LangPlugin::createStructLiteralConstant(StructLiteralExp *e)
     clang::APValue Value;
     expmap.toAPValue(Value, e);
 
-    return CGM->EmitConstantValue(Value, Context.getRecordType(RD), /*CGF=*/nullptr);
+    return clangCG::ConstantEmitter(*CGM).emitAbstract(clang::SourceLocation(), Value,
+                                                       Context.getRecordType(RD));
 }
 
 // This is a HACK for ctor call initializers
@@ -490,8 +492,8 @@ LLValue* LangPlugin::toIndexAggregate(LLValue* src, ::AggregateDeclaration* ad,
     updateCGFInsertPoint();
 
     clangCG::Address address(src, clang::CharUnits::One());
-    auto LV = clangCG::LValue::MakeAddr(address, Context.getRecordType(Record),
-                        Context, clangCG::LValueBaseInfo(clangCG::AlignmentSource::Decl));
+    auto LV = CGF()->MakeAddrLValue(address, Context.getRecordType(Record),
+                                    clangCG::AlignmentSource::Type);
 
     // NOTE: vd might be a field from an anon struct or union injected to parent->fields during semantic
     // LDC differs from Clang in that it also injects the fields to the LLVM type, and access to indirect fields
@@ -697,7 +699,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
             auto PointeeTy = cast<clang::ReferenceType>(ArgTy)->getPointeeType();
             auto Tmp = CGF()->CreateMemTemp(PointeeTy, "ref.tmp");
             clangCG::LValue RefTempDst = CGF()->MakeAddrLValue(Tmp, PointeeTy,
-                                clangCG::LValueBaseInfo(clangCG::AlignmentSource::Decl, false));
+                                                    clangCG::AlignmentSource::Type);
 
             auto RVal = clangCG::RValue::get(DtoRVal(argval));
             CGF()->EmitStoreThroughLValue(RVal, RefTempDst, true);
@@ -725,8 +727,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 //                                 L.getAlignment());
 //             Args.add(clangCG::RValue::getAggregate(tmp), type);
             clangCG::Address addr(val, CGF()->getNaturalTypeAlignment(ArgTy));
-            Args.add(clangCG::RValue::getAggregate(addr),
-                     ArgTy, /*NeedsCopy*/ false);
+            Args.add(clangCG::RValue::getAggregate(addr), ArgTy);
         }
         else
             Args.add(clangCG::RValue::get(val), ArgTy);
