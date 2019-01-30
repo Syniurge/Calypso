@@ -803,7 +803,7 @@ DValue *DtoPaintType(Loc &loc, DValue *val, Type *to) {
     IF_LOG Logger::cout() << "dg: " << *aggr << '\n';
     return new DImValue(to, aggr);
   }
-  if (from->ty == Tpointer || from->ty == Tclass || from->ty == Taarray) {
+  if (from->ty == Tpointer || isClassReference(from) || from->ty == Taarray) { // CALYPSO
     Type *b = to->toBasetype();
     assert(b->ty == Tpointer || b->ty == Tclass || b->ty == Taarray);
     LLValue *ptr = DtoBitCast(DtoRVal(val), DtoType(b));
