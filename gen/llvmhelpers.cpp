@@ -815,6 +815,8 @@ DValue *DtoPaintType(Loc &loc, DValue *val, Type *to) {
     return new DLValue(to, ptr);
   }
   assert(DtoType(from) == DtoType(to));
+  if (val->isLVal()) // CALYPSO (temporary?) NOTE: in copy_ctor.d's v1.assignIndirect(v2), v2 gets casted to the base struct and a the copy ctor is called on a temporary, but the cast expression which already has .to and .type set, then gets its .type altered during the arrayExpressionSemantic call, because the copy ctor takes a non-const argument while assignIndirect takes a const one, which brings us here in DtoPaintType with a lvalue. We can fix this by changing functionParameters() to do the copy ctor call before the cast, by treating CastExp as special case in implicitCastTo(), or by handing lvalues differently here.
+      return new DLValue(to, DtoLVal(val));
   return new DImValue(to, DtoRVal(val));
 }
 
