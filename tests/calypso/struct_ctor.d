@@ -1,4 +1,4 @@
-// RUN: %ldc -cpp-cachedir=%t.cache -of %t %s
+// RUN: %ldc -cpp-args -std=c++11 -cpp-cachedir=%t.cache -of %t %s
 // RUN: %t
 
 pragma (cppmap, "struct_ctor.h");
