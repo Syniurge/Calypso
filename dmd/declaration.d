@@ -262,7 +262,7 @@ enum STC : long
     move                = (1L << 53),   // for C++ rvalue references // CALYPSO
 
     TYPECTOR = (STC.const_ | STC.immutable_ | STC.shared_ | STC.wild),
-    FUNCATTR = (STC.ref_ | STC.nothrow_ | STC.nogc | STC.pure_ | STC.property | STC.safe | STC.trusted | STC.system | STC.implicit), // CALYPSO
+    FUNCATTR = (STC.ref_ | STC.nothrow_ | STC.nogc | STC.pure_ | STC.property | STC.safe | STC.trusted | STC.system),
 }
 
 enum STCStorageClass =
