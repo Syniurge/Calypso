@@ -876,6 +876,15 @@ bool ExprMapper::toAPValue(clang::APValue& Result, Expression* e)
 
     switch (e->op)
     {
+        case TOKnull:
+        {
+            auto PtrType = tymap.toType(e->loc, e->type, nullptr);
+            auto TargetVal = Context.getTargetNullPointerValue(PtrType);
+            Result = APValue((clang::Expr *)nullptr, clang::CharUnits::fromQuantity(TargetVal),
+                             APValue::NoLValuePath(), /*IsNullPtr = */ true);
+
+            return true;
+        }
         case TOKint64:
         {
             auto exp = static_cast<IntegerExp*>(e);
