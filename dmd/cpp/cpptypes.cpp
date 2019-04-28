@@ -1143,6 +1143,19 @@ static TypeQualified *fromInjectedClassName(Loc loc)
     return new_TypeTypeof(loc, new_ThisExp(loc));
 }
 
+Dsymbol* TypeMapper::createDsymForDecl(const clang::NamedDecl* D)
+{
+    return dsym;
+}
+
+Dsymbol* TypeMapper::dsymForDecl(const clang::NamedDecl* D)
+{
+    if (D->dsym)
+        return D->dsym;
+
+    return createDsymForDecl(D);
+}
+
 TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)

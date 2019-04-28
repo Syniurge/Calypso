@@ -150,12 +150,17 @@ public:
 
     // DMD -> Clang
     clang::QualType toType(Loc loc, Type* t, Scope *sc, StorageClass stc = STCundefined);
-    
+
     cpp::Import *AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake = false);
 
 protected:
     cpp::Module *mod;
     bool isGlobal;
+
+    DSymbol* createDsymForDecl(const clang::NamedDecl* D);
+
+    // Returns D->dsym or create it
+    Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 
     struct ImplicitImport
     {
