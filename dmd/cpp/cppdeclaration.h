@@ -8,6 +8,7 @@
 #endif /* __DMC__ */
 
 #include "root/root.h"
+#include "arraytypes.h"
 #include "dsymbol.h"
 #include "enum.h"
 #include "cpp/calypso.h"
@@ -171,16 +172,16 @@ bool isMapped(const clang::Decl *D);
 class DeclMapper : public TypeMapper
 {
 public:
-    DeclMapper(Module *mod, bool isGlobal = false) : TypeMapper(mod, isGlobal) {}
+    Dsymbols importDecls, pendingTempinsts;
+
+    DeclMapper(::Module *mod, bool isGlobal = false, bool addImplicitDecls = true) : TypeMapper(mod, isGlobal, addImplicitDecls) {}
 
     inline Prot::Kind toProt(clang::AccessSpecifier AS);
 
     // Declarations
-    Dsymbols *VisitDeclContext(const clang::DeclContext *DC);
-
     Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
 
-    Dsymbols *VisitValueDecl(const clang::ValueDecl *D);
+    Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
     Dsymbols *VisitTypedefNameDecl(const clang::TypedefNameDecl *D);
     Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
@@ -189,14 +190,18 @@ public:
     Dsymbols *VisitVarTemplateSpecializationDecl(const clang::VarTemplateSpecializationDecl *D);
     Dsymbols *VisitEnumDecl(const clang::EnumDecl *D);
 
-    Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D, unsigned int flags = 0); // entry point when mapping instances during semantic()
+    // Entry points when mapping instances during semantic()
+    Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D);
     ::FuncDeclaration *VisitInstancedFunctionTemplate(const clang::FunctionDecl *D);
     ::VarDeclaration *VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl *D);
+
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
-                                                                    const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
+                                              const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
     Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
 
+    template<typename SpecTy>
+    Dsymbols* CreateTemplateInstanceFor(Loc loc, const SpecTy* D, Dsymbols* decldefs);
     template<typename PartialTy, typename SpecTy>
     Dsymbols *VisitTemplateSpecializationDecl(const SpecTy* D);
 
@@ -208,6 +213,7 @@ public:
         MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
         NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 5,
+        CreateTemplateInstance = 1 << 6,
     };
 
 
@@ -221,8 +227,8 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
     friend class NestedDeclMapper;
 
-    static DeclMapper mapper;
-    static ExprMapper expmap;
+    DeclMapper mapper;
+    ExprMapper expmap;
 
     Loc loc;
     Scope *sc = nullptr;
@@ -232,10 +238,7 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:
-    DeclReferencer()
-    {
-        mapper.addImplicitDecls = false;
-    }
+    DeclReferencer(::Module* minst);
 
     void Traverse(Loc loc, Scope *sc, clang::Stmt *S);
 
@@ -266,6 +269,7 @@ const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only differenc
 bool isPolymorphic(const clang::RecordDecl *D);
 void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
 void MarkFunctionReferenced(::FuncDeclaration* fd);
+bool isTemplateInstantiation(const clang::Decl *D);
 
 inline bool& getIsUsed(::FuncDeclaration* fd)
 {

@@ -359,8 +359,8 @@ Type *TypeMapper::fromType(const clang::QualType T, Loc loc)
     return FromType(*this, loc)(T);
 }
 
-TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix)
-    : tm(tm), loc(loc), prefix(prefix)
+TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix, bool useCachedSyms)
+    : tm(tm), loc(loc), prefix(prefix), useCachedSyms(useCachedSyms)
 {
 }
 
@@ -395,9 +395,6 @@ Type *TypeMapper::FromType::fromType(const clang::QualType T)
 
 Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 {
-    if (T->isDependentType())
-        isDependent = true;
-
     if (auto BT = dyn_cast<clang::BuiltinType>(T))
         return fromTypeBuiltin(BT);
     else if (auto FT = dyn_cast<clang::FunctionProtoType>(T))
@@ -966,7 +963,7 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
 
         if (LeftMostCheck(D))  // we'll need a fully qualified type
         {
-            tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to guarantee against collisions
+            tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to protect against collisions
 
             // build a fake import
             if (auto im = tm.AddImplicitImportForDecl(from.loc, TopDecl, true))
@@ -1011,12 +1008,9 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
 
     if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
     {
-        if (!tm.isInjectedScopeName(D))
-        {
-            Spec = const_cast<clang::ClassTemplateSpecializationDecl*>(ClassSpec);
-            SpecTemp = ClassSpec->getSpecializedTemplate();
-            TempArgs = ClassSpec->getTemplateArgs().asArray();
-        }
+        Spec = const_cast<clang::ClassTemplateSpecializationDecl*>(ClassSpec);
+        SpecTemp = ClassSpec->getSpecializedTemplate();
+        TempArgs = ClassSpec->getTemplateArgs().asArray();
     }
     else if (auto Func = dyn_cast<clang::FunctionDecl>(D)) // functions will always be at the top
     {
@@ -1054,7 +1048,6 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
 const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
 {
     clang::DeclarationName Name = D->getDeclName();
-    decltype(CXXScope) ScopeStack(CXXScope);
 
     if (auto Tag = llvm::dyn_cast<clang::TagDecl>(D))
         if (auto Typedef = Tag->getTypedefNameForAnonDecl())
@@ -1064,59 +1057,10 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
             // TODO: check that this doesn't happen when called from TypeMapper would be more solid
         return nullptr;
 
-    while (!ScopeStack.empty())
-    {
-        auto ScopeDecl = ScopeStack.top();
-        ScopeStack.pop();
-        ScopeChecker ScopeDeclCheck(ScopeDecl);
-
-        assert(ScopeDecl->getCanonicalDecl() != D->getCanonicalDecl()); // should already be handled
-
-        const clang::Decl *DI = D, *LastNamedDI = D;
-        while(!isa<clang::TranslationUnitDecl>(DI))
-        {
-            if (ScopeDeclCheck.isDirectParent(DI))
-                return LastNamedDI;
-
-            DI = cast<clang::Decl>(
-                    getDeclContextNonLinkSpec(DI));
-
-            if (auto Named = dyn_cast<clang::NamedDecl>(DI))
-                if (!Named->getDeclName().isEmpty())
-                    LastNamedDI = DI;
-        }
-
-//         bool fullyQualify = false;
-//
-//         auto ScopeDC = cast<clang::DeclContext>(ScopeDecl);
-//         auto LookupResult = ScopeDC->lookup(Name);
-//         for (auto Decl: LookupResult)
-//         {
-//             if (Decl->isImplicit())
-//                 continue;
-//
-//             fullyQualify = true;
-//             break;
-//         }
-//
-//         if (auto Named = dyn_cast<clang::NamedDecl>(ScopeDecl))
-//             if (clang::DeclarationName::compare(Named->getDeclName(), Name) == 0)
-//                 fullyQualify = true;
-//
-        // NOTE: this isn't enough to check for collisions, imported symbols might collide too
-        // and implicit imports aren't known until the end of the mapping.
-//
-//         if (fullyQualify)
-//         {
-//             Root = D->getTranslationUnitDecl(); // to avoid name collisions, we fully qualify the type
-//             goto LrootDone;
-//         }
-    }
-
     auto DK = GetImplicitImportKeyForDecl(D);
     auto ModDC = GetNonNestedContext(D);
 
-    if (mod && DK == mod->rootKey)
+    if (mod && isCPP(mod) && DK == static_cast<cpp::Module*>(mod)->rootKey)
     {
         if (isa<clang::TagDecl>(ModDC))
             return ModDC;
@@ -1138,28 +1082,45 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
     return D->getTranslationUnitDecl();
 }
 
-static TypeQualified *fromInjectedClassName(Loc loc)
+Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
 {
-    return new_TypeTypeof(loc, new_ThisExp(loc));
+    D = cast<clang::NamedDecl>(D->getCanonicalDecl());
+
+    if (D->d)
+        return D->d->sym;
+
+    ::Module* minst;
+    if (!isTemplateInstantiation(D))
+    {
+        auto Key = GetImplicitImportKeyForDecl(D);
+        minst = cpp::Module::allCppModules[Key];
+        if (!minst) {
+            auto im = AddImplicitImportForDecl(loc, D, !isCPP(mod)); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
+            minst = Module::create(Key, im->packages, im->id);
+            minst->importedFrom = mod;
+        }
+    }
+    else
+        minst = this->mod;
+
+    if (isCPP(minst))
+        static_cast<cpp::Module*>(minst)->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+    else if (minst)
+        DeclMapper(minst, false, false).VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+
+    return D->d ? D->d->sym : nullptr;
 }
 
 TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    if (tm.isInjectedClassName(D))
-        return fromInjectedClassName(loc); // in the following :
-                    //      class time_duration { public: uint seconds() { return 60; } }
-                    //      class seconds : time_duration { public: void foo(seconds *b) {} }
-                    // searching "seconds" in the derived class will return the function.
-                    // seconds needs to be replaced by « typeof(this) ».
-
-    if (tm.isInjectedScopeName(D))
-        return new_TypeIdentifier(fromLoc(D->getLocation()), getIdentifier(D));
-
-    if (!ArgBegin && (options & TQ_PreferCachedSym) && D->dsym) {
-        assert(D->dsym->getType());
-        return (TypeQualified*) D->dsym->getType(); // FIXME
+    if (useCachedSyms) {
+        auto dsym = tm.dsymForDecl(loc, D);
+        if (!ArgBegin && dsym) {
+            assert(dsym->getType());
+            return (TypeQualified*) dsym->getType(); // FIXME
+        }
     }
 
     auto Root = tm.GetRootForTypeQualified(D);
@@ -1181,12 +1142,12 @@ Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 
 Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 {
-    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
+    return typeQualifiedFor(T->getDecl());
 }
 
 Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
-    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
+    return typeQualifiedFor(T->getDecl());
 }
 
 // Rarely used feature of C++, see [expr.mptr.oper]
@@ -1233,169 +1194,10 @@ Type *TypeMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
     return FromType(tm, loc, tqual)(T->getNamedType());
 }
 
-namespace
-{
-// Checks (roughly) if a template specialization type will lead to recursive instantiation of a class template
-// See for example boost/mpl/aux_/integral_wrapper.hpp's "next" and "prev" constants. In C++ they're instantiated lazily
-// so it's not a problem, in D they make DMD instantiate the template endlessly.
-// The workaround is to discard the decls and cross fingers that they're aren't required elsewhere.
-
-// FIXME: the proper fix would be to be as lazy as C++, both during semantic phases and codegen.
-// This means lazier than D, which could go through semantic phases lazily for imported modules but cannot be lazy for
-// for modules being codegen'd.
-
-typedef unsigned RCResult;
-const RCResult RC_Not = 0;
-const RCResult RC_Literal = 1 << 0;
-const RCResult RC_Dependent = 1 << 1;
-const RCResult RC_RecursiveMaybe = RC_Literal | RC_Dependent;
-
-class RecursiveInstChecker : public clang::ConstStmtVisitor<RecursiveInstChecker, RCResult>
-{
-public:
-    const clang::CXXRecordDecl *InjectedName;
-    RecursiveInstChecker(const clang::CXXRecordDecl *InjectedName)
-            : InjectedName(InjectedName) {}
-
-    RCResult VisitStmt(const clang::Stmt *) { return RC_Not; }
-
-#define FALLTHROUGH(CLASS, SUBEXPR) \
-    RCResult Visit##CLASS(const clang::CLASS *E) { return Visit(E->SUBEXPR()); }
-
-    FALLTHROUGH(CXXStaticCastExpr, getSubExpr)
-    FALLTHROUGH(ParenExpr, getSubExpr)
-    FALLTHROUGH(CXXDefaultArgExpr, getExpr)
-    FALLTHROUGH(ImplicitCastExpr, getSubExpr)
-#undef FALLTHROUGH
-
-    RCResult VisitSubstNonTypeTemplateParmExpr(const clang::SubstNonTypeTemplateParmExpr *E) {
-        return RC_Dependent;
-    }
-
-    RCResult VisitDeclRefExpr(const clang::DeclRefExpr *E) {
-        auto Var = dyn_cast<clang::VarDecl>(E->getDecl());
-        if (Var && cast<clang::Decl>(Var->getDeclContext())->getCanonicalDecl()
-                            == InjectedName->getCanonicalDecl())
-            if (auto Init = Var->getAnyInitializer())
-                return Visit(Init);
-
-        return RC_Not;
-    }
-
-    RCResult VisitIntegerLiteral(const clang::IntegerLiteral *E) {
-        return RC_Literal;
-    }
-
-    RCResult VisitUnaryOperator(const clang::UnaryOperator *E) {
-        switch (E->getOpcode())
-        {
-            case clang::UO_PostInc:
-            case clang::UO_PostDec:
-            case clang::UO_PreInc:
-            case clang::UO_PreDec:
-                if (Visit(E->getSubExpr()) & RC_Dependent)
-                    return RC_RecursiveMaybe;
-                break;
-            case clang::UO_Plus:
-            case clang::UO_Minus:
-                return Visit(E->getSubExpr());
-            default:
-                break;
-        }
-        return RC_Not;
-    }
-
-    RCResult VisitBinaryOperator(const clang::BinaryOperator *E) {
-        RCResult Result = RC_Not;
-
-        switch (E->getOpcode())
-        {
-            case clang::BO_Add:
-            case clang::BO_Sub:
-            case clang::BO_Mul:
-            case clang::BO_Shl:
-            case clang::BO_Shr:
-                Result = Visit(E->getLHS()) | Visit(E->getRHS());
-                break;
-            default:
-                break;
-        }
-        return Result;
-    }
-};
-
-}
-
-bool TypeMapper::isRecursivelyInstantiated(const clang::TemplateName Name,
-                const clang::TemplateArgument *ArgBegin,
-                const clang::TemplateArgument *ArgEnd)
-{
-    auto Temp = llvm::dyn_cast_or_null<clang::ClassTemplateDecl>(Name.getAsTemplateDecl());
-    if (!Temp)
-        return false;
-    auto Pattern = Temp->getTemplatedDecl();
-
-    const clang::CXXRecordDecl *InjectedName = nullptr;
-    decltype(CXXScope) ScopeStack(CXXScope);
-    while (!ScopeStack.empty())
-    {
-        auto ScopeDecl = ScopeStack.top();
-        ScopeStack.pop();
-
-        auto ScopePattern = ScopeDecl;
-        if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(ScopePattern))
-            ScopePattern = Spec->getSpecializedTemplate()->getTemplatedDecl();
-
-        if (Pattern->getCanonicalDecl() ==
-                ScopePattern->getCanonicalDecl())
-        {
-            InjectedName = dyn_cast<clang::CXXRecordDecl>(ScopeDecl);
-            break;
-        }
-    }
-
-    if (InjectedName)
-    {
-        int packRecurse = 0;
-
-        for (auto Arg = ArgBegin; Arg != ArgEnd; Arg++)
-        {
-            switch (Arg->getKind())
-            {
-                case clang::TemplateArgument::Expression:
-                {
-                    auto E = Arg->getAsExpr();
-
-                    if (RecursiveInstChecker(InjectedName).Visit(E) == RC_RecursiveMaybe)
-                        return true;
-
-                    auto SNTP = dyn_cast<clang::SubstNonTypeTemplateParmExpr>(E);
-                    if (SNTP && SNTP->getParameter() && SNTP->getParameter()->isParameterPack())
-                        packRecurse |= 2;
-                    else
-                        packRecurse |= 1;
-                }
-                case clang::TemplateArgument::Type:
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if (packRecurse == 3)
-            return true;
-    }
-
-    return false;
-}
-
 TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName Name,
                 const clang::TemplateArgument *ArgBegin,
                 const clang::TemplateArgument *ArgEnd)
 {
-    if (ArgBegin && tm.isRecursivelyInstantiated(Name, ArgBegin, ArgEnd))
-        return nullptr;
-
     Identifier *tempIdent;
 
     switch (Name.getKind())
@@ -1451,23 +1253,7 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
 
 Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::TemplateSpecializationType* T)
 {
-    auto tqual = fromTemplateName(T->getTemplateName(),
-                            T->begin(), T->end());
-
-    if (!tqual)
-        return nullptr; // discard types leading to recursive template expansion
-
-    if (T->isTypeAlias())
-        ;
-    else if (T->isSugared())
-    {
-        if (auto RT = T->getAs<clang::RecordType>()) {
-            if (tm.isInjectedClassName(RT->getDecl()))
-                return fromInjectedClassName(loc);
-        }
-    }
-
-    return tqual;
+    return fromTemplateName(T->getTemplateName(), T->begin(), T->end());
 }
 
 Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
@@ -1543,44 +1329,9 @@ unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
     return 0;
 }
 
-const clang::TemplateTypeParmDecl *TypeMapper::FromType::getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T)
+Type* TypeMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypeParmType* T)
 {
-    auto ParmDecl = T->getDecl();
-    if (!ParmDecl) {
-        auto Depth = T->getDepth();
-        if (Depth < tm.TempParamScope.size())
-            return cast<clang::TemplateTypeParmDecl>(tm.TempParamScope[Depth]->getParam(T->getIndex()));
-        else
-            return nullptr; // may happen for partial template specs arguments (meant for the master template params)
-    }
-
-    auto ParmCtx = cast<clang::Decl>(ParmDecl->getDeclContext())->getCanonicalDecl();
-
-    for (auto I = tm.TempParamScope.rbegin(), E = tm.TempParamScope.rend();
-                I != E; I++)
-    {
-        for (auto& ScopeParam: (*I)->asArray())
-        {
-            auto ScopeParamCtx = cast<clang::Decl>(ScopeParam->getDeclContext())->getCanonicalDecl();
-            if (ScopeChecker(ParmCtx, true)(ScopeParamCtx) &&
-                        getTemplateParmIndex(ParmDecl) == getTemplateParmIndex(ScopeParam))
-                return cast<clang::TemplateTypeParmDecl>(ScopeParam);
-        }
-    }
-
-    return nullptr;
-}
-
-Type* TypeMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypeParmType* T,
-                        const clang::TemplateTypeParmDecl *OrigDecl)
-{
-    if (!OrigDecl)
-        OrigDecl = getOriginalTempTypeParmDecl(T);
-
-    if(!OrigDecl)
-        assert(T->isDependentType());
-
-    auto D = OrigDecl ? OrigDecl : T->getDecl();
+    auto D = T->getDecl();
     auto ident = tm.getIdentifierForTemplateTypeParm(D, T);
     return new_TypeIdentifier(loc, ident);
 }
@@ -1591,8 +1342,7 @@ Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemp
     if (!Replacement.isNull())
         return fromType(Replacement);
 
-    auto OrigParm = getOriginalTempTypeParmDecl(T->getReplacedParameter());
-    return fromTypeTemplateTypeParm(T->getReplacedParameter(), OrigParm);
+    return fromTypeTemplateTypeParm(T->getReplacedParameter());
 }
 
 Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T)
@@ -1632,7 +1382,7 @@ TypeQualified *TypeMapper::FromType::fromNestedNameSpecifierImpl(const clang::Ne
         case clang::NestedNameSpecifier::TypeSpec:
         case clang::NestedNameSpecifier::TypeSpecWithTemplate:
         {
-            auto t = fromTypeUnqual(NNS->getAsType());
+            auto t = FromType(tm, loc, nullptr, false).fromTypeUnqual(NNS->getAsType());
             if (!t)
                 return nullptr;
             assert(t->ty == Tinstance || t->ty == Tident || t->ty == Ttypeof);
@@ -1729,37 +1479,6 @@ Type* TypeMapper::FromType::fromTypeDecltype(const clang::DecltypeType* T)
 Type* TypeMapper::FromType::fromTypePackExpansion(const clang::PackExpansionType* T)
 {
     return fromType(T->getPattern());
-}
-
-// This is to check whether template arguments have to be omitted
-// There may be a more elegant way but for now that'll do
-bool TypeMapper::isInjectedClassName(const clang::Decl *D)
-{
-    if(!CXXScope.empty())
-    {
-        auto ScopeDecl = CXXScope.top()->getCanonicalDecl();
-
-        if (ScopeDecl == D->getCanonicalDecl())
-            return true;
-    }
-
-    return false;
-}
-
-bool TypeMapper::isInjectedScopeName(const clang::Decl *D)
-{
-    decltype(TypeMapper::CXXScope) ScopeStack(CXXScope);
-    while(!ScopeStack.empty())
-    {
-        auto ScopeDecl = ScopeStack.top()->getCanonicalDecl();
-        
-        if (ScopeDecl == D->getCanonicalDecl())
-            return true;
-
-        ScopeStack.pop();
-    }
-
-    return false;
 }
 
 TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
@@ -1898,20 +1617,21 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
 #endif
 }
 
-// In D if a class is inheriting from another module's class, then its own module has to import the base class' module.
-// So we need to populate the beginning of our virtual module with imports for derived classes.
+// Build and possibly add imports for symbols referenced in the module being mapped
 cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake)
 {
     auto Key = GetImplicitImportKeyForDecl(D);
 
-    if (mod && Key == mod->rootKey)
+    assert(fake || !mod || isCPP(mod));
+
+    if (mod && isCPP(mod) && Key == static_cast<cpp::Module*>(mod)->rootKey)
         return nullptr; // do not import self
 
     cpp::Import *im = implicitImports[Key].im;
     if (!im)
     {
         Identifier *importAliasid = nullptr;
-        if (mod && isa<clang::TagDecl>(Key.first) &&
+        if (mod && isCPP(mod) && isa<clang::TagDecl>(Key.first) &&
                 getDeclContextNamedOrTU(Key.first)->isTranslationUnit())
         {
             // Special check for C tags which may have the same name as functions
@@ -1925,7 +1645,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
             {
                 if (Match->getCanonicalDecl() == Key.first)
                     continue;
-                if (GetImplicitImportKeyForDecl(Match) != mod->rootKey)
+                if (GetImplicitImportKeyForDecl(Match) != static_cast<cpp::Module*>(mod)->rootKey)
                     continue; // the matching decl is part of another module, no conflict
 
                 { auto importIdent = getIdentifier(TD);
@@ -1948,7 +1668,8 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 
     if (!fake && !implicitImports[Key].added) {
         if (addImplicitDecls) {
-            mod->members->shift(im);
+            assert(isCPP(mod));
+            static_cast<cpp::Module*>(mod)->mapper->importDecls.push(im);
             implicitImports[Key].added = true;
         } else if (scSemImplicitImports) {
             auto dst = Package::resolve(im->packages, nullptr, &im->pkg);
@@ -2145,62 +1866,6 @@ cpp::Import *TypeMapper::BuildImplicitImport(Loc loc, const clang::Decl *D, cons
     return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
 }
 
-void TypeMapper::pushTempParamList(const clang::Decl *D)
-{
-    const clang::TemplateParameterList *TPL = nullptr;
-
-    if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
-        if (auto ClassTemp = RD->getDescribedClassTemplate())
-            D = ClassTemp;
-
-    if (auto ClassTemp = dyn_cast<clang::ClassTemplateDecl>(D))
-        TPL = getDefinition(ClassTemp)->getTemplateParameters();
-    else if (auto Partial = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(D))
-        TPL = cast<clang::ClassTemplatePartialSpecializationDecl>(
-                        getDefinition(Partial))->getTemplateParameters();
-    else if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
-        TPL = getDefinition(FuncTemp)->getTemplateParameters();
-
-    if (TPL)
-    {
-        TempParamScope.push_back(TPL);
-        return;
-    }
-
-    //if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
-    //{
-    //    if (!ClassSpec->isExplicitSpecialization())
-    //        pushTempParamList(getSpecializedDeclOrExplicit(ClassSpec));
-    //}
-    //else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
-    //{
-    //    if (auto PrimTemp = Func->getPrimaryTemplate())
-    //        pushTempParamList(PrimTemp);
-    //}
-}
-
-void TypeMapper::rebuildScope(const clang::Decl *RightMost)
-{
-    assert(CXXScope.empty() && TempParamScope.empty());
-
-    // Recreate the scope, esp. important for nested template instances
-    std::function<void(const clang::Decl *)> build =
-                    [&] (const clang::Decl *D)
-    {
-        if (isa<clang::TranslationUnitDecl>(D))
-            return;
-
-        build(cast<clang::Decl>(D->getDeclContext()));
-
-        pushTempParamList(D);
-
-        if (isa<clang::CXXRecordDecl>(D) || isa<clang::FunctionDecl>(D))
-            CXXScope.push(D);
-    };
-
-    build(RightMost);
-}
-
 /***** DMD -> Clang types *****/
 
 clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc)
@@ -2300,8 +1965,8 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 
 /***** *****/
 
-TypeMapper::TypeMapper(cpp::Module* mod, bool isGlobal)
-    : mod(mod), isGlobal(isGlobal)
+TypeMapper::TypeMapper(::Module* mod, bool isGlobal, bool addImplicitDecls)
+    : mod(mod), isGlobal(isGlobal), addImplicitDecls(addImplicitDecls)
 {
 }
 
@@ -2316,18 +1981,6 @@ TypeMapper::~TypeMapper()
             if (im->packages) delete im->packages;
             delete im;
         }
-}
-
-TypeMapper::TempParamListRAII::TempParamListRAII(TypeMapper *tm, 
-                const clang::TemplateParameterList * ParamList)
-    : tm(tm)
-{
-    tm->TempParamScope.push_back(ParamList);
-}
-
-TypeMapper::TempParamListRAII::~TempParamListRAII()
-{
-    tm->TempParamScope.pop_back();
 }
 
 // NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.

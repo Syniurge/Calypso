@@ -2255,7 +2255,7 @@ else
      * see if there already exists an instance.
      * If so, return that existing instance.
      */
-    extern (D) final TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs) // CALYPSO (missing final)
+    final TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs) // CALYPSO (missing final, made extern C++)
     {
         //printf("findExistingInstance(%p)\n", tithis);
         tithis.fargs = fargs;
@@ -2270,7 +2270,7 @@ else
      * Add instance ti to TemplateDeclaration's table of instances.
      * Return a handle we can use to later remove it if it fails instantiation.
      */
-    extern (D) final TemplateInstance addInstance(TemplateInstance ti) // CALYPSO (missing final)
+    final TemplateInstance addInstance(TemplateInstance ti) // CALYPSO (missing final, made extern C++)
     {
         //printf("addInstance() %p %p\n", instances, ti);
         auto tibox = TemplateInstanceBox(ti);
@@ -6128,7 +6128,8 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         this.tempdecl = td;
         this.semantictiargsdone = true;
         this.havetempdecl = true;
-        assert(tempdecl._scope);
+        if (!td.langPlugin()) // CALYPSO there's no reason to check for _scope here, at least for cpp::TemplateDeclaration
+            assert(tempdecl._scope);
     }
 
     extern (D) static Objects* arraySyntaxCopy(Objects* objs)
@@ -7483,14 +7484,14 @@ extern (C++) class TemplateInstance : ScopeDsymbol
     /*****************************************
      * Append 'this' to the specific module members[]
      */
-    extern (D) final Dsymbols* appendToModuleMember()
+    extern (C++) final Dsymbols* appendToModuleMember() // CALYPSO
     {
         Module mi = minst; // instantiated . inserted module
 
         if (global.params.useUnitTests || global.params.debuglevel)
         {
             // Turn all non-root instances to speculative
-            if (mi && !mi.isRoot())
+            if (mi && !mi.isCodegen()) // CALYPSO
                 mi = null;
         }
 
@@ -7498,7 +7499,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         //    toPrettyChars(),
         //    enclosing ? enclosing.toPrettyChars() : null,
         //    mi ? mi.toPrettyChars() : null);
-        if (!mi || mi.isRoot())
+        if (!mi || mi.isCodegen()) // CALYPSO
         {
             /* If the instantiated module is speculative or root, insert to the
              * member of a root module. Then:
@@ -7520,9 +7521,9 @@ extern (C++) class TemplateInstance : ScopeDsymbol
             // insert target is made stable by using the module
             // where tempdecl is declared.
             mi = (enc ? enc : tempdecl).getModule();
-            if (!mi.isRoot())
+            if (!mi.isCodegen()) // CALYPSO
                 mi = mi.importedFrom;
-            assert(mi.isRoot());
+            assert(mi.isCodegen()); // CALYPSO
         }
         else
         {
@@ -7552,9 +7553,9 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         Dsymbols* a = mi.members;
         a.push(this);
         memberOf = mi;
-        if (mi.semanticRun >= PASS.semantic2done && mi.isRoot())
+        if (mi.semanticRun >= PASS.semantic2done && mi.isCodegen())
             Module.addDeferredSemantic2(this);
-        if (mi.semanticRun >= PASS.semantic3done && mi.isRoot())
+        if (mi.semanticRun >= PASS.semantic3done && mi.isCodegen())
             Module.addDeferredSemantic3(this);
         return a;
     }

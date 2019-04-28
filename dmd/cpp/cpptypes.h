@@ -57,30 +57,32 @@ enum TypeQualifiedBuilderOpts
     TQ_None = 0,
     TQ_OverOpSkipSpecArg = 1 << 0, // e.g skip "-" in opBinary!"-"
     TQ_OverOpFullIdent = 1 << 1, // prefer the non-templated function over the forwarding template
-    TQ_PreferCachedSym = 1 << 2 // FIXME: temporary flag
 };
 
 class TypeMapper
 {
 public:
-    TypeMapper(cpp::Module *mod = nullptr, bool isGlobal = false);  // mod can be null if no implicit import is needed
+    ::Module *mod;
+    bool isGlobal;
+    bool addImplicitDecls;
+
+    TypeMapper(::Module *mod = nullptr, bool isGlobal = false, bool addImplicitDecls = true);  // mod can be null if no implicit import is needed
     virtual ~TypeMapper();
 
-    bool addImplicitDecls = true;
     bool desugar = true;
 
     Scope* scSemImplicitImports = nullptr; // if non-null AddImplicitImportForDecl will semantic the imports (e.g for DeclReferencer)
 
     unsigned volatileNumber = 0; // number of volatile qualifiers found, needs to be reset when mapping functions
 
-    std::stack<const clang::Decl *> CXXScope;
-    void rebuildScope(const clang::Decl *RightMost); // rebuild both CXXScope and TempParamScope
-
     // Clang -> DMD
     Type *fromType(const clang::QualType T, Loc loc);
     template<bool wantTuple = false>
      Objects *fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                 const clang::TemplateParameterList *ParamList = nullptr);
+
+    // Returns D->dsym or create it
+    Dsymbol* dsymForDecl(Loc loc, const clang::NamedDecl* D);
 
     class FromType // type-specific state
     {
@@ -89,10 +91,10 @@ public:
         Loc loc;
         TypeQualified *prefix; // special case for NNS qualified types
 
-        bool isDependent = false; // if dependent type do not assign TemplateInstance.Inst (causes issues with template default arguments)
+        bool useCachedSyms; // disabled e.g for NNS
         const clang::Expr *TypeOfExpr = nullptr;
 
-        FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix = nullptr);
+        FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix = nullptr, bool useCachedSyms = true);
 
         Type *operator()(const clang::QualType T);
         Type *fromTypeUnqual(const clang::Type *T);
@@ -107,7 +109,7 @@ public:
         Type *fromTypeElaborated(const clang::ElaboratedType *T);
         Type *fromTypeUnaryTransform(const clang::UnaryTransformType *T);
         Type *fromTypeTemplateSpecialization(const clang::TemplateSpecializationType *T);
-        Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T, const clang::TemplateTypeParmDecl *OrigDecl = nullptr);
+        Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T);
         Type *fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType *T);
         Type *fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T);
         Type *fromTypeInjectedClassName(const clang::InjectedClassNameType *T);
@@ -140,8 +142,6 @@ public:
         template<typename _Type>
          Type *fromTypeOfExpr(const _Type *T);
 
-        const clang::TemplateTypeParmDecl *getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T);
-
     private:
         Type *fromType(const clang::QualType T);  // private alias
 
@@ -150,13 +150,10 @@ public:
 
     // DMD -> Clang
     clang::QualType toType(Loc loc, Type* t, Scope *sc, StorageClass stc = STCundefined);
-    
+
     cpp::Import *AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake = false);
 
 protected:
-    cpp::Module *mod;
-    bool isGlobal;
-
     struct ImplicitImport
     {
         cpp::Import *im = nullptr;
@@ -164,23 +161,9 @@ protected:
     };
     llvm::SmallDenseMap<Module::RootKey, ImplicitImport, 4> implicitImports;
 
-    llvm::SmallVector<const clang::TemplateParameterList*, 4> TempParamScope;
-    struct TempParamListRAII {
-        TempParamListRAII(TypeMapper *tm, const clang::TemplateParameterList* ParamList);
-        ~TempParamListRAII();
-        TypeMapper *tm;
-    };
-
-    void pushTempParamList(const clang::Decl *D);
     Identifier *getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
                                 const clang::TemplateTypeParmType *T = nullptr);
     Identifier *getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D);
-
-    bool isInjectedClassName(const clang::Decl *D); // misleading name? not InjectedClassNameType
-    bool isInjectedScopeName(const clang::Decl *D); // true if this is one of the CXXScope decls
-    bool isRecursivelyInstantiated(const clang::TemplateName Name,
-                    const clang::TemplateArgument *ArgBegin,
-                    const clang::TemplateArgument *ArgEnd);
 
     const clang::Decl *GetRootForTypeQualified(clang::NamedDecl* D);
 

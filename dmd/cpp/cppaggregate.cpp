@@ -21,6 +21,10 @@
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/StringExtras.h"
 
+using llvm::isa;
+using llvm::cast;
+using llvm::dyn_cast;
+
 FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Objects *tiargs,
         Type *tthis,
@@ -30,17 +34,10 @@ Expression *resolveProperties(Scope *sc, Expression *e);
 FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
-namespace cpp
-{
-
-using llvm::isa;
-using llvm::cast;
-using llvm::dyn_cast;
-
-template<typename AggTy> bool buildAggLayout(AggTy *ad);
-
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 {
+    using namespace cpp;
+
     auto D = dyn_cast<clang::CXXRecordDecl>(
                     const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
     if (!D)
@@ -72,10 +69,13 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
                 calypso.markSymbolReferenced(ad->dtor);
         }
 
-        DeclReferencer declReferencer;
+        auto ti = ad->isInstantiated();
+        auto minst = ti ? ti->minst : ad->getModule();
+
+        DeclReferencer declReferencer(minst);
         auto sc = ad->_scope;
         if (!sc)
-            sc = ad->getModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
+            sc = ad->getInstantiatingModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
         assert(sc);
 
         for (auto Field: D->fields())
@@ -85,6 +85,11 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         markAggregateReferenced(ad);
     }
 }
+
+namespace cpp
+{
+
+template<typename AggTy> bool buildAggLayout(AggTy *ad);
 
 void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf)
 {
@@ -142,19 +147,27 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
+
+void StructDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
+void ClassDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
+void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
 void StructDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        const_cast<clang::RecordDecl*>(RD)->dsym = this;
-        tidtor = dtor;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
-        if (isUsed)
-            MarkAggregateReferencedImpl(this);
-        v->visit(this);
-    } else if (v_ti == TI_Mangler) { // mangle
+    if (v_ti == TI_Mangler) { // mangle
         if (isAnonymous())
             calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
         else
@@ -196,9 +209,9 @@ bool StructDeclaration::buildLayout()
 void StructDeclaration::finalizeSize()
 {
     ::StructDeclaration::finalizeSize();
-    if (!ctor)
-        ctor = searchCtor();
-    if (ctor)
+
+    auto CRD = cast<clang::CXXRecordDecl>(RD);
+    if (CRD->ctor_begin() != CRD->ctor_end())
         zeroInit = 0;
 }
 
@@ -206,15 +219,7 @@ void ClassDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        const_cast<clang::CXXRecordDecl*>(RD)->dsym = this;
-        tidtor = dtor;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
-        if (isUsed)
-            MarkAggregateReferencedImpl(this);
-        v->visit(this);
-    } else if (v_ti == TI_Mangler) { // mangle
+    if (v_ti == TI_Mangler) { // mangle
         if (isAnonymous())
             calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
         else
@@ -455,7 +460,12 @@ void ClassDeclaration::finalizeVtbl()
 
         auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
         if (vi < 0)
+        {
+            md->vtblIndex = vtbl.dim;
             vtbl.push(md);
+        }
+        else
+            md->vtblIndex = vi;
     }
 }
 
@@ -500,6 +510,15 @@ bool UnionDeclaration::determineFields()
 bool UnionDeclaration::buildLayout()
 {
     return buildAggLayout(this);
+}
+
+void UnionDeclaration::finalizeSize()
+{
+    ::UnionDeclaration::finalizeSize();
+
+    auto CRD = cast<clang::CXXRecordDecl>(RD);
+    if (CRD->ctor_begin() != CRD->ctor_end())
+        zeroInit = 0;
 }
 
 AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)

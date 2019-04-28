@@ -18,6 +18,7 @@ import dmd.dmodule;
 import dmd.dscope;
 import dmd.dsymbol;
 import dmd.dsymbolsem;
+import dmd.dtemplate;
 import dmd.errors;
 import dmd.expression;
 import dmd.globals;
@@ -351,6 +352,12 @@ public:
     Import createImport(int langId,
         Loc loc, Identifiers *packages, Identifier id,
         Identifier aliasId, int isstatic);
+
+    // ===== - - - - - ===== //
+
+    void dsymbolSemantic(Dsymbol dsym, Scope *sc);
+
+    bool isForeignInstance(TemplateInstance ti);
 
     // ===== - - - - - ===== //
 

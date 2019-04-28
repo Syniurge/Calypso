@@ -85,7 +85,7 @@ enum LOG = false;
  * Note the close similarity with AggregateDeclaration::buildDtor(),
  * and the ordering changes (runs forward instead of backwards).
  */
-private FuncDeclaration buildPostBlit(StructDeclaration sd, Scope* sc)
+FuncDeclaration buildPostBlit(StructDeclaration sd, Scope* sc) // CALYPSO (made public)
 {
     //printf("StructDeclaration::buildPostBlit() %s\n", sd.toChars());
     if (sd.isUnionDeclaration())
@@ -379,8 +379,13 @@ private uint setMangleOverride(Dsymbol s, const(char)[] sym)
  */
 extern(C++) void dsymbolSemantic(Dsymbol dsym, Scope* sc)
 {
-    scope v = new DsymbolSemanticVisitor(sc);
-    dsym.accept(v);
+    if (auto lp = dsym.langPlugin())
+        lp.dsymbolSemantic(dsym, sc);
+    else
+    {
+        scope v = new DsymbolSemanticVisitor(sc);
+        dsym.accept(v);
+    }
 }
 
 structalign_t getAlignment(AlignDeclaration ad, Scope* sc)
@@ -455,7 +460,7 @@ package bool allowsContractWithoutBody(FuncDeclaration funcdecl)
     return true;
 }
 
-extern(C++) final class DsymbolSemanticVisitor : Visitor // CALYPSO (made public)
+extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final and  public)
 {
     alias visit = Visitor.visit;
 

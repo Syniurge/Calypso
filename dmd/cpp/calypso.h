@@ -54,6 +54,14 @@ namespace clangCG = clang::CodeGen;
 
 /***********************/
 
+struct DData
+{
+    Dsymbol* sym = nullptr;
+    Dsymbols* mapped_syms = nullptr; // the result of DeclMapper::VisitDecl() calls
+};
+
+/***********************/
+
 struct SpecValue
 {
     const char *op = nullptr; // for overloaded operators
@@ -137,6 +145,10 @@ public:
     ::Import *createImport(int langId,
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) override;
+
+    void dsymbolSemantic(Dsymbol *dsym, Scope *sc) override;
+
+    bool isForeignInstance(::TemplateInstance *ti) override;
 
     int getPragma(Scope* sc, PragmaDeclaration* decl) override;
     void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) override;
@@ -316,5 +328,8 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 
 // Use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
+
+void cppAddMember(Dsymbol* dsym, Scope* sc, ScopeDsymbol* sds);
+void cppSemantic(Dsymbol* dsym, Scope* sc);
 
 #endif /* DMD_CPP_CALYPSO_H */

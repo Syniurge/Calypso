@@ -58,6 +58,11 @@ TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
 
+void TemplateDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
 static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
                                 TypeMapper& tymap, ExprMapper& expmap)
@@ -324,17 +329,16 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(Inst, isForeignInstance(ti)));
+    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst, isForeignInstance(ti)));
     assert(cpptdtypes->dim == dedtypes->dim);
     memcpy(dedtypes->tdata(), cpptdtypes->tdata(), dedtypes->dim * sizeof(void*));
 
     return m;
 }
 
-Objects* TemplateDeclaration::tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance)
+Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance)
 {
-    TypeMapper tymap;
-    tymap.addImplicitDecls = false;
+    TypeMapper tymap(sc->minst, false, false);
 
     auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
                                                             : getTemplateArgs(Inst);
@@ -396,6 +400,9 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 {
     assert(isForeignInstance(ti));
     auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
+
+    if (ti->members)
+        return ti->members; // members were already set during decl mapping
 
     DeclMapper m(static_cast<cpp::Module*>(_scope->_module));
     m.addImplicitDecls = false;
@@ -514,7 +521,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     MATCH match = MATCHexact;
     MATCH matchTiargs = MATCHexact;
 
-    auto dedtypes = tdtypesFromInst(Inst, false);
+    auto dedtypes = tdtypesFromInst(sc, Inst, false);
     ti->tdtypes.dim = dedtypes->dim;
     ti->tdtypes.data = dedtypes->data;
     ti->tiargs = &ti->tdtypes;
@@ -541,6 +548,11 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
 bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
 {
     return isCPP(ti) && static_cast<TemplateInstance*>(ti)->isForeignInst;
+}
+
+bool LangPlugin::isForeignInstance(::TemplateInstance *ti)
+{
+    return TemplateDeclaration::isForeignInstance(ti);
 }
 
 clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* TempOrSpec)
@@ -611,14 +623,14 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         return ti;
     }
 
-    makeForeignInstance(ti);
+    makeForeignInstance(ti, sc);
 
     ti->semanticRun = PASSinit;
     ti->hash = 0;
     return ti;
 }
 
-void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
+void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti, Scope* sc)
 {
     ti->completeInst();
 
@@ -626,7 +638,7 @@ void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
     ti->isForeignInst = true;
     ti->havetempdecl = true;
 
-    ti->correctTiargs();
+    ti->correctTiargs(sc);
 }
 
 TemplateInstUnion TemplateDeclaration::hasExistingClangInst(::TemplateInstance* ti)
@@ -743,10 +755,6 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 void TemplateDeclaration::accept(Visitor *v)
 {
     v->visit(this);
-
-    if (v->_typeid() == TI_DsymbolSem1Visitor)
-        if (isa<clang::TemplateDecl>(TempOrSpec) || isa<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
-            const_cast<clang::NamedDecl*>(TempOrSpec)->dsym = this;
 }
 
 /***********************/
@@ -783,6 +791,11 @@ Dsymbol *TemplateInstance::syntaxCopy(Dsymbol *s)
     }
 
     return ::TemplateInstance::syntaxCopy(s);
+}
+
+void TemplateInstance::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
 }
 
 // For (deco) mangling we need to retrieve the original arguments for the primary template.
@@ -884,7 +897,7 @@ bool TemplateInstance::completeInst()
     return true;
 }
 
-void TemplateInstance::correctTiargs()
+void TemplateInstance::correctTiargs(Scope* sc)
 {
     auto InstND = Inst.dyn_cast<clang::NamedDecl*>();
 
@@ -903,6 +916,9 @@ void TemplateInstance::correctTiargs()
         tiargs = TypeMapper::FromType(tymap, loc).fromTemplateArguments(Args.begin(), Args.end(),
                         PartialTempParams);
         semantictiargsdone = false;
+
+        if (!semanticTiargs(sc))
+            assert(false && "semanticTiargs during correctTiargs() failed");
     }
 }
 

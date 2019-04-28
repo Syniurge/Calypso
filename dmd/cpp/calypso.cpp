@@ -1122,6 +1122,11 @@ int LangPlugin::doesHandleImport(const char* lang)
                 packages, id, aliasId, isstatic);
 }
 
+void LangPlugin::dsymbolSemantic(Dsymbol *dsym, Scope *sc)
+{
+    cppSemantic(dsym, sc);
+}
+
 static bool parseStringExp(Expression *e, const char *&res) {
     e = e->optimize(WANTvalue);
     if (e->op != TOKstring) {
