@@ -491,8 +491,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         const_cast<clang::RecordDecl*>(D)->dsym = a;
     }
 
-    CXXScope.push(D);
-
     if (!isDefined)
         goto Ldeclaration;
 
@@ -535,8 +533,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     }
 
 Ldeclaration:
-    CXXScope.pop();
-
     if (anon)
         decldefs->push(new AnonDeclaration(loc, anon == 2, members));
     else
@@ -889,7 +885,6 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         auto TPL = FT->getTemplateParameters();
         auto AI = D->getTemplateSpecializationArgs()->asArray().begin();
 
-        TempParamListRAII TPLR(this, TPL);
         for (auto PI = TPL->begin(), PE = TPL->end();
             PI != PE; PI++)
         {
@@ -944,29 +939,25 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     auto decldefs = new Dsymbols;
 
+    for (auto P : *TPL)
     {
-        TempParamListRAII TPLR(this, TPL);
+        auto tp = VisitTemplateParameter(P);
+        if (!tp)
+            return nullptr; // should be extremely rare, e.g if there's a int128_t value parameter
+        tpl->push(tp);
+    }
 
-        for (auto P : *TPL)
-        {
-            auto tp = VisitTemplateParameter(P);
-            if (!tp)
-                return nullptr; // should be extremely rare, e.g if there's a int128_t value parameter
-            tpl->push(tp);
-        }
+    auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
+                MapTemplatePatterns);
 
-        auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
-                    MapTemplatePatterns);
+    if (!s)
+        return nullptr;
 
-        if (!s)
-            return nullptr;
+    decldefs->append(s);
 
-        decldefs->append(s);
-
-        if (FTD) {
-            assert(s->dim && (*s)[0]->isFuncDeclaration());
-            id = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
-        }
+    if (FTD) {
+        assert(s->dim && (*s)[0]->isFuncDeclaration());
+        id = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
     }
 
     auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
@@ -1163,8 +1154,6 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 {
     assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
 
-    rebuildScope(cast<clang::Decl>(D->getDeclContext()));
-
     std::unique_ptr<Dsymbols> a(
         VisitRecordDecl(D, flags | MapExplicitSpecs | MapTemplateInstantiations));
     assert(a->dim);
@@ -1173,8 +1162,6 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 
 ::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
 {
-    rebuildScope(cast<clang::Decl>(D->getDeclContext()));
-
     std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
@@ -1186,8 +1173,6 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 
 ::VarDeclaration * DeclMapper::VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl * D)
 {
-    rebuildScope(cast<clang::Decl>(D->getDeclContext()));
-
     std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
@@ -1238,8 +1223,6 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
         TPL = Partial->getTemplateParameters(); // IMPORTANT NOTE: tiargs are made to match the partial spec params during TemplateInstance::semantic()
         AI = nullptr;
     }
-    TempParamScope.push_back(TPL);
-    CXXScope.push(D);
 
     for (auto PI = TPL->begin(), PE = TPL->end();
         PI != PE; PI++)
@@ -1250,11 +1233,8 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
             break; // ex.: std::tuple<> explicit spec of std::tuple<Elem..> // FIXME this doesn't work if there's an argument after a pack
 
         auto tp = VisitTemplateParameter(*PI, AI);
-        if (!tp) {
-            TempParamScope.pop_back();
-            CXXScope.pop();
+        if (!tp)
             return nullptr;
-        }
         tpl->push(tp);
 
         if (AI) AI++;
@@ -1265,17 +1245,9 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
         for (auto& SpecArg: D->getTemplateArgs().asArray())
             FromType(*this, loc).fromTemplateArgument(&SpecArg);
 
-    CXXScope.pop();
-    
-    if (!Partial)
-        TempParamScope.pop_back(); // the depth of template parameters does not consider explicit specs to be in the TempParamScope
-
     auto decldefs = VisitSpecDecl(*this, D);
     if (!decldefs)
         return nullptr;
-
-    if (Partial)
-        TempParamScope.pop_back();
 
     auto a = new TemplateDeclaration(loc, id, tpl, decldefs, D);
     return oneSymbol(a);
@@ -1315,7 +1287,6 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
     const_cast<clang::EnumDecl*>(D)->dsym = e;
-    CXXScope.push(D);
 
     for (auto ECD: D->enumerators())
     {
@@ -1337,7 +1308,6 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
         e->members->push(em);
     }
 
-    CXXScope.pop();
     return oneSymbol(e);
 }
 

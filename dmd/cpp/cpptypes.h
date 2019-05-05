@@ -73,9 +73,6 @@ public:
 
     unsigned volatileNumber = 0; // number of volatile qualifiers found, needs to be reset when mapping functions
 
-    std::stack<const clang::Decl *> CXXScope;
-    void rebuildScope(const clang::Decl *RightMost); // rebuild both CXXScope and TempParamScope
-
     // Clang -> DMD
     Type *fromType(const clang::QualType T, Loc loc);
     template<bool wantTuple = false>
@@ -107,7 +104,7 @@ public:
         Type *fromTypeElaborated(const clang::ElaboratedType *T);
         Type *fromTypeUnaryTransform(const clang::UnaryTransformType *T);
         Type *fromTypeTemplateSpecialization(const clang::TemplateSpecializationType *T);
-        Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T, const clang::TemplateTypeParmDecl *OrigDecl = nullptr);
+        Type *fromTypeTemplateTypeParm(const clang::TemplateTypeParmType *T);
         Type *fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType *T);
         Type *fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T);
         Type *fromTypeInjectedClassName(const clang::InjectedClassNameType *T);
@@ -140,8 +137,6 @@ public:
         template<typename _Type>
          Type *fromTypeOfExpr(const _Type *T);
 
-        const clang::TemplateTypeParmDecl *getOriginalTempTypeParmDecl(const clang::TemplateTypeParmType *T);
-
     private:
         Type *fromType(const clang::QualType T);  // private alias
 
@@ -169,23 +164,9 @@ protected:
     };
     llvm::SmallDenseMap<Module::RootKey, ImplicitImport, 4> implicitImports;
 
-    llvm::SmallVector<const clang::TemplateParameterList*, 4> TempParamScope;
-    struct TempParamListRAII {
-        TempParamListRAII(TypeMapper *tm, const clang::TemplateParameterList* ParamList);
-        ~TempParamListRAII();
-        TypeMapper *tm;
-    };
-
-    void pushTempParamList(const clang::Decl *D);
     Identifier *getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
                                 const clang::TemplateTypeParmType *T = nullptr);
     Identifier *getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D);
-
-    bool isInjectedClassName(const clang::Decl *D); // misleading name? not InjectedClassNameType
-    bool isInjectedScopeName(const clang::Decl *D); // true if this is one of the CXXScope decls
-    bool isRecursivelyInstantiated(const clang::TemplateName Name,
-                    const clang::TemplateArgument *ArgBegin,
-                    const clang::TemplateArgument *ArgEnd);
 
     const clang::Decl *GetRootForTypeQualified(clang::NamedDecl* D);
 
