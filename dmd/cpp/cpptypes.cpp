@@ -1085,26 +1085,25 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
     return D->getTranslationUnitDecl();
 }
 
-Dsymbol* TypeMapper::createDsymForDecl(const clang::NamedDecl* D)
-{
-    return dsym;
-}
-
 Dsymbol* TypeMapper::dsymForDecl(const clang::NamedDecl* D)
 {
-    if (D->dsym)
-        return D->dsym;
+    if (D->d)
+        return D->d->sym;
 
-    return createDsymForDecl(D);
+    DeclMapper declMapper(mod);
+    declMapper.VisitDecl(D);
+
+    return D->d ? D->d->sym : nullptr;
 }
 
 TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    if (!ArgBegin && (options & TQ_PreferCachedSym) && D->dsym) {
-        assert(D->dsym->getType());
-        return (TypeQualified*) D->dsym->getType(); // FIXME
+    auto dsym = tm.dsymForDecl(D);
+    if (!ArgBegin && (options & TQ_PreferCachedSym) && dsym) {
+        assert(dsym->getType());
+        return (TypeQualified*) dsym->getType(); // FIXME
     }
 
     auto Root = tm.GetRootForTypeQualified(D);

@@ -54,6 +54,14 @@ namespace clangCG = clang::CodeGen;
 
 /***********************/
 
+struct DData
+{
+    Dsymbol* sym = nullptr;
+    Dsymbols* mapped_syms = nullptr; // the result of DeclMapper::VisitDecl() calls
+};
+
+/***********************/
+
 struct SpecValue
 {
     const char *op = nullptr; // for overloaded operators

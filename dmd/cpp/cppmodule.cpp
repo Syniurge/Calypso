@@ -225,6 +225,13 @@ inline Dsymbols *oneSymbol(Dsymbol *s)
     return decldefs;
 }
 
+inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
+{
+    if (!D->d)
+        const_cast<clang::NamedDecl*>(D)->d = new DData;
+    const_cast<clang::NamedDecl*>(D)->d->sym = sym;
+}
+
 }
 
 Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
@@ -361,7 +368,7 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
         t = t->immutableOf();
 
     auto a = new VarDeclaration(loc, id, D, t);
-    const_cast<clang::ValueDecl*>(D)->dsym = a;
+    setDsym(D, a);
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
     {
@@ -488,7 +495,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             a = cd;
         }
 
-        const_cast<clang::RecordDecl*>(D)->dsym = a;
+        setDsym(D, a);
     }
 
     if (!isDefined)
@@ -583,7 +590,7 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
         return nullptr;
 
     auto a = new AliasDeclaration(loc, id, t, D);
-    const_cast<clang::TypedefNameDecl*>(D)->dsym = a;
+    setDsym(D, a);
     return oneSymbol(a);
 }
 
@@ -845,7 +852,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
         // Add the overridable method (or the static function)
         fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
-        const_cast<clang::FunctionDecl*>(D)->dsym = fd;
+        setDsym(D, fd);
         a->push(fd);
 
         if (wrapInTemp && isFirstOverloadInScope)
@@ -873,7 +880,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd = new FuncDeclaration(loc, id, stc, tf, D);
     }
 
-    const_cast<clang::FunctionDecl*>(D)->dsym = fd;
+    setDsym(D, fd);
 
     if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
             D->getPrimaryTemplate() && // forward-declared explicit specializations do not have their primary template set (stangely)
@@ -961,7 +968,7 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     }
 
     auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    const_cast<clang::RedeclarableTemplateDecl*>(D)->dsym = td;
+    setDsym(D, td);
 
     auto a = new Dsymbols;
     a->push(td);
@@ -1286,7 +1293,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
     }
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
-    const_cast<clang::EnumDecl*>(D)->dsym = e;
+    setDsym(D, e);
 
     for (auto ECD: D->enumerators())
     {
@@ -1305,6 +1312,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
         }
 
         auto em = new EnumMember(memberLoc, ident, value, nullptr, ECD);
+        setDsym(ECD, em);
         e->members->push(em);
     }
 

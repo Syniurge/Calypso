@@ -152,8 +152,6 @@ protected:
     cpp::Module *mod;
     bool isGlobal;
 
-    DSymbol* createDsymForDecl(const clang::NamedDecl* D);
-
     // Returns D->dsym or create it
     Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 

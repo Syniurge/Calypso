@@ -189,12 +189,9 @@ void EnumDeclaration::accept(Visitor *v)
 {
     v->visit(this);
 
-    if (v->_typeid() == TI_DsymbolSem1Visitor) {
-        const_cast<clang::EnumDecl*>(ED)->dsym = this;
-
+    if (v->_typeid() == TI_DsymbolSem1Visitor)
         if (!defaultval && !members)
             defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
-    }
 }
 
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
@@ -218,8 +215,6 @@ Dsymbol* EnumMember::syntaxCopy(Dsymbol* s)
 void EnumMember::accept(Visitor *v)
 {
     v->visit(this);
-    if (v->_typeid() == TI_DsymbolSem1Visitor)
-        const_cast<clang::EnumConstantDecl*>(ECD)->dsym = this;
 }
 
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
@@ -319,8 +314,8 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
                 // This may get fixed by 3.7.
     }
 
-    if (D->dsym) {
-        calypso.markSymbolReferenced(D->dsym);
+    if (D->d && D->d->sym) {
+        calypso.markSymbolReferenced(D->d->sym);
         return true;
     }
 
@@ -625,12 +620,9 @@ void FuncDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        const_cast<clang::FunctionDecl*>(FD)->dsym = this;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
         doSemantic3(this);
-    } else
+    else
         v->visit(this);
 }
 
@@ -638,12 +630,9 @@ void CtorDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        const_cast<clang::CXXConstructorDecl*>(CCD)->dsym = this;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
         cpp::FuncDeclaration::doSemantic3(this);
-    } else
+    else
         v->visit(this);
 }
 
@@ -651,12 +640,9 @@ void DtorDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        const_cast<clang::CXXDestructorDecl*>(CDD)->dsym = this;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
+    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
         cpp::FuncDeclaration::doSemantic3(this);
-    } else
+    else
         v->visit(this);
 }
 

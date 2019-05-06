@@ -743,10 +743,6 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 void TemplateDeclaration::accept(Visitor *v)
 {
     v->visit(this);
-
-    if (v->_typeid() == TI_DsymbolSem1Visitor)
-        if (isa<clang::TemplateDecl>(TempOrSpec) || isa<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
-            const_cast<clang::NamedDecl*>(TempOrSpec)->dsym = this;
 }
 
 /***********************/
