@@ -359,8 +359,8 @@ Type *TypeMapper::fromType(const clang::QualType T, Loc loc)
     return FromType(*this, loc)(T);
 }
 
-TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix)
-    : tm(tm), loc(loc), prefix(prefix)
+TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix, bool useCachedSyms)
+    : tm(tm), loc(loc), prefix(prefix), useCachedSyms(useCachedSyms)
 {
 }
 
@@ -395,9 +395,6 @@ Type *TypeMapper::FromType::fromType(const clang::QualType T)
 
 Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 {
-    if (T->isDependentType())
-        isDependent = true;
-
     if (auto BT = dyn_cast<clang::BuiltinType>(T))
         return fromTypeBuiltin(BT);
     else if (auto FT = dyn_cast<clang::FunctionProtoType>(T))
@@ -1093,7 +1090,7 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
     auto Key = GetImplicitImportKeyForDecl(D);
     auto mod = cpp::Module::allCppModules[Key];
     if (!mod) {
-        auto im = AddImplicitImportForDecl(loc, D);
+        auto im = AddImplicitImportForDecl(loc, D); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
         mod = Module::create(Key, im->packages, im->id);
     }
 
@@ -1106,10 +1103,12 @@ TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    auto dsym = tm.dsymForDecl(loc, D);
-    if (!ArgBegin && (options & TQ_PreferCachedSym) && dsym) {
-        assert(dsym->getType());
-        return (TypeQualified*) dsym->getType(); // FIXME
+    if (useCachedSyms) {
+        auto dsym = tm.dsymForDecl(loc, D);
+        if (!ArgBegin && dsym) {
+            assert(dsym->getType());
+            return (TypeQualified*) dsym->getType(); // FIXME
+        }
     }
 
     auto Root = tm.GetRootForTypeQualified(D);
@@ -1131,12 +1130,12 @@ Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 
 Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 {
-    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
+    return typeQualifiedFor(T->getDecl());
 }
 
 Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
-    return typeQualifiedFor(T->getDecl(), nullptr, nullptr, TQ_PreferCachedSym);
+    return typeQualifiedFor(T->getDecl());
 }
 
 // Rarely used feature of C++, see [expr.mptr.oper]
@@ -1374,7 +1373,7 @@ TypeQualified *TypeMapper::FromType::fromNestedNameSpecifierImpl(const clang::Ne
         case clang::NestedNameSpecifier::TypeSpec:
         case clang::NestedNameSpecifier::TypeSpecWithTemplate:
         {
-            auto t = fromTypeUnqual(NNS->getAsType());
+            auto t = FromType(tm, loc, nullptr, false).fromTypeUnqual(NNS->getAsType());
             if (!t)
                 return nullptr;
             assert(t->ty == Tinstance || t->ty == Tident || t->ty == Ttypeof);

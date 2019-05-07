@@ -57,7 +57,6 @@ enum TypeQualifiedBuilderOpts
     TQ_None = 0,
     TQ_OverOpSkipSpecArg = 1 << 0, // e.g skip "-" in opBinary!"-"
     TQ_OverOpFullIdent = 1 << 1, // prefer the non-templated function over the forwarding template
-    TQ_PreferCachedSym = 1 << 2 // FIXME: temporary flag
 };
 
 class TypeMapper
@@ -86,10 +85,10 @@ public:
         Loc loc;
         TypeQualified *prefix; // special case for NNS qualified types
 
-        bool isDependent = false; // if dependent type do not assign TemplateInstance.Inst (causes issues with template default arguments)
+        bool useCachedSyms; // disabled e.g for NNS
         const clang::Expr *TypeOfExpr = nullptr;
 
-        FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix = nullptr);
+        FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix = nullptr, bool useCachedSyms = true);
 
         Type *operator()(const clang::QualType T);
         Type *fromTypeUnqual(const clang::Type *T);
