@@ -71,6 +71,7 @@ File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
 
 Package *Module::rootPackage;
 Modules Module::amodules;
+std::map<Module::RootKey, Module*> Module::allCppModules;
 
 void Module::init()
 {
@@ -82,6 +83,8 @@ void Module::init()
 
 Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
 {
+    this->mapper = new DeclMapper(this);
+
     // e.g __cpp_package_package_module
     llvm::SmallString<24> objFilename("__cpp-");
     for (size_t i = 1; i < packages->dim; i++)
@@ -250,6 +253,10 @@ Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
 
 Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 {
+    auto ND = dyn_cast<clang::NamedDecl>(D);
+    if (ND && ND->d && ND->d->mapped_syms)
+        return ND->d->mapped_syms;
+
     if (D != getCanonicalDecl(D))
         return nullptr;
 
@@ -298,6 +305,9 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 
 #undef DECL
 #undef DECLWF
+
+    if (ND && ND->d)
+        const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
     return s;
 }
@@ -1492,21 +1502,18 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     return true;
 }
 
-void mapMacros(DeclMapper &mapper, clang::Module::Header* Header, Dsymbols *members)
+void mapMacros(Module* m, clang::Module::Header* Header)
 {
     auto MacroMapEntry = calypso.MacroMap[Header];
     if (!MacroMapEntry)
         return;
 
     for (auto& P: *MacroMapEntry)
-        if (auto s = mapper.VisitMacro(P.first, P.second))
-            members->push(s);   
+        if (auto s = m->mapper->VisitMacro(P.first, P.second))
+            m->members->push(s);
 }
 
-static void mapNamespace(DeclMapper &mapper,
-                             const clang::DeclContext *DC,
-                             Dsymbols *members,
-                             bool forClangModule = false)
+static void mapNamespace(Module* m, const clang::DeclContext *DC, bool forClangModule = false)
 {
     auto CanonDC = cast<clang::Decl>(DC)->getCanonicalDecl();
     auto MMap = calypso.pch.MMap;
@@ -1532,24 +1539,21 @@ static void mapNamespace(DeclMapper &mapper,
         auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
         if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
         {
-            mapNamespace(mapper, cast<clang::DeclContext>(*D), members, forClangModule);
+            mapNamespace(m, cast<clang::DeclContext>(*D), forClangModule);
             continue;
         }
         else if (!isTopLevelInNamespaceModule(*D))
             continue;
 
-        if (auto s = mapper.VisitDecl(*D))
-            members->append(s);
+        if (auto s = m->mapper->VisitDecl(*D))
+            m->members->append(s);
     }
     
     if (DC->isTranslationUnit())
-        mapMacros(mapper, nullptr, members);
+        mapMacros(m, nullptr);
 }
 
-static void mapClangModule(DeclMapper &mapper,
-                             const clang::Decl *Root,
-                             clang::Module *M,
-                             Dsymbols *members)
+static void mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
 {
     auto AST = calypso.getASTUnit();
     auto& SrcMgr = calypso.getSourceManager();
@@ -1634,23 +1638,35 @@ static void mapClangModule(DeclMapper &mapper,
         if (!isTopLevelInNamespaceModule(D))
             return;
 
-        if (auto s = mapper.VisitDecl(D))
-            members->append(s);
+        if (auto s = m->mapper->VisitDecl(D))
+            m->members->append(s);
     };
 
     if (!isa<clang::TranslationUnitDecl>(Root))
         for (auto R: RootDecls)
-            mapNamespace(mapper, cast<clang::DeclContext>(R), members, true);
+            mapNamespace(m, cast<clang::DeclContext>(R), true);
     else
     {
         // Map the macros contained in the module headers (currently limited to numerical constants)
         for (auto& Header: M->Headers[clang::Module::HK_Normal])
-            mapMacros(mapper, &Header, members);
+            mapMacros(m, &Header);
 
         for (auto D: RegionDecls)
             if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
                 Map(D);
     }
+}
+
+Module *Module::create(Module::RootKey rootKey, Identifiers *packages, Identifier *id)
+{
+    assert(packages && packages->dim);
+
+    auto m = new Module(moduleName(packages, id).c_str(),
+                        id, packages);
+    m->members = new Dsymbols;
+    m->rootKey = rootKey;
+    allCppModules[rootKey] = m;
+    return m;
 }
 
 Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
@@ -1670,8 +1686,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
     const clang::DeclContext *DC = Context.getTranslationUnitDecl();
     Package *pkg = rootPackage;
-
-    assert(packages && packages->dim);
 
     clang::Module *M = nullptr;
     for (size_t i = 1; i < packages->dim; i++)
@@ -1708,45 +1722,15 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     if (!M)
         M = tryFindClangModule(loc, packages, id, pkg, packages->dim);
 
-    auto m = new Module(moduleName(packages, id).c_str(),
-                        id, packages);
-    m->members = new Dsymbols;
-    m->parent = pkg;
-    m->loc = loc;
-
-    isTypedef = false;
-
-    DeclMapper mapper(m);
-
+    RootKey rootKey;
     if (M)
     {
-        auto D = cast<clang::Decl>(DC)->getCanonicalDecl();
-        m->rootKey.first = D;
-        m->rootKey.second = M;
-        mapClangModule(mapper, D, M, m->members);
+        rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
+        rootKey.second = M;
     }
-    else if (id == calypso.id__)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
+    else if (id == calypso.id__)
     {
-        m->rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
-
-        auto NS = dyn_cast<clang::NamespaceDecl>(DC);
-        if (!NS)
-        {
-            assert(isa<clang::TranslationUnitDecl>(DC));
-
-            mapNamespace(mapper, DC, m->members);
-        }
-        else
-        {
-            auto I = NS->redecls_begin(),
-                    E = NS->redecls_end();
-
-            for (; I != E; ++I)
-            {
-                DC = *I;
-                mapNamespace(mapper, DC, m->members);
-            }
-        }
+        rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
     }
     else
     {
@@ -1783,7 +1767,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
                     else if (!isSameNameTagTypedef(Typedef))
                     {
                         isTypedef = true;
-                        delete m;
                         return nullptr; // a new attempt will be made by cpp::Import::loadModule after fixing its id
                     }
                 }
@@ -1803,18 +1786,53 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
             fatal();
         }
 
-        if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
-            D = Spec->getSpecializedTemplate();
-
         D = cast<clang::NamedDecl>(const_cast<clang::Decl*>(getCanonicalDecl(D)));
         auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
 
         if (CTD)
-            m->rootKey.first = CTD->getTemplatedDecl();
+            rootKey.first = CTD->getTemplatedDecl();
         else
-            m->rootKey.first = D;
+            rootKey.first = D;
+    }
 
-        if (auto s = mapper.VisitDecl(D))
+    auto m = allCppModules[rootKey];
+    if (!m)
+        m = create(rootKey, packages, id);
+    m->parent = pkg;
+    m->loc = loc;
+
+    isTypedef = false;
+
+    if (M)
+    {
+        mapClangModule(m, rootKey.first, M);
+    }
+    else if (id == calypso.id__)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
+    {
+        auto NS = dyn_cast<clang::NamespaceDecl>(DC);
+        if (!NS)
+        {
+            assert(isa<clang::TranslationUnitDecl>(DC));
+
+            mapNamespace(m, DC);
+        }
+        else
+        {
+            auto I = NS->redecls_begin(),
+                    E = NS->redecls_end();
+
+            for (; I != E; ++I)
+            {
+                DC = *I;
+                mapNamespace(m, DC);
+            }
+        }
+    }
+    else
+    {
+        auto D = cast<clang::NamedDecl>(rootKey.first);
+
+        if (auto s = m->mapper->VisitDecl(D))
             m->members->append(s);
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
@@ -1836,7 +1854,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
                     if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
                         continue; // friend out-of-line decls are already mapped in VisitRecordDecl
 
-                    if (auto s = mapper.VisitDecl(getCanonicalDecl(OverOp)))
+                    if (auto s = m->mapper->VisitDecl(getCanonicalDecl(OverOp)))
                         m->members->append(s);
                 }
             }

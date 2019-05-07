@@ -193,7 +193,7 @@ public:
     ::FuncDeclaration *VisitInstancedFunctionTemplate(const clang::FunctionDecl *D);
     ::VarDeclaration *VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl *D);
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
-                                                                    const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
+                                              const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
     Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
 

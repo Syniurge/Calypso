@@ -1085,13 +1085,19 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
     return D->getTranslationUnitDecl();
 }
 
-Dsymbol* TypeMapper::dsymForDecl(const clang::NamedDecl* D)
+Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
 {
     if (D->d)
         return D->d->sym;
 
-    DeclMapper declMapper(mod);
-    declMapper.VisitDecl(D);
+    auto Key = GetImplicitImportKeyForDecl(D);
+    auto mod = cpp::Module::allCppModules[Key];
+    if (!mod) {
+        auto im = AddImplicitImportForDecl(loc, D);
+        mod = Module::create(Key, im->packages, im->id);
+    }
+
+    mod->mapper->VisitDecl(D);
 
     return D->d ? D->d->sym : nullptr;
 }
@@ -1100,7 +1106,7 @@ TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    auto dsym = tm.dsymForDecl(D);
+    auto dsym = tm.dsymForDecl(loc, D);
     if (!ArgBegin && (options & TQ_PreferCachedSym) && dsym) {
         assert(dsym->getType());
         return (TypeQualified*) dsym->getType(); // FIXME
@@ -1603,8 +1609,7 @@ static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
 #endif
 }
 
-// In D if a class is inheriting from another module's class, then its own module has to import the base class' module.
-// So we need to populate the beginning of our virtual module with imports for derived classes.
+// Build and possibly add imports for symbols referenced in the module being mapped
 cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake)
 {
     auto Key = GetImplicitImportKeyForDecl(D);

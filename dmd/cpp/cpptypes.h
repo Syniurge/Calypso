@@ -153,7 +153,7 @@ protected:
     bool isGlobal;
 
     // Returns D->dsym or create it
-    Dsymbol* dsymForDecl(const clang::NamedDecl* D);
+    Dsymbol* dsymForDecl(Loc loc, const clang::NamedDecl* D);
 
     struct ImplicitImport
     {
