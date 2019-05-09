@@ -1666,6 +1666,7 @@ Module *Module::create(Module::RootKey rootKey, Identifiers *packages, Identifie
     m->members = new Dsymbols;
     m->rootKey = rootKey;
     allCppModules[rootKey] = m;
+
     return m;
 }
 
@@ -1722,20 +1723,21 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     if (!M)
         M = tryFindClangModule(loc, packages, id, pkg, packages->dim);
 
+    isTypedef = false;
+
     RootKey rootKey;
+    const clang::Decl *D = nullptr;
     if (M)
     {
-        rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
+        rootKey.first = D = cast<clang::Decl>(DC)->getCanonicalDecl();
         rootKey.second = M;
     }
     else if (id == calypso.id__)
     {
-        rootKey.first = cast<clang::Decl>(DC)->getCanonicalDecl();
+        rootKey.first = D = cast<clang::Decl>(DC)->getCanonicalDecl();
     }
     else
     {
-        clang::NamedDecl *D = nullptr;
-
         // Lookups can't find the implicit __va_list_tag record
         if (packages->dim == 1)
         {
@@ -1787,9 +1789,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
         }
 
         D = cast<clang::NamedDecl>(const_cast<clang::Decl*>(getCanonicalDecl(D)));
-        auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
 
-        if (CTD)
+        if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
             rootKey.first = CTD->getTemplatedDecl();
         else
             rootKey.first = D;
@@ -1801,7 +1802,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     m->parent = pkg;
     m->loc = loc;
 
-    isTypedef = false;
+    amodules.push_back(m);
+    pkg->symtab->insert(m);
 
     if (M)
     {
@@ -1830,8 +1832,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     }
     else
     {
-        auto D = cast<clang::NamedDecl>(rootKey.first);
-
         if (auto s = m->mapper->VisitDecl(D))
             m->members->append(s);
 
@@ -1848,7 +1848,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
                 for (auto OverOp: Ctx->lookup(OpName))
                 {
-                    if (!isOverloadedOperatorWithTagOperand(OverOp, D))
+                    if (!isOverloadedOperatorWithTagOperand(OverOp, cast<clang::NamedDecl>(D)))
                         continue;
 
                     if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
@@ -1867,9 +1867,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     auto s = new_LinkDeclaration(LINKcpp, m->members);
     m->members = new Dsymbols;
     m->members->push(s);
-    
-    amodules.push_back(m);
-    pkg->symtab->insert(m);
     return m;
 }
 

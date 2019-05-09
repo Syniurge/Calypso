@@ -78,6 +78,9 @@ public:
      Objects *fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                 const clang::TemplateParameterList *ParamList = nullptr);
 
+    // Returns D->dsym or create it
+    Dsymbol* dsymForDecl(Loc loc, const clang::NamedDecl* D);
+
     class FromType // type-specific state
     {
     public:
@@ -150,9 +153,6 @@ public:
 protected:
     cpp::Module *mod;
     bool isGlobal;
-
-    // Returns D->dsym or create it
-    Dsymbol* dsymForDecl(Loc loc, const clang::NamedDecl* D);
 
     struct ImplicitImport
     {

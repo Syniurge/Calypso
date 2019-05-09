@@ -797,7 +797,7 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
-    auto sym = D->d ? D->d->sym : nullptr;
+    auto sym = tymap.dsymForDecl(loc, D);
     if (sym) {
         if (auto d = sym->isDeclaration()) {
             if (d->isFuncDeclaration() || d->isVarDeclaration())
