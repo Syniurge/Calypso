@@ -232,6 +232,7 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
 {
     if (!D->d)
         const_cast<clang::NamedDecl*>(D)->d = new DData;
+    assert(D->d->sym == nullptr);
     const_cast<clang::NamedDecl*>(D)->d->sym = sym;
 }
 
@@ -260,28 +261,6 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     if (D != getCanonicalDecl(D))
         return nullptr;
 
-    // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
-    // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
-    // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
-    // they get mapped only once.
-    if (!(flags & MapExplicitSpecs))
-    {
-        if (isa<clang::ClassTemplateSpecializationDecl>(D))
-            return nullptr;
-
-        if (auto FD = dyn_cast<clang::FunctionDecl>(D))
-            if (FD->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-                        FD->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
-                return nullptr;
-    }
-
-    if (!(flags & MapTemplatePatterns))
-    {
-        if (auto Var = dyn_cast<clang::VarDecl>(D))
-            if (Var->getDescribedVarTemplate())
-                return nullptr;
-    }
-
     Dsymbols *s = nullptr;
 
 #define DECL(BASE) \
@@ -292,16 +271,19 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     else if (const clang::BASE##Decl *BASE##D = \
                             dyn_cast<clang::BASE##Decl>(D)) \
         s = Visit##BASE##Decl(BASE##D, flags);
+#define DECLEXPLICIT(BASE) \
+    else if ((flags & MapExplicitSpecs) && isa<clang::BASE##Decl>(D)) \
+        s = Visit##BASE##Decl(cast<clang::BASE##Decl>(D));
 
     if (0) ;
     DECL(TypedefName)
-    DECL(ClassTemplateSpecialization)
-    DECL(VarTemplateSpecialization)
+    DECLEXPLICIT(ClassTemplateSpecialization)
+    DECLEXPLICIT(VarTemplateSpecialization)
+    DECL(Enum)
     DECLWF(Record)
     DECLWF(Function)
+    DECLWF(Value)
     DECL(RedeclarableTemplate)
-    DECL(Enum)
-    DECL(Value)
 
 #undef DECL
 #undef DECLWF
@@ -312,13 +294,18 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     return s;
 }
 
-Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D)
+Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 {
     auto& Context = calypso.getASTContext();
     ExprMapper expmap(*this);
 
     if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
         return nullptr;
+
+    if (!(flags & MapTemplatePatterns))
+        if (auto Var = dyn_cast<clang::VarDecl>(D))
+            if (Var->getDescribedVarTemplate())
+                return nullptr;
 
     if (auto Field = dyn_cast<clang::FieldDecl>(D))
     {
@@ -690,6 +677,15 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 {
     if (!isMapped(D))
         return nullptr;
+
+    // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
+    // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
+    // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
+    // they get mapped only once.
+    if (!(flags & MapExplicitSpecs))
+        if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
+                    D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
+            return nullptr;
 
     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
@@ -1169,20 +1165,18 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
     return tp;
 }
 
-Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D,
-                                                 unsigned flags)
+Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D)
 {
     assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
 
-    std::unique_ptr<Dsymbols> a(
-        VisitDecl(getCanonicalDecl(D), flags | MapExplicitSpecs | MapTemplateInstantiations));
+    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
     assert(a->dim);
     return (*a)[0];
 }
 
 ::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
 {
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
+    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
         return static_cast<::FuncDeclaration*>((*a)[0]);
@@ -1193,7 +1187,7 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
 
 ::VarDeclaration * DeclMapper::VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl * D)
 {
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapExplicitSpecs | MapTemplateInstantiations));
+    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
     if (a.get()) {
         assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
         return static_cast<::VarDeclaration*>((*a)[0]);
@@ -1269,10 +1263,22 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
     if (!decldefs)
         return nullptr;
 
-    auto a = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    return oneSymbol(a);
+    auto s = new Dsymbols;
+    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+    s->push(td);
+
+    if (!Partial)
+    {
+        auto explicit_ti = new TemplateInstance(loc, td, new Objects);
+        explicit_ti->Inst = const_cast<SpecTy*>(D);
+        explicit_ti->members = decldefs; // NOTE: it doesn't matter that td and ti share the same members, semantic(td) doesn't do any change to them
+        s->push(explicit_ti);
+    }
+
+    return s;
 }
 
+// WARNING: this is for explicit or partial specs, this might need a better name
 Dsymbols* DeclMapper::VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D)
 {
     return VisitTemplateSpecializationDecl<clang::ClassTemplatePartialSpecializationDecl>(D);

@@ -180,7 +180,7 @@ public:
 
     Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
 
-    Dsymbols *VisitValueDecl(const clang::ValueDecl *D);
+    Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
     Dsymbols *VisitTypedefNameDecl(const clang::TypedefNameDecl *D);
     Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
@@ -189,9 +189,11 @@ public:
     Dsymbols *VisitVarTemplateSpecializationDecl(const clang::VarTemplateSpecializationDecl *D);
     Dsymbols *VisitEnumDecl(const clang::EnumDecl *D);
 
-    Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D, unsigned int flags = 0); // entry point when mapping instances during semantic()
+    // Entry points when mapping instances during semantic()
+    Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D);
     ::FuncDeclaration *VisitInstancedFunctionTemplate(const clang::FunctionDecl *D);
     ::VarDeclaration *VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl *D);
+
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                               const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 

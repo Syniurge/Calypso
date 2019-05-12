@@ -1096,7 +1096,7 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
         mod = Module::create(Key, im->packages, im->id);
     }
 
-    mod->mapper->VisitDecl(D, DeclMapper::MapExplicitSpecs | DeclMapper::MapTemplateInstantiations);
+    mod->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations);
 
     return D->d ? D->d->sym : nullptr;
 }
