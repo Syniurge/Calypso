@@ -1084,6 +1084,8 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
 
 Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
 {
+    D = cast<clang::NamedDecl>(D->getCanonicalDecl());
+
     if (D->d)
         return D->d->sym;
 
@@ -1094,7 +1096,7 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
         mod = Module::create(Key, im->packages, im->id);
     }
 
-    mod->mapper->VisitDecl(D);
+    mod->mapper->VisitDecl(D, DeclMapper::MapExplicitSpecs | DeclMapper::MapTemplateInstantiations);
 
     return D->d ? D->d->sym : nullptr;
 }

@@ -429,6 +429,7 @@ bool isPolymorphic(const clang::RecordDecl *D)
 
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
+    auto CanonDecl = D;
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
     auto& Diags = *calypso.pch.Diags;
@@ -489,23 +490,25 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         }
         else
         {
-            auto baseclasses = new BaseClasses;
+            a = new ClassDeclaration(loc, id, /*baseclasses =*/ nullptr, members, CRD);
+        }
 
+        setDsym(CanonDecl, a);
+
+        if (auto cd = a->isClassDeclaration())
+        {
+            // Base classes must be mapped after attaching the Dsymbol to the Clang declaration,
+            // in case it gets referenced
             if (CRD)
             {
                 for (auto B = CRD->bases_begin(),
                         BEnd = CRD->bases_end(); B != BEnd; ++B)
                 {
                     auto brt = fromType(B->getType(), loc);
-                    baseclasses->push(new BaseClass(brt));
+                    cd->baseclasses->push(new BaseClass(brt));
                 }
             }
-
-            auto cd = new ClassDeclaration(loc, id, baseclasses, members, CRD);
-            a = cd;
         }
-
-        setDsym(D, a);
     }
 
     if (!isDefined)
@@ -1172,7 +1175,7 @@ Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpeci
     assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
 
     std::unique_ptr<Dsymbols> a(
-        VisitRecordDecl(D, flags | MapExplicitSpecs | MapTemplateInstantiations));
+        VisitDecl(getCanonicalDecl(D), flags | MapExplicitSpecs | MapTemplateInstantiations));
     assert(a->dim);
     return (*a)[0];
 }
