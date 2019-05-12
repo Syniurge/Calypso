@@ -252,14 +252,40 @@ Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
     return decldefs;
 }
 
+bool isExplicitSpecialization(const clang::Decl *D)
+{
+    if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
+        return ClassSpec->isExplicitSpecialization();
+    else if (auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D))
+        return VarSpec->isExplicitSpecialization();
+    else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
+        return Func->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
+               Func->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization;
+    else
+        return false;
+}
+
+// IMPORTANT NOTE: this includes undefined instantiation declarations, e.g from typedefs
+// For example in "typedef basic_fstream<char> fstream;", if fstream is unused, then
+// basic_fstream<char> never gets defined
+bool isTemplateInstantiation(const clang::Decl *D)
+{
+    if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
+        return ClassSpec->getSpecializationKind() != clang::TSK_ExplicitSpecialization;
+    else if (auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D))
+        return VarSpec->getSpecializationKind() != clang::TSK_ExplicitSpecialization;
+    else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
+        return Func->isTemplateInstantiation();
+}
+
 Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 {
+    if (D != getCanonicalDecl(D))
+        return nullptr;
+
     auto ND = dyn_cast<clang::NamedDecl>(D);
     if (ND && ND->d && ND->d->mapped_syms)
         return ND->d->mapped_syms;
-
-    if (D != getCanonicalDecl(D))
-        return nullptr;
 
     Dsymbols *s = nullptr;
 
@@ -288,8 +314,14 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 #undef DECL
 #undef DECLWF
 
-    if (ND && ND->d)
-        const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
+    bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
+
+    // We don't want to attach neither template insts, nor the "inner" decl of explicit decls
+    // nor declarations of template instantations (e.g from typedefs) to modules when those
+    // get mapped later
+    if (!mappedInnerSpec && !isTemplateInstantiation(D))
+        if (ND && ND->d)
+            const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
     return s;
 }
@@ -682,10 +714,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
     // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
     // they get mapped only once.
-    if (!(flags & MapExplicitSpecs))
-        if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-                    D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
-            return nullptr;
+    if (!(flags & MapExplicitSpecs) && isExplicitSpecialization(D))
+        return nullptr;
 
     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
@@ -1038,7 +1068,7 @@ Identifier *DeclMapper::getIdentifierForTemplateNonTypeParm(const clang::NonType
 }
 
 TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Param,
-                                                                      const clang::TemplateArgument *SpecArg)
+                                                      const clang::TemplateArgument *SpecArg)
 {
     ExprMapper expmap(*this);
     TemplateParameter *tp;
@@ -1269,7 +1299,15 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
 
     if (!Partial)
     {
-        auto explicit_ti = new TemplateInstance(loc, td, new Objects);
+        auto tiargs = new Objects;
+        for (auto tp: *tpl)
+            tiargs->push(tp->specialization());
+
+        auto explicit_ti = new TemplateInstance(loc, td->ident, tiargs);
+        explicit_ti->tempdecl = td;
+        explicit_ti->havetempdecl = true;
+        explicit_ti->semantictiargsdone = true;
+        explicit_ti->isForeignInst = true;
         explicit_ti->Inst = const_cast<SpecTy*>(D);
         explicit_ti->members = decldefs; // NOTE: it doesn't matter that td and ti share the same members, semantic(td) doesn't do any change to them
         s->push(explicit_ti);
