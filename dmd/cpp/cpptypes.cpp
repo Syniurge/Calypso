@@ -1090,13 +1090,14 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
         return D->d->sym;
 
     auto Key = GetImplicitImportKeyForDecl(D);
-    auto mod = cpp::Module::allCppModules[Key];
-    if (!mod) {
+    auto extMod = cpp::Module::allCppModules[Key];
+    if (!extMod) {
         auto im = AddImplicitImportForDecl(loc, D); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
-        mod = Module::create(Key, im->packages, im->id);
+        extMod = Module::create(Key, im->packages, im->id);
+        extMod->importedFrom = mod;
     }
 
-    mod->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations);
+    extMod->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
 
     return D->d ? D->d->sym : nullptr;
 }

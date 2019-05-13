@@ -199,6 +199,8 @@ public:
 
     Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
 
+    template<typename SpecTy>
+    Dsymbols* CreateTemplateInstanceFor(Loc loc, const SpecTy* D, Dsymbols* decldefs);
     template<typename PartialTy, typename SpecTy>
     Dsymbols *VisitTemplateSpecializationDecl(const SpecTy* D);
 
@@ -210,6 +212,7 @@ public:
         MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
         NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 5,
+        CreateTemplateInstance = 1 << 6,
     };
 
 

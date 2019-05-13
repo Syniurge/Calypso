@@ -316,14 +316,49 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 
     bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
 
-    // We don't want to attach neither template insts, nor the "inner" decl of explicit decls
-    // nor declarations of template instantations (e.g from typedefs) to modules when those
-    // get mapped later
-    if (!mappedInnerSpec && !isTemplateInstantiation(D))
-        if (ND && ND->d)
+    // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
+    // to be the TemplateInstance, that we create if requested
+    if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
+        if (ND && ND->d && s)
             const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
     return s;
+}
+
+template<typename SpecTy>
+Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, Dsymbols* decldefs)
+{
+    auto TempDecl = D->getSpecializedTemplate();
+    auto TempArgs = &D->getTemplateArgs();
+
+    auto tempdecl = dsymForDecl(loc, TempDecl);
+    assert(tempdecl && tempdecl->isTemplateDeclaration());
+    auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
+    auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
+    ti->members = decldefs;
+
+    decldefs = new Dsymbols;
+    decldefs->push(ti);
+
+    return decldefs;
+}
+
+template<>
+Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc loc, const clang::FunctionDecl* D, Dsymbols* decldefs)
+{
+    auto TempDecl = D->getPrimaryTemplate();
+    auto TempArgs = D->getTemplateSpecializationArgs();
+
+    auto tempdecl = dsymForDecl(loc, TempDecl);
+    assert(tempdecl && tempdecl->isTemplateDeclaration());
+    auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
+    auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
+    ti->members = decldefs;
+
+    decldefs = new Dsymbols;
+    decldefs->push(ti);
+
+    return decldefs;
 }
 
 Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
@@ -433,6 +468,11 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     }
 
     decldefs->push(a);
+
+    auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D);
+    if (VarSpec && !VarSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
+        decldefs = CreateTemplateInstanceFor(loc, VarSpec, decldefs);
+
     return decldefs;
 }
 
@@ -602,6 +642,10 @@ Ldeclaration:
                 decldefs->append(s);
         }
     }
+
+    auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
+    if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
+        decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
 
     return decldefs;
 }
@@ -947,6 +991,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         auto td = new TemplateDeclaration(loc, fd->ident, tpl, decldefs, D);
         return oneSymbol(td);
     }
+    else if (isTemplateInstantiation(D) && (flags & CreateTemplateInstance))
+        a = CreateTemplateInstanceFor(loc, D, a);
 
     a->push(fd);
     return a;
