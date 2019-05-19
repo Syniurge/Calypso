@@ -354,6 +354,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    void dsymbolSemantic(Dsymbol dsym, Scope *sc);
+
+    // ===== - - - - - ===== //
+
     int getPragma(Scope* sc, PragmaDeclaration decl);
     void pragmaSemantic(Scope* sc, PragmaDeclaration decl);
 

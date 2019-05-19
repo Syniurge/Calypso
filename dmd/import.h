@@ -80,6 +80,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    virtual void dsymbolSemantic(Dsymbol *dsym, Scope *sc) = 0;
+
+    // ===== - - - - - ===== //
+
     virtual int getPragma(Scope* sc, PragmaDeclaration* decl) = 0;
     virtual void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) = 0;
 
