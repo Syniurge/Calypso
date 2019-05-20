@@ -89,6 +89,12 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         if (tempinst.semanticRun >= PASS.semantic3done)
             return;
 
+        assert(tempinst.tempdecl);
+        TemplateDeclaration tempdecl = tempinst.tempdecl.isTemplateDeclaration();
+        assert(tempdecl);
+
+        Scope* sc = tempdecl._scope ? tempdecl._scope : sc;
+
         // Get the enclosing template instance from the scope tinst
         tempinst.tinst = sc.tinst;
 
@@ -97,14 +103,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         tempinst.semanticRun = PASS.semantic;
 
-        assert(tempinst.tempdecl && tempinst.tempdecl.semanticRun >= PASS.semantic3done);
         if (!tempinst.semanticTiargs(sc))
-        {
             assert(false);
-        }
-
-        TemplateDeclaration tempdecl = tempinst.tempdecl.isTemplateDeclaration();
-        assert(tempdecl);
 
         /* See if there is an existing TemplateInstantiation that already
         * implements the typeargs. If so, just refer to that one instead.
