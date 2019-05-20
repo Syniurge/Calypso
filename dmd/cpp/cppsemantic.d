@@ -100,17 +100,11 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         assert(tempinst.tempdecl && tempinst.tempdecl.semanticRun >= PASS.semantic3done);
         if (!tempinst.semanticTiargs(sc))
         {
-        Lerror:
-            tempinst.inst = tempinst;
-            tempinst.errors = true;
-            return;
+            assert(false);
         }
+
         TemplateDeclaration tempdecl = tempinst.tempdecl.isTemplateDeclaration();
         assert(tempdecl);
-
-        tempinst.hasNestedArgs(tempinst.tiargs, tempdecl.isstatic);
-        if (tempinst.errors)
-            goto Lerror;
 
         /* See if there is an existing TemplateInstantiation that already
         * implements the typeargs. If so, just refer to that one instead.
@@ -295,8 +289,9 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         if (sd.semanticRun >= PASS.semantic3done)
             return;
 
-        Scope* sc = sd._scope;
+        Scope* sc = sd._scope ? sd._scope : this.sc;
         assert(sc);
+        sd._scope = null;
 
         sd.type = sd.type.typeSemantic(sd.loc, sc);
 
@@ -388,8 +383,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
             sd.xhash = buildXtoHash(sd, sc2);
         }
 
-        sd.inv = buildInv(sd, sc2);
-
         sd.determineSize(sd.loc);
 
         if (!sd.getRTInfo)
@@ -420,14 +413,20 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         sc2.pop();
     }
 
+    override void visit(UnionDeclaration ud)
+    {
+        visit(cast(StructDeclaration)ud);
+    }
+
     override void visit(ClassDeclaration cldec)
     {
         if (cldec.semanticRun >= PASS.semanticdone)
             return;
         int errors = global.errors;
 
-        Scope* sc = cldec._scope;
+        Scope* sc = cldec._scope ? cldec._scope : this.sc;
         assert(sc);
+        cldec._scope = null;
 
         cldec.type = cldec.type.typeSemantic(cldec.loc, sc);
 
@@ -443,50 +442,44 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         cldec.semanticRun = PASS.semantic;
 
-        if (cldec.baseok < Baseok.done)
+        assert(cldec.baseok < Baseok.done);
+        cldec.baseok = Baseok.start;
+
+        // See if there's a base class as first in baseclasses[]
+        if (cldec.baseclasses.dim)
         {
-            cldec.baseok = Baseok.start;
+            BaseClass* b = (*cldec.baseclasses)[0];
+            Type tb = b.type.toBasetype();
+            auto sym = getAggregateSym(tb); // CALYPSO
+            auto bcd = isClassDeclarationOrNull(sym);
 
-            // See if there's a base class as first in baseclasses[]
-            if (cldec.baseclasses.dim)
-            {
-                BaseClass* b = (*cldec.baseclasses)[0];
-                Type tb = b.type.toBasetype();
-                auto sym = getAggregateSym(tb); // CALYPSO
-                auto bcd = isClassDeclarationOrNull(sym);
+            assert(!sym.isInterfaceDeclaration());
 
-                assert(!sym.isInterfaceDeclaration());
-
-                /* https://issues.dlang.org/show_bug.cgi?id=11034
-                 * Class inheritance hierarchy
-                 * and instance size of each classes are orthogonal information.
-                 * Therefore, even if tc.sym.sizeof == Sizeok.none,
-                 * we need to set baseClass field for class covariance check.
-                 */
-                cldec.baseClass = sym;
-                b.sym = cldec.baseClass;
-            }
-
-            for (size_t i = (cldec.baseClass ? 1 : 0); i < cldec.baseclasses.dim; i++)
-            {
-                BaseClass* b = (*cldec.baseclasses)[i];
-                Type tb = b.type.toBasetype();
-                b.sym = getAggregateSym(tb);
-            }
-            cldec.baseok = Baseok.done;
-
-            if (cldec.baseClass)
-            {
-                // CALYPSO TODO: leverage .stack for class values?
-//                 if (bcd.stack)
-//                     cldec.stack = true;
-                cldec.enclosing = cldec.baseClass.enclosing;
-                cldec.storage_class |= cldec.baseClass.storage_class & STC.TYPECTOR;
-            }
-
-            cldec.interfaces = cldec.baseclasses.tdata()[(cldec.baseClass ? 1 : 0) .. cldec.baseclasses.dim];
+            /* https://issues.dlang.org/show_bug.cgi?id=11034
+                * Class inheritance hierarchy
+                * and instance size of each classes are orthogonal information.
+                * Therefore, even if tc.sym.sizeof == Sizeok.none,
+                * we need to set baseClass field for class covariance check.
+                */
+            cldec.baseClass = sym;
+            b.sym = cldec.baseClass;
         }
-    Lancestorsdone:
+
+        for (size_t i = (cldec.baseClass ? 1 : 0); i < cldec.baseclasses.dim; i++)
+        {
+            BaseClass* b = (*cldec.baseclasses)[i];
+            Type tb = b.type.toBasetype();
+            b.sym = getAggregateSym(tb);
+        }
+        cldec.baseok = Baseok.done;
+
+        if (cldec.baseClass)
+        {
+            cldec.enclosing = cldec.baseClass.enclosing;
+            cldec.storage_class |= cldec.baseClass.storage_class & STC.TYPECTOR;
+        }
+
+        cldec.interfaces = cldec.baseclasses.tdata()[(cldec.baseClass ? 1 : 0) .. cldec.baseclasses.dim];
 
         if (!cldec.members) // if opaque declaration
         {
@@ -524,12 +517,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
             sc2.pop();
         }
 
-        if (cldec.baseok == Baseok.done)
-        {
-            cldec.baseok = Baseok.semanticdone;
-
-            cldec.initVtbl(); // CALYPSO
-        }
+        cldec.baseok = Baseok.semanticdone;
+        cldec.initVtbl(); // CALYPSO
 
         auto sc2 = cldec.newScope(sc);
 
@@ -581,8 +570,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         cldec.dtor = buildDtor(cldec, sc2);
         cldec.tidtor = buildExternDDtor(cldec, sc2);
 
-        cldec.inv = buildInv(cldec, sc2);
-
         cldec.semanticRun = PASS.semantic3done;
 
         sc2.pop();
@@ -593,8 +580,9 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         if (dsym.semanticRun >= PASS.semantic3done)
             return;
 
-        Scope* sc = dsym._scope;
+        Scope* sc = dsym._scope ? dsym._scope : this.sc;
         assert(sc);
+        dsym._scope = null;
 
         dsym.semanticRun = PASS.semantic;
 
@@ -714,8 +702,9 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         assert(funcdecl.semanticRun <= PASS.semantic);
         funcdecl.semanticRun = PASS.semantic;
 
-        sc = funcdecl._scope;
+        sc = funcdecl._scope ? funcdecl._scope : this.sc;
         assert(sc);
+        funcdecl._scope = null;
 
         funcdecl.parent = sc.parent;
         Dsymbol parent = funcdecl.toParent();
@@ -857,7 +846,7 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
             }
         }
 
-        Module.dprogress++;
+        Module.dprogress++; // CALYPSO TODO shouldn't be needed, remove
         funcdecl.semanticRun = PASS.semanticdone;
 
         /* Save scope for possible later use (if we need the
@@ -871,14 +860,25 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         funcdecl.semantic3(sc);
     }
 
+    override void visit(CtorDeclaration ctd)
+    {
+        visit(cast(FuncDeclaration)ctd);
+    }
+
+    override void visit(DtorDeclaration dd)
+    {
+        visit(cast(FuncDeclaration)dd);
+    }
+
     override void visit(EnumDeclaration ed)
     {
         if (ed.semanticRun >= PASS.semanticdone)
             return;
         assert(ed.semanticRun == PASS.init);
 
-        Scope* sc = ed._scope;
+        Scope* sc = ed._scope ? ed._scope : this.sc;
         assert(sc);
+        ed._scope = null;
 
         ed.parent = sc.parent;
         ed.type = ed.type.typeSemantic(ed.loc, sc);
