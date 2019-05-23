@@ -47,7 +47,7 @@ public:
     Objects* tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance = false);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
-    void makeForeignInstance( cpp::TemplateInstance* ti );
+    void makeForeignInstance(TemplateInstance* ti, Scope* sc);
 
     TemplateInstUnion hasExistingClangInst(::TemplateInstance* ti);
     TemplateInstUnion getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
@@ -83,7 +83,7 @@ public:
     Objects* tiargsForMangling() override;
 
     bool completeInst();
-    void correctTiargs();
+    void correctTiargs(Scope* sc);
     void markInvalid();
 
     const clang::NamedDecl* getInstantiatedTemplate();

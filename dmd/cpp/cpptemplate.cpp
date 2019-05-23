@@ -546,6 +546,11 @@ bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
     return isCPP(ti) && static_cast<TemplateInstance*>(ti)->isForeignInst;
 }
 
+bool LangPlugin::isForeignInstance(::TemplateInstance *ti)
+{
+    return TemplateDeclaration::isForeignInstance(ti);
+}
+
 clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* TempOrSpec)
 {
     if (auto RTD = dyn_cast<clang::RedeclarableTemplateDecl>(TempOrSpec))
@@ -614,14 +619,14 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         return ti;
     }
 
-    makeForeignInstance(ti);
+    makeForeignInstance(ti, sc);
 
     ti->semanticRun = PASSinit;
     ti->hash = 0;
     return ti;
 }
 
-void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
+void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti, Scope* sc)
 {
     ti->completeInst();
 
@@ -629,7 +634,7 @@ void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti)
     ti->isForeignInst = true;
     ti->havetempdecl = true;
 
-    ti->correctTiargs();
+    ti->correctTiargs(sc);
 }
 
 TemplateInstUnion TemplateDeclaration::hasExistingClangInst(::TemplateInstance* ti)
@@ -883,7 +888,7 @@ bool TemplateInstance::completeInst()
     return true;
 }
 
-void TemplateInstance::correctTiargs()
+void TemplateInstance::correctTiargs(Scope* sc)
 {
     auto InstND = Inst.dyn_cast<clang::NamedDecl*>();
 
@@ -902,6 +907,9 @@ void TemplateInstance::correctTiargs()
         tiargs = TypeMapper::FromType(tymap, loc).fromTemplateArguments(Args.begin(), Args.end(),
                         PartialTempParams);
         semantictiargsdone = false;
+
+        if (!semanticTiargs(sc))
+            assert(false && "semanticTiargs during correctTiargs() failed");
     }
 }
 

@@ -82,6 +82,8 @@ public:
 
     virtual void dsymbolSemantic(Dsymbol *dsym, Scope *sc) = 0;
 
+    virtual bool isForeignInstance(::TemplateInstance *ti) = 0;
+
     // ===== - - - - - ===== //
 
     virtual int getPragma(Scope* sc, PragmaDeclaration* decl) = 0;

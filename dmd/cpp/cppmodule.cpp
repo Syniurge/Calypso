@@ -1356,6 +1356,8 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
         explicit_ti->isForeignInst = true;
         explicit_ti->Inst = const_cast<SpecTy*>(D);
         explicit_ti->members = decldefs; // NOTE: it doesn't matter that td and ti share the same members, semantic(td) doesn't do any change to them
+        explicit_ti->tdtypes.setDim(tiargs->dim);
+        memcpy(explicit_ti->tdtypes.data, tiargs->data, tiargs->dim * sizeof(void*));
         s->push(explicit_ti);
     }
 

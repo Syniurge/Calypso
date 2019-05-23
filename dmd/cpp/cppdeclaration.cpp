@@ -416,7 +416,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         if (!tempinst->semanticTiargs(sc))
             assert(false && "DeclReferencer semanticTiargs failed");
 
-        td->makeForeignInstance(tempinst);
+        td->makeForeignInstance(tempinst, sc);
         dsymbolSemantic(tempinst, sc);
 
         s = tempinst->toAlias();

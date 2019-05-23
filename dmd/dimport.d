@@ -18,6 +18,7 @@ import dmd.dmodule;
 import dmd.dscope;
 import dmd.dsymbol;
 import dmd.dsymbolsem;
+import dmd.dtemplate;
 import dmd.errors;
 import dmd.expression;
 import dmd.globals;
@@ -355,6 +356,8 @@ public:
     // ===== - - - - - ===== //
 
     void dsymbolSemantic(Dsymbol dsym, Scope *sc);
+
+    bool isForeignInstance(TemplateInstance ti);
 
     // ===== - - - - - ===== //
 

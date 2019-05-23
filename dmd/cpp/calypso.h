@@ -148,6 +148,8 @@ public:
 
     void dsymbolSemantic(Dsymbol *dsym, Scope *sc) override;
 
+    bool isForeignInstance(::TemplateInstance *ti) override;
+
     int getPragma(Scope* sc, PragmaDeclaration* decl) override;
     void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) override;
 
