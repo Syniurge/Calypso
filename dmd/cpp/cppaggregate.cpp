@@ -453,7 +453,12 @@ void ClassDeclaration::finalizeVtbl()
 
         auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
         if (vi < 0)
+        {
+            md->vtblIndex = vtbl.dim;
             vtbl.push(md);
+        }
+        else
+            md->vtblIndex = vi;
     }
 }
 
