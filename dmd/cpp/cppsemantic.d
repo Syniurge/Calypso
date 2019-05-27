@@ -78,7 +78,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 {
     alias visit = DsymbolSemanticVisitor.visit;
 
-    Scope* sc;
     this(Scope* sc)
     {
         super(sc);

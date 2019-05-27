@@ -612,6 +612,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     }
 
 Ldeclaration:
+    auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
+    if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
+        decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
+
     if (anon)
         decldefs->push(new AnonDeclaration(loc, anon == 2, members));
     else
@@ -642,10 +646,6 @@ Ldeclaration:
                 decldefs->append(s);
         }
     }
-
-    auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
-    if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-        decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
 
     return decldefs;
 }
