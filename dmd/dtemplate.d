@@ -6128,7 +6128,8 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         this.tempdecl = td;
         this.semantictiargsdone = true;
         this.havetempdecl = true;
-        assert(tempdecl._scope);
+        if (!td.langPlugin()) // CALYPSO there's no reason to check for _scope here, at least for cpp::TemplateDeclaration
+            assert(tempdecl._scope);
     }
 
     extern (D) static Objects* arraySyntaxCopy(Objects* objs)

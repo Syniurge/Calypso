@@ -714,13 +714,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         funcdecl.storage_class |= sc.stc & ~STC.ref_;
         ad = funcdecl.isThis();
-        // Don't nest structs b/c of generated methods which should not access the outer scopes.
-        // https://issues.dlang.org/show_bug.cgi?id=16627
-        if (ad && !funcdecl.generated)
-        {
-            funcdecl.storage_class |= ad.storage_class & (STC.TYPECTOR | STC.synchronized_);
-            ad.makeNested();
-        }
         if (sc.func)
             funcdecl.storage_class |= sc.func.storage_class & STC.disable;
         // Remove prefix storage classes silently.
@@ -868,6 +861,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
     override void visit(DtorDeclaration dd)
     {
+        if (!dd.type)
+            dd.type = new TypeFunction(null, Type.tvoid, false, LINK.d, dd.storage_class);
         visit(cast(FuncDeclaration)dd);
     }
 
