@@ -78,7 +78,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 {
     alias visit = DsymbolSemanticVisitor.visit;
 
-    Scope* sc;
     this(Scope* sc)
     {
         super(sc);
@@ -186,11 +185,7 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         // Create our own scope for the template parameters
         Scope* _scope = tempdecl._scope;
-        if (tempdecl.semanticRun == PASS.init)
-        {
-            tempinst.error("template instantiation `%s` forward references template declaration `%s`", tempinst.toChars(), tempdecl.toChars());
-            return;
-        }
+        assert(tempdecl.semanticRun =>= PASS.semanticdone);
 
         tempinst.argsym = new ScopeDsymbol();
         tempinst.argsym.parent = _scope.parent;
