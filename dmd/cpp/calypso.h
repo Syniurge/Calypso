@@ -329,6 +329,7 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 // Use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
 
-void cppSemantic(Dsymbol *dsym, Scope *sc);
+void cppAddMember(Dsymbol* dsym, Scope* sc, ScopeDsymbol* sds);
+void cppSemantic(Dsymbol* dsym, Scope* sc);
 
 #endif /* DMD_CPP_CALYPSO_H */

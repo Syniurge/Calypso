@@ -75,6 +75,7 @@ public:
     TemplateInstance(Loc loc, ::TemplateDeclaration *td, Objects *tiargs);
     TemplateInstance(const TemplateInstance&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Identifier *getIdent() override;
     bool semanticTiargs(Scope *sc) override;
     void declareParameters(Scope *sc) override {}

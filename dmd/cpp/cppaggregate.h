@@ -37,6 +37,7 @@ public:
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
     bool determineFields() override;
     bool buildLayout() override;
     void finalizeSize() override;
@@ -64,6 +65,7 @@ public:
                      Dsymbols* members, const clang::CXXRecordDecl *RD);
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
     bool determineFields() override;
     bool buildLayout() override;
     bool mayBeAnonymous() override;
@@ -96,6 +98,7 @@ public:
     UnionDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
     bool mayBeAnonymous() override;
     bool determineFields() override;
     bool buildLayout() override;

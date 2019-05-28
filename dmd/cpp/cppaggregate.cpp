@@ -142,6 +142,22 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
+
+void StructDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
+void ClassDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
+void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
 void StructDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
