@@ -84,10 +84,10 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 
     override void visit(AggregateDeclaration ad)
     {
+        ad.Dsymbol.addMember(sc, sds);
+
         with (ad)
         {
-            addMember(sc, sds);
-
             if (!members)
                 return;
 
@@ -207,7 +207,6 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 
         // Create our own scope for the template parameters
         Scope* _scope = tempdecl._scope;
-        assert(tempdecl.semanticRun >= PASS.semanticdone);
 
         tempinst.argsym = new ScopeDsymbol();
         tempinst.argsym.parent = _scope.parent;
