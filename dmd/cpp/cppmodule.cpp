@@ -276,6 +276,7 @@ bool isTemplateInstantiation(const clang::Decl *D)
         return VarSpec->getSpecializationKind() != clang::TSK_ExplicitSpecialization;
     else if (auto Func = dyn_cast<clang::FunctionDecl>(D))
         return Func->isTemplateInstantiation();
+    return false;
 }
 
 Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)

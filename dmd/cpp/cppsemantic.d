@@ -185,7 +185,7 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         // Create our own scope for the template parameters
         Scope* _scope = tempdecl._scope;
-        assert(tempdecl.semanticRun =>= PASS.semanticdone);
+        assert(tempdecl.semanticRun => PASS.semanticdone);
 
         tempinst.argsym = new ScopeDsymbol();
         tempinst.argsym.parent = _scope.parent;
