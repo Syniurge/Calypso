@@ -7491,7 +7491,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         if (global.params.useUnitTests || global.params.debuglevel)
         {
             // Turn all non-root instances to speculative
-            if (mi && !mi.isRoot())
+            if (mi && !mi.isCodegen()) // CALYPSO
                 mi = null;
         }
 
@@ -7499,7 +7499,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         //    toPrettyChars(),
         //    enclosing ? enclosing.toPrettyChars() : null,
         //    mi ? mi.toPrettyChars() : null);
-        if (!mi || mi.isRoot())
+        if (!mi || mi.isCodegen()) // CALYPSO
         {
             /* If the instantiated module is speculative or root, insert to the
              * member of a root module. Then:
@@ -7521,9 +7521,9 @@ extern (C++) class TemplateInstance : ScopeDsymbol
             // insert target is made stable by using the module
             // where tempdecl is declared.
             mi = (enc ? enc : tempdecl).getModule();
-            if (!mi.isRoot())
+            if (!mi.isCodegen()) // CALYPSO
                 mi = mi.importedFrom;
-            assert(mi.isRoot());
+            assert(mi.isCodegen()); // CALYPSO
         }
         else
         {
@@ -7553,9 +7553,9 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         Dsymbols* a = mi.members;
         a.push(this);
         memberOf = mi;
-        if (mi.semanticRun >= PASS.semantic2done && mi.isRoot())
+        if (mi.semanticRun >= PASS.semantic2done && mi.isCodegen())
             Module.addDeferredSemantic2(this);
-        if (mi.semanticRun >= PASS.semantic3done && mi.isRoot())
+        if (mi.semanticRun >= PASS.semantic3done && mi.isCodegen())
             Module.addDeferredSemantic3(this);
         return a;
     }
