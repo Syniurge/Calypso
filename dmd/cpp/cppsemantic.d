@@ -90,6 +90,9 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         tempinst.addMember(sc, sc.scopesym);
 
+        if (!tempinst.members)
+            return;
+
         Scope* _scope = tempinst.tempdecl._scope;
         _scope = _scope.push(tempinst.argsym);
         _scope.tinst = tempinst.isDummy ? null : tempinst;

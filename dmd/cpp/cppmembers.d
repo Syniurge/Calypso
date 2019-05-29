@@ -206,7 +206,7 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         tempinst.members = tempdecl.copySyntaxTree(tempinst);
 
         // Create our own scope for the template parameters
-        Scope* _scope = tempdecl._scope;
+        Scope* _scope = /+tempdecl._scope+/ sc;
 
         tempinst.argsym = new ScopeDsymbol();
         tempinst.argsym.parent = _scope.parent;
