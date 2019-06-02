@@ -8,6 +8,7 @@
 #endif /* __DMC__ */
 
 #include "root/root.h"
+#include "arraytypes.h"
 #include "dsymbol.h"
 #include "enum.h"
 #include "cpp/calypso.h"
@@ -171,6 +172,8 @@ bool isMapped(const clang::Decl *D);
 class DeclMapper : public TypeMapper
 {
 public:
+    Dsymbols importDecls, pendingTempinsts;
+
     DeclMapper(Module *mod, bool isGlobal = false) : TypeMapper(mod, isGlobal) {}
 
     inline Prot::Kind toProt(clang::AccessSpecifier AS);

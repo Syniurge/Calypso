@@ -337,9 +337,23 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    ti->isForeignInst = true;
+    ti->Inst = const_cast<SpecTy*>(D);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
+
+    if (mod->members)
+    {
+        // late addition
+        mod->members->append(decldefs);
+
+        if (mod->_scope)
+            // importAll already run
+            ti->addMember(mod->_scope, mod);
+    }
+    else
+        pendingTempinsts.append(decldefs);
 
     return decldefs;
 }
@@ -355,9 +369,23 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    ti->isForeignInst = true;
+    ti->Inst = const_cast<clang::FunctionDecl*>(D);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
+
+    if (mod->members)
+    {
+        // late addition
+        mod->members->append(decldefs);
+
+        if (mod->_scope)
+            // importAll already run
+            ti->addMember(mod->_scope, mod);
+    }
+    else
+        pendingTempinsts.append(decldefs);
 
     return decldefs;
 }
@@ -1598,22 +1626,28 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     return true;
 }
 
-void mapMacros(Module* m, clang::Module::Header* Header)
+Dsymbols* mapMacros(Module* m, clang::Module::Header* Header)
 {
+    auto decldefs = new Dsymbols;
+
     auto MacroMapEntry = calypso.MacroMap[Header];
     if (!MacroMapEntry)
-        return;
+        return decldefs;
 
     for (auto& P: *MacroMapEntry)
         if (auto s = m->mapper->VisitMacro(P.first, P.second))
-            m->members->push(s);
+            decldefs->push(s);
+
+    return decldefs;
 }
 
-static void mapNamespace(Module* m, const clang::DeclContext *DC, bool forClangModule = false)
+static Dsymbols* mapNamespace(Module* m, const clang::DeclContext *DC, bool forClangModule = false)
 {
     auto CanonDC = cast<clang::Decl>(DC)->getCanonicalDecl();
     auto MMap = calypso.pch.MMap;
     auto& SrcMgr = calypso.getSourceManager();
+
+    auto decldefs = new Dsymbols;
 
     auto D = DC->decls_begin(),
             DE = DC->decls_end();
@@ -1635,21 +1669,23 @@ static void mapNamespace(Module* m, const clang::DeclContext *DC, bool forClangM
         auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
         if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
         {
-            mapNamespace(m, cast<clang::DeclContext>(*D), forClangModule);
+            decldefs->append(mapNamespace(m, cast<clang::DeclContext>(*D), forClangModule));
             continue;
         }
         else if (!isTopLevelInNamespaceModule(*D))
             continue;
 
         if (auto s = m->mapper->VisitDecl(*D))
-            m->members->append(s);
+            decldefs->append(s);
     }
     
     if (DC->isTranslationUnit())
-        mapMacros(m, nullptr);
+        decldefs->append(mapMacros(m, nullptr));
+
+    return decldefs;
 }
 
-static void mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
+static Dsymbols* mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
 {
     auto AST = calypso.getASTUnit();
     auto& SrcMgr = calypso.getSourceManager();
@@ -1717,6 +1753,8 @@ static void mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
         fatal();
     }
 
+    auto decldefs = new Dsymbols;
+
     std::function<void(const clang::Decl *)> Map = [&] (const clang::Decl *D)
     {
         if (auto LinkSpec = dyn_cast<clang::LinkageSpecDecl>(D))
@@ -1735,12 +1773,12 @@ static void mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
             return;
 
         if (auto s = m->mapper->VisitDecl(D))
-            m->members->append(s);
+            decldefs->append(s);
     };
 
     if (!isa<clang::TranslationUnitDecl>(Root))
         for (auto R: RootDecls)
-            mapNamespace(m, cast<clang::DeclContext>(R), true);
+            decldefs->append(mapNamespace(m, cast<clang::DeclContext>(R), true));
     else
     {
         // Map the macros contained in the module headers (currently limited to numerical constants)
@@ -1751,6 +1789,8 @@ static void mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
             if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
                 Map(D);
     }
+
+    return decldefs;
 }
 
 Module *Module::create(Module::RootKey rootKey, Identifiers *packages, Identifier *id)
@@ -1759,7 +1799,6 @@ Module *Module::create(Module::RootKey rootKey, Identifiers *packages, Identifie
 
     auto m = new Module(moduleName(packages, id).c_str(),
                         id, packages);
-    m->members = new Dsymbols;
     m->rootKey = rootKey;
     allCppModules[rootKey] = m;
 
@@ -1901,9 +1940,11 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     amodules.push_back(m);
     pkg->symtab->insert(m);
 
+    auto decldefs = new Dsymbols;
+
     if (M)
     {
-        mapClangModule(m, rootKey.first, M);
+        decldefs->append(mapClangModule(m, rootKey.first, M));
     }
     else if (id == calypso.id__)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
     {
@@ -1912,7 +1953,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
         {
             assert(isa<clang::TranslationUnitDecl>(DC));
 
-            mapNamespace(m, DC);
+            decldefs->append(mapNamespace(m, DC));
         }
         else
         {
@@ -1922,14 +1963,14 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
             for (; I != E; ++I)
             {
                 DC = *I;
-                mapNamespace(m, DC);
+                decldefs->append(mapNamespace(m, DC));
             }
         }
     }
     else
     {
         if (auto s = m->mapper->VisitDecl(D))
-            m->members->append(s);
+            decldefs->append(s);
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
         for (int Op = 1; Op < clang::NUM_OVERLOADED_OPERATORS; Op++)
@@ -1951,7 +1992,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
                         continue; // friend out-of-line decls are already mapped in VisitRecordDecl
 
                     if (auto s = m->mapper->VisitDecl(getCanonicalDecl(OverOp)))
-                        m->members->append(s);
+                        decldefs->append(s);
                 }
             }
         }
@@ -1960,9 +2001,15 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     }
 
     // Enclose every mapped symbol into an extern(C++) declaration
-    auto s = new_LinkDeclaration(LINKcpp, m->members);
     m->members = new Dsymbols;
+    m->members->append(&m->mapper->importDecls);
+    m->mapper->importDecls.setDim(0);
+
+    auto s = new_LinkDeclaration(LINKcpp, decldefs);
     m->members->push(s);
+
+    m->members->append(&m->mapper->pendingTempinsts);
+    m->mapper->pendingTempinsts.setDim(0);
     return m;
 }
 

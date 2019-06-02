@@ -1660,7 +1660,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 
     if (!fake && !implicitImports[Key].added) {
         if (addImplicitDecls) {
-            mod->members->shift(im);
+            mod->mapper->importDecls.push(im);
             implicitImports[Key].added = true;
         } else if (scSemImplicitImports) {
             auto dst = Package::resolve(im->packages, nullptr, &im->pkg);

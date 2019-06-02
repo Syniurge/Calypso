@@ -193,14 +193,18 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         }
 
         tempinst.inst = tempinst;
-        tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
+        if (!tempinst.parent)
+        {
+            tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
+            tempinst.appendToModuleMember();
+        }
 
         TemplateInstance tempdecl_instance_idx = tempdecl.addInstance(tempinst);
 
         // Store the place we added it to in target_symbol_list(_idx) so we can
         // remove it later if we encounter an error.
-        Dsymbols* target_symbol_list = tempinst.appendToModuleMember();
-        size_t target_symbol_list_idx = target_symbol_list ? target_symbol_list.dim - 1 : 0;
+//         Dsymbols* target_symbol_list = tempinst.appendToModuleMember();
+//         size_t target_symbol_list_idx = target_symbol_list ? target_symbol_list.dim - 1 : 0;
 
         // Copy the syntax trees from the TemplateDeclaration
         tempinst.members = tempdecl.copySyntaxTree(tempinst);
