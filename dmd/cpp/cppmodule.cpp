@@ -337,6 +337,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    ti->parent = mod;
     ti->isForeignInst = true;
     ti->Inst = const_cast<SpecTy*>(D);
 
@@ -369,6 +370,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    ti->parent = mod;
     ti->isForeignInst = true;
     ti->Inst = const_cast<clang::FunctionDecl*>(D);
 
@@ -641,16 +643,16 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     }
 
 Ldeclaration:
-    auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
-    if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-        decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
-
     if (anon)
         decldefs->push(new AnonDeclaration(loc, anon == 2, members));
     else
     {
         a->members = members;
         decldefs->push(a);
+
+        auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
+        if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
+            decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
     }
 
     // Sometimes friend declarations are the only existing declarations, so map them to the parent context
