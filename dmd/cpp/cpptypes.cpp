@@ -1089,15 +1089,25 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
     if (D->d)
         return D->d->sym;
 
-    auto Key = GetImplicitImportKeyForDecl(D);
-    auto extMod = cpp::Module::allCppModules[Key];
-    if (!extMod) {
-        auto im = AddImplicitImportForDecl(loc, D); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
-        extMod = Module::create(Key, im->packages, im->id);
-        extMod->importedFrom = mod;
+    ::Module* minst;
+    if (!isTemplateInstantiation(D))
+    {
+        auto Key = GetImplicitImportKeyForDecl(D);
+        minst = cpp::Module::allCppModules[Key];
+        if (!minst) {
+            auto im = AddImplicitImportForDecl(loc, D); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
+            minst = Module::create(Key, im->packages, im->id);
+            minst->importedFrom = mod;
+        }
     }
+    else
+        minst = this->mod;
 
-    extMod->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+    if (isCPP(minst))
+        static_cast<cpp::Module*>(minst)->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+    else if (minst)
+        DeclMapper(minst, false, false).VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+    else
 
     return D->d ? D->d->sym : nullptr;
 }
@@ -1956,8 +1966,8 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 
 /***** *****/
 
-TypeMapper::TypeMapper(cpp::Module* mod, bool isGlobal)
-    : mod(mod), isGlobal(isGlobal)
+TypeMapper::TypeMapper(::Module* mod, bool isGlobal, bool addImplicitDecls)
+    : mod(mod), isGlobal(isGlobal), addImplicitDecls(addImplicitDecls)
 {
 }
 

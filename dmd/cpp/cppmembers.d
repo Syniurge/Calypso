@@ -193,11 +193,10 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         }
 
         tempinst.inst = tempinst;
-        if (!tempinst.parent)
-        {
-            tempinst.parent = tempinst.enclosing ? tempinst.enclosing : sc.scopesym;
-            tempinst.appendToModuleMember();
-        }
+        assert(tempdecl.parent);
+        tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
+
+        tempinst.appendToModuleMember();
 
         TemplateInstance tempdecl_instance_idx = tempdecl.addInstance(tempinst);
 

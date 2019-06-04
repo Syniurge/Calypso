@@ -337,24 +337,25 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
-    ti->parent = mod;
     ti->isForeignInst = true;
     ti->Inst = const_cast<SpecTy*>(D);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
-    if (mod->members)
+    if (!mod->members)
+        pendingTempinsts.append(decldefs);
+    else
     {
         // late addition
-        mod->members->append(decldefs);
+        ti->minst = mod;
 
-        if (mod->_scope)
+        if (!mod->_scope)
+            ti->appendToModuleMember();
+        else
             // importAll already run
             ti->addMember(mod->_scope, mod);
     }
-    else
-        pendingTempinsts.append(decldefs);
 
     return decldefs;
 }
@@ -370,24 +371,25 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
-    ti->parent = mod;
     ti->isForeignInst = true;
     ti->Inst = const_cast<clang::FunctionDecl*>(D);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
-    if (mod->members)
+    if (!mod->members)
+        pendingTempinsts.append(decldefs);
+    else
     {
         // late addition
-        mod->members->append(decldefs);
+        ti->minst = mod;
 
-        if (mod->_scope)
+        if (!mod->_scope)
+            ti->appendToModuleMember();
+        else
             // importAll already run
             ti->addMember(mod->_scope, mod);
     }
-    else
-        pendingTempinsts.append(decldefs);
 
     return decldefs;
 }

@@ -174,7 +174,7 @@ class DeclMapper : public TypeMapper
 public:
     Dsymbols importDecls, pendingTempinsts;
 
-    DeclMapper(Module *mod, bool isGlobal = false) : TypeMapper(mod, isGlobal) {}
+    DeclMapper(::Module *mod, bool isGlobal = false, bool addImplicitDecls = true) : TypeMapper(mod, isGlobal, addImplicitDecls) {}
 
     inline Prot::Kind toProt(clang::AccessSpecifier AS);
 
@@ -274,6 +274,7 @@ const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only differenc
 bool isPolymorphic(const clang::RecordDecl *D);
 void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
 void MarkFunctionReferenced(::FuncDeclaration* fd);
+bool isTemplateInstantiation(const clang::Decl *D);
 
 inline bool& getIsUsed(::FuncDeclaration* fd)
 {

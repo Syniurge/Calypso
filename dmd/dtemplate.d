@@ -7484,7 +7484,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
     /*****************************************
      * Append 'this' to the specific module members[]
      */
-    extern (D) final Dsymbols* appendToModuleMember()
+    extern (C++) final Dsymbols* appendToModuleMember() // CALYPSO
     {
         Module mi = minst; // instantiated . inserted module
 
