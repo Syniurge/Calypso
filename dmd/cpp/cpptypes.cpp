@@ -1060,7 +1060,7 @@ const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
     auto DK = GetImplicitImportKeyForDecl(D);
     auto ModDC = GetNonNestedContext(D);
 
-    if (mod && DK == mod->rootKey)
+    if (mod && isCPP(mod) && DK == static_cast<cpp::Module*>(mod)->rootKey)
     {
         if (isa<clang::TagDecl>(ModDC))
             return ModDC;
@@ -1107,7 +1107,6 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
         static_cast<cpp::Module*>(minst)->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
     else if (minst)
         DeclMapper(minst, false, false).VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
-    else
 
     return D->d ? D->d->sym : nullptr;
 }
@@ -1626,7 +1625,9 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 {
     auto Key = GetImplicitImportKeyForDecl(D);
 
-    if (mod && Key == mod->rootKey)
+    assert(!mod || isCPP(mod));
+
+    if (mod && Key == static_cast<cpp::Module*>(mod)->rootKey)
         return nullptr; // do not import self
 
     cpp::Import *im = implicitImports[Key].im;
@@ -1647,7 +1648,7 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
             {
                 if (Match->getCanonicalDecl() == Key.first)
                     continue;
-                if (GetImplicitImportKeyForDecl(Match) != mod->rootKey)
+                if (GetImplicitImportKeyForDecl(Match) != static_cast<cpp::Module*>(mod)->rootKey)
                     continue; // the matching decl is part of another module, no conflict
 
                 { auto importIdent = getIdentifier(TD);
@@ -1670,7 +1671,8 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 
     if (!fake && !implicitImports[Key].added) {
         if (addImplicitDecls) {
-            mod->mapper->importDecls.push(im);
+            assert(isCPP(mod));
+            static_cast<cpp::Module*>(mod)->mapper->importDecls.push(im);
             implicitImports[Key].added = true;
         } else if (scSemImplicitImports) {
             auto dst = Package::resolve(im->packages, nullptr, &im->pkg);

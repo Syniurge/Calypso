@@ -274,8 +274,10 @@ IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
 
 /***********************/
 
-DeclMapper DeclReferencer::mapper(nullptr, true);
-ExprMapper DeclReferencer::expmap(mapper);
+DeclReferencer::DeclReferencer(::Module* minst)
+  : mapper(minst, false, false), expmap(mapper)
+{
+}
 
 void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
 {
@@ -334,7 +336,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
 
     auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
-    e = expressionSemantic(e, sc);
+//     e = expressionSemantic(e, sc);
 
     Dsymbol *s;
     if (e->op == TOKvar)
@@ -348,92 +350,93 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         s = static_cast<ScopeExp*>(e)->sds;
     }
 
-    if (s->isFuncDeclaration() || s->isTemplateDeclaration())
-    {
-        struct DEquals
-        {
-            const clang::Decl* D;
-            Dsymbol *s = nullptr; // return value
+    if (auto tempinst = s->isInstantiated())
+        cppSemantic(tempinst, sc);
+    else if (s->isAggregateDeclaration())
+        cppSemantic(s, nullptr);
 
-            static int fp(void *param, Dsymbol *s)
-            {
-                DEquals *p = (DEquals *)param;
+//     if (s->isFuncDeclaration() || s->isTemplateDeclaration())
+//     {
+//         struct DEquals
+//         {
+//             const clang::Decl* D;
+//             Dsymbol *s = nullptr; // return value
+//
+//             static int fp(void *param, Dsymbol *s)
+//             {
+//                 DEquals *p = (DEquals *)param;
+//
+//                 if (!isCPP(s))
+//                     return 0;
+//
+//                 auto fd = s->isFuncDeclaration();
+//                 auto c_td = static_cast<cpp::TemplateDeclaration*>(
+//                     s->isTemplateDeclaration());
+//                 const clang::Decl* s_D = fd ? getFD(fd) : c_td->TempOrSpec;
+//
+//                 if (p->D == getCanonicalDecl(s_D)) {
+//                     p->s = s;
+//                     return 1;
+//                 }
+//
+//                 return 0;
+//             }
+//         };
+//         DEquals p;
+//         p.D = getCanonicalDecl(D);
+//         overloadApply(s, &p, &DEquals::fp);
+//         s = p.s;
+//         assert(s);
+//     }
 
-                if (!isCPP(s))
-                    return 0;
-
-                auto fd = s->isFuncDeclaration();
-                auto c_td = static_cast<cpp::TemplateDeclaration*>(
-                    s->isTemplateDeclaration());
-                const clang::Decl* s_D = fd ? getFD(fd) : c_td->TempOrSpec;
-
-                if (p->D == getCanonicalDecl(s_D)) {
-                    p->s = s;
-                    return 1;
-                }
-
-                return 0;
-            }
-        };
-        DEquals p;
-        p.D = getCanonicalDecl(D);
-        overloadApply(s, &p, &DEquals::fp);
-        s = p.s;
-        assert(s);
-    }
-
-    if (Func && Func->getPrimaryTemplate())
-    {
-        // if it's a template spec we must instantiate the right overload
-        assert(s->isTemplateDeclaration());
-
-        auto td = static_cast<cpp::TemplateDeclaration*>(s);
-        if (td->semanticRun == PASSinit) {
-            assert(td->_scope);
-            dsymbolSemantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
-        }
-
-        auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
-        assert(tiargs);
-
-        auto checkTiargs = [] (Objects* tiargs) {
-            for (auto& tiarg: *tiargs)
-                if (!tiarg)
-                    return false;
-            return true;
-        };
-        if (!checkTiargs(tiargs))
-            goto Lcleanup;
-
-        SpecValue spec(mapper);
-        getIdentifier(Func, &spec, true);
-        if (spec)
-            tiargs->shift(spec.toTemplateArg(loc));
-        
-        auto tempinst = new cpp::TemplateInstance(loc, td, tiargs);
-        tempinst->Inst = const_cast<clang::FunctionDecl*>(Func);
-        tempinst->semantictiargsdone = false; // NOTE: the "havetempdecl" ctor of Templateinstance set semantictiargsdone to true...
-        if (!tempinst->semanticTiargs(sc))
-            assert(false && "DeclReferencer semanticTiargs failed");
-
-        td->makeForeignInstance(tempinst, sc);
-        dsymbolSemantic(tempinst, sc);
-
-        s = tempinst->toAlias();
-    }
-    else
-    {
-        if (s->isAggregateDeclaration()) { // restricting to aggregates to better grasp if there's more types of symbols that need this
-            if (s->semanticRun < PASSsemantic2)
-                semantic2(s, sc);
-            if (s->semanticRun < PASSsemantic3)
-                semantic3(s, sc);
-        }
-    }
+//     if (Func && Func->getPrimaryTemplate())
+//     {
+//         // if it's a template spec we must instantiate the right overload
+//         assert(s->isTemplateDeclaration());
+//
+//         auto td = static_cast<cpp::TemplateDeclaration*>(s);
+//         if (td->semanticRun == PASSinit) {
+//             assert(td->_scope);
+//             dsymbolSemantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
+//         }
+//
+//         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
+//         assert(tiargs);
+//
+//         auto checkTiargs = [] (Objects* tiargs) {
+//             for (auto& tiarg: *tiargs)
+//                 if (!tiarg)
+//                     return false;
+//             return true;
+//         };
+//         if (!checkTiargs(tiargs))
+//             goto Lcleanup;
+//
+//         SpecValue spec(mapper);
+//         getIdentifier(Func, &spec, true);
+//         if (spec)
+//             tiargs->shift(spec.toTemplateArg(loc));
+//
+//         auto tempinst = new cpp::TemplateInstance(loc, td, tiargs);
+//         tempinst->Inst = const_cast<clang::FunctionDecl*>(Func);
+//         tempinst->semantictiargsdone = false; // NOTE: the "havetempdecl" ctor of Templateinstance set semantictiargsdone to true...
+//         if (!tempinst->semanticTiargs(sc))
+//             assert(false && "DeclReferencer semanticTiargs failed");
+//
+//         td->makeForeignInstance(tempinst, sc);
+//         dsymbolSemantic(tempinst, sc);
+//
+//         s = tempinst->toAlias();
+//     }
+//     else
+//     {
+//         if (s->isAggregateDeclaration())
+//             cppSemantic(s, nullptr);
+//     }
 
     calypso.markSymbolReferenced(s);
 
-Lcleanup:
+// Lcleanup:
     // Memory usage can skyrocket when using a large library
     delete_Object(e);
 
@@ -573,7 +576,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
         sc2->fieldinit = NULL;
         sc2->fieldinit_dim = 0;
 
-        DeclReferencer declReferencer;
+        DeclReferencer declReferencer(sc->minst);
         declReferencer.Traverse(fd->loc, sc2, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))

@@ -343,13 +343,16 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
+    ti->minst = mod;
+
     if (!mod->members)
+    {
         pendingTempinsts.append(decldefs);
+        ti->memberOf = mod;
+    }
     else
     {
         // late addition
-        ti->minst = mod;
-
         if (!mod->_scope)
             ti->appendToModuleMember();
         else
@@ -377,13 +380,16 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
+    ti->minst = mod;
+
     if (!mod->members)
+    {
         pendingTempinsts.append(decldefs);
+        ti->memberOf = mod;
+    }
     else
     {
         // late addition
-        ti->minst = mod;
-
         if (!mod->_scope)
             ti->appendToModuleMember();
         else

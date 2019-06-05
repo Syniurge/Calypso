@@ -229,8 +229,8 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
     friend class NestedDeclMapper;
 
-    static DeclMapper mapper;
-    static ExprMapper expmap;
+    DeclMapper mapper;
+    ExprMapper expmap;
 
     Loc loc;
     Scope *sc = nullptr;
@@ -240,10 +240,7 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 
     bool VisitDeclRef(const clang::NamedDecl *D);
 public:
-    DeclReferencer()
-    {
-        mapper.addImplicitDecls = false;
-    }
+    DeclReferencer(::Module* minst);
 
     void Traverse(Loc loc, Scope *sc, clang::Stmt *S);
 

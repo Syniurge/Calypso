@@ -72,7 +72,10 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
                 calypso.markSymbolReferenced(ad->dtor);
         }
 
-        DeclReferencer declReferencer;
+        auto ti = ad->isInstantiated();
+        auto minst = ti ? ti->minst : ad->getModule();
+
+        DeclReferencer declReferencer(minst);
         auto sc = ad->_scope;
         if (!sc)
             sc = ad->getModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
