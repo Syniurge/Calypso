@@ -179,6 +179,8 @@ public:
     inline Prot::Kind toProt(clang::AccessSpecifier AS);
 
     // Declarations
+    Dsymbols *VisitDeclContext(const clang::DeclContext *DC);
+
     Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
 
     Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);

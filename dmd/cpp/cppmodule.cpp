@@ -238,6 +238,20 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
 
 }
 
+Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
+{
+    auto decldefs = new Dsymbols;
+
+    for (auto D = DC->decls_begin(), DEnd = DC->decls_end();
+        D != DEnd; ++D)
+    {
+        if (auto d = VisitDecl(*D))
+            decldefs->append(d);
+    }
+
+    return decldefs;
+}
+
 bool isExplicitSpecialization(const clang::Decl *D)
 {
     if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
@@ -633,12 +647,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             continue;
 
         if (auto s = VisitDecl(M))
-        {
             members->append(s);
-            if (a)
-                for (auto sym: *s)
-                    sym->parent = a;
-        }
     }
 
 Ldeclaration:
@@ -1449,7 +1458,6 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
         auto em = new EnumMember(memberLoc, ident, value, nullptr, ECD);
         setDsym(ECD, em);
         e->members->push(em);
-        em->parent = e;
     }
 
     return oneSymbol(e);
@@ -2009,8 +2017,6 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
     auto s = new_LinkDeclaration(LINKcpp, decldefs);
     m->members->push(s);
-    for (auto sym: *decldefs)
-        sym->parent = m;
 
     m->members->append(&m->mapper->pendingTempinsts);
     m->mapper->pendingTempinsts.setDim(0);
