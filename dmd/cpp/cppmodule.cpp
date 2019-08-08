@@ -323,6 +323,8 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    for (auto s: *decldefs)
+        s->parent = ti;
     ti->isForeignInst = true;
     ti->Inst = const_cast<SpecTy*>(D);
 
@@ -332,10 +334,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     ti->minst = mod;
 
     if (!mod->members)
-    {
         pendingTempinsts.append(decldefs);
-        ti->memberOf = mod;
-    }
     else
     {
         // late addition
@@ -345,6 +344,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
             // importAll already run
             ti->addMember(mod->_scope, mod);
     }
+    ti->memberOf = mod;
 
     return decldefs;
 }
@@ -360,6 +360,8 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
+    for (auto s: *decldefs)
+        s->parent = ti;
     ti->isForeignInst = true;
     ti->Inst = const_cast<clang::FunctionDecl*>(D);
 
@@ -369,10 +371,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     ti->minst = mod;
 
     if (!mod->members)
-    {
         pendingTempinsts.append(decldefs);
-        ti->memberOf = mod;
-    }
     else
     {
         // late addition
@@ -382,6 +381,7 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
             // importAll already run
             ti->addMember(mod->_scope, mod);
     }
+    ti->memberOf = mod;
 
     return decldefs;
 }
@@ -633,7 +633,12 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             continue;
 
         if (auto s = VisitDecl(M))
+        {
             members->append(s);
+            if (a)
+                for (auto sym: *s)
+                    sym->parent = a;
+        }
     }
 
 Ldeclaration:
@@ -1444,6 +1449,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
         auto em = new EnumMember(memberLoc, ident, value, nullptr, ECD);
         setDsym(ECD, em);
         e->members->push(em);
+        em->parent = e;
     }
 
     return oneSymbol(e);
@@ -2003,10 +2009,10 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
     auto s = new_LinkDeclaration(LINKcpp, decldefs);
     m->members->push(s);
+    for (auto sym: *decldefs)
+        sym->parent = m;
 
     m->members->append(&m->mapper->pendingTempinsts);
-    for (auto ti: m->mapper->pendingTempinsts)
-        static_cast<::TemplateInstance*>(ti)->memberOf = m;
     m->mapper->pendingTempinsts.setDim(0);
     return m;
 }

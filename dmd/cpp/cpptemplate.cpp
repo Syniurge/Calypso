@@ -58,6 +58,11 @@ TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
 
+void TemplateDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    cppAddMember(this, sc, sds);
+}
+
 static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
                                 TypeMapper& tymap, ExprMapper& expmap)
