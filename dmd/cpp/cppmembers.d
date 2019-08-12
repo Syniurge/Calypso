@@ -193,9 +193,10 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         }
 
         tempinst.inst = tempinst;
-//         tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent; // moved to cppsemantic
+        assert(tempdecl.parent);
+        tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
 
-//         tempinst.appendToModuleMember();
+        tempinst.appendToModuleMember();
 
         TemplateInstance tempdecl_instance_idx = tempdecl.addInstance(tempinst);
 
@@ -211,20 +212,19 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         Scope* _scope = /+tempdecl._scope+/ sc;
 
         tempinst.argsym = new ScopeDsymbol();
-//         tempinst.argsym.parent = _scope.parent;
+        tempinst.argsym.parent = _scope.parent;
         _scope = _scope.push(tempinst.argsym);
         _scope.tinst = tempinst.isDummy ? null : tempinst;
         _scope.minst = tempinst.minst;
         //scope.stc = 0;
 
-        // NOTE: see c74274e375b0b05a08c74701b6b2b41dcf02fa1d, but I'm leaving it commented to give it more thought
-//         // Declare each template parameter as an alias for the argument type
-//         Scope* paramscope = _scope.push();
-//         paramscope.stc = 0;
-//         paramscope.protection = Prot(Prot.Kind.public_); // https://issues.dlang.org/show_bug.cgi?id=14169
-//                                                 // template parameters should be public
-//         tempinst.declareParameters(paramscope);
-//         paramscope.pop();
+        // Declare each template parameter as an alias for the argument type
+        Scope* paramscope = _scope.push();
+        paramscope.stc = 0;
+        paramscope.protection = Prot(Prot.Kind.public_); // https://issues.dlang.org/show_bug.cgi?id=14169
+                                                // template parameters should be public
+        tempinst.declareParameters(paramscope);
+        paramscope.pop();
 
         // Add members of template instance to template instance symbol table
         tempinst.symtab = new DsymbolTable();
