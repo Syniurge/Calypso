@@ -238,20 +238,6 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
 
 }
 
-Dsymbols *DeclMapper::VisitDeclContext(const clang::DeclContext *DC)
-{
-    auto decldefs = new Dsymbols;
-
-    for (auto D = DC->decls_begin(), DEnd = DC->decls_end();
-        D != DEnd; ++D)
-    {
-        if (auto d = VisitDecl(*D))
-            decldefs->append(d);
-    }
-
-    return decldefs;
-}
-
 bool isExplicitSpecialization(const clang::Decl *D)
 {
     if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
