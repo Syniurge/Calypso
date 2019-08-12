@@ -90,8 +90,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         tempinst.addMember(sc, sc.scopesym);
 
-//         assert(tempinst.tempdecl.parent);
-//         tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempinst.tempdecl.parent;
+        assert(tempinst.tempdecl.parent);
+        tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempinst.tempdecl.parent;
 
         tempinst.appendToModuleMember();
 
