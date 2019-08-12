@@ -138,7 +138,7 @@ extern(C++) final class CppAddMemberVisitor : Visitor
             if (auto foreignInst = tempdecl.foreignInstance(tempinst, sc))  // CALYPSO
                 assert(tempinst == foreignInst);
         }
-        else
+        else if (tempinst != tempinst.inst) // NOTE: for Calypso the instance might have already been created and added by DeclMapper, but the rest of addMember still needs to be done
         {
             // It's a match
             tempinst.parent = tempinst.inst.parent;

@@ -324,7 +324,11 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, D
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
     ti->isForeignInst = true;
+    ti->inst = ti;
     ti->Inst = const_cast<SpecTy*>(D);
+
+    assert(!static_cast<TemplateDeclaration*>(tempdecl)->findExistingInstance(ti, nullptr));
+    static_cast<TemplateDeclaration*>(tempdecl)->addInstance(ti);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
@@ -361,7 +365,11 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
     ti->isForeignInst = true;
+    ti->inst = ti;
     ti->Inst = const_cast<clang::FunctionDecl*>(D);
+
+    assert(!static_cast<TemplateDeclaration*>(tempdecl)->findExistingInstance(ti, nullptr));
+    static_cast<TemplateDeclaration*>(tempdecl)->addInstance(ti);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);

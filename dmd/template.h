@@ -97,6 +97,10 @@ public:
     RootObject *declareParameter(Scope *sc, TemplateParameter *tp, RootObject *o);
     FuncDeclaration *doHeaderInstantiation(TemplateInstance *ti, Scope *sc, FuncDeclaration *fd, Type *tthis, Expressions *fargs); // CALYPSO
 
+    // CALYPSO (made extern (C++))
+    TemplateInstance* findExistingInstance(TemplateInstance* tithis, Expressions* fargs);
+    TemplateInstance* addInstance(TemplateInstance* ti);
+
     // CALYPSO
     virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
     virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti);

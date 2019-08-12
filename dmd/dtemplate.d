@@ -2255,7 +2255,7 @@ else
      * see if there already exists an instance.
      * If so, return that existing instance.
      */
-    extern (D) final TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs) // CALYPSO (missing final)
+    final TemplateInstance findExistingInstance(TemplateInstance tithis, Expressions* fargs) // CALYPSO (missing final, made extern C++)
     {
         //printf("findExistingInstance(%p)\n", tithis);
         tithis.fargs = fargs;
@@ -2270,7 +2270,7 @@ else
      * Add instance ti to TemplateDeclaration's table of instances.
      * Return a handle we can use to later remove it if it fails instantiation.
      */
-    extern (D) final TemplateInstance addInstance(TemplateInstance ti) // CALYPSO (missing final)
+    final TemplateInstance addInstance(TemplateInstance ti) // CALYPSO (missing final, made extern C++)
     {
         //printf("addInstance() %p %p\n", instances, ti);
         auto tibox = TemplateInstanceBox(ti);
