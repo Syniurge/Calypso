@@ -111,6 +111,15 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         }
     }
 
+    override void visit(TemplateDeclaration tempdecl)
+    {
+        tempdecl.Dsymbol.addMember(sc, sds);
+
+        foreach (ti; tempdecl.instances)
+            if (!ti.parent)
+                ti.parent = tempdecl.parent;
+    }
+
     override void visit(TemplateInstance tempinst)
     {
         if (tempinst.symtab)
@@ -193,7 +202,6 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         }
 
         tempinst.inst = tempinst;
-        assert(tempdecl.parent);
         tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
 
         tempinst.appendToModuleMember();
