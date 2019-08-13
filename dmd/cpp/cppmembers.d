@@ -117,7 +117,10 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 
         foreach (ti; tempdecl.instances)
             if (!ti.parent)
+            {
                 ti.parent = tempdecl.parent;
+                ti.appendToModuleMember();
+            }
     }
 
     override void visit(TemplateInstance tempinst)
@@ -204,7 +207,8 @@ extern(C++) final class CppAddMemberVisitor : Visitor
         tempinst.inst = tempinst;
         tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
 
-        tempinst.appendToModuleMember();
+        if (tempinst.parent) // CALYPSO if not set, delayed to TemplateDeclaration.addMember
+            tempinst.appendToModuleMember();
 
         TemplateInstance tempdecl_instance_idx = tempdecl.addInstance(tempinst);
 
