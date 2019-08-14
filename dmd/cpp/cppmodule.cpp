@@ -1024,7 +1024,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         auto td = new TemplateDeclaration(loc, fd->ident, tpl, decldefs, D);
         return oneSymbol(td);
     }
-    else if (isTemplateInstantiation(D) && (flags & CreateTemplateInstance))
+    else if (isTemplateInstantiation(D) &&
+             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
+             (flags & CreateTemplateInstance))
         a = CreateTemplateInstanceFor(loc, D, a);
 
     a->push(fd);
