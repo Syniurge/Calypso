@@ -330,11 +330,11 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     }
 
 
-    auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
-    if (Prim)
-        D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
+//     auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
+//     if (Prim)
+//         D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
 
-    auto e = expmap.fromExpressionDeclRef(loc, Prim ? Prim : const_cast<clang::NamedDecl*>(D),
+    auto e = expmap.fromExpressionDeclRef(loc, /*Prim ? Prim :*/ const_cast<clang::NamedDecl*>(D),
                                             nullptr, TQ_OverOpFullIdent);
 //     e = expressionSemantic(e, sc);
 
