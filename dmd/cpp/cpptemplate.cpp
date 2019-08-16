@@ -329,17 +329,16 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(Inst, isForeignInstance(ti)));
+    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst, isForeignInstance(ti)));
     assert(cpptdtypes->dim == dedtypes->dim);
     memcpy(dedtypes->tdata(), cpptdtypes->tdata(), dedtypes->dim * sizeof(void*));
 
     return m;
 }
 
-Objects* TemplateDeclaration::tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance)
+Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance)
 {
-    TypeMapper tymap;
-    tymap.addImplicitDecls = false;
+    TypeMapper tymap(sc->minst, false, false);
 
     auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
                                                             : getTemplateArgs(Inst);
@@ -522,7 +521,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     MATCH match = MATCHexact;
     MATCH matchTiargs = MATCHexact;
 
-    auto dedtypes = tdtypesFromInst(Inst, false);
+    auto dedtypes = tdtypesFromInst(sc, Inst, false);
     ti->tdtypes.dim = dedtypes->dim;
     ti->tdtypes.data = dedtypes->data;
     ti->tiargs = &ti->tdtypes;

@@ -45,7 +45,7 @@ public:
 
     MATCH functionTemplateMatch(::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
 
-    Objects* tdtypesFromInst(TemplateInstUnion Inst, bool forForeignInstance = false);
+    Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance = false);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
     void makeForeignInstance(TemplateInstance* ti, Scope* sc);

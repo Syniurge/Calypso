@@ -1095,7 +1095,7 @@ Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
         auto Key = GetImplicitImportKeyForDecl(D);
         minst = cpp::Module::allCppModules[Key];
         if (!minst) {
-            auto im = AddImplicitImportForDecl(loc, D); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
+            auto im = AddImplicitImportForDecl(loc, D, !isCPP(mod)); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
             minst = Module::create(Key, im->packages, im->id);
             minst->importedFrom = mod;
         }
@@ -1625,16 +1625,16 @@ cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDec
 {
     auto Key = GetImplicitImportKeyForDecl(D);
 
-    assert(!mod || isCPP(mod));
+    assert(fake || !mod || isCPP(mod));
 
-    if (mod && Key == static_cast<cpp::Module*>(mod)->rootKey)
+    if (mod && isCPP(mod) && Key == static_cast<cpp::Module*>(mod)->rootKey)
         return nullptr; // do not import self
 
     cpp::Import *im = implicitImports[Key].im;
     if (!im)
     {
         Identifier *importAliasid = nullptr;
-        if (mod && isa<clang::TagDecl>(Key.first) &&
+        if (mod && isCPP(mod) && isa<clang::TagDecl>(Key.first) &&
                 getDeclContextNamedOrTU(Key.first)->isTranslationUnit())
         {
             // Special check for C tags which may have the same name as functions
