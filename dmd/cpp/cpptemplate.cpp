@@ -402,7 +402,7 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     auto c_ti = static_cast<cpp::TemplateInstance*>(ti);
 
     if (ti->members)
-        return ti->members; // this may be an explicit spec whose members are already set during decl mapping
+        return ti->members; // members were already set during decl mapping
 
     DeclMapper m(static_cast<cpp::Module*>(_scope->_module));
     m.addImplicitDecls = false;

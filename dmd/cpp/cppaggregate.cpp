@@ -78,7 +78,7 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         DeclReferencer declReferencer(minst);
         auto sc = ad->_scope;
         if (!sc)
-            sc = ad->getModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
+            sc = ad->getInstantiatingModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
         assert(sc);
 
         for (auto Field: D->fields())
