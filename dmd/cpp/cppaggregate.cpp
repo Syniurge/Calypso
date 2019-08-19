@@ -209,9 +209,9 @@ bool StructDeclaration::buildLayout()
 void StructDeclaration::finalizeSize()
 {
     ::StructDeclaration::finalizeSize();
-    if (!ctor)
-        ctor = searchCtor();
-    if (ctor)
+
+    auto CRD = cast<clang::CXXRecordDecl>(RD);
+    if (CRD->ctor_begin() != CRD->ctor_end())
         zeroInit = 0;
 }
 
@@ -515,9 +515,9 @@ bool UnionDeclaration::buildLayout()
 void UnionDeclaration::finalizeSize()
 {
     ::UnionDeclaration::finalizeSize();
-    if (!ctor)
-        ctor = searchCtor();
-    if (ctor)
+
+    auto CRD = cast<clang::CXXRecordDecl>(RD);
+    if (CRD->ctor_begin() != CRD->ctor_end())
         zeroInit = 0;
 }
 
