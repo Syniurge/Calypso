@@ -123,4 +123,6 @@ const clang::RecordDecl *getRecordDecl(::Type *t);
 
 }
 
+void MarkAggregateReferencedImpl(AggregateDeclaration* ad);
+
 #endif /* DMD_CPP_CPPAGGREGATE_H */

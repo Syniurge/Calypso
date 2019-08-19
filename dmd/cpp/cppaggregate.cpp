@@ -21,6 +21,10 @@
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/StringExtras.h"
 
+using llvm::isa;
+using llvm::cast;
+using llvm::dyn_cast;
+
 FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Objects *tiargs,
         Type *tthis,
@@ -30,17 +34,10 @@ Expression *resolveProperties(Scope *sc, Expression *e);
 FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
-namespace cpp
-{
-
-using llvm::isa;
-using llvm::cast;
-using llvm::dyn_cast;
-
-template<typename AggTy> bool buildAggLayout(AggTy *ad);
-
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 {
+    using namespace cpp;
+
     auto D = dyn_cast<clang::CXXRecordDecl>(
                     const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
     if (!D)
@@ -88,6 +85,11 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         markAggregateReferenced(ad);
     }
 }
+
+namespace cpp
+{
+
+template<typename AggTy> bool buildAggLayout(AggTy *ad);
 
 void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf)
 {
@@ -165,14 +167,7 @@ void StructDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        tidtor = dtor;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
-        if (isUsed)
-            MarkAggregateReferencedImpl(this);
-        v->visit(this);
-    } else if (v_ti == TI_Mangler) { // mangle
+    if (v_ti == TI_Mangler) { // mangle
         if (isAnonymous())
             calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
         else
@@ -224,14 +219,7 @@ void ClassDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
 
-    if (v_ti == TI_DsymbolSem1Visitor) { // semantic
-        v->visit(this);
-        tidtor = dtor;
-    } else if (v_ti == TI_DsymbolSem3Visitor) { // semantic3
-        if (isUsed)
-            MarkAggregateReferencedImpl(this);
-        v->visit(this);
-    } else if (v_ti == TI_Mangler) { // mangle
+    if (v_ti == TI_Mangler) { // mangle
         if (isAnonymous())
             calypso.mangleAnonymousAggregate(this, static_cast<Mangler*>(v)->buf);
         else
