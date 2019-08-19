@@ -524,6 +524,15 @@ bool UnionDeclaration::buildLayout()
     return buildAggLayout(this);
 }
 
+void UnionDeclaration::finalizeSize()
+{
+    ::UnionDeclaration::finalizeSize();
+    if (!ctor)
+        ctor = searchCtor();
+    if (ctor)
+        zeroInit = 0;
+}
+
 AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
 {
     construct_AnonDeclaration(this, loc, isunion, decl);

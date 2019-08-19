@@ -102,6 +102,7 @@ public:
     bool mayBeAnonymous() override;
     bool determineFields() override;
     bool buildLayout() override;
+    void finalizeSize() override;
 };
 
 class AnonDeclaration : public ::AnonDeclaration

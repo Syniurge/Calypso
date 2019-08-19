@@ -206,6 +206,7 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 
         tempinst.inst = tempinst;
         tempinst.parent = tempinst.enclosing ? tempinst.enclosing : tempdecl.parent;
+        // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
 
         if (tempinst.parent) // CALYPSO if not set, delayed to TemplateDeclaration.addMember
             tempinst.appendToModuleMember();

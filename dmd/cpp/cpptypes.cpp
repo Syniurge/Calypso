@@ -963,7 +963,7 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
 
         if (LeftMostCheck(D))  // we'll need a fully qualified type
         {
-            tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to guarantee against collisions
+            tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to protect against collisions
 
             // build a fake import
             if (auto im = tm.AddImplicitImportForDecl(from.loc, TopDecl, true))
