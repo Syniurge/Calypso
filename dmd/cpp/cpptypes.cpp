@@ -1198,9 +1198,6 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
                 const clang::TemplateArgument *ArgBegin,
                 const clang::TemplateArgument *ArgEnd)
 {
-    if (ArgBegin)
-        return nullptr;
-
     Identifier *tempIdent;
 
     switch (Name.getKind())
