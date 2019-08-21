@@ -1074,6 +1074,9 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
         tpl->push(tp);
     }
 
+    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+    setDsym(D, td);
+
     auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
                 MapTemplatePatterns);
 
@@ -1084,11 +1087,8 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     if (FTD) {
         assert(s->dim && (*s)[0]->isFuncDeclaration());
-        id = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
+        td->ident = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
     }
-
-    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    setDsym(D, td);
 
     auto a = new Dsymbols;
     a->push(td);
