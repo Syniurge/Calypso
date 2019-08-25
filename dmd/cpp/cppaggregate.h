@@ -30,14 +30,20 @@ class StructDeclaration : public ::StructDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD;
+    const clang::RecordDecl *RD, *_Def;
     bool isUsed = false;
+    bool membersCompleted = false;
     bool layoutQueried = false;
 
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    d_uns64 size(const Loc &loc) override;
+
     bool determineFields() override;
     bool buildLayout() override;
     void finalizeSize() override;
@@ -48,6 +54,8 @@ public:
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
+    const clang::RecordDecl *Definition();
+
     void accept(Visitor *v) override;
 };
 
@@ -57,8 +65,9 @@ class ClassDeclaration : public ::ClassDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::CXXRecordDecl *RD;
+    const clang::CXXRecordDecl *RD, *_Def;
     bool isUsed = false;
+    bool membersCompleted = false;
     bool layoutQueried = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
@@ -66,6 +75,11 @@ public:
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    d_uns64 size(const Loc &loc) override;
+
     bool determineFields() override;
     bool buildLayout() override;
     bool mayBeAnonymous() override;
@@ -84,6 +98,8 @@ public:
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
+    const clang::CXXRecordDecl *Definition();
+
     void accept(Visitor *v) override;
 };
 
@@ -92,17 +108,25 @@ class UnionDeclaration : public ::UnionDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD;
+    const clang::RecordDecl *RD, *_Def;
+    bool membersCompleted = false;
     bool layoutQueried = false;
+
+    d_uns64 size(const Loc &loc) override;
 
     UnionDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
     bool mayBeAnonymous() override;
     bool determineFields() override;
     bool buildLayout() override;
     void finalizeSize() override;
+
+    const clang::RecordDecl *Definition();
 };
 
 class AnonDeclaration : public ::AnonDeclaration

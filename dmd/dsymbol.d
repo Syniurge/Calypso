@@ -2114,6 +2114,14 @@ extern (C++) final class ForwardingScopeDsymbol : ScopeDsymbol
         forward.importScope(s, protection);
     }
 
+
+    /************************
+     * For "lazy" foreign ScopeDsymbol, populate and reorder the members
+     */
+    void complete() // CALYPSO
+    {
+    }
+
     override const(char)* kind()const{ return "local scope"; }
 
     override inout(ForwardingScopeDsymbol) isForwardingScopeDsymbol() inout

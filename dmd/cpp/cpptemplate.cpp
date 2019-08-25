@@ -454,7 +454,7 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
     ExprMapper expmap(tymap);
     tymap.addImplicitDecls = false;
 
-    auto FunctionTemplate = cast<clang::FunctionTemplateDecl>(TempOrSpec); // probably going to fail epxlicit spec
+    auto FunctionTemplate = cast<clang::FunctionTemplateDecl>(TempOrSpec); // probably going to fail explicit spec
 
     clang::TemplateArgumentListInfo ExplicitTemplateArgs;
     if (ti->tiargs && !isConversion)

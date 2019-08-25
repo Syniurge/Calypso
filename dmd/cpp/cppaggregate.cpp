@@ -19,6 +19,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/ADT/StringExtras.h"
 
 using llvm::isa;
@@ -88,8 +89,6 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 
 namespace cpp
 {
-
-template<typename AggTy> bool buildAggLayout(AggTy *ad);
 
 void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf)
 {
@@ -163,6 +162,135 @@ void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
     cppAddMember(this, sc, sds);
 }
 
+template <typename AggTy>
+inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
+{
+    if (!ad->_Def)
+    {
+        auto& Context = calypso.getASTContext();
+        auto& S = calypso.getSema();
+
+        if (S.RequireCompleteType(ad->RD->getLocation(),
+                                  Context.getRecordType(ad->RD),
+                                  clang::diag::err_incomplete_type))
+            ad->error("No definition available");
+
+        if (!ad->RD->isCompleteDefinition() && ad->RD->getDefinition())
+            ad->_Def = ad->RD->getDefinition();
+        else
+            ad->_Def = ad->RD;
+    }
+
+    return ad->_Def;
+}
+
+const clang::RecordDecl *StructDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+const clang::CXXRecordDecl *ClassDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+const clang::RecordDecl *UnionDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+template <typename AggTy>
+inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flags)
+{
+    if (auto s = ad->ScopeDsymbol::search(loc, ident, flags))
+        return s;
+
+    auto Def = ad->Definition();
+    if (!Def)
+        return nullptr;
+
+    auto Name = calypso.toDeclarationName(ident);
+    for (auto Match: Def->lookup(Name))
+        addToMembers(ad, Match);
+
+    if (ident == Id::ctor)
+    {
+
+    }
+    else
+    {
+    }
+
+    return ad->ScopeDsymbol::search(loc, ident, flags);
+}
+
+Dsymbol *StructDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    return ad_search(this, loc, ident, flags);
+}
+
+Dsymbol *ClassDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    auto s = ad_search(this, loc, ident, flags);
+
+    if (!s)
+        for (auto b: *baseclasses)
+            if (b->sym)
+            {
+                s = b->sym->search(loc, ident, flags);
+                if (s)
+                    break;
+            }
+
+    return s;
+}
+
+Dsymbol *UnionDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    return ad_search(this, loc, ident, flags);
+}
+
+template <typename AggTy>
+inline void ad_complete(AggTy* ad)
+{
+    if (ad->membersCompleted)
+        return;
+    ad->membersCompleted = true;
+
+    ad->members->setDim(0);
+
+    auto Canon = ad->RD->getCanonicalDecl();
+
+    // Add specific decls: fields, vars, tags, templates, typedefs
+    for (auto M: ad->Definition()->decls())
+    {
+        if (cast<clang::Decl>(M->getDeclContext())->getCanonicalDecl() != Canon)
+            continue; // only map declarations that are semantically within the RecordDecl
+
+        if (!isa<clang::FieldDecl>(M) && !isa<clang::VarDecl>(M) &&
+              !isa<clang::FunctionDecl>(M) && !isa<clang::TagDecl>(M) &&
+              !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
+            continue;
+
+        addToMembers(ad, M);
+    }
+}
+
+void StructDeclaration::complete()
+{
+    ad_complete(this);
+}
+
+void ClassDeclaration::complete()
+{
+    ad_complete(this);
+}
+
+void UnionDeclaration::complete()
+{
+    ad_complete(this);
+}
+
 void StructDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
@@ -174,6 +302,57 @@ void StructDeclaration::accept(Visitor *v)
             v->visit(this);
     } else
         v->visit(this);
+}
+
+template <typename AggTy>
+void ad_determineSize(AggTy *ad)
+{
+    if (ad->layoutQueried)
+        return;
+    ad->layoutQueried = true;
+
+    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
+    {
+       // if it's a forward reference, consider the record empty
+        ad->structsize = 1;
+        ad->alignsize = 1;
+        return;
+    }
+
+    auto& Context = calypso.getASTContext();
+    auto& RL = Context.getASTRecordLayout(ad->RD);
+
+    ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
+    ad->structsize = RL.getSize().getQuantity();
+
+    typedef clang::DeclContext::filtered_decl_iterator<clang::ValueDecl, &clang::ValueDecl::isCXXInstanceMember> Field_iterator; // also includes IndirectFieldDecl
+    for (Field_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
+    {
+        auto Field = *I;
+        auto vd = static_cast<VarDeclaration*>(DeclMapper(ad).dsymForDecl(Field));
+        ad->fields.push(vd);
+
+        vd->offsetInBits = RL.getFieldOffset(Field);
+        vd->offset = vd->offsetInBits / 8;
+    }
+}
+
+d_uns64 StructDeclaration::size(const Loc &loc)
+{
+    ad_determineSize(this);
+    return structsize;
+}
+
+d_uns64 ClassDeclaration::size(const Loc &loc)
+{
+    ad_determineSize(this);
+    return structsize;
+}
+
+d_uns64 UnionDeclaration::size(const Loc &loc)
+{
+    ad_determineSize(this);
+    return structsize;
 }
 
 Expression *StructDeclaration::defaultInit(Loc loc)
@@ -203,7 +382,8 @@ bool StructDeclaration::determineFields()
 
 bool StructDeclaration::buildLayout()
 {
-    return buildAggLayout(this);
+    buildAggLayout(this);
+    return true;
 }
 
 void StructDeclaration::finalizeSize()
@@ -602,72 +782,6 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
         }
     }
     return nullptr;
-}
-
-template <typename AggTy>
- bool buildAggLayout(AggTy *ad)
-{
-    assert(isCPP(ad));
-
-    if (ad->layoutQueried)
-        return true;
-
-    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
-    {
-       // if it's a forward reference, consider the record empty
-        ad->structsize = 1;
-        ad->alignsize = 1;
-        return true;
-    }
-
-    auto& Context = calypso.getASTContext();
-    auto& RL = Context.getASTRecordLayout(ad->RD);
-
-    ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
-    ad->structsize = RL.getSize().getQuantity();
-
-    std::function<void(Dsymbols *, unsigned, const clang::ASTRecordLayout&)>
-        addRecord = [&] (Dsymbols *members, unsigned baseoffset,  const clang::ASTRecordLayout& Layout)
-    {
-        for (auto m: *members)
-        {
-            if (auto vd = m->isVarDeclaration())
-            {
-                assert(isCPP(vd));
-
-                if (vd->_scope)
-                    dsymbolSemantic(vd, nullptr);
-
-                auto c_vd = static_cast<VarDeclaration*>(vd);
-                auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
-
-                if (!FD)
-                    continue;
-
-                auto fldIdx = FD->getFieldIndex();
-                vd->offset = baseoffset + Layout.getFieldOffset(fldIdx) / 8;
-                c_vd->offsetInBits = baseoffset * 8 + Layout.getFieldOffset(fldIdx);
-
-                ad->fields.push(vd);
-            }
-            else if (auto anon = m->isAttribDeclaration())
-            {
-                assert(/*anon->isAnonDeclaration() && */isCPP(anon));
-                auto AnonField = static_cast<cpp::AnonDeclaration*>(anon)->AnonField;
-                auto AnonRecord = AnonField->getType()->castAs<clang::RecordType>()->getDecl();
-
-                auto AnonFieldIdx = AnonField->getFieldIndex();
-                auto& AnonLayout = Context.getASTRecordLayout(AnonRecord);
-
-                addRecord(anon->decl, baseoffset + Layout.getFieldOffset(AnonFieldIdx) / 8, AnonLayout);
-            }
-        }
-    };
-
-    addRecord(ad->members, 0, RL);
-
-    ad->layoutQueried = true;
-    return true;
 }
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad)

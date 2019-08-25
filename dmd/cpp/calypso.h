@@ -108,8 +108,6 @@ public:
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
     std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps;
 
-    ModuleMap *MMap = nullptr;
-
     void init(); // load the list of headers already cached in the PCH
     void add(const char* header, ::Module *from);
 
@@ -238,8 +236,7 @@ public:
     llvm::StringSet<> TargetFeatures;
     llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
 
-    typedef std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMapEntryTy;
-    llvm::DenseMap<const clang::Module::Header*, MacroMapEntryTy*> MacroMap;
+    std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMap;
 
     BuiltinTypes &builtinTypes;
 
@@ -304,6 +301,11 @@ public:
 
     const char *mangle(Dsymbol *s);
     void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
+
+    std::unordered_map<const Identifier*, clang::IdentifierInfo*> IIMap;
+
+    clang::IdentifierInfo* toIdentifierInfo(Identifier* ident); // remove the 'ℂ' if present
+    clang::DeclarationName toDeclarationName(Identifier* ident);
 
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly

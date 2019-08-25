@@ -28,7 +28,7 @@ namespace cpp
 class ExprMapper
 {
 public:
-    ExprMapper(TypeMapper &tymap)
+    ExprMapper(DeclMapper &tymap)
         : tymap(tymap) {}
 
     // Clang -> DMD
@@ -54,7 +54,7 @@ public:
     clang::Expr *toExpression(Expression *e);
 
 protected:
-    TypeMapper &tymap;
+    DeclMapper &tymap;
 
     Expression* fromUnaExp(clang::SourceLocation Loc, const clang::UnaryOperator::Opcode Op,
                            const clang::Expr *SubExpr);

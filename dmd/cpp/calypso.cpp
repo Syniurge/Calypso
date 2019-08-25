@@ -268,7 +268,6 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
     auto& Context = calypso.getASTContext();
 
     TypeMapper mapper;
-    mapper.addImplicitDecls = false;
 
     auto T = D->getConversionType().getDesugaredType(Context);
     auto t = mapper.fromType(T, Loc());
@@ -495,6 +494,37 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
     else
         return ident;
 }
+
+clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
+{
+    auto& II = IIMap[ident];
+
+    if (!II)
+    {
+        const char prefix[] = u8"ℂ";
+        const size_t prefixLength = sizeof(prefix)-1;
+
+        auto& Ctx = calypso.getASTContext();
+
+        bool prefixed = strncmp(ident->toChars(), prefix, prefixLength) == 0;
+
+        const char* str = !prefixed ? ident->toChars() : ident->toChars() + prefixLength;
+        size_t len = ident->length();
+        if (prefixed)
+            len -= prefixLength;
+
+        II = &Ctx.Idents.get(llvm::StringRef(str, len));
+    }
+
+    return II;
+}
+
+clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
+{
+    return clang::DeclarationName(toIdentifierInfo(ident));
+}
+
+// ===== //
 
 Loc fromLoc(clang::SourceLocation L)
 {
@@ -925,42 +955,23 @@ void PCH::update()
 
 void LangPlugin::buildMacroMap()
 {
-    auto& MMap = pch.MMap;
     auto& PP = getPreprocessor();
     auto& Context = getASTContext();
     auto& Sema = getSema();
-    auto& SM = getSourceManager();
 
-    for (auto I = PP.macro_begin(), E = PP.macro_end(); I != E; I++)
+    for (auto& M: PP.macros())
     {
-        auto II = (*I).getFirst();
+        auto II = M.getFirst();
         if (!II->hasMacroDefinition())
             continue;
 
-        auto MDir = (*I).getSecond().getLatest();
+        auto MDir = M.getSecond().getLatest();
         auto MInfo = MDir->getMacroInfo();
 
         if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
             continue;
 
-        // Find the corresponding module header this macro is from
         auto MLoc = MDir->getLocation();
-        auto MFileID = SM.getFileID(MLoc);
-        auto MFileEntry = SM.getFileEntryForID(MFileID);
-
-        const clang::Module::Header *FoundHeader = nullptr;
-        for (auto ModI = MMap->module_begin(), ModE = MMap->module_end(); ModI != ModE; ModI++) {
-            for (auto& Header: ModI->getValue()->Headers[clang::Module::HK_Normal])
-                if (MFileEntry == Header.Entry) {
-                    FoundHeader = &Header; break;
-                }
-            if (FoundHeader) break;
-        }
-
-        auto& MacroMapEntry = MacroMap[FoundHeader];
-        if (!MacroMapEntry)
-            MacroMapEntry = new MacroMapEntryTy;
-
         clang::Expr* Expr = nullptr;
 
         if (MInfo->getNumTokens() == 0) {
@@ -978,7 +989,7 @@ void LangPlugin::buildMacroMap()
         }
 
         if (Expr)
-            MacroMapEntry->emplace_back(II, Expr);
+            MacroMap.emplace_back(II, Expr);
     }
 }
 

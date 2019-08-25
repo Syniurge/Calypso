@@ -124,7 +124,7 @@ public:
     virtual bool determineFields(); // CALYPSO
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
-    d_uns64 size(const Loc &loc);
+    virtual d_uns64 size(const Loc &loc); // CALYPSO
     bool fit(const Loc &loc, Scope *sc, Expressions *elements, Type *stype); // CALYPSO
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     Type *getType();

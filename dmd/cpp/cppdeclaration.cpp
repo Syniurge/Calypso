@@ -68,11 +68,14 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
 
 bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
 {
-    auto& Context = calypso.getASTContext();
     assert(isCPP(v2));
+
+    auto& Context = calypso.getASTContext();
     auto c_v2 = static_cast<cpp::VarDeclaration*>(v2);
+
     auto Field1 = cast<clang::FieldDecl>(VD);
     auto Field2 = cast<clang::FieldDecl>(c_v2->VD);
+
     unsigned size1 = Field1->isBitField() ? Field1->getBitWidthValue(Context) : (type->size() * 8);
     unsigned size2 = Field2->isBitField() ? Field2->getBitWidthValue(Context) : (v2->type->size() * 8);
     return (offsetInBits < c_v2->offsetInBits + size2 &&
@@ -192,6 +195,26 @@ void EnumDeclaration::accept(Visitor *v)
     if (v->_typeid() == TI_DsymbolSem1Visitor)
         if (!defaultval && !members)
             defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
+}
+
+Dsymbol *EnumDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    if (auto s = ScopeDsymbol::search(loc, ident, flags))
+        return s;
+
+    auto Name = calypso.toDeclarationName(ident);
+    for (auto Match: ED->lookup(Name))
+        addToMembers(this, Match);
+
+    return ScopeDsymbol::search(loc, ident, flags);
+}
+
+void EnumDeclaration::complete()
+{
+    members->setDim(0);
+
+    for (auto ECD: ED->enumerators())
+        addToMembers(this, ECD);
 }
 
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,

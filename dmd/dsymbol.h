@@ -324,6 +324,7 @@ public:
     virtual Dsymbol *symtabInsert(Dsymbol *s);
     virtual Dsymbol *symtabLookup(Dsymbol *s, Identifier *id);
     bool hasStaticCtorOrDtor();
+    virtual void complete(); // CALYPSO
 
     ScopeDsymbol *isScopeDsymbol() { return this; }
     void accept(Visitor *v) { v->visit(this); }

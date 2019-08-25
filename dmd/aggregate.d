@@ -303,7 +303,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     abstract void finalizeSize();
 
-    override final d_uns64 size(const ref Loc loc)
+    override d_uns64 size(const ref Loc loc) // CALYPSO
     {
         //printf("+AggregateDeclaration::size() %s, scope = %p, sizeok = %d\n", toChars(), _scope, sizeok);
         bool ok = determineSize(loc);
