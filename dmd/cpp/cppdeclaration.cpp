@@ -68,11 +68,14 @@ VarDeclaration::VarDeclaration(const VarDeclaration& o)
 
 bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
 {
-    auto& Context = calypso.getASTContext();
     assert(isCPP(v2));
+
+    auto& Context = calypso.getASTContext();
     auto c_v2 = static_cast<cpp::VarDeclaration*>(v2);
+
     auto Field1 = cast<clang::FieldDecl>(VD);
     auto Field2 = cast<clang::FieldDecl>(c_v2->VD);
+
     unsigned size1 = Field1->isBitField() ? Field1->getBitWidthValue(Context) : (type->size() * 8);
     unsigned size2 = Field2->isBitField() ? Field2->getBitWidthValue(Context) : (v2->type->size() * 8);
     return (offsetInBits < c_v2->offsetInBits + size2 &&
@@ -116,37 +119,6 @@ FuncDeclaration::FuncDeclaration(const FuncDeclaration& o)
 {
 }
 
-::FuncDeclaration *FuncDeclaration::overloadCppMatch(::FuncDeclaration *fd,
-                                                        const clang::FunctionDecl* FD)
-{
-    struct FDEquals
-    {
-        const clang::FunctionDecl* FD;            // type to match
-        ::FuncDeclaration *f; // return value
-
-        static int fp(void *param, Dsymbol *s)
-        {
-            if (!s->isFuncDeclaration() || !isCPP(s))
-                return 0;
-            auto f = static_cast<::FuncDeclaration*>(s);
-            FDEquals *p = (FDEquals *)param;
-
-            if (p->FD == getFD(f))
-            {
-                p->f = f;
-                return 1;
-            }
-
-            return 0;
-        }
-    };
-    FDEquals p;
-    p.FD = FD;
-    p.f = nullptr;
-    overloadApply(fd, &p, &FDEquals::fp);
-    return p.f;
-}
-
 CtorDeclaration::CtorDeclaration(Loc loc, StorageClass storage_class,
                                  Type* type, const clang::CXXConstructorDecl* CCD)
 {
@@ -165,6 +137,8 @@ DtorDeclaration::DtorDeclaration(Loc loc, StorageClass storage_class,
 {
     construct_DtorDeclaration(this, loc, loc, storage_class, id);
     this->CDD = CDD;
+
+    this->type = new_TypeFunction(nullptr, Type::tvoid, false, LINKcpp, this->storage_class);
 }
 
 DtorDeclaration::DtorDeclaration(const DtorDeclaration& o)
@@ -194,6 +168,56 @@ void EnumDeclaration::accept(Visitor *v)
             defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
 }
 
+void EnumDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    Dsymbol::addMember(sc, sds);
+}
+
+Dsymbol *EnumDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    if (auto s = ScopeDsymbol::search(loc, ident, flags))
+        return s;
+
+    auto Name = calypso.toDeclarationName(ident);
+    for (auto Match: ED->lookup(Name))
+        dsymForDecl(this, Match);
+
+    return ScopeDsymbol::search(loc, ident, flags);
+}
+
+void EnumDeclaration::complete()
+{
+    Dsymbols* newMembers = new Dsymbols;
+    newMembers->reserve(members->dim);
+
+    for (auto ECD: ED->enumerators())
+        newMembers->push(dsymForDecl(this, ECD));
+
+    delete members;
+    members = newMembers;
+}
+
+Expression *EnumDeclaration::getDefaultValue(const Loc &loc)
+{
+    if (defaultval)
+        return defaultval;
+
+    auto I = ED->enumerator_begin();
+
+    if (I == ED->enumerator_end())
+    {
+        error(loc, "forward reference of `%s.init`", toChars());
+        defaultval = new_ErrorExp();
+    }
+    else
+    {
+        auto em = static_cast<EnumMember*>(dsymForDecl(this, *I));
+        defaultval = em->value();
+    }
+
+    return defaultval;
+}
+
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
                const clang::EnumConstantDecl *ECD)
 {
@@ -217,6 +241,15 @@ void EnumMember::accept(Visitor *v)
     v->visit(this);
 }
 
+void EnumMember::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    if (sds->isAnonymous()) {
+        assert(sds->parent->isScopeDsymbol());
+        sds = static_cast<ScopeDsymbol*>(sds->parent);
+    }
+    Dsymbol::addMember(sc, sds);
+}
+
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
                                 Type* type, const clang::TypedefNameDecl* TND)
 {
@@ -236,34 +269,23 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
     return new cpp::AliasDeclaration(*this); // hmm hmm
 }
 
-void AliasDeclaration::doSemantic()
+Type *AliasDeclaration::getType()
 {
-    if (!_scope)
-        return;
-
-    isUsed = true;
-    dsymbolSemantic(this, _scope);
+    if (!type)
+        type = DeclMapper(this).fromType(TND->getUnderlyingType(), loc);
+    return type;
 }
 
 Dsymbol *AliasDeclaration::toAlias()
 {
-    doSemantic();
-    return ::AliasDeclaration::toAlias();
+    if (!aliassym)
+        aliassym = getType()->toDsymbol(nullptr);
+    return aliassym;
 }
 
 Dsymbol *AliasDeclaration::toAlias2()
 {
-    doSemantic();
-    return ::AliasDeclaration::toAlias2();
-}
-
-void AliasDeclaration::accept(Visitor *v)
-{
-    if (v->_typeid() == TI_DsymbolSem1Visitor && !isUsed)
-        ; // resolve aliases lazily, the DMD way of evaluating everything leads to infinite recursion for some C++ templates
-          // ex.: typedef _Index_tuple<_Indexes, sizeof(_Indexes)> _Index_tuple<size_t... _Indexes>::__next;
-    else
-        v->visit(this);
+    return toAlias();
 }
 
 IMPLEMENT_syntaxCopy(VarDeclaration, VD)
@@ -275,19 +297,13 @@ IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
 /***********************/
 
 DeclReferencer::DeclReferencer(::Module* minst)
-  : mapper(minst, false, false), expmap(mapper)
+  : mapper(minst, minst), expmap(mapper)
 {
 }
 
-void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
+void DeclReferencer::Traverse(Loc loc, clang::Stmt *S)
 {
     this->loc = loc;
-    this->sc = mapper.scSemImplicitImports = sc;
-
-    // First map nested record decls (esp. lambda classes)
-    // This needs to be done before because lambda CXXRecordDecl may be used before and/or after within the AST/
-    NestedDeclMapper(*this).TraverseStmt(S);
-
     TraverseStmt(S);
 }
 
@@ -305,140 +321,11 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             return true;
 
     if (auto FD = dyn_cast<clang::FunctionDecl>(D))
-    {
-        if (!isMapped(D))
-            return true;
         if (FD->getBuiltinID())
             return true;
-        if (FD->isExternC())
-            return true; // FIXME: Clang 3.6 doesn't always map decls to the right source file,
-                // so the path generated by typeQualifiedFor although correct will result in a failed lookup.
-                // This may get fixed by 3.7.
-    }
 
-    if (D->d && D->d->sym) {
-        calypso.markSymbolReferenced(D->d->sym);
-        return true;
-    }
-
-    auto Func = dyn_cast<clang::FunctionDecl>(D);
-    if (D->isOutOfLine() && D->getFriendObjectKind() != clang::Decl::FOK_None)
-    {
-        auto DeclCtx = dyn_cast<clang::DeclContext>(D);
-        if (DeclCtx && DeclCtx->isDependentContext()) // FIXME
-            return true;
-    }
-
-
-//     auto Prim = Func ? Func->getPrimaryTemplate() : nullptr;
-//     if (Prim)
-//         D = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(Func));
-
-    auto e = expmap.fromExpressionDeclRef(loc, /*Prim ? Prim :*/ const_cast<clang::NamedDecl*>(D),
-                                            nullptr, TQ_OverOpFullIdent);
-//     e = expressionSemantic(e, sc);
-
-    Dsymbol *s;
-    if (e->op == TOKvar)
-        s = static_cast<SymbolExp*>(e)->var;
-    else if (e->op == TOKtemplate)
-        s = static_cast<TemplateExp*>(e)->td;
-    else if (e->op == TOKtype)
-        s = static_cast<TypeExp*>(e)->type->toDsymbol(nullptr);
-    else {
-        assert(e->op == TOKimport);
-        s = static_cast<ScopeExp*>(e)->sds;
-    }
-
-    if (auto tempinst = s->isInstantiated())
-        cppSemantic(tempinst, sc);
-    else if (s->isAggregateDeclaration())
-        cppSemantic(s, nullptr);
-
-//     if (s->isFuncDeclaration() || s->isTemplateDeclaration())
-//     {
-//         struct DEquals
-//         {
-//             const clang::Decl* D;
-//             Dsymbol *s = nullptr; // return value
-//
-//             static int fp(void *param, Dsymbol *s)
-//             {
-//                 DEquals *p = (DEquals *)param;
-//
-//                 if (!isCPP(s))
-//                     return 0;
-//
-//                 auto fd = s->isFuncDeclaration();
-//                 auto c_td = static_cast<cpp::TemplateDeclaration*>(
-//                     s->isTemplateDeclaration());
-//                 const clang::Decl* s_D = fd ? getFD(fd) : c_td->TempOrSpec;
-//
-//                 if (p->D == getCanonicalDecl(s_D)) {
-//                     p->s = s;
-//                     return 1;
-//                 }
-//
-//                 return 0;
-//             }
-//         };
-//         DEquals p;
-//         p.D = getCanonicalDecl(D);
-//         overloadApply(s, &p, &DEquals::fp);
-//         s = p.s;
-//         assert(s);
-//     }
-
-//     if (Func && Func->getPrimaryTemplate())
-//     {
-//         // if it's a template spec we must instantiate the right overload
-//         assert(s->isTemplateDeclaration());
-//
-//         auto td = static_cast<cpp::TemplateDeclaration*>(s);
-//         if (td->semanticRun == PASSinit) {
-//             assert(td->_scope);
-//             dsymbolSemantic(td, td->_scope); // this must be done here because havetempdecl being set to true it won't be done by findTempDecl()
-//         }
-//
-//         auto tiargs = mapper.fromTemplateArguments(loc, Func->getTemplateSpecializationArgs());
-//         assert(tiargs);
-//
-//         auto checkTiargs = [] (Objects* tiargs) {
-//             for (auto& tiarg: *tiargs)
-//                 if (!tiarg)
-//                     return false;
-//             return true;
-//         };
-//         if (!checkTiargs(tiargs))
-//             goto Lcleanup;
-//
-//         SpecValue spec(mapper);
-//         getIdentifier(Func, &spec, true);
-//         if (spec)
-//             tiargs->shift(spec.toTemplateArg(loc));
-//
-//         auto tempinst = new cpp::TemplateInstance(loc, td, tiargs);
-//         tempinst->Inst = const_cast<clang::FunctionDecl*>(Func);
-//         tempinst->semantictiargsdone = false; // NOTE: the "havetempdecl" ctor of Templateinstance set semantictiargsdone to true...
-//         if (!tempinst->semanticTiargs(sc))
-//             assert(false && "DeclReferencer semanticTiargs failed");
-//
-//         td->makeForeignInstance(tempinst, sc);
-//         dsymbolSemantic(tempinst, sc);
-//
-//         s = tempinst->toAlias();
-//     }
-//     else
-//     {
-//         if (s->isAggregateDeclaration())
-//             cppSemantic(s, nullptr);
-//     }
-
-    calypso.markSymbolReferenced(s);
-
-// Lcleanup:
-    // Memory usage can skyrocket when using a large library
-    delete_Object(e);
+    if (auto sym = mapper.dsymForDecl(D))
+        calypso.markSymbolReferenced(sym);
 
     return true;
 }
@@ -494,25 +381,6 @@ bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
 
 /***********************/
 
-bool NestedDeclMapper::VisitLambdaExpr(const clang::LambdaExpr *E)
-{
-    return TraverseCXXRecordDecl(E->getLambdaClass());
-}
-
-bool NestedDeclMapper::TraverseCXXRecordDecl(const clang::CXXRecordDecl *D)
-{
-    if (D->isLambda() && D->getLambdaManglingNumber() == 0)
-        return true; // the lambda record is internal, no need to map it
-
-    if (auto a = dref.mapper.VisitRecordDecl(D))
-        for (auto s: *a)
-            dsymbolSemantic(s, dref.sc);
-
-    return true;
-}
-
-/***********************/
-
 void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
 {
     auto& Diags = calypso.getDiagnostics();
@@ -532,7 +400,7 @@ void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
         S.InstantiateFunctionDefinition(D->getLocation(), D);
 }
 
-void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
+void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd)
 {
     auto& S = calypso.getSema();
 
@@ -543,7 +411,8 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
 
     if (D->isInvalidDecl())
     {
-        if (fd->parent->isTemplateInstance() && isCPP(fd->parent)) {
+        if (fd->parent->isTemplateInstance() && isCPP(fd->parent))
+        {
             auto c_ti = static_cast<cpp::TemplateInstance*>(fd->parent);
             c_ti->markInvalid();
         }
@@ -553,35 +422,12 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
     const clang::FunctionDecl *Def;
     if (D->hasBody(Def))
     {
-        Scope *sc2 = sc->push();
-        sc2->func = fd;
-//         sc2->parent = fd;
-        sc2->callSuper = 0;
-        sc2->sbreak = NULL;
-        sc2->scontinue = NULL;
-        sc2->sw = NULL;
-        sc2->stc &= ~(STCauto | STCscope | STCstatic | STCabstract |
-                        STCdeprecated | STCoverride |
-                        STC_TYPECTOR | STCfinal | STCtls | STCgshared | STCref | STCreturn |
-                        STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
-        sc2->protection = {Prot::public_, nullptr};
-        sc2->explicitProtection = 0;
-        sc2->aligndecl = NULL;
-        sc2->flags = sc->flags & ~SCOPEcontract;
-        sc2->flags &= ~SCOPEcompile;
-        sc2->tf = NULL;
-        sc2->os = NULL;
-        sc2->inLoop = 0;
-        sc2->userAttribDecl = NULL;
-        sc2->fieldinit = NULL;
-        sc2->fieldinit_dim = 0;
-
-        DeclReferencer declReferencer(sc->minst);
-        declReferencer.Traverse(fd->loc, sc2, Def->getBody());
+        DeclReferencer declReferencer(fd->getInstantiatingModule());
+        declReferencer.Traverse(fd->loc, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
             for (auto& Init: Ctor->inits())
-                declReferencer.Traverse(fd->loc, sc2, Init->getInit());
+                declReferencer.Traverse(fd->loc, Init->getInit());
     }
 
     MarkModuleForGenIfNeeded(fd);
@@ -600,53 +446,7 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
     if (fd->isCtorDeclaration() || fd->isDtorDeclaration())
         fd->langPlugin()->markSymbolReferenced(fd->parent);
 
-    if (fd->semanticRun >= PASSsemantic3done)
-        InstantiateAndTraverseFunctionBody(fd, fd->_scope);
-}
-
-void FuncDeclaration::doSemantic3(::FuncDeclaration *fd)
-{
-    if (fd->semanticRun >= PASSsemantic3)
-        return;
-    fd->semanticRun = PASSsemantic3;
-    fd->semantic3Errors = false;
-
-    if (getIsUsed(fd)) {
-        assert(fd->_scope);
-        InstantiateAndTraverseFunctionBody(fd, fd->_scope);
-    }
-
-    fd->semanticRun = PASSsemantic3done;
-}
-
-void FuncDeclaration::accept(Visitor *v)
-{
-    auto v_ti = v->_typeid();
-
-    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
-        doSemantic3(this);
-    else
-        v->visit(this);
-}
-
-void CtorDeclaration::accept(Visitor *v)
-{
-    auto v_ti = v->_typeid();
-
-    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
-        cpp::FuncDeclaration::doSemantic3(this);
-    else
-        v->visit(this);
-}
-
-void DtorDeclaration::accept(Visitor *v)
-{
-    auto v_ti = v->_typeid();
-
-    if (v_ti == TI_DsymbolSem3Visitor) // semantic3
-        cpp::FuncDeclaration::doSemantic3(this);
-    else
-        v->visit(this);
+    InstantiateAndTraverseFunctionBody(fd);
 }
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f)

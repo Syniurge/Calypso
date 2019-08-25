@@ -354,23 +354,25 @@ inline bool isTypeQualifed(Type *t)
     return t->ty == Tident || t->ty == Tinstance || t->ty == Ttypeof || t->ty == Treturn;
 }
 
-Type *TypeMapper::fromType(const clang::QualType T, Loc loc)
+unsigned DeclMapper::volatileNumber = 0;
+
+Type *DeclMapper::fromType(const clang::QualType T, Loc loc)
 {
     return FromType(*this, loc)(T);
 }
 
-TypeMapper::FromType::FromType(TypeMapper &tm, Loc loc, TypeQualified *prefix, bool useCachedSyms)
-    : tm(tm), loc(loc), prefix(prefix), useCachedSyms(useCachedSyms)
+DeclMapper::FromType::FromType(DeclMapper &mapper, Loc loc, TypeQualified *prefix)
+    : mapper(mapper), loc(loc), prefix(prefix)
 {
 }
 
-Type *TypeMapper::FromType::operator()(const clang::QualType _T)
+Type *DeclMapper::FromType::operator()(const clang::QualType _T)
 {
     if (isNonSupportedType(_T))
         return nullptr;
 
     auto& Context = calypso.getASTContext();
-    clang::QualType T = tm.desugar ? _T.getDesugaredType(Context) : _T;
+    clang::QualType T = _T.getDesugaredType(Context);
 
     Type *t = fromTypeUnqual(T.getTypePtr());
 
@@ -381,19 +383,19 @@ Type *TypeMapper::FromType::operator()(const clang::QualType _T)
         t = t->makeConst();
 
     if (T.isVolatileQualified())
-        tm.volatileNumber++;
+        mapper.volatileNumber++;
 
     // restrict qualifiers are inconsequential
 
     return t;
 }
 
-Type *TypeMapper::FromType::fromType(const clang::QualType T)
+Type *DeclMapper::FromType::fromType(const clang::QualType T)
 {
     return (*this)(T);
 }
 
-Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
+Type *DeclMapper::FromType::fromTypeUnqual(const clang::Type *T)
 {
     if (auto BT = dyn_cast<clang::BuiltinType>(T))
         return fromTypeBuiltin(BT);
@@ -466,7 +468,7 @@ Type *TypeMapper::FromType::fromTypeUnqual(const clang::Type *T)
 }
 
 
-Type *TypeMapper::FromType::fromTypeBuiltin(const clang::BuiltinType *T)
+Type *DeclMapper::FromType::fromTypeBuiltin(const clang::BuiltinType *T)
 {
     auto t = calypso.builtinTypes.toD[T];
 
@@ -474,7 +476,7 @@ Type *TypeMapper::FromType::fromTypeBuiltin(const clang::BuiltinType *T)
     return t;
 }
 
-Type *TypeMapper::FromType::fromTypeComplex(const clang::ComplexType *T)
+Type *DeclMapper::FromType::fromTypeComplex(const clang::ComplexType *T)
 {
     auto& Context = calypso.getASTContext();
     auto dT = T->desugar();
@@ -490,7 +492,7 @@ Type *TypeMapper::FromType::fromTypeComplex(const clang::ComplexType *T)
     return nullptr;
 }
 
-Type* TypeMapper::FromType::fromTypeVector(const clang::VectorType* T)
+Type* DeclMapper::FromType::fromTypeVector(const clang::VectorType* T)
 {
     auto t = fromType(T->getElementType());
     if (!t)
@@ -500,7 +502,7 @@ Type* TypeMapper::FromType::fromTypeVector(const clang::VectorType* T)
     return new_TypeVector(new_TypeSArray(t, dim));
 }
 
-Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
+Type* DeclMapper::FromType::fromTypeArray(const clang::ArrayType* T)
 {
     auto t = fromType(T->getElementType());
     if (!t)
@@ -513,7 +515,7 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
     }
     else if (auto DSAT = dyn_cast<clang::DependentSizedArrayType>(T))
     {
-        auto dim = ExprMapper(tm).fromExpression(DSAT->getSizeExpr());
+        auto dim = ExprMapper(mapper).fromExpression(DSAT->getSizeExpr());
         return new_TypeSArray(t, dim);
     }
     else if (isa<clang::IncompleteArrayType>(T))
@@ -525,7 +527,7 @@ Type* TypeMapper::FromType::fromTypeArray(const clang::ArrayType* T)
 }
 
 // MSVC-specific(?) __underlying_type intrinsic returning the underlying integral type of an enum
-Type* TypeMapper::FromType::fromTypeUnaryTransform(const clang::UnaryTransformType* T)
+Type* DeclMapper::FromType::fromTypeUnaryTransform(const clang::UnaryTransformType* T)
 {
     auto Underlying = T->getUnderlyingType();
     if (!Underlying.isNull())
@@ -535,10 +537,10 @@ Type* TypeMapper::FromType::fromTypeUnaryTransform(const clang::UnaryTransformTy
 }
 
 template<bool wantTuple>
-  Objects* TypeMapper::FromType::fromTemplateArgument(const clang::TemplateArgument* Arg,
+  Objects* DeclMapper::FromType::fromTemplateArgument(const clang::TemplateArgument* Arg,
                 const clang::NamedDecl *Param)
 {
-    ExprMapper expmap(tm);
+    ExprMapper expmap(mapper);
     auto tiargs = new Objects;
 
     std::function<void(const clang::TemplateArgument*, Objects*)>
@@ -565,7 +567,7 @@ template<bool wantTuple>
                 tiarg = new_NullExp(loc/*, fromType(Arg->getNullPtrType())*/);
                 break;
             case clang::TemplateArgument::Type:
-                tiarg = FromType(tm, loc)(Arg->getAsType());
+                tiarg = FromType(mapper, loc)(Arg->getAsType());
                 break;
             case clang::TemplateArgument::Template:
                 tiarg = fromTemplateName(Arg->getAsTemplate());
@@ -600,9 +602,9 @@ template<bool wantTuple>
     return tiargs;
 }
 
-template Objects *TypeMapper::FromType::fromTemplateArgument<false>(const clang::TemplateArgument *Arg,
+template Objects *DeclMapper::FromType::fromTemplateArgument<false>(const clang::TemplateArgument *Arg,
                                                                                 const clang::NamedDecl *Param);
-template Objects *TypeMapper::FromType::fromTemplateArgument<true>(const clang::TemplateArgument *Arg,
+template Objects *DeclMapper::FromType::fromTemplateArgument<true>(const clang::TemplateArgument *Arg,
                                                                                 const clang::NamedDecl *Param);
 
 namespace {
@@ -666,7 +668,7 @@ namespace {
 }
 
 template<bool wantTuple>
-  Objects* TypeMapper::FromType::fromTemplateArguments(const clang::TemplateArgument *First,
+  Objects* DeclMapper::FromType::fromTemplateArguments(const clang::TemplateArgument *First,
                                         const clang::TemplateArgument *End,
                                         const clang::TemplateParameterList *ParamList)
 {
@@ -688,12 +690,12 @@ template<bool wantTuple>
 }
 
 template
-  Objects* TypeMapper::FromType::fromTemplateArguments<true>(const clang::TemplateArgument *First,
+  Objects* DeclMapper::FromType::fromTemplateArguments<true>(const clang::TemplateArgument *First,
                                         const clang::TemplateArgument *End,
                                         const clang::TemplateParameterList *ParamList);
 
 template<bool wantTuple>
-  Objects *TypeMapper::fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
+  Objects *DeclMapper::fromTemplateArguments(Loc loc, const clang::TemplateArgumentList *List,
                                            const clang::TemplateParameterList *ParamList)
 {
     auto Array = List->asArray();
@@ -701,9 +703,9 @@ template<bool wantTuple>
     return FromType(*this, loc).fromTemplateArguments<wantTuple>(First, End, ParamList);
 }
 
-template Objects* TypeMapper::fromTemplateArguments<false>(Loc loc, const clang::TemplateArgumentList *List,
+template Objects* DeclMapper::fromTemplateArguments<false>(Loc loc, const clang::TemplateArgumentList *List,
                                            const clang::TemplateParameterList *ParamList);
-template Objects* TypeMapper::fromTemplateArguments<true>(Loc loc, const clang::TemplateArgumentList *List,
+template Objects* DeclMapper::fromTemplateArguments<true>(Loc loc, const clang::TemplateArgumentList *List,
                                            const clang::TemplateParameterList *ParamList);
 
 class ScopeChecker // determines if a C++ decl is "scopingly" equivalent to another's
@@ -805,13 +807,6 @@ public:
         return false;
     }
 
-    bool isDirectParent(const clang::Decl *D)
-    {
-        auto Parent = cast<clang::Decl>(
-                        getDeclContextNonLinkSpec(D));
-        return operator()(Parent, false);
-    }
-
     bool extended(const clang::Decl *D)
     {
         if (operator()(D))
@@ -831,8 +826,8 @@ public:
 class TypeQualifiedBuilder
 {
 public:
-    TypeMapper::FromType &from;
-    TypeMapper &tm;
+    DeclMapper::FromType &from;
+    DeclMapper &mapper;
 
     TypeQualifiedBuilderOpts options;
 
@@ -857,12 +852,12 @@ public:
 
     RootObject *getIdentOrTempinst(const clang::Decl *D);
 
-    TypeQualifiedBuilder(TypeMapper::FromType &from, const clang::Decl* Root,
+    TypeQualifiedBuilder(DeclMapper::FromType &from, const clang::Decl* Root,
         const clang::NamedDecl *TopDecl = nullptr,
         const clang::TemplateArgument *TempArgBegin = nullptr,
         const clang::TemplateArgument *TempArgEnd = nullptr,
         TypeQualifiedBuilderOpts options = TQ_None)
-        : from(from), tm(from.tm), options(options), RootEquals(Root),
+        : from(from), mapper(from.mapper), options(options), RootEquals(Root),
           TopDecl(TopDecl),
           TopTempArgBegin(TempArgBegin),
           TopTempArgEnd(TempArgEnd)
@@ -931,9 +926,9 @@ RootObject *TypeQualifiedBuilder::getIdentOrTempinst(const clang::Decl *D)
         return nullptr;
 
     if (options & TQ_OverOpFullIdent)
-        return getExtendedIdentifierOrNull(Named, tm);
+        return getExtendedIdentifierOrNull(Named, mapper);
 
-    SpecValue spec(tm); // overloaded operator
+    SpecValue spec(mapper); // overloaded operator
     auto ident = getIdentifierOrNull(Named, &spec);
 
     if (spec && !(options & TQ_OverOpSkipSpecArg))
@@ -965,17 +960,14 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
         {
             tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to protect against collisions
 
-            // build a fake import
-            if (auto im = tm.AddImplicitImportForDecl(from.loc, TopDecl, true))
+            if (auto m = mapper.getModule(TopDecl))
             {
-                if (im->aliasId)
-                    addIdent(tqual, im->aliasId);
-                else
-                {
-                    for (auto package: *im->packages)
-                        addIdent(tqual, package);
-                    addIdent(tqual, im->id);
-                }
+                std::function<void(Dsymbol*)> add = [&] (Dsymbol* pkg) {
+                    if (auto parent = pkg->parent)
+                        add(parent);
+                    addIdent(tqual, pkg->ident);
+                };
+                add(m);
             }
             // if no Import was returned D is part of the module being mapped
 
@@ -985,12 +977,12 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
         else
         {
             auto Parent = cast<clang::Decl>(
-                        getDeclContextNamedOrTU(D));
+                        getDeclContextOpaque(D));
             tqual = get(Parent);
         }
     }
 
-    auto DC = getDeclContextNamedOrTU(D);
+    auto DC = getDeclContextOpaque(D);
     if (isa<clang::EnumConstantDecl>(D) &&
             from.prefix && DC->isTransparentContext())
         add(tqual, getIdentOrTempinst(cast<clang::NamedDecl>(DC))); // if the enum constant is prefixed in the DeclRef and the enum isn't a C++11 static enum, append its name
@@ -1045,93 +1037,26 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
     return tqual;
 }
 
-const clang::Decl *TypeMapper::GetRootForTypeQualified(clang::NamedDecl *D)
-{
-    clang::DeclarationName Name = D->getDeclName();
-
-    if (auto Tag = llvm::dyn_cast<clang::TagDecl>(D))
-        if (auto Typedef = Tag->getTypedefNameForAnonDecl())
-            Name = Typedef->getDeclName();
-
-    if (Name.isEmpty()) // might be an anonymous enum decl for fromExpressionDeclRef
-            // TODO: check that this doesn't happen when called from TypeMapper would be more solid
-        return nullptr;
-
-    auto DK = GetImplicitImportKeyForDecl(D);
-    auto ModDC = GetNonNestedContext(D);
-
-    if (mod && isCPP(mod) && DK == static_cast<cpp::Module*>(mod)->rootKey)
-    {
-        if (isa<clang::TagDecl>(ModDC))
-            return ModDC;
-
-        // else ModDC is a namespace/TU and we need to return the first decl to its right
-        auto Root = D;
-        while (D->getCanonicalDecl() != ModDC->getCanonicalDecl())
-        {
-            auto DC = getDeclContextNamedOrTU(D);
-            if (DC->isTranslationUnit())
-                return D->getTranslationUnitDecl();
-
-            Root = D;
-            D = cast<clang::NamedDecl>(const_cast<clang::DeclContext*>(DC));
-        }
-        return Root;
-    }
-
-    return D->getTranslationUnitDecl();
-}
-
-Dsymbol* TypeMapper::dsymForDecl(Loc loc, const clang::NamedDecl* D)
-{
-    D = cast<clang::NamedDecl>(D->getCanonicalDecl());
-
-    if (D->d)
-        return D->d->sym;
-
-    ::Module* minst;
-    if (!isTemplateInstantiation(D))
-    {
-        auto Key = GetImplicitImportKeyForDecl(D);
-        minst = cpp::Module::allCppModules[Key];
-        if (!minst) {
-            auto im = AddImplicitImportForDecl(loc, D, !isCPP(mod)); // TODO: implicit imports should, like before and for reflection correctness, always get created even if the module exists, but the performance impact needs to be evaluated
-            minst = Module::create(Key, im->packages, im->id);
-            minst->importedFrom = mod;
-        }
-    }
-    else
-        minst = this->mod;
-
-    if (isCPP(minst))
-        static_cast<cpp::Module*>(minst)->mapper->VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
-    else if (minst)
-        DeclMapper(minst, false, false).VisitDecl(D, DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
-
-    return D->d ? D->d->sym : nullptr;
-}
-
-TypeQualified *TypeMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
+TypeQualified *DeclMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    if (useCachedSyms) {
-        auto dsym = tm.dsymForDecl(loc, D);
+    if (true) {
+        auto dsym = mapper.dsymForDecl(D);
         if (!ArgBegin && dsym) {
             assert(dsym->getType());
             return (TypeQualified*) dsym->getType(); // FIXME
         }
     }
 
-    auto Root = tm.GetRootForTypeQualified(D);
+    auto Root = mapper.getModule(D)->rootDecl;
     if (!Root)
         return nullptr; // FIXME struct {} Val;
 
-    tm.AddImplicitImportForDecl(loc, D);
     return TypeQualifiedBuilder(*this, Root, D, ArgBegin, ArgEnd, options).get(D);
 }
 
-Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
+Type* DeclMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
 {
     auto Typedef = T->getDecl();
     if (isAnonTagTypedef(Typedef) || isSameNameTagTypedef(Typedef))
@@ -1140,22 +1065,22 @@ Type* TypeMapper::FromType::fromTypeTypedef(const clang::TypedefType* T)
     return typeQualifiedFor(Typedef);
 }
 
-Type* TypeMapper::FromType::fromTypeEnum(const clang::EnumType* T)
+Type* DeclMapper::FromType::fromTypeEnum(const clang::EnumType* T)
 {
     return typeQualifiedFor(T->getDecl());
 }
 
-Type *TypeMapper::FromType::fromTypeRecord(const clang::RecordType *T)
+Type *DeclMapper::FromType::fromTypeRecord(const clang::RecordType *T)
 {
     return typeQualifiedFor(T->getDecl());
 }
 
 // Rarely used feature of C++, see [expr.mptr.oper]
 // In the Itanium ABI a member func pointer is a pair of ptrdiff_t { ptr; thisadj; }
-Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
+Type *DeclMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType *T)
 {
     auto mt = fromType(T->getPointeeType());
-    auto tc = FromType(tm, loc).fromTypeUnqual(T->getClass());
+    auto tc = FromType(mapper, loc).fromTypeUnqual(T->getClass());
 
     auto tiargs = new Objects;
     tiargs->push(mt); // we need to remember the member type and the parent class, in case we have to send the type back to Clang
@@ -1169,7 +1094,7 @@ Type *TypeMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType
     return t;
 }
 
-Type *TypeMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
+Type *DeclMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
 {
     // NOTE: Why must we sometimes respect NestedNameSpecifiers? Because of this situation:
     //     template<typename _Iterator>
@@ -1191,10 +1116,10 @@ Type *TypeMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
             tqual = fromNestedNameSpecifier(NNS);
     }
 
-    return FromType(tm, loc, tqual)(T->getNamedType());
+    return FromType(mapper, loc, tqual)(T->getNamedType());
 }
 
-TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName Name,
+TypeQualified *DeclMapper::FromType::fromTemplateName(const clang::TemplateName Name,
                 const clang::TemplateArgument *ArgBegin,
                 const clang::TemplateArgument *ArgEnd)
 {
@@ -1206,7 +1131,7 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
         {
             auto Temp = Name.getAsTemplateDecl();
             if (auto TempParm = dyn_cast<clang::TemplateTemplateParmDecl>(Temp))
-                tempIdent = tm.getIdentifierForTemplateTemplateParm(TempParm);
+                tempIdent = mapper.getIdentifierForTemplateTemplateParm(TempParm);
             else
                 return typeQualifiedFor(Temp, ArgBegin, ArgEnd);
             break;
@@ -1221,11 +1146,11 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
                     NNS->getKind() == clang::NestedNameSpecifier::TypeSpecWithTemplate)
                 tqual = fromNestedNameSpecifier(NNS);
 
-            return FromType(tm, loc, tqual).typeQualifiedFor(Name.getAsTemplateDecl(), ArgBegin, ArgEnd);
+            return FromType(mapper, loc, tqual).typeQualifiedFor(Name.getAsTemplateDecl(), ArgBegin, ArgEnd);
         }
 
         case clang::TemplateName::SubstTemplateTemplateParm:
-            tempIdent = tm.getIdentifierForTemplateTemplateParm(
+            tempIdent = mapper.getIdentifierForTemplateTemplateParm(
                     Name.getAsSubstTemplateTemplateParm()->getParameter());
             break;
 
@@ -1251,12 +1176,12 @@ TypeQualified *TypeMapper::FromType::fromTemplateName(const clang::TemplateName 
         return new_TypeIdentifier(loc, tempIdent);
 }
 
-Type* TypeMapper::FromType::fromTypeTemplateSpecialization(const clang::TemplateSpecializationType* T)
+Type* DeclMapper::FromType::fromTypeTemplateSpecialization(const clang::TemplateSpecializationType* T)
 {
     return fromTemplateName(T->getTemplateName(), T->begin(), T->end());
 }
 
-Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
+Identifier *DeclMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTypeParmDecl *D,
                                 const clang::TemplateTypeParmType *T)
 {
     unsigned Depth, Index;
@@ -1285,7 +1210,7 @@ Identifier *TypeMapper::getIdentifierForTemplateTypeParm(const clang::TemplateTy
     return Identifier::idPool(OS.str().c_str(), OS.str().size());
 }
 
-Identifier *TypeMapper::getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D)
+Identifier *DeclMapper::getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D)
 {
     // TODO: merge with others?
 
@@ -1329,14 +1254,14 @@ unsigned getTemplateParmDepth(const clang::NamedDecl *ParmDecl)
     return 0;
 }
 
-Type* TypeMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypeParmType* T)
+Type* DeclMapper::FromType::fromTypeTemplateTypeParm(const clang::TemplateTypeParmType* T)
 {
     auto D = T->getDecl();
-    auto ident = tm.getIdentifierForTemplateTypeParm(D, T);
+    auto ident = mapper.getIdentifierForTemplateTypeParm(D, T);
     return new_TypeIdentifier(loc, ident);
 }
 
-Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType* T)
+Type* DeclMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemplateTypeParmType* T)
 {
     auto Replacement = T->getReplacementType();
     if (!Replacement.isNull())
@@ -1345,7 +1270,7 @@ Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParm(const clang::SubstTemp
     return fromTypeTemplateTypeParm(T->getReplacedParameter());
 }
 
-Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T)
+Type* DeclMapper::FromType::fromTypeSubstTemplateTypeParmPack(const clang::SubstTemplateTypeParmPackType* T)
 {
     auto Pack = T->getArgumentPack();
     auto args = fromTemplateArgument<false>(&Pack);
@@ -1357,7 +1282,7 @@ Type* TypeMapper::FromType::fromTypeSubstTemplateTypeParmPack(const clang::Subst
     return nullptr;
 }
 
-Type* TypeMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClassNameType* T) // e.g in template <...> class A { A &next; } next has an injected class name type
+Type* DeclMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClassNameType* T) // e.g in template <...> class A { A &next; } next has an injected class name type
 {
     // A simple identifier is preferrable when possible, as mapping template arguments requires switching to a different parameter scope
     return new_TypeIdentifier(loc, getIdentifier(T->getDecl()));
@@ -1366,7 +1291,7 @@ Type* TypeMapper::FromType::fromTypeInjectedClassName(const clang::InjectedClass
         // NOTE: this will return typeof(this) if we aren't in a nested class, but if we are the name of the record is (without template arguments)
 }
 
-TypeQualified *TypeMapper::FromType::fromNestedNameSpecifierImpl(const clang::NestedNameSpecifier *NNS)
+TypeQualified *DeclMapper::FromType::fromNestedNameSpecifierImpl(const clang::NestedNameSpecifier *NNS)
 {
     TypeQualified *result = nullptr;
 
@@ -1382,7 +1307,7 @@ TypeQualified *TypeMapper::FromType::fromNestedNameSpecifierImpl(const clang::Ne
         case clang::NestedNameSpecifier::TypeSpec:
         case clang::NestedNameSpecifier::TypeSpecWithTemplate:
         {
-            auto t = FromType(tm, loc, nullptr, false).fromTypeUnqual(NNS->getAsType());
+            auto t = FromType(mapper, loc, nullptr).fromTypeUnqual(NNS->getAsType());
             if (!t)
                 return nullptr;
             assert(t->ty == Tinstance || t->ty == Tident || t->ty == Ttypeof);
@@ -1402,11 +1327,11 @@ TypeQualified *TypeMapper::FromType::fromNestedNameSpecifierImpl(const clang::Ne
     return result;
 }
 
-TypeQualified* TypeMapper::FromType::fromNestedNameSpecifier(const clang::NestedNameSpecifier* NNS)
+TypeQualified* DeclMapper::FromType::fromNestedNameSpecifier(const clang::NestedNameSpecifier* NNS)
 {
     if (auto Prefix = NNS->getPrefix())
         if (auto tqual = fromNestedNameSpecifier(Prefix))
-            return FromType(tm, loc, tqual).fromNestedNameSpecifierImpl(NNS);
+            return FromType(mapper, loc, tqual).fromNestedNameSpecifierImpl(NNS);
 
     return fromNestedNameSpecifierImpl(NNS);
 }
@@ -1414,7 +1339,7 @@ TypeQualified* TypeMapper::FromType::fromNestedNameSpecifier(const clang::Nested
 // NOTE: Dependent***Type are not mandatory to get templates working because the instantiation is done by Sema
 // and then DMD simply maps the resulting class or function specialization, so we could return TypeNull and it would still work.
 // Still good for reflection.
-Type* TypeMapper::FromType::fromTypeDependentName(const clang::DependentNameType* T)
+Type* DeclMapper::FromType::fromTypeDependentName(const clang::DependentNameType* T)
 {
     TypeQualified *tqual = nullptr;
 
@@ -1430,7 +1355,7 @@ Type* TypeMapper::FromType::fromTypeDependentName(const clang::DependentNameType
     return tqual;
 }
 
-Type* TypeMapper::FromType::fromTypeDependentTemplateSpecialization(const clang::DependentTemplateSpecializationType* T)
+Type* DeclMapper::FromType::fromTypeDependentTemplateSpecialization(const clang::DependentTemplateSpecializationType* T)
 {
     TypeQualified *tqual = nullptr;
 
@@ -1451,41 +1376,41 @@ Type* TypeMapper::FromType::fromTypeDependentTemplateSpecialization(const clang:
 }
 
 template <typename _Type>
-Type *TypeMapper::FromType::fromTypeOfExpr(const _Type *T)
+Type *DeclMapper::FromType::fromTypeOfExpr(const _Type *T)
 {
     if (T->isSugared())  // TODO: remove this for reflection?
     {
-        FromType underlying(tm, loc);
+        FromType underlying(mapper, loc);
         underlying.TypeOfExpr = T->getUnderlyingExpr(); // needed for SubstTemplateTypeParm
 
         return underlying(T->desugar());
     }
 
-    auto exp = ExprMapper(tm).fromExpression(T->getUnderlyingExpr());
+    auto exp = ExprMapper(mapper).fromExpression(T->getUnderlyingExpr());
     assert(exp);
     return new_TypeTypeof(loc, exp);
 }
 
-Type* TypeMapper::FromType::fromTypeTypeOfExpr(const clang::TypeOfExprType* T)
+Type* DeclMapper::FromType::fromTypeTypeOfExpr(const clang::TypeOfExprType* T)
 {
     return fromTypeOfExpr(T);
 }
 
-Type* TypeMapper::FromType::fromTypeDecltype(const clang::DecltypeType* T)
+Type* DeclMapper::FromType::fromTypeDecltype(const clang::DecltypeType* T)
 {
     return fromTypeOfExpr(T);
 }
 
-Type* TypeMapper::FromType::fromTypePackExpansion(const clang::PackExpansionType* T)
+Type* DeclMapper::FromType::fromTypePackExpansion(const clang::PackExpansionType* T)
 {
     return fromType(T->getPattern());
 }
 
-TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
+TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
         const clang::FunctionDecl *FD)
 {
     if (T->isVolatile())
-        tm.volatileNumber++;
+        mapper.volatileNumber++;
 
     auto& S = calypso.getSema();
     auto& Diags = calypso.getDiagnostics();
@@ -1501,7 +1426,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
                 I != E; I++)
     {
         StorageClass stc = STCundefined;
-        auto at = tm.fromType(*I, loc);
+        auto at = mapper.fromType(*I, loc);
         Identifier *ident = nullptr;
         Expression *defaultArg = nullptr;
 
@@ -1538,7 +1463,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
                                 (*PI)->getUninstantiatedDefaultArg() : (*PI)->getDefaultArg();
 
                 if (DefaultArgExpr) // might be null if BuildCXXDefaultArgExpr returned ExprError
-                    defaultArg = ExprMapper(tm).fromExpression(DefaultArgExpr);
+                    defaultArg = ExprMapper(mapper).fromExpression(DefaultArgExpr);
 
                 if (Diags.hasErrorOccurred())
                     Diags.Reset();
@@ -1560,7 +1485,7 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         stc |= STCauto;
         rt = nullptr;
     } else {
-        rt = FromType(tm, loc)(T->getReturnType());
+        rt = FromType(mapper, loc)(T->getReturnType());
         if (!rt)
             return nullptr;
 
@@ -1585,132 +1510,41 @@ TypeFunction *TypeMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     return tf;
 }
 
-static clang::Module *GetClangModuleForDecl(const clang::Decl* D)
-{
-#ifdef USE_CLANG_MODULES
-    auto& SrcMgr = calypso.getSourceManager();
-    auto MMap = calypso.pch.MMap;
-
-    if (!MMap)
-        return nullptr;
-
-    auto Loc = D->getLocStart();
-    auto DLoc = SrcMgr.getFileLoc(Loc);
-    if (!DLoc.isFileID())
-        return nullptr;
-
-    auto FID = SrcMgr.getFileID(DLoc);
-    auto Header = SrcMgr.getFileEntryForID(FID);
-    if (!Header)
-    {
-        assert(D->isImplicit()); // maybe too narrow..
-        return nullptr;
-    }
-
-    auto KH = MMap->findModuleForHeader(Header);
-    if (!KH)
-        return nullptr;
-
-    return KH.getModule();
-#else
-    return nullptr;
-#endif
-}
-
-// Build and possibly add imports for symbols referenced in the module being mapped
-cpp::Import *TypeMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake)
-{
-    auto Key = GetImplicitImportKeyForDecl(D);
-
-    assert(fake || !mod || isCPP(mod));
-
-    if (mod && isCPP(mod) && Key == static_cast<cpp::Module*>(mod)->rootKey)
-        return nullptr; // do not import self
-
-    cpp::Import *im = implicitImports[Key].im;
-    if (!im)
-    {
-        Identifier *importAliasid = nullptr;
-        if (mod && isCPP(mod) && isa<clang::TagDecl>(Key.first) &&
-                getDeclContextNamedOrTU(Key.first)->isTranslationUnit())
-        {
-            // Special check for C tags which may have the same name as functions
-            // When this does happens, rename the import
-            // NOTE: is this really specific to tags and functions?
-            auto TD = cast<clang::TagDecl>(Key.first);
-            auto TU = TD->getTranslationUnitDecl();
-
-            auto R = TU->lookup(TD->getDeclName());
-            for (auto Match: R)
-            {
-                if (Match->getCanonicalDecl() == Key.first)
-                    continue;
-                if (GetImplicitImportKeyForDecl(Match) != static_cast<cpp::Module*>(mod)->rootKey)
-                    continue; // the matching decl is part of another module, no conflict
-
-                { auto importIdent = getIdentifier(TD);
-                llvm::SmallString<48> s(u8"ℂ"); // non-ASCII but pretty
-                s += llvm::StringRef(importIdent->toChars(), importIdent->length());
-                importAliasid = Identifier::idPool(s.c_str(), s.size()); }
-
-                assert(!Key.second);
-                break;
-            }
-        }
-
-        if (Key.second)
-            im = BuildImplicitImport(loc, Key.first, Key.second, importAliasid);
-        else
-            im = BuildImplicitImport(loc, Key.first, importAliasid);
-
-        implicitImports[Key].im = im;
-    }
-
-    if (!fake && !implicitImports[Key].added) {
-        if (addImplicitDecls) {
-            assert(isCPP(mod));
-            static_cast<cpp::Module*>(mod)->mapper->importDecls.push(im);
-            implicitImports[Key].added = true;
-        } else if (scSemImplicitImports) {
-            auto dst = Package::resolve(im->packages, nullptr, &im->pkg);
-            if (!dst->lookup(im->id)) {
-                dsymbolSemantic(im, scSemImplicitImports);
-                semantic2(im, scSemImplicitImports);
-            }
-        }
-    }
-
-    return im;
-}
-
-Module::RootKey TypeMapper::GetImplicitImportKeyForDecl(const clang::NamedDecl* D)
-{
-    D = cast<clang::NamedDecl>(getCanonicalDecl(D));
-
-    if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine())
-        return GetImplicitImportKeyForDecl(  // friend declarations which aren't redeclared in the semantic declctx are part of the record module
-                cast<clang::NamedDecl>(D->getLexicalDeclContext()));
-
-    auto TopMost = GetNonNestedContext(D);
-    bool IsNamespaceOrTU = isa<clang::TranslationUnitDecl>(TopMost) ||
-                    isa<clang::NamespaceDecl>(TopMost);
-
-    auto Func = dyn_cast<clang::FunctionDecl>(D);
-    if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
-        Func = FuncTemp->getTemplatedDecl();
-    if (IsNamespaceOrTU && Func && Func->isOverloadedOperator())
-        if (auto Tag = isOverloadedOperatorWithTagOperand(D)) // non-member operators are part of the record module
-            return GetImplicitImportKeyForDecl(Tag);
-
-    if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(TopMost))
-        return GetImplicitImportKeyForDecl(Spec->getSpecializedTemplate());
-
-    Module::RootKey Key;
-    Key.first = TopMost->getCanonicalDecl();
-    if (IsNamespaceOrTU)
-        Key.second = GetClangModuleForDecl(D); // see if there's a Clang module which contains the decl
-    return Key;
-}
+// // Build and possibly add imports for symbols referenced in the module being mapped
+// cpp::Import *DeclMapper::AddImplicitImportForDecl(Loc loc, const clang::NamedDecl *D, bool fake)
+// {
+//     auto Key = GetImplicitImportKeyForDecl(D);
+//
+//     assert(fake || !mod || isCPP(mod));
+//
+//     cpp::Import *im = BuildImplicitImport(loc, Key, nullptr);
+//     return im;
+// }
+//
+// const clang::Decl* DeclMapper::GetImplicitImportKeyForDecl(const clang::NamedDecl* D)
+// {
+//     D = cast<clang::NamedDecl>(getCanonicalDecl(D));
+//
+//     if (D->getFriendObjectKind() != clang::Decl::FOK_None && D->isOutOfLine())
+//         return GetImplicitImportKeyForDecl(  // friend declarations which aren't redeclared in the semantic declctx are part of the record module
+//                 cast<clang::NamedDecl>(D->getLexicalDeclContext()));
+//
+//     auto TopMost = GetNonNestedContext(D);
+//     bool IsNamespaceOrTU = isa<clang::TranslationUnitDecl>(TopMost) ||
+//                     isa<clang::NamespaceDecl>(TopMost);
+//
+//     auto Func = dyn_cast<clang::FunctionDecl>(D);
+//     if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
+//         Func = FuncTemp->getTemplatedDecl();
+//     if (IsNamespaceOrTU && Func && Func->isOverloadedOperator())
+//         if (auto Tag = isOverloadedOperatorWithTagOperand(D)) // non-member operators are part of the record module
+//             return GetImplicitImportKeyForDecl(Tag);
+//
+//     if (auto Spec = dyn_cast<clang::ClassTemplateSpecializationDecl>(TopMost))
+//         return GetImplicitImportKeyForDecl(Spec->getSpecializedTemplate());
+//
+//     return TopMost->getCanonicalDecl();
+// }
 
 // Remove sugar other than aliases
 clang::QualType withoutNonAliasSugar(clang::QualType Ty)
@@ -1757,8 +1591,8 @@ bool isSameNameTagTypedef(const clang::TypedefNameDecl* D)
     {
         auto Tag = TagTy->getDecl();
 
-        auto Parent = cast<clang::Decl>(getDeclContextNamedOrTU(D));
-        auto TagParent = cast<clang::Decl>(getDeclContextNamedOrTU(Tag));
+        auto Parent = cast<clang::Decl>(getDeclContextOpaque(D));
+        auto TagParent = cast<clang::Decl>(getDeclContextOpaque(Tag));
 
         if (Tag->getName() == D->getName() &&
                 TagParent->getCanonicalDecl() == Parent->getCanonicalDecl())
@@ -1792,83 +1626,57 @@ const clang::Decl *GetNonNestedContext(const clang::Decl *D)
         return D;
 
     return GetNonNestedContext(cast<clang::Decl>(
-                        getDeclContextNamedOrTU(D)));
+                        getDeclContextOpaque(D)));
 }
 
-static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
-                                               Loc loc, Identifiers *sPackages)
-{
-    if (DC->isTranslationUnit()) return nullptr;
-    assert(!DC->isFunctionOrMethod() && "Building import for a decl nested inside a func?");
-
-    if (auto sModule = BuildImplicitImportInternal(
-                getDeclContextNamedOrTU(cast<clang::Decl>(DC)), loc, sPackages))
-        return sModule;
-
-    if (auto NS = dyn_cast<clang::NamespaceDecl>(DC))
-    {
-        if (NS->isAnonymousNamespace())
-            error(loc, "Cannot import symbols from anonymous namespaces");
-
-        if (!NS->isInline())
-            sPackages->push(getIdentifier(NS));
-
-        return nullptr;
-    }
-    else if (isa<clang::TagDecl>(DC))
-        return getIdentifier(cast<clang::NamedDecl>(DC));
-
-    llvm_unreachable("Unhandled case");
-}
-
-cpp::Import *TypeMapper::BuildImplicitImport(Loc loc, const clang::Decl *D, Identifier *aliasid)
-{
-    auto DC = cast<clang::DeclContext>(D);
-
-    auto sPackages = new Identifiers;
-    auto sModule = BuildImplicitImportInternal(DC, loc, sPackages);
-
-    if (!sModule)
-    {
-        if (isa<clang::ClassTemplateDecl>(D))
-            sModule = getIdentifier(cast<clang::NamedDecl>(D));
-        else
-            // D is neither a tag nor a class template, we need to import the namespace's functions and vars
-            sModule = calypso.id__;
-    }
-
-    return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
-}
-
-cpp::Import *TypeMapper::BuildImplicitImport(Loc loc, const clang::Decl *D, const clang::Module *Mod,
-                                          Identifier *aliasid)
-{
-    auto sPackages = new Identifiers;
-
-    if (!isa<clang::TranslationUnitDecl>(D))
-    {
-        auto loc = fromLoc(D->getLocation());
-        auto DC = cast<clang::DeclContext>(D);
-
-        BuildImplicitImportInternal(DC, loc, sPackages);
-    }
-
-    auto insertIndex = sPackages->dim;
-    auto sModule = Identifier::idPool(Mod->Name.c_str(), Mod->Name.size());
-
-    auto M = Mod->Parent;
-    while (M)
-    {
-        sPackages->insert(insertIndex, Identifier::idPool(M->Name.c_str(), M->Name.size()));
-        M = M->Parent;
-    }
-
-    return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
-}
+// static Identifier *BuildImplicitImportInternal(const clang::DeclContext *DC,
+//                                                Loc loc, Identifiers *sPackages)
+// {
+//     if (DC->isTranslationUnit()) return nullptr;
+//     assert(!DC->isFunctionOrMethod() && "Building import for a decl nested inside a func?");
+//
+//     if (auto sModule = BuildImplicitImportInternal(
+//                 getDeclContextOpaque(cast<clang::Decl>(DC)), loc, sPackages))
+//         return sModule;
+//
+//     if (auto NS = dyn_cast<clang::NamespaceDecl>(DC))
+//     {
+//         if (NS->isAnonymousNamespace())
+//             error(loc, "Cannot import symbols from anonymous namespaces");
+//
+//         if (!NS->isInline())
+//             sPackages->push(getIdentifier(NS));
+//
+//         return nullptr;
+//     }
+//     else if (isa<clang::TagDecl>(DC))
+//         return getIdentifier(cast<clang::NamedDecl>(DC));
+//
+//     llvm_unreachable("Unhandled case");
+// }
+//
+// cpp::Import *DeclMapper::BuildImplicitImport(Loc loc, const clang::Decl *D, Identifier *aliasid)
+// {
+//     auto DC = cast<clang::DeclContext>(D);
+//
+//     auto sPackages = new Identifiers;
+//     auto sModule = BuildImplicitImportInternal(DC, loc, sPackages);
+//
+//     if (!sModule)
+//     {
+//         if (isa<clang::ClassTemplateDecl>(D))
+//             sModule = getIdentifier(cast<clang::NamedDecl>(D));
+//         else
+//             // D is neither a tag nor a class template, we need to import the namespace's functions and vars
+//             sModule = calypso.id__;
+//     }
+//
+//     return new cpp::Import(loc, sPackages, sModule, aliasid, 1);
+// }
 
 /***** DMD -> Clang types *****/
 
-clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc)
+clang::QualType DeclMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc)
 {
     auto& Context = calypso.getASTContext();
 
@@ -1965,24 +1773,6 @@ clang::QualType TypeMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
 
 /***** *****/
 
-TypeMapper::TypeMapper(::Module* mod, bool isGlobal, bool addImplicitDecls)
-    : mod(mod), isGlobal(isGlobal), addImplicitDecls(addImplicitDecls)
-{
-}
-
-TypeMapper::~TypeMapper()
-{
-    if (isGlobal)
-        return; // IrDsymbol::list may get destroyed before this dtor call, and ~IrDsymbol would then cause a segfault
-
-    for (auto impPair: implicitImports)
-        if (!impPair.second.added) {
-            auto im = impPair.second.im;
-            if (im->packages) delete im->packages;
-            delete im;
-        }
-}
-
 // NOTE: doesn't return null if the template isn't defined. What we really want is some sort of canonical declaration to refer to for template parameter names.
 template <typename RedeclTempDecl>
  const RedeclTempDecl *getRTDDefinition(const RedeclTempDecl *D)
@@ -2024,31 +1814,26 @@ const clang::VarTemplateSpecializationDecl *getDefinition(const clang::VarTempla
     return D;
 }
 
-const clang::DeclContext *getDeclContextNonLinkSpec(const clang::Decl *D)
+// skips anonymous tags, linkage specs and inline namespaces
+const clang::DeclContext *getDeclContextOpaque(const clang::Decl *D)
 {
     auto DC = D->getDeclContext();
 
-    while (isa<clang::LinkageSpecDecl>(DC))
+    while (isa<clang::LinkageSpecDecl>(DC) || DC->isInlineNamespace())
         DC = DC->getParent();
 
-    return DC;
-}
-
-const clang::DeclContext *getDeclContextNamedOrTU(const clang::Decl *D)
-{
-    auto DC = getDeclContextNonLinkSpec(D);
     auto NamedDC = dyn_cast<clang::NamedDecl>(DC);
-    
     if (NamedDC && NamedDC->getDeclName().isEmpty())
     {
         if (auto Tag = llvm::dyn_cast<clang::TagDecl>(DC))
             if (Tag->getTypedefNameForAnonDecl())
                 return DC;
 
-        return getDeclContextNamedOrTU(NamedDC);
+        return getDeclContextOpaque(NamedDC);
     }
 
     assert(NamedDC || isa<clang::TranslationUnitDecl>(DC));
+
     return DC;
 }
 

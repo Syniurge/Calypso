@@ -44,7 +44,7 @@ namespace cpp
 class ClassDeclaration;
 class BuiltinTypes;
 class TemplateInstance;
-class TypeMapper;
+class DeclMapper;
 
 namespace reclang { class DiagnosticPrinter; }
 using clang::ModuleMap;
@@ -67,8 +67,8 @@ struct SpecValue
     const char *op = nullptr; // for overloaded operators
     Type *t = nullptr; // for conversion operators
 
-    TypeMapper &mapper;
-    SpecValue(TypeMapper &mapper) : mapper(mapper) {}
+    DeclMapper &mapper;
+    SpecValue(DeclMapper &mapper) : mapper(mapper) {}
 
     operator bool() { return op || t; }
     RootObject *toTemplateArg(Loc loc);
@@ -81,11 +81,11 @@ Identifier *fromIdentifier(const clang::IdentifierInfo *II);
 Identifier *fromDeclarationName(const clang::DeclarationName N, SpecValue *spec = nullptr);
 Identifier *getIdentifier(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
 Identifier *getIdentifierOrNull(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
-Identifier *getExtendedIdentifier(const clang::NamedDecl *D, TypeMapper &mapper); // will return the name of the non-templated method for operators, same than getIdentifier() for other Decls
-Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, TypeMapper &mapper);
+Identifier *getExtendedIdentifier(const clang::NamedDecl *D, DeclMapper &mapper); // will return the name of the non-templated method for operators, same than getIdentifier() for other Decls
+Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, DeclMapper &mapper);
 
 RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
-                               TypeMapper &mapper);
+                               DeclMapper &mapper);
 
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                                                            const clang::NamedDecl *SpecificTag = nullptr);
@@ -107,8 +107,6 @@ public:
     DiagnosticPrinter *DiagClient;
     clang::IntrusiveRefCntPtr<clang::DiagnosticsEngine> Diags;
     std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps;
-
-    ModuleMap *MMap = nullptr;
 
     void init(); // load the list of headers already cached in the PCH
     void add(const char* header, ::Module *from);
@@ -160,7 +158,6 @@ public:
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 
     ::DtorDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
-    ::FuncDeclaration *buildOpAssign(::StructDeclaration *sd, Scope *sc) override;
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
     bool isSymbolReferenced(Dsymbol *s) override;
@@ -175,7 +172,6 @@ public:
     void adjustLinkerArgs(std::vector<std::string>& args) override;
 
     // ==== mars_mainBody ====
-    void semanticModules() override;
     void codegenModules() override;
 
     // ==== CodeGen ====
@@ -238,8 +234,7 @@ public:
     llvm::StringSet<> TargetFeatures;
     llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
 
-    typedef std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMapEntryTy;
-    llvm::DenseMap<const clang::Module::Header*, MacroMapEntryTy*> MacroMap;
+    std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMap;
 
     BuiltinTypes &builtinTypes;
 
@@ -290,8 +285,6 @@ public:
 
     LangPlugin();
 
-    void buildMacroMap();
-
     clang::ASTUnit *getASTUnit() { return pch.AST.get(); }
     clang::ASTContext &getASTContext();
     clang::Sema &getSema();
@@ -304,6 +297,11 @@ public:
 
     const char *mangle(Dsymbol *s);
     void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
+
+    std::unordered_map<const Identifier*, clang::IdentifierInfo*> IIMap;
+
+    clang::IdentifierInfo* toIdentifierInfo(Identifier* ident); // remove the 'ℂ' if present
+    clang::DeclarationName toDeclarationName(Identifier* ident);
 
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly

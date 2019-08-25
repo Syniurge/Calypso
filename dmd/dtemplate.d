@@ -2298,42 +2298,6 @@ else
         return null;
     }
 
-    bool checkTempDeclFwdRefs(Scope *sc, Dsymbol tempdecl, TemplateInstance ti)
-    {
-        // Look for forward references
-        auto tovers = tempdecl.isOverloadSet();
-        foreach (size_t oi; 0 .. tovers ? tovers.a.dim : 1)
-        {
-            Dsymbol dstart = tovers ? tovers.a[oi] : tempdecl;
-            int r = overloadApply(dstart, (Dsymbol s)
-            {
-                auto td = s.isTemplateDeclaration();
-                if (!td)
-                    return 0;
-
-                if (td.semanticRun == PASS.init)
-                {
-                    if (td._scope)
-                    {
-                        // Try to fix forward reference. Ungag errors while doing so.
-                        Ungag ungag = td.ungagSpeculative();
-                        td.dsymbolSemantic(td._scope);
-                    }
-                    if (td.semanticRun == PASS.init)
-                    {
-                        error("`%s` forward references template declaration `%s`",
-                            toChars(), td.toChars());
-                        return 1;
-                    }
-                }
-                return 0;
-            });
-            if (r)
-                return false;
-        }
-        return true;
-    }
-
     // Variadic template generalization for Calypso (pretty intrusive...)
     final size_t numParameterPacks()
     {
@@ -6626,7 +6590,38 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         }
         assert(tempdecl);
 
-        return firstTempDecl().checkTempDeclFwdRefs(sc, tempdecl, this); // CALYPSO
+        // Look for forward references
+        auto tovers = tempdecl.isOverloadSet();
+        foreach (size_t oi; 0 .. tovers ? tovers.a.dim : 1)
+        {
+            Dsymbol dstart = tovers ? tovers.a[oi] : tempdecl;
+            int r = overloadApply(dstart, (Dsymbol s)
+            {
+                auto td = s.isTemplateDeclaration();
+                if (!td)
+                    return 0;
+
+                if (td.semanticRun == PASS.init)
+                {
+                    if (td._scope)
+                    {
+                        // Try to fix forward reference. Ungag errors while doing so.
+                        Ungag ungag = td.ungagSpeculative();
+                        td.dsymbolSemantic(td._scope);
+                    }
+                    if (td.semanticRun == PASS.init)
+                    {
+                        error("`%s` forward references template declaration `%s`",
+                            toChars(), td.toChars());
+                        return 1;
+                    }
+                }
+                return 0;
+            });
+            if (r)
+                return false;
+        }
+        return true;
     }
 
     /**********************************************
@@ -6984,6 +6979,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
             }
             else if ((flags & 4) && tupa) // CALYPSO
             {
+                assert(false); // TODO remove completely + comment above, this should be dead code
                 semanticTiargs(loc, sc, &tupa.objects, flags);
             }
             else if (isParameter(o))
@@ -7042,7 +7038,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         {
             TemplateDeclaration tempdecl = this.tempdecl.isTemplateDeclaration();
             assert(tempdecl);
-            assert(tempdecl._scope);
+            assert(tempdecl._scope || tempdecl.langPlugin()); // CALYPSO
             // Deduce tdtypes
             tdtypes.setDim(tempdecl.parameters.dim);
             if (!tempdecl.matchWithInstance(sc, this, &tdtypes, fargs, 2))

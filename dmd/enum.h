@@ -52,7 +52,7 @@ public:
     Prot prot();
     Expression *getMaxMinValue(const Loc &loc, Identifier *id);
     bool isSpecial() const;
-    Expression *getDefaultValue(const Loc &loc);
+    virtual Expression *getDefaultValue(const Loc &loc); // CALYPSO
     Type *getMemtype(const Loc &loc);
 
     EnumDeclaration *isEnumDeclaration() { return this; }

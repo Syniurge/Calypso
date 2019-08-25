@@ -170,7 +170,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
      * Returns:
      *      false if any errors occur.
      */
-    bool determineFields() // CALYPSO (made non-final)
+    final bool determineFields()
     {
         if (_scope)
             dsymbolSemantic(this, null);
@@ -303,7 +303,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     abstract void finalizeSize();
 
-    override final d_uns64 size(const ref Loc loc)
+    override d_uns64 size(const ref Loc loc) // CALYPSO
     {
         //printf("+AggregateDeclaration::size() %s, scope = %p, sizeok = %d\n", toChars(), _scope, sizeok);
         bool ok = determineSize(loc);
@@ -749,7 +749,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     /* Append vthis field (this.tupleof[$-1]) to make this aggregate type nested.
      */
-    void makeNested() // CALYPSO
+    final void makeNested()
     {
         if (enclosing) // if already nested
             return;
@@ -923,11 +923,6 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     // CALYPSO
     bool byRef() const
-    {
-        return false;
-    }
-
-    bool mayBeAnonymous()
     {
         return false;
     }

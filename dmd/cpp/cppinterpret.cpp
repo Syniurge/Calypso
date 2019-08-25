@@ -23,9 +23,8 @@ Expression *LangPlugin::interpret(::FuncDeclaration *fd, InterState *istate, Exp
     auto& Context = calypso.getASTContext();
     auto FD = const_cast<clang::FunctionDecl*>(getFD(fd));
 
-    TypeMapper tymap;
-    ExprMapper expmap(tymap);
-    tymap.addImplicitDecls = false;
+    DeclMapper mapper(fd);
+    ExprMapper expmap(mapper);
 
     llvm::SmallVector<clang::Expr*, 2> Args;
     for (auto arg: *arguments) {

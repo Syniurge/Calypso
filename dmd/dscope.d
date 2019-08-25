@@ -146,7 +146,7 @@ version (IN_LLVM)
         return new Scope();
     }
 
-    extern (D) static Scope* createGlobal(Module _module)
+    extern (C++) static Scope* createGlobal(Module _module) // CALYPSO
     {
         Scope* sc = Scope.alloc();
         *sc = Scope.init;

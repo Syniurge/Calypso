@@ -57,14 +57,14 @@ RootObject *typeQualifiedRoot(TypeQualified *tqual)
 Objects *fromASTTemplateArgumentListInfo(Loc loc,
             const clang::TemplateArgumentLoc *Args,
             unsigned NumTemplateArgs,
-            TypeMapper &tymap)
+            DeclMapper &mapper)
 {
     auto tiargs = new Objects;
 
     for (unsigned i = 0; i < NumTemplateArgs; i++)
     {
         auto Arg = &Args[i].getArgument();
-        tiargs->append(TypeMapper::FromType(tymap, loc).fromTemplateArgument(Arg));
+        tiargs->append(DeclMapper::FromType(mapper, loc).fromTemplateArgument(Arg));
     }
 
     return tiargs;
@@ -87,7 +87,7 @@ Expression *ExprMapper::fixIntegerExp(IntegerExp *e, clang::QualType T)
                 return fromExpressionDeclRef(e->loc, ECD);
         }
 
-        return new_CastExp(e->loc, e, tymap.fromType(T, e->loc));
+        return new_CastExp(e->loc, e, mapper.fromType(T, e->loc));
         //llvm_unreachable("Couldn't find the corresponding enum constant");
     }
 
@@ -286,7 +286,7 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
         return new_NullExp(loc);
     else if (Kind == clang::CK_NullToMemberPointer)
         return new_CallExp(loc,
-            new_TypeExp(loc, tymap.fromType(E->getType(), loc))); // default __cpp_member_ptr value
+            new_TypeExp(loc, mapper.fromType(E->getType(), loc))); // default __cpp_member_ptr value
 
     auto SubExpr = E->getSubExpr();
     auto CastDestTy = E->getType();
@@ -298,7 +298,7 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
     assert(SubExpr->getType().getCanonicalType()
                     != CastDestTy.getCanonicalType()); // we should be ignoring all casts that do not alter the type
 
-    return new_CastExp(loc, e, tymap.fromType(CastDestTy, loc));
+    return new_CastExp(loc, e, mapper.fromType(CastDestTy, loc));
 }
 
 Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  // TODO implement interpret properly
@@ -340,7 +340,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     {
         auto Val = IL->getValue();
         Ty = E->getType();
-        t = tymap.fromType(Ty, loc);
+        t = mapper.fromType(Ty, loc);
 
         e = new_IntegerExp(loc, Ty->hasSignedIntegerRepresentation() ?
                         Val.getSExtValue() : Val.getZExtValue(), t);
@@ -425,7 +425,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
                 case clang::UTT_IsPOD:
                 {
                     auto args = new Objects;
-                    auto t = tymap.fromType(TT->getArg(0)->getType(), loc);
+                    auto t = mapper.fromType(TT->getArg(0)->getType(), loc);
                     args->push(t);
                     e = new_TraitsExp(loc, Id::isPOD, args);
                     break;
@@ -451,7 +451,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     }
     else if (auto UEOTT = dyn_cast<clang::UnaryExprOrTypeTraitExpr>(E))
     {
-        auto t = tymap.fromType(UEOTT->getTypeOfArgument(), loc);
+        auto t = mapper.fromType(UEOTT->getTypeOfArgument(), loc);
         auto e1 = new_TypeExp(loc, t);
 
         switch (UEOTT->getKind())
@@ -501,7 +501,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
 
         if (auto NNS = DSDR->getQualifier())
         {
-            auto tqual = TypeMapper::FromType(tymap, loc).fromNestedNameSpecifier(NNS);
+            auto tqual = DeclMapper::FromType(mapper, loc).fromNestedNameSpecifier(NNS);
             e1 = new_TypeExp(loc, tqual);
         }
 
@@ -513,7 +513,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (DSDR->hasExplicitTemplateArgs())
         {
             auto tiargs = fromASTTemplateArgumentListInfo(loc,
-                        DSDR->getTemplateArgs(), DSDR->getNumTemplateArgs(), tymap);
+                        DSDR->getTemplateArgs(), DSDR->getNumTemplateArgs(), mapper);
 
             tempinst = new_TemplateInstance(loc, ident, tiargs);
         }
@@ -592,7 +592,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (UL->hasExplicitTemplateArgs())
         {
             auto tiargs = fromASTTemplateArgumentListInfo(loc,
-                        UL->getTemplateArgs(), UL->getNumTemplateArgs(), tymap);
+                        UL->getTemplateArgs(), UL->getNumTemplateArgs(), mapper);
             auto tempinst = new_TemplateInstance(loc, id, tiargs);
             e = new_ScopeExp(loc, tempinst);
         }
@@ -604,7 +604,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
         if (E->getType()->getAs<clang::ReferenceType>())
             return new_NullExp(loc);
 
-        t = tymap.fromType(E->getType().withoutLocalFastQualifiers(), loc);
+        t = mapper.fromType(E->getType().withoutLocalFastQualifiers(), loc);
         e = new_CallExp(loc, new_TypeExp(loc, t));
     }
     else if (auto MT = dyn_cast<clang::MaterializeTemporaryExpr>(E))
@@ -631,7 +631,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
 //             }
 //             else
 //             {
-//                 t = tymap.fromType(Ty.withoutLocalFastQualifiers(), loc);
+//                 t = mapper.fromType(Ty.withoutLocalFastQualifiers(), loc);
 //
 //                 auto args = new Expressions;
 //                 args->push(e);
@@ -652,7 +652,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
             e = fromExpression(CCE->getArg(0));
         else
         {
-            t = tymap.fromType(E->getType().withoutLocalFastQualifiers(), loc);
+            t = mapper.fromType(E->getType().withoutLocalFastQualifiers(), loc);
 
             auto args = new Expressions;
             for (auto Arg: CCE->arguments())
@@ -664,7 +664,7 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
     else if (auto CNE = dyn_cast<clang::CXXNewExpr>(E))
     {
         auto Ty = CNE->getAllocatedType();
-        t = tymap.fromType(Ty.withoutLocalFastQualifiers(), loc);
+        t = mapper.fromType(Ty.withoutLocalFastQualifiers(), loc);
 
         Expressions *args = nullptr;
         auto Construct = CNE->getConstructExpr();
@@ -797,7 +797,7 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
-    auto sym = tymap.dsymForDecl(loc, D);
+    auto sym = mapper.dsymForDecl(D);
     if (sym) {
         if (auto d = sym->isDeclaration()) {
             if (d->isFuncDeclaration() || d->isVarDeclaration())
@@ -813,7 +813,7 @@ Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
     if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
         return fromExpressionNonTypeTemplateParm(loc, NTTP);
 
-    auto tqual = TypeMapper::FromType(tymap, loc).typeQualifiedFor(D, nullptr, nullptr, tqualOpts);
+    auto tqual = DeclMapper::FromType(mapper, loc).typeQualifiedFor(D, nullptr, nullptr, tqualOpts);
     assert(tqual && "DeclRefExpr decl without a DeclarationName");
 
     // Convert the TypeQualified path to DotXXXExp because
@@ -830,7 +830,7 @@ template<typename T>
 {
     assert(E->getBase() && "Unhandled case");
 
-    auto member = getIdentOrTempinst(loc, MemberName, tymap);
+    auto member = getIdentOrTempinst(loc, MemberName, mapper);
     auto e1 = fromExpression(E->getBase());
 
     if (!e1 || !member)
@@ -841,7 +841,7 @@ template<typename T>
         assert(member->dyncast() == DYNCAST_IDENTIFIER);
 
         auto tiargs = fromASTTemplateArgumentListInfo(loc,
-            E->getTemplateArgs(), E->getNumTemplateArgs(), tymap);
+            E->getTemplateArgs(), E->getNumTemplateArgs(), mapper);
         auto tempinst = new_TemplateInstance(loc,
             static_cast<Identifier*>(member), tiargs);
 
@@ -850,7 +850,7 @@ template<typename T>
 
     if (auto NNS = E->getQualifier())
     {
-        auto tqual = TypeMapper::FromType(tymap, loc).fromNestedNameSpecifier(NNS);
+        auto tqual = DeclMapper::FromType(mapper, loc).fromNestedNameSpecifier(NNS);
         e1 = dotIdentOrInst(loc, e1, typeQualifiedRoot(tqual));
 
         for (auto id : tqual->idents)
@@ -879,7 +879,7 @@ bool ExprMapper::toAPValue(clang::APValue& Result, Expression* e)
     {
         case TOKnull:
         {
-            auto PtrType = tymap.toType(e->loc, e->type, nullptr);
+            auto PtrType = mapper.toType(e->loc, e->type, nullptr);
             auto TargetVal = Context.getTargetNullPointerValue(PtrType);
             Result = APValue((clang::Expr *)nullptr, clang::CharUnits::fromQuantity(TargetVal),
                              APValue::NoLValuePath(), /*IsNullPtr = */ true);
@@ -891,7 +891,7 @@ bool ExprMapper::toAPValue(clang::APValue& Result, Expression* e)
             auto exp = static_cast<IntegerExp*>(e);
             auto value = exp->getInteger();
 
-            auto IntType = tymap.toType(e->loc, e->type, nullptr);
+            auto IntType = mapper.toType(e->loc, e->type, nullptr);
             unsigned IntSize = Context.getTypeSize(IntType);
 
             llvm::APInt IntVal(IntSize, value);
@@ -1008,7 +1008,7 @@ clang::Expr* ExprMapper::toExpression(Expression* e)
             clang::APValue Value;
             toAPValue(Value, e);
 
-            auto IntType = tymap.toType(e->loc, e->type, nullptr);
+            auto IntType = mapper.toType(e->loc, e->type, nullptr);
             return clang::IntegerLiteral::Create(Context,
                                             Value.getInt(),
                                             IntType, Loc);
@@ -1018,7 +1018,7 @@ clang::Expr* ExprMapper::toExpression(Expression* e)
             clang::APValue Value;
             toAPValue(Value, e);
 
-            auto FloatType = tymap.toType(e->loc, e->type, nullptr);
+            auto FloatType = mapper.toType(e->loc, e->type, nullptr);
             return clang::FloatingLiteral::Create(Context,
                                             Value.getFloat(), true,
                                             FloatType, Loc);

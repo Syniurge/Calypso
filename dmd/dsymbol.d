@@ -1676,6 +1676,13 @@ public:
         return false;
     }
 
+    /************************
+     * For "lazy" foreign ScopeDsymbol, populate and reorder the members
+     */
+    void complete() // CALYPSO
+    {
+    }
+
     extern (D) alias ForeachDg = int delegate(size_t idx, Dsymbol s);
 
     /***************************************

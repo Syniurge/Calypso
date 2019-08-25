@@ -798,7 +798,7 @@ Expression op_overload(Expression e, Scope* sc)
             if (e.op == TOK.assign && ad1 == ad2)
             {
                 StructDeclaration sd = ad1.isStructDeclaration();
-                if (sd && !sd.hasIdentityAssign)
+                if (sd && !sd.hasIdentityAssign) // CALYPSO FIXME (discovered during LAZY) class values
                 {
                     /* This is bitwise struct assignment. */
                     return;

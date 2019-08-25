@@ -29,9 +29,10 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
 ::Module* Import::loadModule(Scope* sc)
 {
     calypso.pch.update();
-    
+
     bool isTypedef;
     ::Module* m = Module::load(loc, packages, id, isTypedef);
+
     if (isTypedef) {
         if (!aliasId)
             aliasId = id;
@@ -54,22 +55,11 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
         load(sc);
         m = mod;
     }
+
+    if (!m->importedFrom)
+        m->importedFrom = getInstantiatingModule();
+
     return m;
-}
-
-GlobalImport::GlobalImport(Loc loc)
-{
-    construct_Import(this, loc, nullptr, calypso.id_Scpp, nullptr, 0);
-    this->pkg = cpp::Module::rootPackage;
-}
-
-void GlobalImport::load(Scope *sc)
-{
-    if (loaded)
-        return;
-
-    sc->scopesym->importScope(pkg, {Prot::private_, nullptr});
-    loaded = true;
 }
 
 }

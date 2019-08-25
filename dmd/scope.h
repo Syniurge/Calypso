@@ -118,6 +118,8 @@ struct Scope
 
     Scope();
 
+    static Scope* createGlobal(Module* _module); // CALYPSO
+
     Scope *copy();
 
     Scope *push();

@@ -121,16 +121,16 @@ public:
     virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     virtual Scope *newScope(Scope *sc);
     void setScope(Scope *sc);
-    virtual bool determineFields(); // CALYPSO
+    bool determineFields();
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
-    d_uns64 size(const Loc &loc);
+    virtual d_uns64 size(const Loc &loc); // CALYPSO
     bool fit(const Loc &loc, Scope *sc, Expressions *elements, Type *stype); // CALYPSO
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     Type *getType();
     bool isDeprecated();         // is aggregate deprecated?
     bool isNested();
-    virtual void makeNested();  // CALYPSO
+    void makeNested();
     bool isExport() const;
     Dsymbol *searchCtor();
 
@@ -149,7 +149,6 @@ public:
 
     // CALYPSO
     virtual bool byRef() const { return false; }
-    virtual bool mayBeAnonymous() { return false; }
     virtual Expression *defaultInit(Loc loc);
     Expression *defaultInitLiteral(Loc loc);
     size_t literalElemDim(); // returns the total number of fields of an aggregate literal (TODO: better name?)

@@ -263,12 +263,9 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
 }
 
 static Identifier *fullConversionMapIdent(Identifier *baseIdent,
-                                       const clang::CXXConversionDecl *D)
+                const clang::CXXConversionDecl *D, DeclMapper& mapper)
 {
     auto& Context = calypso.getASTContext();
-
-    TypeMapper mapper;
-    mapper.addImplicitDecls = false;
 
     auto T = D->getConversionType().getDesugaredType(Context);
     auto t = mapper.fromType(T, Loc());
@@ -295,7 +292,7 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
 }
 
 static Identifier *getConversionIdentifier(const clang::CXXConversionDecl *D,
-                TypeMapper &mapper, Type *&t, clang::QualType T = clang::QualType(),
+                DeclMapper &mapper, Type *&t, clang::QualType T = clang::QualType(),
                 bool wantCanonicalType = false)
 {
     if (D)
@@ -450,7 +447,7 @@ Identifier *getIdentifier(const clang::NamedDecl *D, SpecValue *spec, bool useCa
 }
 
 Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
-                                  TypeMapper &mapper)
+                                  DeclMapper &mapper)
 {
     SpecValue spec(mapper);
     auto ident = getIdentifierOrNull(D, &spec);
@@ -460,16 +457,16 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
     auto FD = dyn_cast<clang::FunctionDecl>(D);
     if (spec.op && FD)
         ident = fullOperatorMapIdent(ident,
-                            FD->getOverloadedOperator());
+                        FD->getOverloadedOperator());
     else if (spec.t)
         ident = fullConversionMapIdent(ident,
-                    cast<clang::CXXConversionDecl>(D));
+                        cast<clang::CXXConversionDecl>(D), mapper);
 
     return ident;
 }
 
 Identifier *getExtendedIdentifier(const clang::NamedDecl *D,
-                                  TypeMapper &mapper)
+                                  DeclMapper &mapper)
 {
     auto result = getExtendedIdentifierOrNull(D, mapper);
     assert(result);
@@ -478,7 +475,7 @@ Identifier *getExtendedIdentifier(const clang::NamedDecl *D,
 }
 
 RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
-                               TypeMapper &mapper)
+                               DeclMapper &mapper)
 {
     SpecValue spec(mapper);
     auto ident = fromDeclarationName(N, &spec);
@@ -495,6 +492,37 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
     else
         return ident;
 }
+
+clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
+{
+    auto& II = IIMap[ident];
+
+    if (!II)
+    {
+        const char prefix[] = u8"ℂ";
+        const size_t prefixLength = sizeof(prefix)-1;
+
+        auto& Ctx = calypso.getASTContext();
+
+        bool prefixed = strncmp(ident->toChars(), prefix, prefixLength) == 0;
+
+        const char* str = !prefixed ? ident->toChars() : ident->toChars() + prefixLength;
+        size_t len = ident->length();
+        if (prefixed)
+            len -= prefixLength;
+
+        II = &Ctx.Idents.get(llvm::StringRef(str, len));
+    }
+
+    return II;
+}
+
+clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
+{/*if (ident == Id::opBinary) { return Ctx.DeclarationNameTable.getCXXConstructorName}*/
+    return clang::DeclarationName(toIdentifierInfo(ident));
+}
+
+// ===== //
 
 Loc fromLoc(clang::SourceLocation L)
 {
@@ -849,65 +877,13 @@ void PCH::update()
         loadFromPCH();
     }
 
-    auto& SrcMgr = AST->getSourceManager();
-    auto& PP = AST->getPreprocessor();
-
 //     PP.enableIncrementalProcessing();
-
-    /* Collect Clang module map files */
-    MMap = new ModuleMap(AST->getSourceManager(), *Diags,
-                            PP.getLangOpts(), &PP.getTargetInfo(), PP.getHeaderSearchInfo());
-
-    llvm::DenseSet<const clang::DirectoryEntry*> CheckedDirs;
-    auto lookForModuleMap = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
-        if (SLoc.isExpansion())
-            return;
-
-        auto OrigEntry = SLoc.getFile().getContentCache()->OrigEntry;
-        if (!OrigEntry)
-            return;
-
-        auto Dir = OrigEntry->getDir();
-
-        if (CheckedDirs.count(Dir))
-            return;
-        CheckedDirs.insert(Dir);
-
-        std::error_code err;
-        llvm::sys::fs::directory_iterator DirIt(llvm::Twine(Dir->getName()), err), DirEnd;
-
-        for (; DirIt != DirEnd && !err; DirIt.increment(err))
-        {
-            auto path = DirIt->path();
-            auto extension = llvm::sys::path::extension(path);
-
-            if (extension.equals(".modulemap_d"))
-            {
-                auto MMapFile = AST->getFileManager().getFile(path);
-                assert(MMapFile);
-
-                if (MMap->parseModuleMapFile(MMapFile, false, Dir))
-                {
-                    ::error(Loc(), "Clang module map '%s/%s' file parsing failed",
-                            MMapFile->getDir()->getName().str().c_str(), MMapFile->getName().str().c_str());
-                    fatal();
-                }
-            }
-        }
-    };
-
-    for (size_t i = 0; i < SrcMgr.local_sloc_entry_size(); i++)
-        lookForModuleMap(SrcMgr.getLocalSLocEntry(i));
-    for (size_t i = 0; i < SrcMgr.loaded_sloc_entry_size(); i++)
-        lookForModuleMap(SrcMgr.getLoadedSLocEntry(i));
 
     // Since the out-of-dateness of headers are checked lazily for most of them, it might only be detected
     // by walking through all the SLoc entries. If an error occurred start over and trigger a loadFromHeaders.
     if (Diags->hasErrorOccurred())
     {
         Diags->Reset();
-
-        delete MMap;
 
         needHeadersReload = true;
         return update();
@@ -916,71 +892,49 @@ void PCH::update()
     // Build the builtin type map
     calypso.builtinTypes.build(AST->getASTContext());
 
-    // Since macros aren't sorted by file (unlike decls) we build a map of macros in order to only go through every macro once
-    calypso.buildMacroMap();
-
     // Initialize the mangling context
     MangleCtx = AST->getASTContext().createMangleContext();
 }
 
-void LangPlugin::buildMacroMap()
-{
-    auto& MMap = pch.MMap;
-    auto& PP = getPreprocessor();
-    auto& Context = getASTContext();
-    auto& Sema = getSema();
-    auto& SM = getSourceManager();
-
-    for (auto I = PP.macro_begin(), E = PP.macro_end(); I != E; I++)
-    {
-        auto II = (*I).getFirst();
-        if (!II->hasMacroDefinition())
-            continue;
-
-        auto MDir = (*I).getSecond().getLatest();
-        auto MInfo = MDir->getMacroInfo();
-
-        if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
-            continue;
-
-        // Find the corresponding module header this macro is from
-        auto MLoc = MDir->getLocation();
-        auto MFileID = SM.getFileID(MLoc);
-        auto MFileEntry = SM.getFileEntryForID(MFileID);
-
-        const clang::Module::Header *FoundHeader = nullptr;
-        for (auto ModI = MMap->module_begin(), ModE = MMap->module_end(); ModI != ModE; ModI++) {
-            for (auto& Header: ModI->getValue()->Headers[clang::Module::HK_Normal])
-                if (MFileEntry == Header.Entry) {
-                    FoundHeader = &Header; break;
-                }
-            if (FoundHeader) break;
-        }
-
-        auto& MacroMapEntry = MacroMap[FoundHeader];
-        if (!MacroMapEntry)
-            MacroMapEntry = new MacroMapEntryTy;
-
-        clang::Expr* Expr = nullptr;
-
-        if (MInfo->getNumTokens() == 0) {
-            unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
-            Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
-                                        Context.BoolTy, MLoc);
-        } else {
-            auto& Tok = MInfo->getReplacementToken(0);
-            if (Tok.getKind() != clang::tok::numeric_constant)
-                continue;
-
-            auto ResultExpr = Sema.ActOnNumericConstant(Tok);
-            if (!ResultExpr.isInvalid())
-                Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
-        }
-
-        if (Expr)
-            MacroMapEntry->emplace_back(II, Expr);
-    }
-}
+// void LangPlugin::buildMacroMap()
+// {
+//     auto& PP = getPreprocessor();
+//     auto& Context = getASTContext();
+//     auto& Sema = getSema();
+//
+//     for (auto& M: PP.macros())
+//     {
+//         auto II = M.getFirst();
+//         if (!II->hasMacroDefinition())
+//             continue;
+//
+//         auto MDir = M.getSecond().getLatest();
+//         auto MInfo = MDir->getMacroInfo();
+//
+//         if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
+//             continue;
+//
+//         auto MLoc = MDir->getLocation();
+//         clang::Expr* Expr = nullptr;
+//
+//         if (MInfo->getNumTokens() == 0) {
+//             unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
+//             Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
+//                                         Context.BoolTy, MLoc);
+//         } else {
+//             auto& Tok = MInfo->getReplacementToken(0);
+//             if (Tok.getKind() != clang::tok::numeric_constant)
+//                 continue;
+//
+//             auto ResultExpr = Sema.ActOnNumericConstant(Tok);
+//             if (!ResultExpr.isInvalid())
+//                 Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
+//         }
+//
+//         if (Expr)
+//             MacroMap.emplace_back(II, Expr);
+//     }
+// }
 
 void PCH::save()
 {
@@ -1061,34 +1015,10 @@ void LangPlugin::GenModSet::add(::Module *m)
     insert(objName);
 }
 
-void LangPlugin::semanticModules()
-{
-    // Do pass 2 semantic analysis
-    for (size_t i = 0; i < cpp::Module::amodules.dim; i++)
-    {
-        auto m = cpp::Module::amodules[i];
-        if (global.params.verbose)
-            fprintf(stderr, "semantic2 %s\n", m->toChars());
-        semantic2(m, nullptr);
-    }
-    if (global.errors)
-        fatal();
-    // Do pass 3 semantic analysis
-    for (size_t i = 0; i < cpp::Module::amodules.dim; i++)
-    {
-        auto m = cpp::Module::amodules[i];
-        if (global.params.verbose)
-            fprintf(stderr, "semantic3 %s\n", m->toChars());
-        semantic3(m, nullptr);
-    }
-    Module::runDeferredSemantic3();
-    if (global.errors)
-        fatal();
-}
-
 void LangPlugin::codegenModules()
 {
-    for (auto m: cpp::Module::amodules) {
+    for (auto& pair: cpp::Module::allCppModules) {
+        auto m = pair.second;
         m->checkAndAddOutputFile(m->objfile);
         global.params.objfiles.push(m->objfile->name.toChars());
     }

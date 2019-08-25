@@ -4,14 +4,15 @@
 #include "attrib.h"
 #include "declaration.h"
 #include "enum.h"
+#include "expression.h"
+#include "id.h"
 #include "identifier.h"
 #include "import.h"
 #include "init.h"
 #include "identifier.h"
-#include "template.h"
 #include "scope.h"
 #include "statement.h"
-#include "id.h"
+#include "template.h"
 #include "driver/cl_options.h"
 
 #include "cpp/calypso.h"
@@ -26,14 +27,11 @@
 #include <stdlib.h>
 #include <string>
 
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Basic/TargetInfo.h"
-#include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Sema/Sema.h"
@@ -70,8 +68,7 @@ File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
 }
 
 Package *Module::rootPackage;
-Modules Module::amodules;
-std::map<Module::RootKey, Module*> Module::allCppModules;
+std::map<const clang::Decl*, Module*> Module::allCppModules;
 
 void Module::init()
 {
@@ -81,48 +78,9 @@ void Module::init()
     modules->insert(rootPackage);
 }
 
-Module::Module(const char* filename, Identifier* ident, Identifiers *packages)
+Module::Module(const char* filename, Identifier* ident)
 {
-    this->mapper = new DeclMapper(this);
-
-    // e.g __cpp_package_package_module
-    llvm::SmallString<24> objFilename("__cpp-");
-    for (size_t i = 1; i < packages->dim; i++)
-    {
-        Identifier *pid = (*packages)[i];
-        objFilename += pid->toChars();
-        objFilename += "-";
-    }
-    objFilename += ident->toChars();
-
-    construct_Module(this, strdup(objFilename.c_str()), ident, 0, 0);
-
-    loadEmittedSymbolList();
-
-    // FIXME 1.1: needs rework to avoid dup code
-    const char* objExt = nullptr;
-    if (global.params.output_o)
-        objExt = global.obj_ext;
-    else if (global.params.output_bc)
-        objExt = global.bc_ext;
-    else if (global.params.output_ll)
-        objExt = global.ll_ext;
-    else if (global.params.output_s)
-        objExt = global.s_ext;
-
-    if (objExt)
-        objfile = setOutCalypsoFile(/*global.params.objname, */global.params.objdir, arg, objExt);
-}
-
-Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
-{
-    auto result = ::Module::search(loc, ident, flags);
-
-    if ((flags & IgnorePrivateImports) && result && result->isImport())
-        return nullptr; // semi-HACK? this makes the imports inside an imported module invisible to D code,
-                                // but also prevents conflicts caused by the choice to name C++ modules after record names.
-
-    return result;
+    construct_Module(this, filename, ident, 0, 0);
 }
 
 void Module::addPreambule()
@@ -140,8 +98,6 @@ void Module::addPreambule()
             ::Import *im = new_Import(Loc(), packages, calypso.id_core, nullptr, true);
             members->shift(im);
         }
-        // the C++ special import for global namespace lookups
-        members->shift(new GlobalImport(Loc()));
         { // object
             ::Import *im = new_Import(Loc(), nullptr, Id::object, nullptr, true);
             members->shift(im);
@@ -197,12 +153,7 @@ void Module::saveEmittedSymbolList()
 
 /************************************/
 
-// DeclMapper::DeclMapper(Module* mod)
-//     : TypeMapper(mod)
-// {
-// }
-
-inline Prot::Kind DeclMapper::toProt(clang::AccessSpecifier AS)
+inline Prot::Kind fromProt(clang::AccessSpecifier AS)
 {
     switch(AS) {
         case clang::AS_public:
@@ -293,6 +244,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     DECLEXPLICIT(ClassTemplateSpecialization)
     DECLEXPLICIT(VarTemplateSpecialization)
     DECL(Enum)
+    DECL(EnumConstant)
     DECLWF(Record)
     DECLWF(Function)
     DECLWF(Value)
@@ -313,60 +265,47 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 }
 
 template<typename SpecTy>
-Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor(Loc loc, const SpecTy* D, Dsymbols* decldefs)
+clang::RedeclarableTemplateDecl* getSpecializedTemplateWithArgs(const SpecTy* D,
+                                        const clang::TemplateArgumentList*& TempArgs)
 {
-    auto TempDecl = D->getSpecializedTemplate();
-    auto TempArgs = &D->getTemplateArgs();
+    TempArgs = &D->getTemplateArgs();
+    return D->getSpecializedTemplate();
+}
 
-    auto tempdecl = dsymForDecl(loc, TempDecl);
+template<>
+clang::RedeclarableTemplateDecl* getSpecializedTemplateWithArgs<clang::FunctionDecl>(const clang::FunctionDecl* D,
+                                        const clang::TemplateArgumentList*& TempArgs)
+{
+    TempArgs = D->getTemplateSpecializationArgs();
+    return D->getPrimaryTemplate();
+}
+
+template<typename SpecTy>
+Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decldefs)
+{
+    const clang::TemplateArgumentList* TempArgs;
+    auto TempDecl = getSpecializedTemplateWithArgs(D, TempArgs);
+
+    auto tempdecl = dsymForDecl(TempDecl);
     assert(tempdecl && tempdecl->isTemplateDeclaration());
+
+    auto loc = (*decldefs)[0]->loc;
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
-    ti->members = decldefs;
     ti->isForeignInst = true;
     ti->inst = ti;
     ti->Inst = const_cast<SpecTy*>(D);
 
-    assert(!static_cast<TemplateDeclaration*>(tempdecl)->findExistingInstance(ti, nullptr));
-    static_cast<TemplateDeclaration*>(tempdecl)->addInstance(ti);
-
-    decldefs = new Dsymbols;
-    decldefs->push(ti);
-
-    ti->minst = mod;
-
-    if (!mod->members)
-    {
-        pendingTempinsts.append(decldefs);
-        ti->memberOf = mod;
-    }
-    else
-    {
-        // late addition
-        if (!mod->_scope)
-            ti->appendToModuleMember();
-        else
-            // importAll already run
-            ti->addMember(mod->_scope, mod);
-    }
-
-    return decldefs;
-}
-
-template<>
-Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc loc, const clang::FunctionDecl* D, Dsymbols* decldefs)
-{
-    auto TempDecl = D->getPrimaryTemplate();
-    auto TempArgs = D->getTemplateSpecializationArgs();
-
-    auto tempdecl = dsymForDecl(loc, TempDecl);
-    assert(tempdecl && tempdecl->isTemplateDeclaration());
-    auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
-    auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->members = decldefs;
-    ti->isForeignInst = true;
-    ti->inst = ti;
-    ti->Inst = const_cast<clang::FunctionDecl*>(D);
+    ti->symtab = new_DsymbolTable();
+    for (auto s: *decldefs)
+        s->addMember(nullptr, ti);
+
+    if (decldefs->dim == 1)
+        ti->aliasdecl = (*decldefs)[0];
+
+    ti->semantictiargsdone = true;
+    ti->semanticRun = PASSsemantic3done;
 
     assert(!static_cast<TemplateDeclaration*>(tempdecl)->findExistingInstance(ti, nullptr));
     static_cast<TemplateDeclaration*>(tempdecl)->addInstance(ti);
@@ -374,22 +313,8 @@ Dsymbols* cpp::DeclMapper::CreateTemplateInstanceFor<clang::FunctionDecl>(Loc lo
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
-    ti->minst = mod;
-
-    if (!mod->members)
-    {
-        pendingTempinsts.append(decldefs);
-        ti->memberOf = mod;
-    }
-    else
-    {
-        // late addition
-        if (!mod->_scope)
-            ti->appendToModuleMember();
-        else
-            // importAll already run
-            ti->addMember(mod->_scope, mod);
-    }
+    ti->minst = minst;
+    ti->appendToModuleMember();
 
     return decldefs;
 }
@@ -399,8 +324,8 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     auto& Context = calypso.getASTContext();
     ExprMapper expmap(*this);
 
-    if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
-        return nullptr;
+    if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
+        D = Indirect->getVarDecl();
 
     if (!(flags & MapTemplatePatterns))
         if (auto Var = dyn_cast<clang::VarDecl>(D))
@@ -412,15 +337,17 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
         if (Field->isUnnamedBitfield())
             return nullptr;
 
-        // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false, it returns true only for "true" anonymous structs/unions
+        // NOTE:  isAnonymousStructOrUnion() returns true only for "true" anonymous structs/unions
+        //  for union {...} myUnion it will be false.
         if (Field->isAnonymousStructOrUnion())
         {
-            auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
-            assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
-
-            auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
-            anon->AnonField = Field;
-            return a;
+//             auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
+//             assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
+//
+//             auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
+//             anon->AnonField = Field;
+//             return a;
+            return nullptr;
         }
     }
 
@@ -434,29 +361,7 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     }
 
     auto id = fromIdentifier(II);
-    Type *t = nullptr;
-
-    auto Ty = withoutNonAliasSugar(D->getType());
-    if (auto RT = dyn_cast<clang::RecordType>(Ty.getTypePtr()))
-    {
-        auto RD = RT->getDecl();
-        if (!RD->getIdentifier())
-        {
-            // Special case of union {...} myUnion; without D equivalment
-            auto r = VisitRecordDecl(RD, NamedValueWithAnonRecord);
-            if (!r)
-                return nullptr;
-
-            assert(r->dim == 1 && r->data[0]->isAggregateDeclaration());
-            auto ad = static_cast<AggregateDeclaration*>(r->data[0]);
-
-            t = ad->type;
-            decldefs->push(ad);
-        }
-    }
-
-    if (!t)
-        t = fromType(D->getType(), loc);
+    auto t = fromType(D->getType(), loc);
 
     if (!t)
         return nullptr;
@@ -466,6 +371,13 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
     auto a = new VarDeclaration(loc, id, D, t);
     setDsym(D, a);
+
+    a->linkage = LINKcpp;
+    a->protection.kind = fromProt(D->getAccess());
+    // a->alignment =?
+
+    if (t->isConst())
+        a->storage_class |= STCconst;
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
     {
@@ -500,11 +412,12 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
         }
     }
 
+    a->semanticRun = PASSsemantic3done;
     decldefs->push(a);
 
     auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D);
     if (VarSpec && !VarSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-        decldefs = CreateTemplateInstanceFor(loc, VarSpec, decldefs);
+        decldefs = CreateTemplateInstanceFor(VarSpec, decldefs);
 
     return decldefs;
 }
@@ -522,32 +435,24 @@ bool isPolymorphic(const clang::RecordDecl *D)
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
     auto CanonDecl = D;
-    auto& Context = calypso.getASTContext();
-    auto& S = calypso.getSema();
-    auto& Diags = *calypso.pch.Diags;
-    auto Canon = D->getCanonicalDecl();
 
-    if (D->isInjectedClassName())
+    if (!isMapped(D))
         return nullptr;
+
+//     if (D->isInjectedClassName())
+//         return nullptr;
+    assert(!D->isInjectedClassName());
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
 
-    if (S.RequireCompleteType(D->getLocation(),
-                Context.getRecordType(D), clang::diag::err_incomplete_type))
-        Diags.Reset();
-
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
-    bool isDefined = D->isCompleteDefinition();
-    bool isStruct = !isPolymorphic(D) && !(flags & ForcePolymorphic);
-
-    auto TND = D->getTypedefNameForAnonDecl();
 
     int anon = 0;
     if (D->isAnonymousStructOrUnion())
     {
-        assert(!TND);
+        assert(!D->getTypedefNameForAnonDecl());
 
         if (!(flags & MapAnonRecord))
           return nullptr;
@@ -557,14 +462,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             anon = 2;
     }
 
-    if (!anon && !getIdentifierOrNull(D) &&
-                !(flags & NamedValueWithAnonRecord))
-        return nullptr; // special case for union {} myUnion; which has no D equivalent
+    // NOTE: the special case of union {} myUnion; has no real D equivalent
+    // but we simply map it as a true anonymous AggregateDeclaration
 
     auto CRD = dyn_cast<clang::CXXRecordDecl>(D);
-        // NOTE: CXXRecordDecl will disappear in a future version of Clang and only
-        // RecordDecl will remain to be used for both C and C++.
-
     auto members = new Dsymbols;
 
     AggregateDeclaration *a;
@@ -576,7 +477,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         {
             a = new UnionDeclaration(loc, id, D);
         }
-        else if (isStruct)
+        else if (!isPolymorphic(D))
         {
             a = new StructDeclaration(loc, id, D);
         }
@@ -589,62 +490,34 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
         if (auto cd = a->isClassDeclaration())
         {
+            assert(CRD);
+
             // Base classes must be mapped after attaching the Dsymbol to the Clang declaration,
-            // in case it gets referenced
-            if (CRD)
+            // in case the derived class gets referenced
+            for (auto& B: CRD->bases())
             {
-                for (auto B = CRD->bases_begin(),
-                        BEnd = CRD->bases_end(); B != BEnd; ++B)
-                {
-                    auto brt = fromType(B->getType(), loc);
-                    cd->baseclasses->push(new BaseClass(brt));
-                }
+                auto brt = fromType(B.getType(), loc);
+                auto b = new BaseClass(brt);
+                b->sym = getAggregateSym(brt);
+                cd->baseclasses->push(b);
+
+                if (!cd->baseClass)
+                    cd->baseClass = b->sym;
             }
+
+//             cd->interfaces = cd->baseclasses.tdata()[(cd->baseClass ? 1 : 0) .. cd->baseclasses.dim];
+
+            cd->baseok = BASEOKdone;
+
+            if (CRD->isAbstract())
+                cd->isabstract = ABSyes;
         }
+
+        a->protection.kind = Prot::public_;
+        a->semanticRun = PASSsemantic3done;
+        a->symtab = new_DsymbolTable();
     }
 
-    if (!isDefined)
-        goto Ldeclaration;
-
-    if (CRD)
-    {
-        if (!D->isUnion() && !CRD->isDependentType())
-        {
-            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
-
-            // Clang declares and defines implicit ctors/assignment operators lazily,
-            // but before D's semantic passes we at least need to declare them
-            S.LookupDefaultConstructor(_CRD);
-            for (int i = 0; i < 2; i++)
-                S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0);
-
-            S.LookupDestructor(_CRD);
-
-            for (int i = 0; i < 2; i++)
-                for (int j = 0; j < 2; j++)
-                    for (int k = 0; k < 2; k++)
-                        S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, j ? true : false,
-                                                k ? clang::Qualifiers::Const : 0);
-        }
-    }
-
-    // Add specific decls: fields, vars, tags, templates, typedefs
-    // They are expected by DMD to be in the correct order.
-    for (auto M: D->decls())
-    {
-        if (cast<clang::Decl>(M->getDeclContext())->getCanonicalDecl() != Canon)
-            continue;  /* only map declarations that are semantically within the RecordDecl */
-
-        if (!isa<clang::FieldDecl>(M) && !isa<clang::VarDecl>(M) &&
-              !isa<clang::FunctionDecl>(M) && !isa<clang::TagDecl>(M) &&
-              !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
-            continue;
-
-        if (auto s = VisitDecl(M))
-            members->append(s);
-    }
-
-Ldeclaration:
     if (anon)
         decldefs->push(new AnonDeclaration(loc, anon == 2, members));
     else
@@ -654,30 +527,7 @@ Ldeclaration:
 
         auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
         if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-            decldefs = CreateTemplateInstanceFor(loc, ClassSpec, decldefs);
-    }
-
-    // Sometimes friend declarations are the only existing declarations, so map them to the parent context
-    // see friend QString::operator==(const QString &s1, const QString &s2);
-    // NOTE: should be after because ClassDeclaration::semantic() expects decldefs[0] to be the record
-    typedef clang::DeclContext::specific_decl_iterator<clang::FriendDecl> Friend_iterator;
-    auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
-    if (!CTSD || CTSD->getSpecializationKind() != clang::TSK_ImplicitInstantiation) // if we're in an implicit instantiation, no need to remap the out-of-line specializations which have their own template mapped with the class template
-    {
-        for (Friend_iterator I(D->decls_begin()), E(D->decls_end());
-                    I != E; I++)
-        {
-            auto Decl = (*I)->getFriendDecl();
-            if (!Decl || !Decl->isOutOfLine())
-                continue;
-
-            auto DeclCtx = dyn_cast<clang::DeclContext>(Decl);
-            if (DeclCtx && DeclCtx->isDependentContext()) // FIXME: map them as template decls using the tpl from the record
-                continue; // Later NOTE: dependent out-of-line free operators defined in a record as friend decl (ex. piecewise_linear_distribution::operator==) do not get added to the parent declcontext
-
-            if (auto s = VisitDecl(Decl))
-                decldefs->append(s);
-        }
+            decldefs = CreateTemplateInstanceFor(ClassSpec, decldefs);
     }
 
     return decldefs;
@@ -693,12 +543,12 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
-    auto t = fromType(D->getUnderlyingType(), loc);
+//     auto t = fromType(D->getUnderlyingType(), loc);
 
-    if (!t)
-        return nullptr;
+//     if (!t)
+//         return nullptr;
 
-    auto a = new AliasDeclaration(loc, id, t, D);
+    auto a = new AliasDeclaration(loc, id, nullptr, D);
     setDsym(D, a);
     return oneSymbol(a);
 }
@@ -779,13 +629,20 @@ bool isMapped(const clang::Decl *D)
         }
     }
 
+    if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
+        if (RD->isLambda() && RD->getLambdaManglingNumber() == 0)
+            return false;
+
     return true;
 }
 
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     if (!isMapped(D))
+    {
+        setDsym(D, nullptr);
         return nullptr;
+    }
 
     // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
     // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
@@ -794,16 +651,16 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     if (!(flags & MapExplicitSpecs) && isExplicitSpecialization(D))
         return nullptr;
 
-    if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
-            D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
-        return nullptr;
+//     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
+//             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
+//         return nullptr;
 
     auto loc = fromLoc(D->getLocation());
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
     auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
-    if (D->isInvalidDecl())
-        return nullptr;
+//     if (D->isInvalidDecl())
+//         return nullptr;
 
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
@@ -824,7 +681,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto funcVolatileNumber = volatileNumber;
     if (funcVolatileNumber)
     {
-            auto R = getDeclContextNonLinkSpec(D)->lookup(D->getDeclName());
+            auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
 
             for (auto Match: R)
             {
@@ -893,9 +750,48 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
         return Identifier::idPool(idStr.c_str(), idStr.size());
     };
-    
+
     auto a = new Dsymbols;
     ::FuncDeclaration *fd;
+
+    auto fillSemInfo = [&] (::FuncDeclaration* fd)
+    {
+        fd->linkage = LINKcpp;
+        fd->protection.kind = fromProt(D->getAccess());
+
+        fd->originalType = tf;
+
+        auto sc = minst->_scope->push();
+        if (tf->isref)
+            sc->stc |= STCref;
+        if (tf->isscope)
+            sc->stc |= STCscope;
+        if (tf->isnothrow)
+            sc->stc |= STCnothrow;
+    //     sc->stc |= STCnogc;
+
+        if (fd->isCtorDeclaration())
+        {
+            auto CD = cast<clang::CXXConstructorDecl>(D);
+            auto ad = static_cast<AggregateDeclaration*>(dsymForDecl(CD->getParent()));
+
+            sc->flags |= SCOPEctor;
+            Type* tret = ad->handleType();
+            assert(tret);
+            tret = tret->addStorageClass(fd->storage_class | sc->stc);
+            tret = tret->addMod(fd->type->mod);
+            tf->next = tret;
+            sc->stc |= STCref; // CALYPSO-specific
+        }
+
+        sc->linkage = LINKcpp;
+
+        fd->type = typeSemantic(fd->type, fd->loc, sc);
+        sc->pop();
+
+        fd->semanticRun = PASSsemantic3done;
+    };
+
     if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
     {
         fd = new CtorDeclaration(loc, stc, tf, CD);
@@ -921,7 +817,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             // then if the destination type depends on the the template parameters the decl name won't be found by the lookup inside the parent,
             // we need to take the primary template name. Ex.: operator Vec<float, 3>(); instantiated from template<_Tp, int n> operator Vec<_Tp, n>();
 
-        auto R = getDeclContextNonLinkSpec(D)->lookup(Name);
+        auto R = getDeclContextOpaque(D)->lookup(Name);
         std::function<bool(const clang::NamedDecl*)> pred;
         SpecValue spec2(*this);
         if (isa<clang::TagDecl>(D->getDeclContext()))
@@ -969,6 +865,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         // Add the overridable method (or the static function)
         fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
         setDsym(D, fd);
+        fillSemInfo(fd);
         a->push(fd);
 
         if (wrapInTemp && isFirstOverloadInScope)
@@ -984,6 +881,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             decldefs->push(a_fwd);
 
             auto tempdecl = new_TemplateDeclaration(loc, opIdent, tpl, nullptr, decldefs);
+            tempdecl->semanticRun = PASSsemantic3done;
             a->push(tempdecl);
         }
 
@@ -997,10 +895,11 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
 
     setDsym(D, fd);
+    fillSemInfo(fd);
 
     if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-            D->getPrimaryTemplate() && // forward-declared explicit specializations do not have their primary template set (stangely)
-            !(flags & MapTemplateInstantiations))
+            D->getPrimaryTemplate() // forward-declared explicit specializations do not have their primary template set (stangely)
+            /*&& !(flags & MapTemplateInstantiations)*/)
     {
         auto tpl = new TemplateParameters;
 
@@ -1027,7 +926,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     else if (isTemplateInstantiation(D) &&
              D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
              (flags & CreateTemplateInstance))
-        a = CreateTemplateInstanceFor(loc, D, a);
+        a = CreateTemplateInstanceFor(D, a);
 
     a->push(fd);
     return a;
@@ -1064,8 +963,6 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     auto tpl = initTempParams(loc, spec);
     auto TPL = Def->getTemplateParameters();
 
-    auto decldefs = new Dsymbols;
-
     for (auto P : *TPL)
     {
         auto tp = VisitTemplateParameter(P);
@@ -1074,57 +971,53 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
         tpl->push(tp);
     }
 
-    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+    auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
     setDsym(D, td);
 
-    auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
-                MapTemplatePatterns);
+    td->semanticRun = PASSsemantic3done;
 
-    if (!s)
-        return nullptr;
-
-    decldefs->append(s);
-
-    if (FTD) {
-        assert(s->dim && (*s)[0]->isFuncDeclaration());
-        td->ident = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
-    }
+    // FIXME: function overloads with volatile parameters?
 
     auto a = new Dsymbols;
     a->push(td);
 
-    // Append explicit and partial specializations to the returned symbols as well
-    if (CTD)
+    if (false) // NOTE: mapping explicit and partial specs isn't needed since cpp::TemplateInstance
+               // will route to the correct spec. And there might a massive amount of explicit specs
+               // in some cases (such as Qt's QTypeInfo), so mapping them lazily is a *huge* win.
     {
-        llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
-        const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
+        // Append explicit and partial specializations to the returned symbols as well
+        if (CTD)
+        {
+            llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
+            const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
 
-        for (auto Spec: CTD->specializations())
-            if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
+            for (auto Spec: CTD->specializations())
+                if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
 
-        for (auto PartialSpec: PS)
-            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
-    }
-    else if (FTD)
-    {
-        for (auto Spec: FTD->specializations())
-            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                a->append(sp);
-    }
-    else if (VTD)
-    {
-        llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
-        const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
+            for (auto PartialSpec: PS)
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
+        }
+        else if (FTD)
+        {
+            for (auto Spec: FTD->specializations())
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                    a->append(sp);
+        }
+        else if (VTD)
+        {
+            llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
+            const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
 
-        for (auto Spec: VTD->specializations())
-            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                a->append(sp);
+            for (auto Spec: VTD->specializations())
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                    a->append(sp);
 
-        for (auto PartialSpec: PS)
-            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
+            for (auto PartialSpec: PS)
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
+        }
     }
 
     return a;
@@ -1205,15 +1098,7 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
             }
 
             if (NTTPD->hasDefaultArgument())
-            {
                 tp_defaultvalue = expmap.fromExpression(NTTPD->getDefaultArgument());
-
-//                 // TEMPORARY HACK: we choose a simple default value to make defaultArg()'s life easier
-//                 //  (there were obscure identifier errors, e.g in __iterator_traits<_normal_iterator>).
-//                 //  This doesn't affect anything other than reflection since the default argument evaluation is done by Clang
-//                 //  We could btw use Clang's evaluation while keeping the mapped expression for reflection
-//                 tp_defaultvalue = new_DotIdExp(loc, new_TypeExp(loc, valTy), Id::init);
-            }
 
             tp = new_TemplateValueParameter(loc, id, valTy,
                                         tp_specvalue, tp_defaultvalue);
@@ -1276,37 +1161,6 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
     return tp;
 }
 
-Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D)
-{
-    assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
-
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    assert(a->dim);
-    return (*a)[0];
-}
-
-::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
-{
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    if (a.get()) {
-        assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
-        return static_cast<::FuncDeclaration*>((*a)[0]);
-    }
-
-    return nullptr;
-}
-
-::VarDeclaration * DeclMapper::VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl * D)
-{
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    if (a.get()) {
-        assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
-        return static_cast<::VarDeclaration*>((*a)[0]);
-    }
-
-    return nullptr;
-}
-
 template<typename SpecTy>
 inline Dsymbols* VisitSpecDecl(DeclMapper& declmap, const SpecTy* D) { assert(false); return nullptr; }
 
@@ -1330,10 +1184,11 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
     if (!D->isExplicitSpecialization())
         return nullptr;
 
-    auto Partial = dyn_cast<PartialTy>(D);
     // NOTE: D's partial specializations != C++'s partial specializations
     // The mapping provides a "close" but not exact approximation of equivalent template specs in D (for reflection),
     // but TemplateDeclaration::findBestMatch is skipped since the choice is done by Clang anyway.
+
+    auto Partial = dyn_cast<PartialTy>(D);
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
@@ -1365,38 +1220,9 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
         if (AI) AI++;
     }
 
-    if (Partial)
-        // SEMI-HACK: even if we don't map partial specialization arguments, we still need to call fromTemplateArgument() to import module dependencies
-        for (auto& SpecArg: D->getTemplateArgs().asArray())
-            FromType(*this, loc).fromTemplateArgument(&SpecArg);
-
-    auto decldefs = VisitSpecDecl(*this, D);
-    if (!decldefs)
-        return nullptr;
-
-    auto s = new Dsymbols;
-    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    s->push(td);
-
-    if (!Partial)
-    {
-        auto tiargs = new Objects;
-        for (auto tp: *tpl)
-            tiargs->push(tp->specialization());
-
-        auto explicit_ti = new TemplateInstance(loc, td->ident, tiargs);
-        explicit_ti->tempdecl = td;
-        explicit_ti->havetempdecl = true;
-        explicit_ti->semantictiargsdone = true;
-        explicit_ti->isForeignInst = true;
-        explicit_ti->Inst = const_cast<SpecTy*>(D);
-        explicit_ti->members = decldefs; // NOTE: it doesn't matter that td and ti share the same members, semantic(td) doesn't do any change to them
-        explicit_ti->tdtypes.setDim(tiargs->dim);
-        memcpy(explicit_ti->tdtypes.data, tiargs->data, tiargs->dim * sizeof(void*));
-        s->push(explicit_ti);
-    }
-
-    return s;
+    auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
+    td->semanticRun = PASSsemantic3done;
+    return oneSymbol(td);
 }
 
 // WARNING: this is for explicit or partial specs, this might need a better name
@@ -1412,12 +1238,9 @@ Dsymbols* DeclMapper::VisitVarTemplateSpecializationDecl(const clang::VarTemplat
 
 Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 {
+    auto CanonDecl = D;
     if (!D->isCompleteDefinition())
-    {
         D = D->getDefinition();
-        if (!D)
-            return nullptr; // forward declaration without definition, skip
-    }
 
     auto loc = fromLoc(D->getLocation());
     auto ident = getIdentifierOrNull(D);
@@ -1433,79 +1256,309 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
     }
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
-    setDsym(D, e);
-
-    for (auto ECD: D->enumerators())
-    {
-        auto memberLoc = fromLoc(ECD->getLocation());
-
-        if (!e->members)
-            e->members = new Dsymbols;
-
-        auto ident = fromIdentifier(ECD->getIdentifier());
-        Expression *value = nullptr;
-
-        if (auto InitE = ECD->getInitExpr())
-        {
-            value = ExprMapper(*this).fromExpression(InitE);
-            value = new_CastExp(memberLoc, value, memtype); // SEMI-HACK (?) because the type returned by 1LU << ... will be ulong and we may need an int (see wctype.h)
-        }
-
-        auto em = new EnumMember(memberLoc, ident, value, nullptr, ECD);
-        setDsym(ECD, em);
-        e->members->push(em);
-    }
+    setDsym(CanonDecl, e);
+    e->members = new Dsymbols;
+    e->symtab = new_DsymbolTable();
+    e->semanticRun = PASSsemantic3done;
 
     return oneSymbol(e);
 }
 
-Dsymbol* DeclMapper::VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E)
+Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 {
-    auto TU = calypso.getASTContext().getTranslationUnitDecl();
+    auto loc = fromLoc(D->getLocation());
+    auto ident = fromIdentifier(D->getIdentifier());
 
-    Loc loc;
-    auto ident = fromIdentifier(II);
+    auto parent = static_cast<EnumDeclaration*>(
+                dsymForDecl(cast<clang::Decl>(getDeclContextOpaque(D))));
+    auto value = ExprMapper(*this).fromAPInt(loc, D->getInitVal(), clang::QualType());
 
-    // C allows macros and other symbols to share the same name, D doesn't
-    // Conflicting macros get prefixed with ℂ
-    if (!TU->lookup(clang::DeclarationName(II)).empty())
-        ident = prefixConflictingIdentifier(ident);
+    auto em = new EnumMember(loc, ident, value, nullptr, D);
+    setDsym(D, em);
 
-    ExprMapper expmap(*this);
-    auto e = expmap.fromExpression(E);
-    auto ie = new_ExpInitializer(loc, e);
+    em->ed = parent;
+    em->storage_class |= STCmanifest;
+    em->type = parent->type;
+    em->semanticRun = PASSsemantic3done;
 
-    auto v = new_VarDeclaration(loc, nullptr, ident, ie);
-    v->storage_class = STCmanifest;
-    return v;
+    return oneSymbol(em);
 }
 
 /*****/
 
-std::string moduleName(Identifiers *packages, Identifier *ident)
+Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
 {
-    std::string result = "__cpp/";
+    if (auto ND = dyn_cast<clang::NamedDecl>(D))
+        return dsymForDecl(ND);
+
+    assert(isa<clang::TranslationUnitDecl>(D) && "Unhandled dsymForDecl(clang::Decl)");
+    return getModule(D);
+}
+
+Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
+{
+    D = cast<clang::NamedDecl>(getCanonicalDecl(D));
+
+    if (D->d)
+        return D->d->sym;
+
+    if (auto NS = dyn_cast<clang::NamespaceDecl>(D)) {
+        if (NS->isInlineNamespace())
+            return dsymForDecl(cast<clang::Decl>(NS->getDeclContext()));
+        return getModule(NS);
+    }
+
+    ScopeDsymbol* parent = nullptr;
+
+    auto Parent = cast<clang::Decl>(getDeclContextOpaque(D));
+    bool IsParentNamespaceOrTU = isa<clang::TranslationUnitDecl>(Parent) ||
+                    isa<clang::NamespaceDecl>(Parent);
+
+    if (IsParentNamespaceOrTU)
+    {
+        auto Func = dyn_cast<clang::FunctionDecl>(D);
+        if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
+            Func = FuncTemp->getTemplatedDecl();
+
+        if (Func && Func->isOverloadedOperator())
+        {
+            if (auto Tag = isOverloadedOperatorWithTagOperand(D))
+                parent = getModule(Tag); // non-member operators are part of the record module
+        }
+        else if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
+            parent = getModule(D);
+        else
+            parent = getModule(Parent); // aka _
+    }
+    else
+    {
+        auto s = dsymForDecl(Parent);
+        assert(s->isScopeDsymbol());
+        parent = static_cast<ScopeDsymbol*>(s);
+    }
+
+    auto minst = this->minst;
+    if (auto ti = parent->isInstantiated())
+        minst = ti->minst;
+
+    DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
+                    DeclMapper::CreateTemplateInstance);
+    assert(D->d);
+
+    auto sym = D->d->sym;
+    if (!sym)
+        return nullptr;
+
+    if (!sym->parent)
+    {
+        if (!isa<clang::IndirectFieldDecl>(D))
+            parent->members->push(D->d->sym);
+        D->d->sym->addMember(nullptr, parent);
+    }
+    else
+        assert(sym->parent->isTemplateInstance() &&
+                "Parent already set but not a TemplateInstance?");
+
+    return D->d->sym;
+}
+
+// ***** //
+
+Module *DeclMapper::getModule(const clang::Decl* rootDecl)
+{
+    Module* m = Module::allCppModules[rootDecl];
+
+    if (!m)
+    {
+        auto parent = getPackage(rootDecl);
+
+        bool IsNamespaceOrTU = isa<clang::TranslationUnitDecl>(rootDecl) ||
+                isa<clang::NamespaceDecl>(rootDecl);
+        auto ident = IsNamespaceOrTU ? calypso.id__ : getIdentifier(cast<clang::NamedDecl>(rootDecl));
+
+        llvm::SmallString<24> objFilename("__cpp-");
+        for (auto pkg = parent; pkg != Module::rootPackage; pkg = static_cast<Package*>(pkg->parent))
+        {
+            objFilename += pkg->ident->toChars();
+            objFilename += "-";
+        }
+        objFilename += ident->toChars();
+
+        m = new Module(strdup(objFilename.c_str()), ident);
+        m->rootDecl = rootDecl;
+        m->parent = parent;
+        m->importedFrom = importedFrom;
+        m->loc = fromLoc(rootDecl->getLocation());
+        m->members = new Dsymbols;
+        m->symtab = new_DsymbolTable();
+        m->setScope(Scope::createGlobal(m));
+        m->semanticRun = PASSsemantic3done;
+
+        Module::allCppModules[rootDecl] = m;
+        parent->symtab->insert(m);
+
+        m->loadEmittedSymbolList();
+
+        const char* objExt = nullptr;
+        if (global.params.output_o)
+            objExt = global.obj_ext;
+        else if (global.params.output_bc)
+            objExt = global.bc_ext;
+        else if (global.params.output_ll)
+            objExt = global.ll_ext;
+        else if (global.params.output_s)
+            objExt = global.s_ext;
+
+        if (objExt)
+            m->objfile = setOutCalypsoFile(global.params.objdir, m->arg, objExt);
+    }
+
+    return m;
+}
+
+Package *DeclMapper::getPackage(const clang::Decl* rootDecl)
+{
+    if (isa<clang::TranslationUnitDecl>(rootDecl))
+        return Module::rootPackage;
+
+    auto Parent = cast<clang::Decl>(getDeclContextOpaque(rootDecl));
+
+    if (isa<clang::TagDecl>(rootDecl) || isa<clang::ClassTemplateDecl>(rootDecl))
+        return getPackage(Parent);
+
+    auto NS = cast<clang::NamespaceDecl>(rootDecl);
+    if (NS->d) {
+        assert(NS->d->sym->isPackage());
+        return static_cast<Package*>(NS->d->sym);
+    }
+
+    auto parent = getPackage(Parent);
+
+    auto pkg = new_Package(getIdentifier(NS));
+    setDsym(NS, pkg);
+    parent->symtab->insert(pkg);
+    pkg->parent = parent;
+    pkg->symtab = new_DsymbolTable();
+
+    return pkg;
+}
+
+Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    return DeclMapper(sds).dsymForDecl(D);
+}
+
+// ***** //
+
+Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
+{
+    if (!calypso.getASTUnit()) {
+        ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\") first");
+        fatal();
+    }
+
+    auto& Context = calypso.getASTContext();
+    auto& S = calypso.getSema();
+    auto& Diags = calypso.pch.Diags;
+
+    S.CurContext = Context.getTranslationUnitDecl();
+    if (!S.TUScope)
+        S.TUScope = new clang::Scope(nullptr, clang::Scope::DeclScope, *Diags);
+
+    const clang::DeclContext *DC = Context.getTranslationUnitDecl();
+    Package *pkg = rootPackage;
+
     for (size_t i = 1; i < packages->dim; i++)
     {
         Identifier *pid = (*packages)[i];
-        result.append(pid->toChars(), pid->length());
-        result.append("/");
+
+        auto R = DC->lookup(calypso.toDeclarationName(pid));
+        if (R.empty())
+        {
+            ::error(loc, "no C++ package named %s", pid->toChars());
+            fatal();
+        }
+
+        auto NSN = dyn_cast<clang::NamespaceDecl>(R[0]);
+        if (!NSN || NSN->isInline())
+        {
+            ::error(loc, "only non-inline namespaces can be C++ packages");
+            fatal();
+        }
+
+        pkg = static_cast<Package*>(pkg->symtab->lookup(pid));
+        assert(pkg);
+
+        DC = NSN;
     }
-    result.append(ident->toChars(), ident->length());
-    return result;
-}
 
-// Look into namespace redecls if there are any
-static clang::DeclContext::lookup_result lookup(const clang::DeclContext *DC,
-                                                   Identifier *id)
-{
-    auto& Table = calypso.getPreprocessor().getIdentifierTable();
+    isTypedef = false;
 
-    const char prefix[] = u8"ℂ";
-    bool prefixed = strncmp(id->toChars(), prefix, sizeof(prefix)-1) == 0;
-    auto& II = Table.get(!prefixed ? id->toChars() : id->toChars() + sizeof(prefix)-1);
+    const clang::Decl *rootDecl = nullptr;
 
-    return DC->lookup(clang::DeclarationName(&II));
+    if (id == calypso.id__)
+    {
+        rootDecl = cast<clang::Decl>(DC)->getCanonicalDecl();
+    }
+    else
+    {
+        // Lookups can't find the implicit __va_list_tag record
+        if (packages->dim == 1)
+        {
+            if (id == calypso.id___va_list_tag)
+                rootDecl = cast<clang::NamedDecl>(Context.getVaListTagDecl());
+            else if (id == calypso.id___NSConstantString_tag)
+                rootDecl = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
+        }
+
+        if (!rootDecl)
+        {
+            auto R = DC->lookup(calypso.toDeclarationName(id));
+            if (R.empty())
+            {
+                ::error(loc, "no C++ module named %s", id->toChars());
+                fatal();
+            }
+
+            // Module must be a record or enum
+            for (auto Match: R)
+            {
+                if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
+                {
+                    if (auto Tag = isAnonTagTypedef(Typedef))
+                        Match = const_cast<clang::TagDecl*>(Tag);
+                    else if (!isSameNameTagTypedef(Typedef))
+                    {
+                        isTypedef = true;
+                        return nullptr; // a new attempt will be made by cpp::Import::loadModule after fixing its id
+                    }
+                }
+
+                if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
+                {
+                    rootDecl = Match;
+                    break;
+                }
+            }
+        }
+
+        if (!rootDecl)
+        {
+            ::error(loc, "C++ modules have to be enums, records (class/struct, template or not), typedefs or _.\n"
+                         "Importing a typedef is equivalent to \"import (C++) _ : 'typedef';\"\n"
+                         "(Typedefs are included in the _ module)");
+            fatal();
+        }
+
+        rootDecl = getCanonicalDecl(rootDecl);
+    }
+
+    auto m = DeclMapper(nullptr, nullptr).getModule(rootDecl);
+
+    if (id == calypso.id__)
+        m->searchInlineNamespaces();
+
+    return m;
 }
 
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
@@ -1567,53 +1620,16 @@ const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
 
     if (OpTyDecl && // either LHS or RHS has a tag type
           (!SpecificTag || OpTyDecl->getCanonicalDecl() == SpecificTag->getCanonicalDecl())) // if we're looking for a specific type, compare it
-        return OpTyDecl; 
+        return OpTyDecl;
 
     return nullptr;
-}
-
-static clang::Module *tryFindClangModule(Loc loc, Identifiers *packages, Identifier *id,
-                                         Package *&p, size_t i)
-{
-#ifdef USE_CLANG_MODULES
-    auto MMap = calypso.pch.MMap;
-
-    if (!MMap)
-        return nullptr;
-
-    Package *pkg = p;
-    clang::Module *M = nullptr;
-
-    for (; i < packages->dim; i++)
-    {
-        Identifier *pid = (*packages)[i];
-
-        llvm::StringRef name(pid->toChars(), pid->length());
-        M = MMap->lookupModuleQualified(name, M);
-        if (!M)
-            return nullptr;
-
-        pkg = static_cast<Package*>(pkg->symtab->lookup(pid));
-        assert(pkg);
-    }
-
-    llvm::StringRef name(id->toChars(), id->length());
-    M = MMap->lookupModuleQualified(name, M);
-    if (!M)
-        return nullptr;
-
-    p = pkg;
-    return M;
-#else
-    return nullptr;
-#endif
 }
 
 static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
 {
     auto Tag = dyn_cast<clang::TagDecl>(D);
     if (Tag && (Tag->getIdentifier() || Tag->getTypedefNameForAnonDecl()))
-        return false; // anonymous tags are added as well
+        return false; // anonymous tags are added to _ as well
 
     auto Func = dyn_cast<clang::FunctionDecl>(D);
     if (Func && Func->getDescribedFunctionTemplate())
@@ -1632,391 +1648,246 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     return true;
 }
 
-Dsymbols* mapMacros(Module* m, clang::Module::Header* Header)
+static void mapNamespace(Module* m, const clang::DeclContext *DC)
 {
-    auto decldefs = new Dsymbols;
+    llvm::SmallVector<clang::DeclContext*, 1> Ctxs;
+    const_cast<clang::DeclContext*>(DC)->collectAllContexts(Ctxs);
 
-    auto MacroMapEntry = calypso.MacroMap[Header];
-    if (!MacroMapEntry)
-        return decldefs;
+    for (auto Ctx: Ctxs)
+    {
+        auto CanonCtx = cast<clang::Decl>(Ctx)->getCanonicalDecl();
 
-    for (auto& P: *MacroMapEntry)
-        if (auto s = m->mapper->VisitMacro(P.first, P.second))
-            decldefs->push(s);
+        for (auto D = Ctx->decls_begin(), DE = Ctx->decls_end(); D != DE; ++D)
+        {
+            if (cast<clang::Decl>(D->getDeclContext())->getCanonicalDecl() != CanonCtx)
+                continue;  // only map declarations that are semantically within the DeclContext
 
-    return decldefs;
+            auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
+            if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
+            {
+                mapNamespace(m, cast<clang::DeclContext>(*D));
+                continue;
+            }
+            else if (!isTopLevelInNamespaceModule(*D))
+                continue;
+
+            dsymForDecl(m, *D);
+        }
+    }
 }
 
-static Dsymbols* mapNamespace(Module* m, const clang::DeclContext *DC, bool forClangModule = false)
+void Module::complete()
 {
-    auto CanonDC = cast<clang::Decl>(DC)->getCanonicalDecl();
-    auto MMap = calypso.pch.MMap;
-    auto& SrcMgr = calypso.getSourceManager();
+    members->setDim(0);
 
-    auto decldefs = new Dsymbols;
-
-    auto D = DC->decls_begin(),
-            DE = DC->decls_end();
-
-    for (; D != DE; ++D)
-    {
-        if (cast<clang::Decl>(D->getDeclContext())->getCanonicalDecl()
-                != CanonDC)
-            continue;  // only map declarations that are semantically within the DeclContext
-
-        auto DLoc = SrcMgr.getFileLoc((*D)->getLocation());
-#ifdef USE_CLANG_MODULES
-        if (!forClangModule && DLoc.isValid() && DLoc.isFileID()
-                && MMap->findModuleForHeader(
-                    SrcMgr.getFileEntryForID(SrcMgr.getFileID(DLoc))))
-            continue;  // skip decls which are parts of a Clang module
-#endif
-
-        auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
-        if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
-        {
-            decldefs->append(mapNamespace(m, cast<clang::DeclContext>(*D), forClangModule));
-            continue;
-        }
-        else if (!isTopLevelInNamespaceModule(*D))
-            continue;
-
-        if (auto s = m->mapper->VisitDecl(*D))
-            decldefs->append(s);
+    if (ident == calypso.id__)
+    { // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace
+        mapNamespace(this, cast<clang::DeclContext>(rootDecl));
     }
-    
-    if (DC->isTranslationUnit())
-        decldefs->append(mapMacros(m, nullptr));
-
-    return decldefs;
-}
-
-static Dsymbols* mapClangModule(Module *m, const clang::Decl *Root, clang::Module *M)
-{
-    auto AST = calypso.getASTUnit();
-    auto& SrcMgr = calypso.getSourceManager();
-
-    llvm::SmallVector<clang::Decl*, 32> RegionDecls;
-
-    // HACK-ish but Clang doesn't offer a straightforward way
-    // SourceManager::translateFile() only offers the first FID of a FileEntry which doesn't contain all the decls,
-    // so we need to loop over all the FID corresponding to Header.Entry.
-    auto findRegionDecls = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
-        if (SLoc.isFile() && SLoc.getFile().getContentCache())
+    else if (auto Tag = dyn_cast<clang::TagDecl>(rootDecl))
+    {
+        // Sometimes friend declarations inside a record are the only existing declarations,
+        // so map them to the record's parent module.
+        // see friend QString::operator==(const QString &s1, const QString &s2);
+        typedef clang::DeclContext::specific_decl_iterator<clang::FriendDecl> Friend_iterator;
+        for (Friend_iterator I(Tag->decls_begin()), E(Tag->decls_end()); I != E; I++)
         {
-            for (auto& Header: M->Headers[clang::Module::HK_Normal])
-            {
-                if (SLoc.getFile().getContentCache()->OrigEntry != Header.Entry)
-                    continue;
+            auto Decl = (*I)->getFriendDecl();
+            if (!Decl || !Decl->isOutOfLine())
+                continue;
 
-                auto Loc = clang::SourceLocation::getFromRawEncoding(SLoc.getOffset());
-                auto FID = SrcMgr.getFileID(Loc); // NOTE: getting a FileID without a SourceLocation is impossible, it's locked tight
-                AST->findFileRegionDecls(FID, 0, SrcMgr.getFileIDSize(FID), RegionDecls); // passed Length is the maximum value before offset overflow kicks in
-            }
+            auto DeclCtx = dyn_cast<clang::DeclContext>(Decl);
+            if (DeclCtx && DeclCtx->isDependentContext())
+                continue;
+
+            dsymForDecl(this, Decl);
         }
-    };
-
-    for (unsigned I = 0, N = SrcMgr.local_sloc_entry_size(); I != N; ++I)
-        findRegionDecls(SrcMgr.getLocalSLocEntry(I));
-    for (unsigned I = 0, N = SrcMgr.loaded_sloc_entry_size(); I != N; ++I)
-        findRegionDecls(SrcMgr.getLoadedSLocEntry(I));
-
-    // Not forgetting namespace redecls
-    llvm::SmallVector<clang::Decl*, 8> RootDecls, ParentDecls;
-
-    std::function<bool(const clang::Decl *)>
-        Corresponding = [&] (const clang::Decl *D)
-    {
-        if (isa<clang::TranslationUnitDecl>(D))
-            return true;
-
-        if (!Corresponding(cast<clang::Decl>(getDeclContextNonLinkSpec(D))->getCanonicalDecl()))
-            return false;
-
-        ParentDecls.swap(RootDecls);
-        RootDecls.clear();
-
-        if (!ParentDecls.empty())
-            for (auto Parent: ParentDecls)
-            {
-                auto DC = cast<clang::DeclContext>(Parent);
-                for (auto ModDecl: DC->decls())
-                    if (D->getCanonicalDecl() == ModDecl->getCanonicalDecl())
-                        RootDecls.push_back(ModDecl);
-            }
-        else
-            for (auto ModDecl: RegionDecls)
-                if (isa<clang::TranslationUnitDecl>(getDeclContextNonLinkSpec(ModDecl)))
-                    if (D->getCanonicalDecl() == ModDecl->getCanonicalDecl())
-                        RootDecls.push_back(ModDecl);
-
-        return !RootDecls.empty();
-    };
-
-    if (!Corresponding(Root))
-    {
-        ::error(Loc(), "Incorrect import, Clang module doesn't contain requested namespaces");
-        fatal();
-    }
-
-    auto decldefs = new Dsymbols;
-
-    std::function<void(const clang::Decl *)> Map = [&] (const clang::Decl *D)
-    {
-        if (auto LinkSpec = dyn_cast<clang::LinkageSpecDecl>(D))
-        {
-            for (auto LD: LinkSpec->decls())
-                Map(LD);
-            return;
-        }
-
-        auto DC = D->getDeclContext();
-        assert(isa<clang::TranslationUnitDecl>(DC)
-                || isa<clang::NamespaceDecl>(DC)
-                || isa<clang::LinkageSpecDecl>(DC));
-
-        if (!isTopLevelInNamespaceModule(D))
-            return;
-
-        if (auto s = m->mapper->VisitDecl(D))
-            decldefs->append(s);
-    };
-
-    if (!isa<clang::TranslationUnitDecl>(Root))
-        for (auto R: RootDecls)
-            decldefs->append(mapNamespace(m, cast<clang::DeclContext>(R), true));
-    else
-    {
-        // Map the macros contained in the module headers (currently limited to numerical constants)
-        for (auto& Header: M->Headers[clang::Module::HK_Normal])
-            mapMacros(m, &Header);
-
-        for (auto D: RegionDecls)
-            if (isa<clang::TranslationUnitDecl>(D->getDeclContext()))
-                Map(D);
-    }
-
-    return decldefs;
-}
-
-Module *Module::create(Module::RootKey rootKey, Identifiers *packages, Identifier *id)
-{
-    assert(packages && packages->dim);
-
-    auto m = new Module(moduleName(packages, id).c_str(),
-                        id, packages);
-    m->rootKey = rootKey;
-    allCppModules[rootKey] = m;
-
-    return m;
-}
-
-Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
-{
-    if (!calypso.getASTUnit()) {
-        ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\")");
-        fatal();
-    }
-
-    auto& Context = calypso.getASTContext();
-    auto& S = calypso.getSema();
-    auto& Diags = calypso.pch.Diags;
-
-    S.CurContext = Context.getTranslationUnitDecl();
-    if (!S.TUScope)
-        S.TUScope = new clang::Scope(nullptr, clang::Scope::DeclScope, *Diags);
-
-    const clang::DeclContext *DC = Context.getTranslationUnitDecl();
-    Package *pkg = rootPackage;
-
-    clang::Module *M = nullptr;
-    for (size_t i = 1; i < packages->dim; i++)
-    {
-        Identifier *pid = (*packages)[i];
-
-        auto R = lookup(DC, pid);
-        if (R.empty())
-        {
-            // Check if there's a Clang module matching the remaining packages.module.
-            // Note that if there is a Clang module named QtCore, import Qt.QtCore is correct and
-            // will import the declarations inside Qt:: and inside the headers listed in QtCore.
-            M = tryFindClangModule(loc, packages, id, pkg, i);
-            if (M)
-                break;
-
-            ::error(loc, "no C++ package named %s", pid->toChars());
-            fatal();
-        }
-
-        auto NSN = dyn_cast<clang::NamespaceDecl>(R[0]);
-        if (!NSN || NSN->isInline())
-        {
-            ::error(loc, "only non-inline namespaces can be C++ packages");
-            fatal();
-        }
-
-        pkg = static_cast<Package*>(pkg->symtab->lookup(pid));
-        assert(pkg);
-
-        DC = NSN;
-    }
-
-    if (!M)
-        M = tryFindClangModule(loc, packages, id, pkg, packages->dim);
-
-    isTypedef = false;
-
-    RootKey rootKey;
-    const clang::Decl *D = nullptr;
-    if (M)
-    {
-        rootKey.first = D = cast<clang::Decl>(DC)->getCanonicalDecl();
-        rootKey.second = M;
-    }
-    else if (id == calypso.id__)
-    {
-        rootKey.first = D = cast<clang::Decl>(DC)->getCanonicalDecl();
-    }
-    else
-    {
-        // Lookups can't find the implicit __va_list_tag record
-        if (packages->dim == 1)
-        {
-            if (id == calypso.id___va_list_tag)
-                D = cast<clang::NamedDecl>(Context.getVaListTagDecl());
-            else if (id == calypso.id___NSConstantString_tag)
-                D = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
-                                                    // But this should be fixed if C++ import lookups get skipped (Calypso does A LOT of unnecessary name lookups
-                                                    // and this was to stick as close as possible to DMD, but they're very expensive to build and do and skipping them
-                                                    // would cut down multiple times compilation times)
-        }
-
-        if (!D)
-        {
-            auto R = lookup(DC, id);
-            if (R.empty())
-            {
-                ::error(loc, "no C++ module named %s", id->toChars());
-                fatal();
-            }
-
-            // Module must be a record or enum
-            for (auto Match: R)
-            {
-                if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
-                {
-                    if (auto Tag = isAnonTagTypedef(Typedef))
-                        Match = const_cast<clang::TagDecl*>(Tag);
-                    else if (!isSameNameTagTypedef(Typedef))
-                    {
-                        isTypedef = true;
-                        return nullptr; // a new attempt will be made by cpp::Import::loadModule after fixing its id
-                    }
-                }
-
-                if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
-                {
-                    D = Match;
-                    break;
-                }
-            }
-        }
-
-        if (!D)
-        {
-            ::error(loc, "C++ modules have to be enums, records (class/struct, template or not), typedefs or _.\n"
-                            "Typedefs are included in _, and importing a typedef is equivalent to \"import (C++) _ : <typedef>;\"");
-            fatal();
-        }
-
-        D = cast<clang::NamedDecl>(const_cast<clang::Decl*>(getCanonicalDecl(D)));
-
-        if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
-            rootKey.first = CTD->getTemplatedDecl();
-        else
-            rootKey.first = D;
-    }
-
-    auto m = allCppModules[rootKey];
-    if (!m)
-        m = create(rootKey, packages, id);
-    m->parent = pkg;
-    m->loc = loc;
-
-    amodules.push_back(m);
-    pkg->symtab->insert(m);
-
-    auto decldefs = new Dsymbols;
-
-    if (M)
-    {
-        decldefs->append(mapClangModule(m, rootKey.first, M));
-    }
-    else if (id == calypso.id__)  // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace which aren't in a Clang module
-    {
-        auto NS = dyn_cast<clang::NamespaceDecl>(DC);
-        if (!NS)
-        {
-            assert(isa<clang::TranslationUnitDecl>(DC));
-
-            decldefs->append(mapNamespace(m, DC));
-        }
-        else
-        {
-            auto I = NS->redecls_begin(),
-                    E = NS->redecls_end();
-
-            for (; I != E; ++I)
-            {
-                DC = *I;
-                decldefs->append(mapNamespace(m, DC));
-            }
-        }
-    }
-    else
-    {
-        if (auto s = m->mapper->VisitDecl(D))
-            decldefs->append(s);
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
-        for (int Op = 1; Op < clang::NUM_OVERLOADED_OPERATORS; Op++)
+        for (int I = 1; I < clang::NUM_OVERLOADED_OPERATORS; I++)
         {
-            auto OpName = Context.DeclarationNames.getCXXOperatorName(
-                        static_cast<clang::OverloadedOperatorKind>(Op));
+            auto Op = static_cast<clang::OverloadedOperatorKind>(I);
+            searchNonMemberOverloadedOperators(Op);
 
-            for (auto Ctx = D->getDeclContext(); Ctx; Ctx = Ctx->getLookupParent())
-            {
-                if (Ctx->isTransparentContext())
-                    continue;
-
-                for (auto OverOp: Ctx->lookup(OpName))
-                {
-                    if (!isOverloadedOperatorWithTagOperand(OverOp, cast<clang::NamedDecl>(D)))
-                        continue;
-
-                    if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
-                        continue; // friend out-of-line decls are already mapped in VisitRecordDecl
-
-                    if (auto s = m->mapper->VisitDecl(getCanonicalDecl(OverOp)))
-                        decldefs->append(s);
-                }
-            }
+            for (auto OO: nonMemberOverloadedOperators[Op].OOs)
+                dsymForDecl(this, OO);
         }
+    }
+}
 
-//         srcFilename = AST->getSourceManager().getFilename(TD->getLocation());
+void Module::searchInlineNamespaces()
+{
+    if (searchedInlineNamespaces)
+        return;
+    searchedInlineNamespaces = true;
+
+    auto DC = cast<clang::DeclContext>(rootDecl);
+
+    typedef clang::DeclContext::specific_decl_iterator<clang::NamespaceDecl> Namespace_iterator;
+    for (Namespace_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+        if ((*I)->isInlineNamespace() && (*I)->isOriginalNamespace())
+            inlineNamespaces.push_back(*I);
+}
+
+bool isRecordMemberInModuleContext(clang::Decl* D)
+{
+    auto Friend = dyn_cast<clang::FriendDecl>(D);
+    if (!Friend)
+        return false;
+
+    auto Friended = Friend->getFriendDecl();
+    if (!Friended || !Friended->isOutOfLine())
+        return false;
+
+    auto FriendDC = dyn_cast<clang::DeclContext>(Friended);
+    if (FriendDC && FriendDC->isDependentContext())
+        return false; // FIXME: dependent out-of-line free operators defined in a record as friend decl
+                      // (ex. piecewise_linear_distribution::operator==) do not get added to the parent
+                      // declcontext, so aren't mapped to the module
+
+    return true;
+}
+
+clang::Expr* exprFromMacro(const clang::IdentifierInfo* II)
+{
+    auto& PP = calypso.getPreprocessor();
+    auto& Context = calypso.getASTContext();
+    auto& Sema = calypso.getSema();
+
+    if (PP.isMacroDefined(II))
+        return nullptr;
+
+    auto MInfo = PP.getMacroInfo(II);
+    if (!MInfo)
+        return nullptr;
+
+    if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
+        return nullptr;
+
+    auto MLoc = MInfo->getDefinitionLoc();
+
+    if (MInfo->getNumTokens() == 0) {
+        unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
+        return clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
+                                    Context.BoolTy, MLoc);
+    } else {
+        auto& Tok = MInfo->getReplacementToken(0);
+        if (Tok.getKind() != clang::tok::numeric_constant)
+            return nullptr;
+
+        auto ResultExpr = Sema.ActOnNumericConstant(Tok);
+        if (!ResultExpr.isInvalid())
+            return ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
     }
 
-    // Enclose every mapped symbol into an extern(C++) declaration
-    m->members = new Dsymbols;
-    m->members->append(&m->mapper->importDecls);
-    m->mapper->importDecls.setDim(0);
+    return nullptr;
+}
 
-    auto s = new_LinkDeclaration(LINKcpp, decldefs);
-    m->members->push(s);
+Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
+{
+    auto TU = calypso.getASTContext().getTranslationUnitDecl();
 
-    m->members->append(&m->mapper->pendingTempinsts);
-    m->mapper->pendingTempinsts.setDim(0);
-    return m;
+    auto II = calypso.toIdentifierInfo(ident);
+
+    // C allows macros and other symbols to share the same name, D doesn't
+    // Conflicting macros must be prefixed with ℂ
+    if (!TU->lookup(clang::DeclarationName(II)).empty())
+        return nullptr;
+
+    auto E = exprFromMacro(II);
+    if (!E)
+        return nullptr;
+
+    ExprMapper expmap(*this);
+
+    auto loc = fromLoc(E->getLocStart());
+    auto e = expmap.fromExpression(E);
+    auto ie = new_ExpInitializer(loc, e);
+
+    auto v = new_VarDeclaration(loc, nullptr, ident, ie);
+    v->storage_class = STCmanifest;
+    return v;
+}
+
+Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
+{
+    if (auto s = symtab->lookup(ident))
+        return s;
+
+    DeclMapper mapper(this);
+
+    auto Name = calypso.toDeclarationName(ident);
+
+    if (this->ident == calypso.id__)
+    {
+        auto DC = cast<clang::DeclContext>(rootDecl);
+
+        for (auto Match: DC->lookup(Name))
+            if (isTopLevelInNamespaceModule(Match))
+                mapper.dsymForDecl(Match);
+
+        for (auto NS: inlineNamespaces)
+            for (auto Match: NS->lookup(Name))
+                if (isTopLevelInNamespaceModule(Match))
+                    mapper.dsymForDecl(Match);
+
+        if (isa<clang::TranslationUnitDecl>(rootDecl)) // TODO: specific derived Module class for TU
+            mapper.dsymForMacro(ident);
+    }
+    else if (this->ident == ident)
+    {
+        mapper.dsymForDecl(rootDecl);
+    }
+    else
+    {
+        if (auto DC = dyn_cast<clang::DeclContext>(rootDecl))
+            for (auto Match: DC->lookup(Name))
+                if (isRecordMemberInModuleContext(Match))
+                    mapper.dsymForDecl(Match);
+
+        if (Name.getNameKind() == clang::DeclarationName::CXXOperatorName)
+        {
+            auto Op = Name.getCXXOverloadedOperator();
+            searchNonMemberOverloadedOperators(Op);
+
+            for (auto OO: nonMemberOverloadedOperators[Op].OOs)
+                mapper.dsymForDecl(OO);
+        }
+    }
+
+    return symtab->lookup(ident);
+}
+
+void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op)
+{
+    if (nonMemberOverloadedOperators[Op].searched)
+        return;
+    nonMemberOverloadedOperators[Op].searched = true;
+
+    if (!isa<clang::RecordDecl>(rootDecl) && !isa<clang::ClassTemplateDecl>(rootDecl))
+        return;
+
+    auto& Context = calypso.getASTContext();
+
+    auto OpName = Context.DeclarationNames.getCXXOperatorName(
+                static_cast<clang::OverloadedOperatorKind>(Op));
+
+    for (auto Ctx = rootDecl->getDeclContext(); Ctx; Ctx = Ctx->getLookupParent())
+    {
+        if (Ctx->isTransparentContext())
+            continue;
+
+        for (auto OverOp: Ctx->lookup(OpName))
+        {
+            if (!isOverloadedOperatorWithTagOperand(OverOp, cast<clang::NamedDecl>(rootDecl)))
+                continue;
+
+            if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
+                continue; // friend out-of-line decls are already mapped as part as the record
+
+            nonMemberOverloadedOperators[Op].OOs.push_back(getCanonicalDecl(OverOp));
+        }
+    }
 }
 
 }

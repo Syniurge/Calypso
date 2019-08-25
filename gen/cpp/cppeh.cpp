@@ -65,7 +65,7 @@ void LangPlugin::toBeginCatch(IRState& irs, ::Catch *cj)
             DtoDeclarationExp(cj->var);
             IrLocal* irLocal = getIrLocal(cj->var);
 
-            auto CatchParamTy = TypeMapper().toType(cj->loc, cj->var->type,
+            auto CatchParamTy = DeclMapper(nullptr, nullptr).toType(cj->loc, cj->var->type,
                                                         irs.func()->decl->_scope, cj->var->storage_class);
             clangCG::Address ParamAddr(irLocal->value,
                                        CGF()->getNaturalTypeAlignment(CatchParamTy));
@@ -92,7 +92,7 @@ void LangPlugin::toEndCatch(IRState& irs, ::Catch *cj)
 llvm::GlobalVariable *LangPlugin::toCatchScopeType(IRState& irs, Type *t)
 {
     auto loc = irs.func()->decl->loc;
-    auto ThrowType = TypeMapper().toType(loc, t, irs.func()->decl->_scope);
+    auto ThrowType = DeclMapper(nullptr, nullptr).toType(loc, t, irs.func()->decl->_scope);
 
     auto TypeInfo = CGM->GetAddrOfRTTIDescriptor(ThrowType, /*ForEH=*/true);
     auto& wrapper = type_infoWrappers[TypeInfo];

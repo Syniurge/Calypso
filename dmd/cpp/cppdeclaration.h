@@ -62,11 +62,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    static void doSemantic3(::FuncDeclaration *fd);
-    static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
-
-    void accept(Visitor *v) override;
 };
 
 class CtorDeclaration : public ::CtorDeclaration
@@ -83,8 +78,6 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool functionSemantic3() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    void accept(Visitor *v) override;
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -102,8 +95,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    void accept(Visitor *v) override;
 };
 
 class EnumDeclaration : public ::EnumDeclaration
@@ -117,6 +108,11 @@ public:
             const clang::EnumDecl *ED);
     EnumDeclaration(const EnumDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    Expression *getDefaultValue(const Loc &loc) override;
 
     void accept(Visitor *v) override;
 };
@@ -131,6 +127,7 @@ public:
     EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
                const clang::EnumConstantDecl *ECD);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
 
     void accept(Visitor *v) override;
 };
@@ -141,17 +138,14 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::TypedefNameDecl *TND;
-    bool isUsed = false;
 
     AliasDeclaration(Loc loc, Identifier *ident, Type *type,
             const clang::TypedefNameDecl *TND);
     AliasDeclaration(const AliasDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void doSemantic();
+    Type *getType() override;
     Dsymbol *toAlias() override;
     Dsymbol *toAlias2() override;
-
-    void accept(Visitor *v) override;
 };
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);
@@ -167,58 +161,7 @@ const clang::FunctionDecl *getFD(::FuncDeclaration *f);
     }
 // NOTE: we use copy constructors only to copy the arguments passed to the main constructor, the rest is handled by syntaxCopy
 
-bool isMapped(const clang::Decl *D);
-
-class DeclMapper : public TypeMapper
-{
-public:
-    Dsymbols importDecls, pendingTempinsts;
-
-    DeclMapper(::Module *mod, bool isGlobal = false, bool addImplicitDecls = true) : TypeMapper(mod, isGlobal, addImplicitDecls) {}
-
-    inline Prot::Kind toProt(clang::AccessSpecifier AS);
-
-    // Declarations
-    Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
-
-    Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
-    Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
-    Dsymbols *VisitTypedefNameDecl(const clang::TypedefNameDecl *D);
-    Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
-    Dsymbols *VisitRedeclarableTemplateDecl(const clang::RedeclarableTemplateDecl* D);
-    Dsymbols *VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D);
-    Dsymbols *VisitVarTemplateSpecializationDecl(const clang::VarTemplateSpecializationDecl *D);
-    Dsymbols *VisitEnumDecl(const clang::EnumDecl *D);
-
-    // Entry points when mapping instances during semantic()
-    Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D);
-    ::FuncDeclaration *VisitInstancedFunctionTemplate(const clang::FunctionDecl *D);
-    ::VarDeclaration *VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl *D);
-
-    TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
-                                              const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
-
-    Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
-
-    template<typename SpecTy>
-    Dsymbols* CreateTemplateInstanceFor(Loc loc, const SpecTy* D, Dsymbols* decldefs);
-    template<typename PartialTy, typename SpecTy>
-    Dsymbols *VisitTemplateSpecializationDecl(const SpecTy* D);
-
-    enum
-    {
-        ForcePolymorphic = 1 << 0, // When a templace declaration is polymorphic, we want the explicit template specializations to be polymorphic too even if isPolymorphic() is false
-        MapTemplatePatterns = 1 << 1, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
-        MapTemplateInstantiations = 1 << 2,
-        MapExplicitSpecs = 1 << 3, // If not set explicit and partial specs will be discarded by VisitDecl
-        NamedValueWithAnonRecord = 1 << 4, // Only set when called from VisitValueDecl for e.g union {...} myUnion
-        MapAnonRecord = 1 << 5,
-        CreateTemplateInstance = 1 << 6,
-    };
-
-
-    static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
-};
+// *************** //
 
 class NestedDeclMapper;
 
@@ -231,16 +174,16 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
     ExprMapper expmap;
 
     Loc loc;
-    Scope *sc = nullptr;
 
     bool Reference(const clang::NamedDecl *D);
     bool Reference(const clang::Type *T);
 
     bool VisitDeclRef(const clang::NamedDecl *D);
+
 public:
     DeclReferencer(::Module* minst);
 
-    void Traverse(Loc loc, Scope *sc, clang::Stmt *S);
+    void Traverse(Loc loc, clang::Stmt *S);
 
     bool VisitCXXConstructExpr(const clang::CXXConstructExpr *E);
     bool VisitCXXNewExpr(const clang::CXXNewExpr *E);
@@ -250,26 +193,6 @@ public:
 
     bool shouldVisitImplicitCode() const { return true; }
 };
-
-// Map records nested within a function, which includes lambda types.
-class NestedDeclMapper : public clang::RecursiveASTVisitor<NestedDeclMapper>
-{
-    DeclReferencer& dref;
-
-public:
-    NestedDeclMapper(DeclReferencer& dref) : dref(dref) {}
-
-    bool VisitLambdaExpr(const clang::LambdaExpr *E);
-    bool TraverseCXXRecordDecl(const clang::CXXRecordDecl *D);
-
-    bool shouldVisitImplicitCode() const { return true; }
-};
-
-const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
-bool isPolymorphic(const clang::RecordDecl *D);
-void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
-void MarkFunctionReferenced(::FuncDeclaration* fd);
-bool isTemplateInstantiation(const clang::Decl *D);
 
 inline bool& getIsUsed(::FuncDeclaration* fd)
 {

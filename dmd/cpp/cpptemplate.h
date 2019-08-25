@@ -33,8 +33,7 @@ public:
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
     TemplateDeclaration(const TemplateDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
-    void addMember(Scope *sc, ScopeDsymbol *sds) override;
-    bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, ::TemplateInstance *ti) override;
+
     bool evaluateConstraint(::TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, ::FuncDeclaration *fd) override;
     bool earlyFunctionValidityCheck(::TemplateInstance *ti, Scope *sc, Objects *dedtypes) override;
     void prepareBestMatch(::TemplateInstance *ti, Scope *sc, Expressions *fargs) override;
@@ -48,7 +47,6 @@ public:
     Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance = false);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
-    void makeForeignInstance(TemplateInstance* ti, Scope* sc);
 
     TemplateInstUnion hasExistingClangInst(::TemplateInstance* ti);
     TemplateInstUnion getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
@@ -78,14 +76,12 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Identifier *getIdent() override;
-    bool semanticTiargs(Scope *sc) override;
     void declareParameters(Scope *sc) override {}
     size_t correspondingParamIdx(size_t argi) override;
     TemplateParameter* correspondingParam(size_t argi) override;
     Objects* tiargsForMangling() override;
 
-    bool completeInst();
-    void correctTiargs(Scope* sc);
+    void correctTiargs();
     void markInvalid();
 
     const clang::NamedDecl* getInstantiatedTemplate();

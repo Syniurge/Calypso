@@ -30,23 +30,26 @@ class StructDeclaration : public ::StructDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD;
+    const clang::RecordDecl *RD, *_Def = nullptr;
     bool isUsed = false;
-    bool layoutQueried = false;
+    bool membersCompleted = false;
 
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
-    bool determineFields() override;
-    bool buildLayout() override;
-    void finalizeSize() override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    d_uns64 size(const Loc &loc) override;
+
     Expression *defaultInit(Loc loc) override;
-    bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     bool disableDefaultCtor() override { return false; }
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
+
+    const clang::RecordDecl *Definition();
 
     void accept(Visitor *v) override;
 };
@@ -57,18 +60,23 @@ class ClassDeclaration : public ::ClassDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::CXXRecordDecl *RD;
+    const clang::CXXRecordDecl *RD, *_Def = nullptr;
     bool isUsed = false;
-    bool layoutQueried = false;
+
+    bool membersCompleted = false;
+    bool vtblBuilt = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
                      Dsymbols* members, const clang::CXXRecordDecl *RD);
     ClassDeclaration(const ClassDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
-    bool determineFields() override;
-    bool buildLayout() override;
-    bool mayBeAnonymous() override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    d_uns64 size(const Loc &loc) override;
+
+    void buildVtbl();
 
     void addLocalClass(ClassDeclarations *) override;
 
@@ -79,10 +87,10 @@ public:
     bool allowMultipleInheritance() override { return true; }
     bool allowInheritFromStruct() override { return true; }
     bool needsInterfaceSemantic() const override { return false; }
-    void makeNested() override;
-    void finalizeVtbl() override;
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
+
+    const clang::CXXRecordDecl *Definition();
 
     void accept(Visitor *v) override;
 };
@@ -92,17 +100,20 @@ class UnionDeclaration : public ::UnionDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD;
-    bool layoutQueried = false;
+    const clang::RecordDecl *RD, *_Def = nullptr;
+    bool membersCompleted = false;
+
+    d_uns64 size(const Loc &loc) override;
 
     UnionDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     UnionDeclaration(const UnionDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
-    bool mayBeAnonymous() override;
-    bool determineFields() override;
-    bool buildLayout() override;
-    void finalizeSize() override;
+    Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+    Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
+
+    const clang::RecordDecl *Definition();
 };
 
 class AnonDeclaration : public ::AnonDeclaration
@@ -114,15 +125,13 @@ public:
 
     AnonDeclaration(Loc loc, bool isunion, Dsymbols *decl);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
 };
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad);
 const clang::RecordDecl *getRecordDecl(::Type *t);
-::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl *FD);
 ::FuncDeclaration *findOverriddenMethod(::FuncDeclaration* md, ::ClassDeclaration* base );
 
 }
-
-void MarkAggregateReferencedImpl(AggregateDeclaration* ad);
 
 #endif /* DMD_CPP_CPPAGGREGATE_H */

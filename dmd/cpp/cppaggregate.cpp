@@ -19,6 +19,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/ADT/StringExtras.h"
 
 using llvm::isa;
@@ -31,65 +32,10 @@ FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Expressions *arguments,
         int flags = 0);
 Expression *resolveProperties(Scope *sc, Expression *e);
-FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
-
-void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
-{
-    using namespace cpp;
-
-    auto D = dyn_cast<clang::CXXRecordDecl>(
-                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
-    if (!D)
-        return;
-
-    if (D->hasDefinition()) {
-        auto& Context = calypso.getASTContext();
-        auto& S = calypso.getSema();
-
-        auto Key = Context.getCurrentKeyFunction(D);
-        const clang::FunctionDecl* Body;
-        if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body))) {
-            // As in C++, only mark virtual methods for codegen if the key method is defined
-            // If the definition isn't the current TU, assume that methods have been emitted
-            // by another TU.
-            S.MarkVTableUsed(D->getLocation(), D);
-
-            for (auto s: *ad->members)
-                if (s->isFuncDeclaration() && isCPP(s)) {
-                    auto fd = static_cast<::FuncDeclaration*>(s);
-                    auto MD = dyn_cast<clang::CXXMethodDecl>(getFD(fd));
-                    if (MD && MD->isVirtual())
-                        MarkFunctionReferenced(fd);
-                }
-
-            if (ad->defaultCtor)
-                calypso.markSymbolReferenced(ad->defaultCtor);
-            if (ad->dtor)
-                calypso.markSymbolReferenced(ad->dtor);
-        }
-
-        auto ti = ad->isInstantiated();
-        auto minst = ti ? ti->minst : ad->getModule();
-
-        DeclReferencer declReferencer(minst);
-        auto sc = ad->_scope;
-        if (!sc)
-            sc = ad->getInstantiatingModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
-        assert(sc);
-
-        for (auto Field: D->fields())
-            if (auto InClassInit = Field->getInClassInitializer())
-                declReferencer.Traverse(ad->loc, sc, InClassInit);
-
-        markAggregateReferenced(ad);
-    }
-}
 
 namespace cpp
 {
-
-template<typename AggTy> bool buildAggLayout(AggTy *ad);
 
 void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf)
 {
@@ -147,20 +93,197 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
-
 void StructDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
 }
 
 void ClassDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
 }
 
 void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
+}
+
+template <typename AggTy>
+inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
+{
+    if (!ad->_Def)
+    {
+        auto& Context = calypso.getASTContext();
+        auto& S = calypso.getSema();
+
+        if (S.RequireCompleteType(ad->RD->getLocation(), Context.getRecordType(ad->RD),
+                                  clang::diag::err_incomplete_type))
+            ad->error("No definition available");
+
+        if (!ad->RD->isCompleteDefinition() && ad->RD->getDefinition())
+            ad->_Def = ad->RD->getDefinition();
+        else
+            ad->_Def = ad->RD;
+    }
+
+    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // making sure that the canon decl is still the same (FIXME might be completely unnecessary)
+    return ad->_Def;
+}
+
+const clang::RecordDecl *StructDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+const clang::CXXRecordDecl *ClassDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+const clang::RecordDecl *UnionDeclaration::Definition()
+{
+    return ad_Definition(this);
+}
+
+template <typename AggTy>
+inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flags)
+{
+    if (auto s = ad->ScopeDsymbol::search(loc, ident, flags))
+        return s;
+
+    auto Def = ad->Definition();
+    if (!Def)
+        return nullptr;
+
+    if (ident == Id::ctor || ident == Id::dtor || ident == Id::assign)
+    {
+        auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
+
+        if (CRD && ident == Id::ctor)
+            for (auto Ctor: CRD->ctors())
+                dsymForDecl(ad, Ctor);
+
+        // Special members
+        if (CRD && !CRD->isUnion())
+        {
+            auto& S = calypso.getSema();
+            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
+
+            // NOTE: Would mapping only non-trivial special members be preferable?
+            // It probably would make mapping more subject to unexpected variations..
+
+            auto map = [&] (clang::Decl* D) {
+                if (D)
+                    dsymForDecl(ad, D);
+            };
+
+            if (ident == Id::ctor)
+            {
+                map(S.LookupDefaultConstructor(_CRD));
+
+                for (int i = 0; i < 2; i++)
+                    map(S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
+            }
+            else if (ident == Id::dtor)
+            {
+                map(S.LookupDestructor(_CRD));
+            }
+            else if (ident == Id::assign)
+            {
+                for (int i = 0; i < 2; i++)
+                    for (int j = 0; j < 2; j++)
+                        for (int k = 0; k < 2; k++)
+                            map(S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
+                                        j ? true : false, k ? clang::Qualifiers::Const : 0));
+            }
+        }
+    }
+    else
+    {
+        auto Name = calypso.toDeclarationName(ident);
+        for (auto Match: Def->lookup(Name))
+            dsymForDecl(ad, Match);
+    }
+
+    return ad->ScopeDsymbol::search(loc, ident, flags);
+}
+
+Dsymbol *StructDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    return ad_search(this, loc, ident, flags);
+}
+
+Dsymbol *ClassDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    auto s = ad_search(this, loc, ident, flags);
+
+    if (!s)
+        for (auto b: *baseclasses)
+            if (b->sym)
+            {
+                s = b->sym->search(loc, ident, flags);
+                if (s)
+                    break;
+            }
+
+    return s;
+}
+
+Dsymbol *UnionDeclaration::search(const Loc &loc, Identifier *ident, int flags)
+{
+    return ad_search(this, loc, ident, flags);
+}
+
+// TODO replace by generator pattern/input iterator?
+
+template <typename AggTy>
+inline void ad_complete(AggTy* ad)
+{
+    if (ad->membersCompleted)
+        return;
+    ad->membersCompleted = true;
+
+    // Force declaration of implicit special members
+    ad->search(ad->loc, Id::ctor);
+    ad->search(ad->loc, Id::dtor);
+    ad->search(ad->loc, Id::assign);
+
+    Dsymbols* newMembers = new Dsymbols;
+    newMembers->reserve(ad->members->dim);
+
+    auto Canon = ad->RD->getCanonicalDecl();
+
+    // Add specific decls: fields, vars, tags, templates, typedefs
+    for (auto M: ad->Definition()->decls())
+    {
+        if (cast<clang::Decl>(M->getDeclContext())->getCanonicalDecl() != Canon)
+            continue; // only map declarations that are semantically within the RecordDecl
+
+        if (!isa<clang::FieldDecl>(M) && !isa<clang::VarDecl>(M) &&
+              !isa<clang::FunctionDecl>(M) && !isa<clang::TagDecl>(M) &&
+              !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
+            continue;
+
+        newMembers->push(dsymForDecl(ad, M));
+    }
+
+    delete ad->members;
+    ad->members = newMembers;
+}
+
+void StructDeclaration::complete()
+{
+    ad_complete(this);
+}
+
+void ClassDeclaration::complete()
+{
+    ad_complete(this);
+}
+
+void UnionDeclaration::complete()
+{
+    ad_complete(this);
 }
 
 void StructDeclaration::accept(Visitor *v)
@@ -176,43 +299,73 @@ void StructDeclaration::accept(Visitor *v)
         v->visit(this);
 }
 
+template <typename AggTy>
+void ad_determineSize(AggTy *ad)
+{
+    assert(ad->sizeok != SIZEOKdone);
+    ad->sizeok = SIZEOKdone;
+
+    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
+    {
+       // if it's a forward reference, consider the record empty
+        ad->structsize = 1;
+        ad->alignsize = 1;
+        return;
+    }
+
+    auto& Context = calypso.getASTContext();
+    auto& RL = Context.getASTRecordLayout(ad->RD);
+
+    ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
+    ad->structsize = RL.getSize().getQuantity();
+
+    typedef clang::DeclContext::specific_decl_iterator<clang::ValueDecl> Value_iterator;
+    for (Value_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
+    {
+        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I)/* &&
+            !isa<clang::MSPropertyDecl>(*I) (TODO)*/)
+            continue;
+
+        auto Field = *I;
+        auto vd = static_cast<VarDeclaration*>(dsymForDecl(ad, Field));
+        ad->fields.push(vd);
+
+        vd->offsetInBits = Context.getFieldOffset(Field);
+        vd->offset = vd->offsetInBits / 8;
+    }
+
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
+    if (auto sd = ad->isStructDeclaration())
+        if (!CRD || CRD->ctor_begin() == CRD->ctor_end())
+            sd->zeroInit = true;
+}
+
+// NOTE: size() gets called to "determine fields", but shouldn't the two be separate?
+d_uns64 StructDeclaration::size(const Loc &loc)
+{
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
+    return structsize;
+}
+
+d_uns64 ClassDeclaration::size(const Loc &loc)
+{
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
+    return structsize;
+}
+
+d_uns64 UnionDeclaration::size(const Loc &loc)
+{
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
+    return structsize;
+}
+
 Expression *StructDeclaration::defaultInit(Loc loc)
 {
     auto arguments = new Expressions;
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
-}
-
-bool StructDeclaration::mayBeAnonymous()
-{
-    return true;
-}
-
-bool StructDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
-    return true;
-}
-
-bool StructDeclaration::buildLayout()
-{
-    return buildAggLayout(this);
-}
-
-void StructDeclaration::finalizeSize()
-{
-    ::StructDeclaration::finalizeSize();
-
-    auto CRD = cast<clang::CXXRecordDecl>(RD);
-    if (CRD->ctor_begin() != CRD->ctor_end())
-        zeroInit = 0;
 }
 
 void ClassDeclaration::accept(Visitor *v)
@@ -226,11 +379,6 @@ void ClassDeclaration::accept(Visitor *v)
             v->visit(this);
     } else
         v->visit(this);
-}
-
-bool ClassDeclaration::mayBeAnonymous()
-{
-    return true;
 }
 
 void ClassDeclaration::addLocalClass(ClassDeclarations *aclasses)
@@ -337,7 +485,7 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 }
 
 template <typename AggTy>
- Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
+Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
     if (exp->op == TOKstructliteral)
         return nullptr;
@@ -364,14 +512,14 @@ template <typename AggTy>
 
     // FIXME: sc->intypeof == 1?
 
-    if (ad->ctor)
+    if (auto ctor = ad->search(vd->loc, Id::ctor))
     {
         auto e1 = new_DotIdExp(loc, ve, Id::ctor);
 
         if (!ce) {
             exp = expressionSemantic(exp, sc);
             exp = resolveProperties(sc, exp);
-            
+
             if (exp->type->constConv(ad->getType()) >= MATCHconst)
                 exp = new_ConstructExp(loc, ve, exp); // enables in-place construction
             else
@@ -379,15 +527,14 @@ template <typename AggTy>
                 auto args = new Expressions;
                 args->push(exp);
 
-                if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
-                    args->pop(); // TODO: error if there'ss no default ctor
+                if (!resolveFuncCall(loc, nullptr, ctor, nullptr, nullptr, args, 1|4))
+                    args->pop(); // TODO: error if there's no default ctor
 
                 ce = new_CallExp(loc, e1, args);
 
                 if (args->dim == 0)
                     // rewrite to an assignment
-                    exp = new_CommaExp(loc, ce,
-                                        new_AssignExp(loc, ve, exp));
+                    exp = new_CommaExp(loc, ce, new_AssignExp(loc, ve, exp));
                 else
                     exp = ce;
             }
@@ -396,6 +543,8 @@ template <typename AggTy>
     }
     else
     {
+        ad->size(loc); // to determine fields
+
         Expression* init = ce
                     ? new_StructLiteralExp(loc, ad, ce->arguments, ad->getType())
                     : ad->getType()->defaultInitLiteral(loc);
@@ -418,6 +567,11 @@ Expression* ClassDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* v
     return buildVarInitializerImpl(this, sc, vd, exp);
 }
 
+Expression* UnionDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
+{
+    return buildVarInitializerImpl(this, sc, vd, exp);
+}
+
 Expression *ClassDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -427,36 +581,33 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
 }
 
-void ClassDeclaration::makeNested()
-{
-    // do not add vthis
-}
-
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
-// Note that Func::semantic will re-set methods redundantly (although it's useful as a sanity check and it also sets vtblIndex),
-// but vanilla doesn't know how to deal with multiple inheritance hence the need to query Clang.
-
-// Why is this needed? Because D vtbls are only built after the first base class, so this is actually the cleanest and easiest way
-// to take C++ multiple inheritance into account. No change to FuncDeclaration::semantic needed.
-void ClassDeclaration::finalizeVtbl()
+void ClassDeclaration::buildVtbl()
 {
-    clang::CXXFinalOverriderMap FinaOverriders;
-    RD->getFinalOverriders(FinaOverriders);
+    if (vtblBuilt)
+        return;
+    vtblBuilt = true;
 
-    llvm::DenseSet<const clang::CXXMethodDecl*> inVtbl;
-
-    for (auto I = FinaOverriders.begin(), E = FinaOverriders.end();
-         I != E; ++I)
+    if (auto bcd = isClassDeclarationOrNull(baseClass))
     {
-        auto OverMD = I->second.begin()->second.front().Method;
-        if (inVtbl.count(OverMD))
-            continue;
+        static_cast<cpp::ClassDeclaration*>(bcd)->buildVtbl();
 
-        auto md = findMethod(this, OverMD);
+        vtbl.setDim(bcd->vtbl.dim);
+        memcpy(vtbl.tdata(), bcd->vtbl.tdata(), sizeof(void*) * vtbl.dim);
+    }
+
+    clang::CXXFinalOverriderMap FinalOverriders;
+    RD->getFinalOverriders(FinalOverriders);
+
+    for (const auto &Overrider : FinalOverriders)
+    {
+        auto OverMD = Overrider.second.begin()->second.front().Method;
+        auto md = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
         if (!md)
             continue;
 
-        inVtbl.insert(OverMD);
+        if (md->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
+            continue;
 
         auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
         if (vi < 0)
@@ -467,58 +618,6 @@ void ClassDeclaration::finalizeVtbl()
         else
             md->vtblIndex = vi;
     }
-}
-
-bool ClassDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
-    return true;
-}
-
-bool ClassDeclaration::buildLayout()
-{
-    return buildAggLayout(this);
-}
-
-bool UnionDeclaration::mayBeAnonymous()
-{
-    return true;
-}
-
-bool UnionDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
-    return true;
-}
-
-bool UnionDeclaration::buildLayout()
-{
-    return buildAggLayout(this);
-}
-
-void UnionDeclaration::finalizeSize()
-{
-    ::UnionDeclaration::finalizeSize();
-
-    auto CRD = cast<clang::CXXRecordDecl>(RD);
-    if (CRD->ctor_begin() != CRD->ctor_end())
-        zeroInit = 0;
 }
 
 AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
@@ -532,6 +631,11 @@ Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
     auto a = new AnonDeclaration(loc, isunion, decl);
     a->AnonField = AnonField;
     return a;
+}
+
+void AnonDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    Dsymbol::addMember(sc, sds); // do not re-add the contents to parent's members
 }
 
 Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
@@ -565,17 +669,6 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     return ad->dtors[0];
 }
 
-::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)
-{
-    if (auto f = hasIdentityOpAssign(sd, sc))
-    {
-        sd->hasIdentityAssign = true;
-        return f;
-    }
-
-    return nullptr; // do not build an opAssign if none was mapped
-}
-
 ::FuncDeclaration *LangPlugin::searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc)
 {
     if (Dsymbol *eq = search_function(sd, Id::eq))
@@ -602,72 +695,6 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
         }
     }
     return nullptr;
-}
-
-template <typename AggTy>
- bool buildAggLayout(AggTy *ad)
-{
-    assert(isCPP(ad));
-
-    if (ad->layoutQueried)
-        return true;
-
-    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
-    {
-       // if it's a forward reference, consider the record empty
-        ad->structsize = 1;
-        ad->alignsize = 1;
-        return true;
-    }
-
-    auto& Context = calypso.getASTContext();
-    auto& RL = Context.getASTRecordLayout(ad->RD);
-
-    ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
-    ad->structsize = RL.getSize().getQuantity();
-
-    std::function<void(Dsymbols *, unsigned, const clang::ASTRecordLayout&)>
-        addRecord = [&] (Dsymbols *members, unsigned baseoffset,  const clang::ASTRecordLayout& Layout)
-    {
-        for (auto m: *members)
-        {
-            if (auto vd = m->isVarDeclaration())
-            {
-                assert(isCPP(vd));
-
-                if (vd->_scope)
-                    dsymbolSemantic(vd, nullptr);
-
-                auto c_vd = static_cast<VarDeclaration*>(vd);
-                auto FD = dyn_cast<clang::FieldDecl>(c_vd->VD);
-
-                if (!FD)
-                    continue;
-
-                auto fldIdx = FD->getFieldIndex();
-                vd->offset = baseoffset + Layout.getFieldOffset(fldIdx) / 8;
-                c_vd->offsetInBits = baseoffset * 8 + Layout.getFieldOffset(fldIdx);
-
-                ad->fields.push(vd);
-            }
-            else if (auto anon = m->isAttribDeclaration())
-            {
-                assert(/*anon->isAnonDeclaration() && */isCPP(anon));
-                auto AnonField = static_cast<cpp::AnonDeclaration*>(anon)->AnonField;
-                auto AnonRecord = AnonField->getType()->castAs<clang::RecordType>()->getDecl();
-
-                auto AnonFieldIdx = AnonField->getFieldIndex();
-                auto& AnonLayout = Context.getASTRecordLayout(AnonRecord);
-
-                addRecord(anon->decl, baseoffset + Layout.getFieldOffset(AnonFieldIdx) / 8, AnonLayout);
-            }
-        }
-    };
-
-    addRecord(ad->members, 0, RL);
-
-    ad->layoutQueried = true;
-    return true;
 }
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad)
@@ -701,38 +728,6 @@ const clang::RecordDecl *getRecordDecl(::Type *t)
     return getRecordDecl(ad);
 }
 
-::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl* FD)
-{
-    TypeMapper tmap;
-    tmap.addImplicitDecls = false;
-
-    auto ident = getExtendedIdentifier(FD, tmap);
-
-    auto s = ad->ScopeDsymbol::search(ad->loc, ident);
-    if (s && s->isFuncDeclaration())
-    {
-        assert(isCPP(s));
-        auto fd = static_cast<::FuncDeclaration*>(s);
-        fd = FuncDeclaration::overloadCppMatch(fd, FD);
-        if (fd)
-            return fd;
-    }
-
-    // search in base classes
-    if (auto cd = ad->isClassDeclaration())
-        for (auto *b: *cd->baseclasses)
-        {
-            if (!isCPP(b->sym)) // skip Object
-                continue;
-
-            auto result = findMethod(b->sym, FD);
-            if (result)
-                return result;
-        }
-
-    return nullptr;
-}
-
 ::FuncDeclaration* findOverriddenMethod(::FuncDeclaration *md, ::ClassDeclaration *base)
 {
     for (auto s2: base->vtbl)
@@ -764,8 +759,45 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
         return;
     isUsed = true;
 
-    if (ad->semanticRun >= PASSsemanticdone)
-        MarkAggregateReferencedImpl(ad);
+    auto D = dyn_cast<clang::CXXRecordDecl>(
+                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
+
+    if (D && D->hasDefinition()) {
+        auto& Context = calypso.getASTContext();
+        auto& S = calypso.getSema();
+
+        auto Key = Context.getCurrentKeyFunction(D);
+        const clang::FunctionDecl* Body;
+        if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body))) {
+            // As in C++, only mark virtual methods for codegen if the key method is defined
+            // If the definition isn't the current TU, assume that methods have been emitted
+            // by another TU.
+            S.MarkVTableUsed(D->getLocation(), D);
+
+            for (auto MD: D->methods())
+                if (MD->isVirtual()) {
+                    auto md = static_cast<::FuncDeclaration*>(
+                                    DeclMapper(ad).dsymForDecl(MD));
+                    MarkFunctionReferenced(md);
+                }
+
+            if (ad->defaultCtor)
+                calypso.markSymbolReferenced(ad->defaultCtor);
+            if (ad->dtor)
+                calypso.markSymbolReferenced(ad->dtor);
+        }
+
+//         DeclReferencer declReferencer(ad);
+//
+//         for (auto Field: D->fields())
+//             if (auto InClassInit = Field->getInClassInitializer())
+//                 declReferencer.Traverse(ad->loc, InClassInit);
+
+        markAggregateReferenced(ad);
+
+        if (auto cd = ad->isClassDeclaration())
+            static_cast<cpp::ClassDeclaration*>(cd)->buildVtbl();
+    }
 }
 
 }

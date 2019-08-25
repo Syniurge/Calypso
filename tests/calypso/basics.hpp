@@ -13,16 +13,17 @@ namespace test {
     };
 
     // Global variables
-//     extern double testDoubleVar;
-//     extern testStruct testVar;
+    extern double testDoubleVar;
+    extern testStruct testVar;
     
     // Simple class with virtual functions
     class testClass
     {
-    protected:
-        testStruct priv;
+//     protected:
+//         testStruct priv;
 
     public:
+        testStruct priv;
         unsigned n;
         virtual int echo(int a, int b);
         virtual float echo2(float f);
