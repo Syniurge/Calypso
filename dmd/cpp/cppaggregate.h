@@ -80,6 +80,8 @@ public:
 
     d_uns64 size(const Loc &loc) override;
 
+    void buildVtbl();
+
     bool determineFields() override;
     bool buildLayout() override;
     bool mayBeAnonymous() override;

@@ -1418,11 +1418,14 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     auto minst = this->minst;
     if (auto ti = parent->isInstantiated())
         minst = ti->minst;
+
     DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
                     DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
-
     assert(D->d);
+
+    parent->members->push(D->d->sym);
     D->d->sym->addMember(nullptr, parent);
+
     return D->d->sym;
 }
 

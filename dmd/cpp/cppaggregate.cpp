@@ -35,6 +35,11 @@ Expression *resolveProperties(Scope *sc, Expression *e);
 FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
+void buildVtbl()
+{
+
+}
+
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 {
     using namespace cpp;
@@ -56,6 +61,9 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
             // by another TU.
             S.MarkVTableUsed(D->getLocation(), D);
 
+            for (auto MD: D->methods())
+                DeclMapper(ad).dsymForDecl(MD);
+
             for (auto s: *ad->members)
                 if (s->isFuncDeclaration() && isCPP(s)) {
                     auto fd = static_cast<::FuncDeclaration*>(s);
@@ -74,14 +82,10 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
         auto minst = ti ? ti->minst : ad->getModule();
 
         DeclReferencer declReferencer(minst);
-        auto sc = ad->_scope;
-        if (!sc)
-            sc = ad->getInstantiatingModule()->_scope; // FIXME: ad->_scope shouldn't be null, and won't be after the fwdref work
-        assert(sc);
 
         for (auto Field: D->fields())
             if (auto InClassInit = Field->getInClassInitializer())
-                declReferencer.Traverse(ad->loc, sc, InClassInit);
+                declReferencer.Traverse(ad->loc, InClassInit);
 
         markAggregateReferenced(ad);
     }
@@ -337,6 +341,7 @@ void ad_determineSize(AggTy *ad)
     }
 }
 
+// NOTE: size() gets called to "determine fields", but shouldn't the two be separate?
 d_uns64 StructDeclaration::size(const Loc &loc)
 {
     ad_determineSize(this);
@@ -618,7 +623,7 @@ void ClassDeclaration::makeNested()
 
 // Why is this needed? Because D vtbls are only built after the first base class, so this is actually the cleanest and easiest way
 // to take C++ multiple inheritance into account. No change to FuncDeclaration::semantic needed.
-void ClassDeclaration::finalizeVtbl()
+void ClassDeclaration::buildVtbl()
 {
     clang::CXXFinalOverriderMap FinaOverriders;
     RD->getFinalOverriders(FinaOverriders);
@@ -817,10 +822,8 @@ const clang::RecordDecl *getRecordDecl(::Type *t)
 
 ::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl* FD)
 {
-    TypeMapper tmap;
-    tmap.addImplicitDecls = false;
-
-    auto ident = getExtendedIdentifier(FD, tmap);
+    DeclMapper mapper;
+    auto ident = getExtendedIdentifier(FD, mapper);
 
     auto s = ad->ScopeDsymbol::search(ad->loc, ident);
     if (s && s->isFuncDeclaration())
