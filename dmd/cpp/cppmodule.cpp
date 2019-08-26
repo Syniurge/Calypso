@@ -1331,12 +1331,14 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
     if (auto InitE = D->getInitExpr())
     {
         value = ExprMapper(*this).fromExpression(InitE);
-        value = new_CastExp(memberLoc, value, parent->memtype); // SEMI-HACK (?) because the type returned by
-                                // 1LU << ... will be ulong and we may need an int (see wctype.h)
+        value = new_CastExp(memberLoc, value, parent->memtype); // SEMI-HACK (?)
+                                // the type returned by 1LU << ... will be ulong yet
+                                // we may need an int (see wctype.h
     }
 
     auto em = new EnumMember(memberLoc, ident, value, nullptr, D);
     setDsym(D, em);
+    em->ed = parent;
 
     return oneSymbol(em);
 }
@@ -1500,6 +1502,11 @@ Package *DeclMapper::getPackage(const clang::Decl* rootDecl)
     pkg->symtab = new_DsymbolTable();
 
     return pkg;
+}
+
+Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    return DeclMapper(sds).dsymForDecl(D);
 }
 
 // ***** //
@@ -1829,12 +1836,6 @@ bool isRecordMemberInModuleContext(clang::Decl* D)
                       // declcontext, so aren't mapped to the module
 
     return true;
-}
-
-void addToMembers(ScopeDsymbol* sds, const clang::Decl* D)
-{
-    auto s = DeclMapper(sds).dsymForDecl(D);
-    sds->members->push(s);
 }
 
 Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)

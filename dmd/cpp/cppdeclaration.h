@@ -117,6 +117,7 @@ public:
             const clang::EnumDecl *ED);
     EnumDeclaration(const EnumDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
 
@@ -133,6 +134,7 @@ public:
     EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
                const clang::EnumConstantDecl *ECD);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
 
     void accept(Visitor *v) override;
 };
@@ -295,7 +297,7 @@ public:
     //
 
     Dsymbol* dsymForDecl(const clang::Decl* D);
-    Dsymbol* dsymForDecl(const clang::NamedDecl* D);
+    Dsymbol* dsymForDecl(const clang::NamedDecl* D,);
 
     Module* getModule(const clang::Decl* rootDecl);
     Package* getPackage(const clang::Decl* rootDecl);
@@ -361,7 +363,7 @@ public:
     bool shouldVisitImplicitCode() const { return true; }
 };
 
-void addToMembers(ScopeDsymbol* sds, const clang::Decl* D);
+Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D);
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
 

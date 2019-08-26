@@ -197,6 +197,11 @@ void EnumDeclaration::accept(Visitor *v)
             defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
 }
 
+void EnumDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    Dsymbol::addMember(sc, sds);
+}
+
 Dsymbol *EnumDeclaration::search(const Loc &loc, Identifier *ident, int flags)
 {
     if (auto s = ScopeDsymbol::search(loc, ident, flags))
@@ -211,10 +216,14 @@ Dsymbol *EnumDeclaration::search(const Loc &loc, Identifier *ident, int flags)
 
 void EnumDeclaration::complete()
 {
-    members->setDim(0);
+    Dsymbols* newMembers = new Dsymbols;
+    newMembers->reserve(members->dim);
 
     for (auto ECD: ED->enumerators())
-        addToMembers(this, ECD);
+        newMembers->push(dsymForDecl(this, ECD));
+
+    delete members;
+    members = newMembers;
 }
 
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
@@ -238,6 +247,15 @@ Dsymbol* EnumMember::syntaxCopy(Dsymbol* s)
 void EnumMember::accept(Visitor *v)
 {
     v->visit(this);
+}
+
+void EnumMember::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    if (sds->isAnonymous()) {
+        assert(sds->parent->isScopeDsymbol());
+        sds = static_cast<ScopeDsymbol*>(sds->parent);
+    }
+    Dsymbol::addMember(sc, sds);
 }
 
 AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,

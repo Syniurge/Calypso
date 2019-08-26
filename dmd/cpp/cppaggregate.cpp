@@ -35,21 +35,14 @@ Expression *resolveProperties(Scope *sc, Expression *e);
 FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
-void buildVtbl()
-{
-
-}
-
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
 {
     using namespace cpp;
 
     auto D = dyn_cast<clang::CXXRecordDecl>(
                     const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
-    if (!D)
-        return;
 
-    if (D->hasDefinition()) {
+    if (D && D->hasDefinition()) {
         auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
 
@@ -62,14 +55,10 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
             S.MarkVTableUsed(D->getLocation(), D);
 
             for (auto MD: D->methods())
-                DeclMapper(ad).dsymForDecl(MD);
-
-            for (auto s: *ad->members)
-                if (s->isFuncDeclaration() && isCPP(s)) {
-                    auto fd = static_cast<::FuncDeclaration*>(s);
-                    auto MD = dyn_cast<clang::CXXMethodDecl>(getFD(fd));
-                    if (MD && MD->isVirtual())
-                        MarkFunctionReferenced(fd);
+                if (MD->isVirtual()) {
+                    auto md = static_cast<::FuncDeclaration*>(
+                                    DeclMapper(ad).dsymForDecl(MD));
+                    MarkFunctionReferenced(md);
                 }
 
             if (ad->defaultCtor)
@@ -78,10 +67,7 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
                 calypso.markSymbolReferenced(ad->dtor);
         }
 
-        auto ti = ad->isInstantiated();
-        auto minst = ti ? ti->minst : ad->getModule();
-
-        DeclReferencer declReferencer(minst);
+        DeclReferencer declReferencer(ad);
 
         for (auto Field: D->fields())
             if (auto InClassInit = Field->getInClassInitializer())
@@ -150,24 +136,23 @@ IMPLEMENT_syntaxCopy(StructDeclaration, RD)
 IMPLEMENT_syntaxCopy(ClassDeclaration, RD)
 IMPLEMENT_syntaxCopy(UnionDeclaration, RD)
 
-
 void StructDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
 }
 
 void ClassDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
 }
 
 void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
-    cppAddMember(this, sc, sds);
+    Dsymbol::addMember(sc, sds);
 }
 
 template <typename AggTy>
-inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
+inline decltype(AggTy::_Def) ad_Definition(AggTy* ad) // FIXME: useless, already taking the definition in DeclMapper
 {
     if (!ad->_Def)
     {
@@ -254,6 +239,8 @@ Dsymbol *UnionDeclaration::search(const Loc &loc, Identifier *ident, int flags)
     return ad_search(this, loc, ident, flags);
 }
 
+// TODO replace by generator pattern/input iterator
+
 template <typename AggTy>
 inline void ad_complete(AggTy* ad)
 {
@@ -261,7 +248,8 @@ inline void ad_complete(AggTy* ad)
         return;
     ad->membersCompleted = true;
 
-    ad->members->setDim(0);
+    Dsymbols* newMembers = new Dsymbols;
+    newMembers->reserve(ad->members->dim);
 
     auto Canon = ad->RD->getCanonicalDecl();
 
@@ -276,8 +264,11 @@ inline void ad_complete(AggTy* ad)
               !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
             continue;
 
-        addToMembers(ad, M);
+        newMembers->push(dsymForDecl(ad, M));
     }
+
+    delete ad->members;
+    ad->members = newMembers;
 }
 
 void StructDeclaration::complete()
@@ -618,11 +609,6 @@ void ClassDeclaration::makeNested()
 }
 
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
-// Note that Func::semantic will re-set methods redundantly (although it's useful as a sanity check and it also sets vtblIndex),
-// but vanilla doesn't know how to deal with multiple inheritance hence the need to query Clang.
-
-// Why is this needed? Because D vtbls are only built after the first base class, so this is actually the cleanest and easiest way
-// to take C++ multiple inheritance into account. No change to FuncDeclaration::semantic needed.
 void ClassDeclaration::buildVtbl()
 {
     clang::CXXFinalOverriderMap FinaOverriders;
@@ -630,8 +616,7 @@ void ClassDeclaration::buildVtbl()
 
     llvm::DenseSet<const clang::CXXMethodDecl*> inVtbl;
 
-    for (auto I = FinaOverriders.begin(), E = FinaOverriders.end();
-         I != E; ++I)
+    for (auto I = FinaOverriders.begin(), E = FinaOverriders.end(); I != E; ++I)
     {
         auto OverMD = I->second.begin()->second.front().Method;
         if (inVtbl.count(OverMD))
@@ -652,49 +637,6 @@ void ClassDeclaration::buildVtbl()
         else
             md->vtblIndex = vi;
     }
-}
-
-bool ClassDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
-    return true;
-}
-
-bool ClassDeclaration::buildLayout()
-{
-    return buildAggLayout(this);
-}
-
-bool UnionDeclaration::mayBeAnonymous()
-{
-    return true;
-}
-
-bool UnionDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
-    return true;
-}
-
-bool UnionDeclaration::buildLayout()
-{
-    return buildAggLayout(this);
 }
 
 void UnionDeclaration::finalizeSize()
