@@ -226,6 +226,27 @@ void EnumDeclaration::complete()
     members = newMembers;
 }
 
+Expression *EnumDeclaration::getDefaultValue(const Loc &loc)
+{
+    if (defaultval)
+        return defaultval;
+
+    auto I = ED->enumerator_begin();
+
+    if (I == ED->enumerator_end())
+    {
+        error(loc, "forward reference of `%s.init`", toChars());
+        defaultval = new_ErrorExp();
+    }
+    else
+    {
+        auto em = static_cast<EnumMember*>(dsymForDecl(this, *I));
+        defaultval = em->value();
+    }
+
+    return defaultval;
+}
+
 EnumMember::EnumMember(Loc loc, Identifier *id, Expression *value, Type *type,
                const clang::EnumConstantDecl *ECD)
 {

@@ -152,15 +152,14 @@ void UnionDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 }
 
 template <typename AggTy>
-inline decltype(AggTy::_Def) ad_Definition(AggTy* ad) // FIXME: useless, already taking the definition in DeclMapper
+inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
 {
     if (!ad->_Def)
     {
         auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
 
-        if (S.RequireCompleteType(ad->RD->getLocation(),
-                                  Context.getRecordType(ad->RD),
+        if (S.RequireCompleteType(ad->RD->getLocation(), Context.getRecordType(ad->RD),
                                   clang::diag::err_incomplete_type))
             ad->error("No definition available");
 
@@ -513,7 +512,7 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 }
 
 template <typename AggTy>
- Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
+Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
     if (exp->op == TOKstructliteral)
         return nullptr;
@@ -540,7 +539,7 @@ template <typename AggTy>
 
     // FIXME: sc->intypeof == 1?
 
-    if (ad->ctor)
+    if (auto ctor = ad->search(Id::ctor))
     {
         auto e1 = new_DotIdExp(loc, ve, Id::ctor);
 
@@ -555,15 +554,14 @@ template <typename AggTy>
                 auto args = new Expressions;
                 args->push(exp);
 
-                if (!resolveFuncCall(loc, nullptr, ad->ctor, nullptr, nullptr, args, 1|4))
-                    args->pop(); // TODO: error if there'ss no default ctor
+                if (!resolveFuncCall(loc, nullptr, ctor, nullptr, nullptr, args, 1|4))
+                    args->pop(); // TODO: error if there's no default ctor
 
                 ce = new_CallExp(loc, e1, args);
 
                 if (args->dim == 0)
                     // rewrite to an assignment
-                    exp = new_CommaExp(loc, ce,
-                                        new_AssignExp(loc, ve, exp));
+                    exp = new_CommaExp(loc, ce, new_AssignExp(loc, ve, exp));
                 else
                     exp = ce;
             }
@@ -572,6 +570,8 @@ template <typename AggTy>
     }
     else
     {
+        ad->size(loc); // to determine fields
+
         Expression* init = ce
                     ? new_StructLiteralExp(loc, ad, ce->arguments, ad->getType())
                     : ad->getType()->defaultInitLiteral(loc);
@@ -611,6 +611,15 @@ void ClassDeclaration::makeNested()
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
 void ClassDeclaration::buildVtbl()
 {
+    if (auto bcd = isClassDeclarationOrNull(baseClass))
+    {
+        static_cast<cpp::ClassDeclaration*>(bcd)->buildVtbl();
+
+        // Copy vtbl[] from base class
+        vtbl.setDim(bcd->vtbl.dim);
+        memcpy(vtbl.tdata(), bcd->vtbl.tdata(), sizeof(void*) * vtbl.dim);
+    }
+
     clang::CXXFinalOverriderMap FinaOverriders;
     RD->getFinalOverriders(FinaOverriders);
 
@@ -622,7 +631,7 @@ void ClassDeclaration::buildVtbl()
         if (inVtbl.count(OverMD))
             continue;
 
-        auto md = findMethod(this, OverMD);
+        auto md = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
         if (!md)
             continue;
 
@@ -659,6 +668,11 @@ Dsymbol* AnonDeclaration::syntaxCopy(Dsymbol* s)
     auto a = new AnonDeclaration(loc, isunion, decl);
     a->AnonField = AnonField;
     return a;
+}
+
+void AnonDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
+{
+    Dsymbol::addMember(sc, sds); // do not re-add the contents to parent's members
 }
 
 Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)

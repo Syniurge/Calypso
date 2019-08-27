@@ -192,6 +192,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
         if (*pval)
             goto Ldone;
 
+        complete(); // CALYPSO
         if (_scope)
             dsymbolSemantic(this, _scope);
         if (errors)
@@ -273,7 +274,7 @@ extern (C++) class EnumDeclaration : ScopeDsymbol // CALYPSO (made non final)
                 ident == Id.__c_long_double) && memtype;
     }
 
-    final Expression getDefaultValue(const ref Loc loc) // CALYPSO
+    Expression getDefaultValue(const ref Loc loc) // CALYPSO (made non-final)
     {
         //printf("EnumDeclaration::getDefaultValue() %p %s\n", this, toChars());
         if (defaultval)

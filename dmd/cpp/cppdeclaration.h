@@ -121,6 +121,8 @@ public:
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
 
+    Expression *getDefaultValue(const Loc &loc) override;
+
     void accept(Visitor *v) override;
 };
 

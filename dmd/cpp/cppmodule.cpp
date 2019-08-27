@@ -331,8 +331,8 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     auto& Context = calypso.getASTContext();
     ExprMapper expmap(*this);
 
-    if (isa<clang::IndirectFieldDecl>(D)) // implicit fields injected from anon unions/structs, which are already mapped
-        return nullptr;
+    if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
+        D = Indirect->getVarDecl();
 
     if (!(flags & MapTemplatePatterns))
         if (auto Var = dyn_cast<clang::VarDecl>(D))
@@ -344,15 +344,17 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
         if (Field->isUnnamedBitfield())
             return nullptr;
 
-        // NOTE: in union {...} myUnion isAnonymousStructOrUnion() will be false, it returns true only for "true" anonymous structs/unions
+        // NOTE:  isAnonymousStructOrUnion() returns true only for "true" anonymous structs/unions
+        //  for union {...} myUnion it will be false.
         if (Field->isAnonymousStructOrUnion())
         {
-            auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
-            assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
-
-            auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
-            anon->AnonField = Field;
-            return a;
+//             auto a = VisitDecl(Field->getType()->castAs<clang::RecordType>()->getDecl(), MapAnonRecord);
+//             assert(a->dim == 1 && (*a)[0]->isAttribDeclaration());
+//
+//             auto anon = static_cast<AnonDeclaration*>((*a)[0]->isAttribDeclaration());
+//             anon->AnonField = Field;
+//             return a;
+            return nullptr;
         }
     }
 
@@ -436,7 +438,7 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
     auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D);
     if (VarSpec && !VarSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-        decldefs = CreateTemplateInstanceFor(loc, VarSpec, decldefs);
+        decldefs = CreateTemplateInstanceFor(VarSpec, decldefs);
 
     return decldefs;
 }
@@ -457,10 +459,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
     auto& Diags = *calypso.pch.Diags;
-    auto Canon = D->getCanonicalDecl();
 
-    if (D->isInjectedClassName())
-        return nullptr;
+//     if (D->isInjectedClassName())
+//         return nullptr;
+    assert(!D->isInjectedClassName());
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
@@ -469,12 +471,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         D = D->getDefinition();
     bool isDefined = D->isCompleteDefinition();
 
-    auto TND = D->getTypedefNameForAnonDecl();
-
     int anon = 0;
     if (D->isAnonymousStructOrUnion())
     {
-        assert(!TND);
+        assert(!D->getTypedefNameForAnonDecl());
 
         if (!(flags & MapAnonRecord))
           return nullptr;
@@ -489,9 +489,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         return nullptr; // special case for union {} myUnion; which has no D equivalent
 
     auto CRD = dyn_cast<clang::CXXRecordDecl>(D);
-        // NOTE: CXXRecordDecl will disappear in a future version of Clang and only
-        // RecordDecl will remain to be used for both C and C++.
-
     auto members = new Dsymbols;
 
     AggregateDeclaration *a;
@@ -517,7 +514,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         if (auto cd = a->isClassDeclaration())
         {
             // Base classes must be mapped after attaching the Dsymbol to the Clang declaration,
-            // in case it gets referenced
+            // in case the derived class gets referenced
             if (CRD)
             {
                 for (auto B = CRD->bases_begin(),
@@ -525,6 +522,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
                 {
                     auto brt = fromType(B->getType(), loc);
                     cd->baseclasses->push(new BaseClass(brt));
+
+                    if (!cd->baseClass)
+                        cd->baseClass = getAggregateSym(brt);
                 }
             }
         }
@@ -690,8 +690,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
     auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
-    if (D->isInvalidDecl())
-        return nullptr;
+//     if (D->isInvalidDecl())
+//         return nullptr;
 
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
@@ -1293,11 +1293,7 @@ Dsymbols* DeclMapper::VisitVarTemplateSpecializationDecl(const clang::VarTemplat
 Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 {
     if (!D->isCompleteDefinition())
-    {
         D = D->getDefinition();
-        if (!D)
-            return nullptr; // forward declaration without definition, skip
-    }
 
     auto loc = fromLoc(D->getLocation());
     auto ident = getIdentifierOrNull(D);
@@ -1425,7 +1421,8 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
                     DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
     assert(D->d);
 
-    parent->members->push(D->d->sym);
+    if (!isa<clang::IndirectFieldDecl>(D))
+        parent->members->push(D->d->sym);
     D->d->sym->addMember(nullptr, parent);
 
     return D->d->sym;

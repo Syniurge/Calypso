@@ -140,6 +140,7 @@ public:
 
     AnonDeclaration(Loc loc, bool isunion, Dsymbols *decl);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
+    void addMember(Scope *sc, ScopeDsymbol *sds) override;
 };
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad);

@@ -267,7 +267,7 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
 {
     auto& Context = calypso.getASTContext();
 
-    TypeMapper mapper;
+    DeclMapper mapper;
 
     auto T = D->getConversionType().getDesugaredType(Context);
     auto t = mapper.fromType(T, Loc());
@@ -294,7 +294,7 @@ static Identifier *fullConversionMapIdent(Identifier *baseIdent,
 }
 
 static Identifier *getConversionIdentifier(const clang::CXXConversionDecl *D,
-                TypeMapper &mapper, Type *&t, clang::QualType T = clang::QualType(),
+                DeclMapper &mapper, Type *&t, clang::QualType T = clang::QualType(),
                 bool wantCanonicalType = false)
 {
     if (D)
@@ -449,7 +449,7 @@ Identifier *getIdentifier(const clang::NamedDecl *D, SpecValue *spec, bool useCa
 }
 
 Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
-                                  TypeMapper &mapper)
+                                  DeclMapper &mapper)
 {
     SpecValue spec(mapper);
     auto ident = getIdentifierOrNull(D, &spec);
@@ -468,7 +468,7 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
 }
 
 Identifier *getExtendedIdentifier(const clang::NamedDecl *D,
-                                  TypeMapper &mapper)
+                                  DeclMapper &mapper)
 {
     auto result = getExtendedIdentifierOrNull(D, mapper);
     assert(result);
@@ -477,7 +477,7 @@ Identifier *getExtendedIdentifier(const clang::NamedDecl *D,
 }
 
 RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
-                               TypeMapper &mapper)
+                               DeclMapper &mapper)
 {
     SpecValue spec(mapper);
     auto ident = fromDeclarationName(N, &spec);

@@ -44,7 +44,7 @@ namespace cpp
 class ClassDeclaration;
 class BuiltinTypes;
 class TemplateInstance;
-class TypeMapper;
+class DeclMapper;
 
 namespace reclang { class DiagnosticPrinter; }
 using clang::ModuleMap;
@@ -67,8 +67,8 @@ struct SpecValue
     const char *op = nullptr; // for overloaded operators
     Type *t = nullptr; // for conversion operators
 
-    TypeMapper &mapper;
-    SpecValue(TypeMapper &mapper) : mapper(mapper) {}
+    DeclMapper &mapper;
+    SpecValue(DeclMapper &mapper) : mapper(mapper) {}
 
     operator bool() { return op || t; }
     RootObject *toTemplateArg(Loc loc);
@@ -81,11 +81,11 @@ Identifier *fromIdentifier(const clang::IdentifierInfo *II);
 Identifier *fromDeclarationName(const clang::DeclarationName N, SpecValue *spec = nullptr);
 Identifier *getIdentifier(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
 Identifier *getIdentifierOrNull(const clang::NamedDecl* D, cpp::SpecValue* spec = nullptr, bool useCanonicalType = false);
-Identifier *getExtendedIdentifier(const clang::NamedDecl *D, TypeMapper &mapper); // will return the name of the non-templated method for operators, same than getIdentifier() for other Decls
-Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, TypeMapper &mapper);
+Identifier *getExtendedIdentifier(const clang::NamedDecl *D, DeclMapper &mapper); // will return the name of the non-templated method for operators, same than getIdentifier() for other Decls
+Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, DeclMapper &mapper);
 
 RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
-                               TypeMapper &mapper);
+                               DeclMapper &mapper);
 
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                                                            const clang::NamedDecl *SpecificTag = nullptr);
