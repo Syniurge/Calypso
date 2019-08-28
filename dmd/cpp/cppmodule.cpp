@@ -1292,6 +1292,7 @@ Dsymbols* DeclMapper::VisitVarTemplateSpecializationDecl(const clang::VarTemplat
 
 Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 {
+    auto CanonDecl = D;
     if (!D->isCompleteDefinition())
         D = D->getDefinition();
 
@@ -1309,7 +1310,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
     }
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
-    setDsym(D, e);
+    setDsym(CanonDecl, e);
 
     return oneSymbol(e);
 }
@@ -1373,7 +1374,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
 
 Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 {
-    D = cast<clang::NamedDecl>(D->getCanonicalDecl());
+    D = cast<clang::NamedDecl>(getCanonicalDecl(D));
 
     if (D->d)
         return D->d->sym;

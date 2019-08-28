@@ -33,7 +33,6 @@ public:
     const clang::RecordDecl *RD, *_Def;
     bool isUsed = false;
     bool membersCompleted = false;
-    bool layoutQueried = false;
 
     StructDeclaration(Loc loc, Identifier* id, const clang::RecordDecl* RD);
     StructDeclaration(const StructDeclaration&);
@@ -45,8 +44,6 @@ public:
     d_uns64 size(const Loc &loc) override;
 
     bool determineFields() override;
-    bool buildLayout() override;
-    void finalizeSize() override;
     Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
@@ -68,7 +65,6 @@ public:
     const clang::CXXRecordDecl *RD, *_Def;
     bool isUsed = false;
     bool membersCompleted = false;
-    bool layoutQueried = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
                      Dsymbols* members, const clang::CXXRecordDecl *RD);
@@ -83,7 +79,6 @@ public:
     void buildVtbl();
 
     bool determineFields() override;
-    bool buildLayout() override;
     bool mayBeAnonymous() override;
 
     void addLocalClass(ClassDeclarations *) override;
@@ -112,7 +107,6 @@ public:
 
     const clang::RecordDecl *RD, *_Def;
     bool membersCompleted = false;
-    bool layoutQueried = false;
 
     d_uns64 size(const Loc &loc) override;
 
@@ -125,8 +119,6 @@ public:
 
     bool mayBeAnonymous() override;
     bool determineFields() override;
-    bool buildLayout() override;
-    void finalizeSize() override;
 
     const clang::RecordDecl *Definition();
 };

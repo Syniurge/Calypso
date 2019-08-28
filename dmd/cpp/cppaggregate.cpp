@@ -169,6 +169,7 @@ inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
             ad->_Def = ad->RD;
     }
 
+    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // making sure that the canon decl is still the same (FIXME might be unnecessary)
     return ad->_Def;
 }
 
@@ -301,9 +302,8 @@ void StructDeclaration::accept(Visitor *v)
 template <typename AggTy>
 void ad_determineSize(AggTy *ad)
 {
-    if (ad->layoutQueried)
-        return;
-    ad->layoutQueried = true;
+    assert(ad->sizeok != SIZEOKdone);
+    ad->sizeok = SIZEOKdone;
 
     if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
     {
@@ -319,9 +319,13 @@ void ad_determineSize(AggTy *ad)
     ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
     ad->structsize = RL.getSize().getQuantity();
 
-    typedef clang::DeclContext::filtered_decl_iterator<clang::ValueDecl, &clang::ValueDecl::isCXXInstanceMember> Field_iterator; // also includes IndirectFieldDecl
-    for (Field_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
+    typedef clang::DeclContext::specific_decl_iterator<clang::ValueDecl> Value_iterator;
+    for (Value_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
     {
+        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I) &&
+            !isa<clang::MSPropertyDecl>(*I))
+            continue;
+
         auto Field = *I;
         auto vd = static_cast<VarDeclaration*>(DeclMapper(ad).dsymForDecl(Field));
         ad->fields.push(vd);
@@ -329,24 +333,32 @@ void ad_determineSize(AggTy *ad)
         vd->offsetInBits = RL.getFieldOffset(Field);
         vd->offset = vd->offsetInBits / 8;
     }
+
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(RD);
+    if (auto sd = ad->isStructDeclaration())
+        if (!CRD || CRD->ctor_begin() == CRD->ctor_end())
+            sd->zeroInit = true;
 }
 
 // NOTE: size() gets called to "determine fields", but shouldn't the two be separate?
 d_uns64 StructDeclaration::size(const Loc &loc)
 {
-    ad_determineSize(this);
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
     return structsize;
 }
 
 d_uns64 ClassDeclaration::size(const Loc &loc)
 {
-    ad_determineSize(this);
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
     return structsize;
 }
 
 d_uns64 UnionDeclaration::size(const Loc &loc)
 {
-    ad_determineSize(this);
+    if (sizeok != SIZEOKdone)
+        ad_determineSize(this);
     return structsize;
 }
 
@@ -373,21 +385,6 @@ bool StructDeclaration::determineFields()
         sizeok = SIZEOKfwd;
 
     return true;
-}
-
-bool StructDeclaration::buildLayout()
-{
-    buildAggLayout(this);
-    return true;
-}
-
-void StructDeclaration::finalizeSize()
-{
-    ::StructDeclaration::finalizeSize();
-
-    auto CRD = cast<clang::CXXRecordDecl>(RD);
-    if (CRD->ctor_begin() != CRD->ctor_end())
-        zeroInit = 0;
 }
 
 void ClassDeclaration::accept(Visitor *v)
@@ -646,15 +643,6 @@ void ClassDeclaration::buildVtbl()
         else
             md->vtblIndex = vi;
     }
-}
-
-void UnionDeclaration::finalizeSize()
-{
-    ::UnionDeclaration::finalizeSize();
-
-    auto CRD = cast<clang::CXXRecordDecl>(RD);
-    if (CRD->ctor_begin() != CRD->ctor_end())
-        zeroInit = 0;
 }
 
 AnonDeclaration::AnonDeclaration(Loc loc, bool isunion, Dsymbols* decl)
