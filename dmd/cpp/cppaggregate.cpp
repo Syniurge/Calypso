@@ -169,7 +169,7 @@ inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
             ad->_Def = ad->RD;
     }
 
-    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // making sure that the canon decl is still the same (FIXME might be unnecessary)
+    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // making sure that the canon decl is still the same (FIXME might be completely unnecessary)
     return ad->_Def;
 }
 
@@ -200,7 +200,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
 
     auto Name = calypso.toDeclarationName(ident);
     for (auto Match: Def->lookup(Name))
-        addToMembers(ad, Match);
+        dsymForDecl(ad, Match);
 
     if (ident == Id::ctor)
     {
@@ -334,7 +334,7 @@ void ad_determineSize(AggTy *ad)
         vd->offset = vd->offsetInBits / 8;
     }
 
-    auto CRD = dyn_cast<clang::CXXRecordDecl>(RD);
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
     if (auto sd = ad->isStructDeclaration())
         if (!CRD || CRD->ctor_begin() == CRD->ctor_end())
             sd->zeroInit = true;
@@ -536,7 +536,7 @@ Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, 
 
     // FIXME: sc->intypeof == 1?
 
-    if (auto ctor = ad->search(Id::ctor))
+    if (auto ctor = ad->search(vd->loc, Id::ctor))
     {
         auto e1 = new_DotIdExp(loc, ve, Id::ctor);
 

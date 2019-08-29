@@ -952,8 +952,6 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     auto tpl = initTempParams(loc, spec);
     auto TPL = Def->getTemplateParameters();
 
-    auto decldefs = new Dsymbols;
-
     for (auto P : *TPL)
     {
         auto tp = VisitTemplateParameter(P);
@@ -962,57 +960,51 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
         tpl->push(tp);
     }
 
-    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
+    auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
     setDsym(D, td);
 
-    auto s = VisitDecl(getCanonicalDecl(Def->getTemplatedDecl()),
-                MapTemplatePatterns);
-
-    if (!s)
-        return nullptr;
-
-    decldefs->append(s);
-
-    if (FTD) {
-        assert(s->dim && (*s)[0]->isFuncDeclaration());
-        td->ident = (*s)[0]->ident; // in case of volatile overloads the original ident may be prefixed
-    }
+    // FIXME: function overloads with volatile parameters?
 
     auto a = new Dsymbols;
     a->push(td);
 
-    // Append explicit and partial specializations to the returned symbols as well
-    if (CTD)
+    if (false) // NOTE: mapping explicit and partial specs isn't needed since cpp::TemplateInstance
+               // will route to the correct spec. And there might a massive amount of explicit specs
+               // in some cases (such as Qt's QTypeInfo), so mapping them lazily is a *huge* win.
     {
-        llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
-        const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
+        // Append explicit and partial specializations to the returned symbols as well
+        if (CTD)
+        {
+            llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
+            const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
 
-        for (auto Spec: CTD->specializations())
-            if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
+            for (auto Spec: CTD->specializations())
+                if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
 
-        for (auto PartialSpec: PS)
-            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
-    }
-    else if (FTD)
-    {
-        for (auto Spec: FTD->specializations())
-            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                a->append(sp);
-    }
-    else if (VTD)
-    {
-        llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
-        const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
+            for (auto PartialSpec: PS)
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
+        }
+        else if (FTD)
+        {
+            for (auto Spec: FTD->specializations())
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                    a->append(sp);
+        }
+        else if (VTD)
+        {
+            llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
+            const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
 
-        for (auto Spec: VTD->specializations())
-            if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                a->append(sp);
+            for (auto Spec: VTD->specializations())
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                    a->append(sp);
 
-        for (auto PartialSpec: PS)
-            if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                a->append(sp);
+            for (auto PartialSpec: PS)
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                    a->append(sp);
+        }
     }
 
     return a;

@@ -58,18 +58,13 @@ TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
 
-void TemplateDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
-{
-    cppAddMember(this, sc, sds);
-}
-
 static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
-                                TypeMapper& tymap, ExprMapper& expmap)
+                                DeclMapper& mapper, ExprMapper& expmap)
 {
     auto& Context = calypso.getASTContext();
 
-    SpecValue spec(tymap);
+    SpecValue spec(mapper);
     getIdentifierOrNull(Temp, &spec);
 
     std::function<void(RootObject* o)>
@@ -82,7 +77,7 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
 
         if (ta)
         {
-            auto T = tymap.toType(loc, ta, sc);
+            auto T = mapper.toType(loc, ta, sc);
             auto DI = Context.getTrivialTypeSourceInfo(T);
 
             clang::TemplateArgumentLoc Loc(clang::TemplateArgument(T), DI);
@@ -218,13 +213,6 @@ clang::FunctionDecl *instantiateFunctionDeclaration(clang::TemplateArgumentListI
                                 FuncTemp->getDeclContext(), MultiList));
 }
 
-// Hijack the end of findTempDecl to only check forward refs for the unique candidate selected by Sema,
-// which is done later in matchWithInstance.
-bool TemplateDeclaration::checkTempDeclFwdRefs(Scope* sc, Dsymbol* tempdecl, ::TemplateInstance* ti)
-{
-    return true;
-}
-
 // C++ doesn't have constraints but in function calls SFINAE with std::enable_if<> and the like may be used to weed out candidate overloads,
 // whereas D expects at least the instantiated symbol to have a valid type.
 // evaluateConstraint is a good place to make Sema check whether the instantiated decl is valid or not
@@ -239,12 +227,11 @@ bool TemplateDeclaration::evaluateConstraint(::TemplateInstance* ti, Scope* sc, 
     auto& Diags = calypso.getDiagnostics();
     auto Temp = getPrimaryTemplate();
 
-    TypeMapper tymap;
-    ExprMapper expmap(tymap);
-    tymap.addImplicitDecls = false;
+    DeclMapper mapper(ti);
+    ExprMapper expmap(mapper);
 
     clang::TemplateArgumentListInfo Args;
-    fillTemplateArgumentListInfo(ti->loc, sc, Args, dedtypes, Temp, tymap, expmap);
+    fillTemplateArgumentListInfo(ti->loc, sc, Args, dedtypes, Temp, mapper, expmap);
 
     bool instSuccess = true;
 
@@ -259,8 +246,10 @@ bool TemplateDeclaration::evaluateConstraint(::TemplateInstance* ti, Scope* sc, 
         instSuccess = instantiateFunctionDeclaration(Args, FuncTemp);
     }
 
-    if (!instSuccess)
+    if (!instSuccess) {
+        assert(false); // FIXME TEMPORARY? still necessary after going lazy?
         Diags.Reset();
+    }
 
     return instSuccess;
 }
@@ -284,36 +273,10 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
 {
     // Give only the primary template a chance to match
     // The "best matching" is done dy Sema, and then foreignInstance corrects ti->tempdecl
-    if (!isa<clang::RedeclarableTemplateDecl>(TempOrSpec))
-    {
-        // Check if we're not calling matchWithInstance from a foreignInstance with the
-        // tempdecl already determined, which might be a specialization.
-        if (!isForeignInstance(ti))
-            return MATCHnomatch;
-    }
-
-    // Do TemplateDeclaration::semantic() here instead of during findTempDecl
-    // Qt's QTypeInfo has a massive amount of explicit specs that caused findTempDecl to break down,
-    // so for class templates the preselection is done by Sema in prepareBestMatch and only the selected specialization gets semantic'd
-    // NOTE: this might be an issue as well for function templates for some libraries.
-    if (semanticRun == PASSinit)
-    {
-        if (_scope)
-        {
-            // Try to fix forward reference. Ungag errors while doing so.
-            Ungag ungag = ungagSpeculative();
-            dsymbolSemantic(this, _scope);
-        }
-        if (semanticRun == PASSinit)
-        {
-            ti->error("%s forward references template declaration %s", ti->toChars(), toChars());
-        }
-    }
+    assert(isa<clang::RedeclarableTemplateDecl>(TempOrSpec));
 
     MATCH m = MATCHexact;
     TemplateInstUnion Inst = hasExistingClangInst(ti);
-
-    assert(Inst || !isForeignInstance(ti));
 
     if (!Inst)
     {
@@ -656,18 +619,16 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
 
     auto& S = calypso.getSema();
 
-    TypeMapper tymap;
-    ExprMapper expmap(tymap);
-    tymap.addImplicitDecls = false;
+    DeclMapper mapper(ti);
+    ExprMapper expmap(mapper);
 
-    auto Temp = const_cast<clang::RedeclarableTemplateDecl*>
-                                (getDefinition(getPrimaryTemplate() /*,false*/)); // TODO: remove lookIntoMemberTemplate dead code
+    auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(getDefinition(getPrimaryTemplate()));
 
     if (!tdtypes)
         tdtypes = &ti->tdtypes;
 
     clang::TemplateArgumentListInfo Args;
-    fillTemplateArgumentListInfo(loc, sc, Args, tdtypes, Temp, tymap, expmap);
+    fillTemplateArgumentListInfo(loc, sc, Args, tdtypes, Temp, mapper, expmap);
 
     clang::TemplateName Name(Temp);
 
@@ -675,7 +636,8 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
             isa<clang::TypeAliasTemplateDecl>(Temp))
     {
         auto Ty = S.CheckTemplateIdType(Name, Temp->getLocation(), Args); // NOTE: this also substitutes the argument types
-        if (!Ty.isNull()) {                                                 // to TemplateTypeParmType, which is needed for partial specializations to work.
+                                    // to TemplateTypeParmType, which is needed for partial specializations to work
+        if (!Ty.isNull()) {
             if (auto TST = Ty->getAs<clang::TemplateSpecializationType>())
                 if (TST->isTypeAlias())
                     return TST;
@@ -720,36 +682,16 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
         RealTemp = TST->getTemplateName().getAsTemplateDecl();
     }
 
-    RealTemp = RealTemp->getCanonicalDecl();
-
-    ::TemplateDeclaration *td = this;
-    if (td->overroot)
-        td = td->overroot;
-
-    // Find and set the correct tempdecl of the instance
-    for (; td; td = td->overnext)
-    {
-        if (!isCPP(td))
-        {
-            ::warning(td->loc, "Unexpected non C++ template declaration");
-            continue;
-        }
-
-        auto c_td = static_cast<cpp::TemplateDeclaration*>(td);
-        if (c_td->TempOrSpec->getCanonicalDecl() == RealTemp)
-            return c_td;
-    }
-
-    return nullptr;
+    auto sym = dsymForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
+    assert(sym->isTemplateDeclaration());
+    return static_cast<TemplateDeclaration*>(sym);
 }
 
 void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 {
     ti->tempdecl = getCorrespondingTempDecl(ti->Inst);
 
-    assert(ti->tempdecl && isCPP(ti->tempdecl)/* &&
-            static_cast<cpp::TemplateDeclaration*>(ti->tempdecl)
-                            ->TempOrSpec->getCanonicalDecl() == RealTemp*/);
+    assert(ti->tempdecl && isCPP(ti->tempdecl));
 }
 
 void TemplateDeclaration::accept(Visitor *v)

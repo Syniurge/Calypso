@@ -103,7 +103,6 @@ public:
 
     // CALYPSO
     virtual TemplateInstance *foreignInstance(TemplateInstance *tithis, Scope *sc) { return NULL; }
-    virtual bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, TemplateInstance *ti);
 
     // CALYPSO variadic template generalization (pretty intrusive...)
     size_t numParameterPacks();

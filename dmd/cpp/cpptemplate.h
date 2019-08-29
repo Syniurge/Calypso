@@ -33,8 +33,7 @@ public:
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
     TemplateDeclaration(const TemplateDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
-    void addMember(Scope *sc, ScopeDsymbol *sds) override;
-    bool checkTempDeclFwdRefs(Scope *sc, Dsymbol* tempdecl, ::TemplateInstance *ti) override;
+
     bool evaluateConstraint(::TemplateInstance *ti, Scope *sc, Scope *paramscope, Objects *dedtypes, ::FuncDeclaration *fd) override;
     bool earlyFunctionValidityCheck(::TemplateInstance *ti, Scope *sc, Objects *dedtypes) override;
     void prepareBestMatch(::TemplateInstance *ti, Scope *sc, Expressions *fargs) override;
