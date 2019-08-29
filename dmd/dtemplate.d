@@ -6979,6 +6979,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
             }
             else if ((flags & 4) && tupa) // CALYPSO
             {
+                assert(false); // TODO remove completely + comment above, this should be dead code
                 semanticTiargs(loc, sc, &tupa.objects, flags);
             }
             else if (isParameter(o))

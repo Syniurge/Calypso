@@ -63,10 +63,7 @@ public:
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 
-    static void doSemantic3(::FuncDeclaration *fd);
     static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
-
-    void accept(Visitor *v) override;
 };
 
 class CtorDeclaration : public ::CtorDeclaration
@@ -83,8 +80,6 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool functionSemantic3() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    void accept(Visitor *v) override;
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -102,8 +97,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    void accept(Visitor *v) override;
 };
 
 class EnumDeclaration : public ::EnumDeclaration
@@ -307,7 +300,7 @@ public:
     enum
     {
         MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
-        MapTemplateInstantiations = 1 << 1,
+//         MapTemplateInstantiations = 1 << 1,
         MapExplicitSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 4,
@@ -367,7 +360,7 @@ public:
 
 Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D);
 
-const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-ilne friend' decl and the actual decl is declared, this returns the latter instead of the former
+const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-line friend' decl and the actual decl is declared, this returns the latter instead of the former
 
 Prot::Kind toProt(clang::AccessSpecifier AS);
 bool isPolymorphic(const clang::RecordDecl *D);

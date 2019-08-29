@@ -682,9 +682,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     if (!(flags & MapExplicitSpecs) && isExplicitSpecialization(D))
         return nullptr;
 
-    if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
-            D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
-        return nullptr;
+//     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
+//             D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization)
+//         return nullptr;
 
     auto loc = fromLoc(D->getLocation());
     auto MD = dyn_cast<clang::CXXMethodDecl>(D);
@@ -887,8 +887,8 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     setDsym(D, fd);
 
     if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-            D->getPrimaryTemplate() && // forward-declared explicit specializations do not have their primary template set (stangely)
-            !(flags & MapTemplateInstantiations))
+            D->getPrimaryTemplate() // forward-declared explicit specializations do not have their primary template set (stangely)
+            /*&& !(flags & MapTemplateInstantiations)*/)
     {
         auto tpl = new TemplateParameters;
 
@@ -915,7 +915,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     else if (isTemplateInstantiation(D) &&
              D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
              (flags & CreateTemplateInstance))
-        a = CreateTemplateInstanceFor(loc, D, a);
+        a = CreateTemplateInstanceFor(D, a);
 
     a->push(fd);
     return a;
@@ -1146,37 +1146,6 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
     else assert(false && "unrecognized template parameter");
 
     return tp;
-}
-
-Dsymbol *DeclMapper::VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D)
-{
-    assert(!isa<clang::ClassTemplatePartialSpecializationDecl>(D));
-
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    assert(a->dim);
-    return (*a)[0];
-}
-
-::FuncDeclaration *DeclMapper::VisitInstancedFunctionTemplate(const clang::FunctionDecl *D)
-{
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    if (a.get()) {
-        assert(a->dim == 1 && (*a)[0]->isFuncDeclaration() && isCPP((*a)[0]));
-        return static_cast<::FuncDeclaration*>((*a)[0]);
-    }
-
-    return nullptr;
-}
-
-::VarDeclaration * DeclMapper::VisitInstancedVarTemplate(const clang::VarTemplateSpecializationDecl * D)
-{
-    std::unique_ptr<Dsymbols> a(VisitDecl(getCanonicalDecl(D), MapTemplateInstantiations));
-    if (a.get()) {
-        assert(a->dim == 1 && (*a)[0]->isVarDeclaration() && isCPP((*a)[0]));
-        return static_cast<::VarDeclaration*>((*a)[0]);
-    }
-
-    return nullptr;
 }
 
 template<typename SpecTy>
@@ -1411,7 +1380,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         minst = ti->minst;
 
     DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
-                    DeclMapper::MapTemplateInstantiations | DeclMapper::CreateTemplateInstance);
+                    DeclMapper::CreateTemplateInstance);
     assert(D->d);
 
     if (!isa<clang::IndirectFieldDecl>(D))
