@@ -43,7 +43,6 @@ public:
 
     d_uns64 size(const Loc &loc) override;
 
-    bool determineFields() override;
     Expression *defaultInit(Loc loc) override;
     bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
@@ -78,7 +77,6 @@ public:
 
     void buildVtbl();
 
-    bool determineFields() override;
     bool mayBeAnonymous() override;
 
     void addLocalClass(ClassDeclarations *) override;
@@ -118,7 +116,6 @@ public:
     void complete() override;
 
     bool mayBeAnonymous() override;
-    bool determineFields() override;
 
     const clang::RecordDecl *Definition();
 };
@@ -137,7 +134,6 @@ public:
 
 const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad);
 const clang::RecordDecl *getRecordDecl(::Type *t);
-::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl *FD);
 ::FuncDeclaration *findOverriddenMethod(::FuncDeclaration* md, ::ClassDeclaration* base );
 
 }

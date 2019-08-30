@@ -170,7 +170,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
      * Returns:
      *      false if any errors occur.
      */
-    bool determineFields() // CALYPSO (made non-final)
+    final bool determineFields()
     {
         if (_scope)
             dsymbolSemantic(this, null);

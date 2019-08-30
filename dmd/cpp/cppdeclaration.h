@@ -62,8 +62,6 @@ public:
     bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
-
-    static ::FuncDeclaration *overloadCppMatch(::FuncDeclaration *fd, const clang::FunctionDecl* FD);
 };
 
 class CtorDeclaration : public ::CtorDeclaration
@@ -140,13 +138,12 @@ public:
     CALYPSO_LANGPLUGIN
 
     const clang::TypedefNameDecl *TND;
-    bool isUsed = false;
 
     AliasDeclaration(Loc loc, Identifier *ident, Type *type,
             const clang::TypedefNameDecl *TND);
     AliasDeclaration(const AliasDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    void doSemantic();
+    Type *getType() override;
     Dsymbol *toAlias() override;
     Dsymbol *toAlias2() override;
 

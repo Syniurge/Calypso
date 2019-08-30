@@ -327,7 +327,7 @@ void ad_determineSize(AggTy *ad)
             continue;
 
         auto Field = *I;
-        auto vd = static_cast<VarDeclaration*>(DeclMapper(ad).dsymForDecl(Field));
+        auto vd = static_cast<VarDeclaration*>(dsymForDecl(ad, Field));
         ad->fields.push(vd);
 
         vd->offsetInBits = RL.getFieldOffset(Field);
@@ -370,20 +370,6 @@ Expression *StructDeclaration::defaultInit(Loc loc)
 
 bool StructDeclaration::mayBeAnonymous()
 {
-    return true;
-}
-
-bool StructDeclaration::determineFields()
-{
-    if (sizeok != SIZEOKnone)
-        return true;
-
-    if (!buildAggLayout(this))
-        return false;
-
-    if (sizeok != SIZEOKdone)
-        sizeok = SIZEOKfwd;
-
     return true;
 }
 
@@ -543,7 +529,7 @@ Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, 
         if (!ce) {
             exp = expressionSemantic(exp, sc);
             exp = resolveProperties(sc, exp);
-            
+
             if (exp->type->constConv(ad->getType()) >= MATCHconst)
                 exp = new_ConstructExp(loc, ve, exp); // enables in-place construction
             else
@@ -612,27 +598,22 @@ void ClassDeclaration::buildVtbl()
     {
         static_cast<cpp::ClassDeclaration*>(bcd)->buildVtbl();
 
-        // Copy vtbl[] from base class
         vtbl.setDim(bcd->vtbl.dim);
         memcpy(vtbl.tdata(), bcd->vtbl.tdata(), sizeof(void*) * vtbl.dim);
     }
 
-    clang::CXXFinalOverriderMap FinaOverriders;
-    RD->getFinalOverriders(FinaOverriders);
+    clang::CXXFinalOverriderMap FinalOverriders;
+    RD->getFinalOverriders(FinalOverriders);
 
-    llvm::DenseSet<const clang::CXXMethodDecl*> inVtbl;
-
-    for (auto I = FinaOverriders.begin(), E = FinaOverriders.end(); I != E; ++I)
+    for (const auto &Overrider : FinalOverriders)
     {
-        auto OverMD = I->second.begin()->second.front().Method;
-        if (inVtbl.count(OverMD))
-            continue;
-
+        auto OverMD = Overrider.second.begin()->second.front().Method;
         auto md = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
         if (!md)
             continue;
 
-        inVtbl.insert(OverMD);
+        if (md->vtblIndex) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
+            continue;
 
         auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
         if (vi < 0)
@@ -762,36 +743,6 @@ const clang::RecordDecl *getRecordDecl(::Type *t)
     }
 
     return getRecordDecl(ad);
-}
-
-::FuncDeclaration *findMethod(::AggregateDeclaration *ad, const clang::FunctionDecl* FD)
-{
-    DeclMapper mapper;
-    auto ident = getExtendedIdentifier(FD, mapper);
-
-    auto s = ad->ScopeDsymbol::search(ad->loc, ident);
-    if (s && s->isFuncDeclaration())
-    {
-        assert(isCPP(s));
-        auto fd = static_cast<::FuncDeclaration*>(s);
-        fd = FuncDeclaration::overloadCppMatch(fd, FD);
-        if (fd)
-            return fd;
-    }
-
-    // search in base classes
-    if (auto cd = ad->isClassDeclaration())
-        for (auto *b: *cd->baseclasses)
-        {
-            if (!isCPP(b->sym)) // skip Object
-                continue;
-
-            auto result = findMethod(b->sym, FD);
-            if (result)
-                return result;
-        }
-
-    return nullptr;
 }
 
 ::FuncDeclaration* findOverriddenMethod(::FuncDeclaration *md, ::ClassDeclaration *base)

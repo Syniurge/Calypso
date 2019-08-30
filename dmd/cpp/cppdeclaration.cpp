@@ -119,37 +119,6 @@ FuncDeclaration::FuncDeclaration(const FuncDeclaration& o)
 {
 }
 
-::FuncDeclaration *FuncDeclaration::overloadCppMatch(::FuncDeclaration *fd,
-                                                        const clang::FunctionDecl* FD)
-{
-    struct FDEquals
-    {
-        const clang::FunctionDecl* FD;            // type to match
-        ::FuncDeclaration *f; // return value
-
-        static int fp(void *param, Dsymbol *s)
-        {
-            if (!s->isFuncDeclaration() || !isCPP(s))
-                return 0;
-            auto f = static_cast<::FuncDeclaration*>(s);
-            FDEquals *p = (FDEquals *)param;
-
-            if (p->FD == getFD(f))
-            {
-                p->f = f;
-                return 1;
-            }
-
-            return 0;
-        }
-    };
-    FDEquals p;
-    p.FD = FD;
-    p.f = nullptr;
-    overloadApply(fd, &p, &FDEquals::fp);
-    return p.f;
-}
-
 CtorDeclaration::CtorDeclaration(Loc loc, StorageClass storage_class,
                                  Type* type, const clang::CXXConstructorDecl* CCD)
 {
@@ -209,7 +178,7 @@ Dsymbol *EnumDeclaration::search(const Loc &loc, Identifier *ident, int flags)
 
     auto Name = calypso.toDeclarationName(ident);
     for (auto Match: ED->lookup(Name))
-        addToMembers(this, Match);
+        dsymForDecl(this, Match);
 
     return ScopeDsymbol::search(loc, ident, flags);
 }
@@ -298,25 +267,23 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
     return new cpp::AliasDeclaration(*this); // hmm hmm
 }
 
-void AliasDeclaration::doSemantic()
+Type *AliasDeclaration::getType()
 {
-    if (!_scope)
-        return;
-
-    isUsed = true;
-    dsymbolSemantic(this, _scope);
+    if (!type)
+        type = DeclMapper(this).fromType(TND->getUnderlyingType(), loc);
+    return type;
 }
 
 Dsymbol *AliasDeclaration::toAlias()
 {
-    doSemantic();
-    return ::AliasDeclaration::toAlias();
+    if (!aliassym)
+        aliassym = getType()->toDsymbol(nullptr);
+    return aliassym;
 }
 
 Dsymbol *AliasDeclaration::toAlias2()
 {
-    doSemantic();
-    return ::AliasDeclaration::toAlias2();
+    return toAlias();
 }
 
 void AliasDeclaration::accept(Visitor *v)
