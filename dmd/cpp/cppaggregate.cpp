@@ -67,11 +67,11 @@ void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
                 calypso.markSymbolReferenced(ad->dtor);
         }
 
-        DeclReferencer declReferencer(ad);
-
-        for (auto Field: D->fields())
-            if (auto InClassInit = Field->getInClassInitializer())
-                declReferencer.Traverse(ad->loc, InClassInit);
+//         DeclReferencer declReferencer(ad);
+//
+//         for (auto Field: D->fields())
+//             if (auto InClassInit = Field->getInClassInitializer())
+//                 declReferencer.Traverse(ad->loc, InClassInit);
 
         markAggregateReferenced(ad);
     }
@@ -202,12 +202,34 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
     for (auto Match: Def->lookup(Name))
         dsymForDecl(ad, Match);
 
-    if (ident == Id::ctor)
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
+    if (CRD && !CRD->isUnion())
     {
+        auto& S = calypso.getSema();
+        auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
-    }
-    else
-    {
+        // NOTE: Would mapping only non-trivial special members be preferable?
+        // It probably would make mapping more subject to unexpected variations..
+
+        if (ident == Id::ctor)
+        {
+            dsymForDecl(ad, S.LookupDefaultConstructor(_CRD));
+
+            for (int i = 0; i < 2; i++)
+                dsymForDecl(ad, S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
+        }
+        else if (ident == Id::dtor)
+        {
+            dsymForDecl(ad, S.LookupDestructor(_CRD));
+        }
+        else if (ident == Id::assign)
+        {
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                    for (int k = 0; k < 2; k++)
+                        dsymForDecl(ad, S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
+                                    j ? true : false, k ? clang::Qualifiers::Const : 0));
+        }
     }
 
     return ad->ScopeDsymbol::search(loc, ident, flags);
@@ -239,7 +261,7 @@ Dsymbol *UnionDeclaration::search(const Loc &loc, Identifier *ident, int flags)
     return ad_search(this, loc, ident, flags);
 }
 
-// TODO replace by generator pattern/input iterator
+// TODO replace by generator pattern/input iterator?
 
 template <typename AggTy>
 inline void ad_complete(AggTy* ad)
@@ -247,6 +269,11 @@ inline void ad_complete(AggTy* ad)
     if (ad->membersCompleted)
         return;
     ad->membersCompleted = true;
+
+    // Force declaration of implicit special members
+    ad->search(ad->loc, Id::ctor);
+    ad->search(ad->loc, Id::dtor);
+    ad->search(ad->loc, Id::assign);
 
     Dsymbols* newMembers = new Dsymbols;
     newMembers->reserve(ad->members->dim);
@@ -322,15 +349,15 @@ void ad_determineSize(AggTy *ad)
     typedef clang::DeclContext::specific_decl_iterator<clang::ValueDecl> Value_iterator;
     for (Value_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
     {
-        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I) &&
-            !isa<clang::MSPropertyDecl>(*I))
+        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I)/* &&
+            !isa<clang::MSPropertyDecl>(*I) (TODO)*/)
             continue;
 
         auto Field = *I;
         auto vd = static_cast<VarDeclaration*>(dsymForDecl(ad, Field));
         ad->fields.push(vd);
 
-        vd->offsetInBits = RL.getFieldOffset(Field);
+        vd->offsetInBits = Context.getFieldOffset(Field);
         vd->offset = vd->offsetInBits / 8;
     }
 
@@ -368,11 +395,6 @@ Expression *StructDeclaration::defaultInit(Loc loc)
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
 }
 
-bool StructDeclaration::mayBeAnonymous()
-{
-    return true;
-}
-
 void ClassDeclaration::accept(Visitor *v)
 {
     auto v_ti = v->_typeid();
@@ -384,11 +406,6 @@ void ClassDeclaration::accept(Visitor *v)
             v->visit(this);
     } else
         v->visit(this);
-}
-
-bool ClassDeclaration::mayBeAnonymous()
-{
-    return true;
 }
 
 void ClassDeclaration::addLocalClass(ClassDeclarations *aclasses)
@@ -584,11 +601,6 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
 
     auto arguments = new Expressions;
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
-}
-
-void ClassDeclaration::makeNested()
-{
-    // do not add vthis
 }
 
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one

@@ -130,7 +130,7 @@ public:
     Type *getType();
     bool isDeprecated();         // is aggregate deprecated?
     bool isNested();
-    virtual void makeNested();  // CALYPSO
+    void makeNested();
     bool isExport() const;
     Dsymbol *searchCtor();
 
@@ -149,7 +149,6 @@ public:
 
     // CALYPSO
     virtual bool byRef() const { return false; }
-    virtual bool mayBeAnonymous() { return false; }
     virtual Expression *defaultInit(Loc loc);
     Expression *defaultInitLiteral(Loc loc);
     size_t literalElemDim(); // returns the total number of fields of an aggregate literal (TODO: better name?)

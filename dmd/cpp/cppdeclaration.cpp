@@ -308,15 +308,9 @@ DeclReferencer::DeclReferencer(::Module* minst)
 {
 }
 
-void DeclReferencer::Traverse(Loc loc, Scope *sc, clang::Stmt *S)
+void DeclReferencer::Traverse(Loc loc, clang::Stmt *S)
 {
     this->loc = loc;
-    this->sc = sc;
-
-    // First map nested record decls (esp. lambda classes)
-    // This needs to be done before because lambda CXXRecordDecl may be used before and/or after within the AST/
-    NestedDeclMapper(*this).TraverseStmt(S);
-
     TraverseStmt(S);
 }
 
@@ -334,12 +328,8 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             return true;
 
     if (auto FD = dyn_cast<clang::FunctionDecl>(D))
-    {
-        if (!isMapped(D))
-            return true;
         if (FD->getBuiltinID())
             return true;
-    }
 
     if (auto sym = mapper.dsymForDecl(D))
         calypso.markSymbolReferenced(sym);
@@ -394,25 +384,6 @@ bool DeclReferencer::VisitDeclRefExpr(const clang::DeclRefExpr *E)
 bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
 {
     return VisitDeclRef(E->getMemberDecl());
-}
-
-/***********************/
-
-bool NestedDeclMapper::VisitLambdaExpr(const clang::LambdaExpr *E)
-{
-    return TraverseCXXRecordDecl(E->getLambdaClass());
-}
-
-bool NestedDeclMapper::TraverseCXXRecordDecl(const clang::CXXRecordDecl *D)
-{
-    if (D->isLambda() && D->getLambdaManglingNumber() == 0)
-        return true; // the lambda record is internal, no need to map it
-
-    if (auto a = dref.mapper.VisitRecordDecl(D))
-        for (auto s: *a)
-            dsymbolSemantic(s, dref.sc);
-
-    return true;
 }
 
 /***********************/

@@ -749,7 +749,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     /* Append vthis field (this.tupleof[$-1]) to make this aggregate type nested.
      */
-    void makeNested() // CALYPSO
+    final void makeNested()
     {
         if (enclosing) // if already nested
             return;
@@ -923,11 +923,6 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
 
     // CALYPSO
     bool byRef() const
-    {
-        return false;
-    }
-
-    bool mayBeAnonymous()
     {
         return false;
     }

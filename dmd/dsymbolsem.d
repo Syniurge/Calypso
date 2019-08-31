@@ -4278,7 +4278,7 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
             assert(sc.parent && sc.func);
             sd.parent = sc.parent;
         }
-        assert(sd.parent && (!sd.isAnonymous() || sd.mayBeAnonymous())); // CALYPSO
+        assert(sd.parent && !sd.isAnonymous());
 
         if (sd.errors)
             sd.type = Type.terror;

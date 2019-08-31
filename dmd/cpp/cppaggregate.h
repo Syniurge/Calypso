@@ -44,7 +44,6 @@ public:
     d_uns64 size(const Loc &loc) override;
 
     Expression *defaultInit(Loc loc) override;
-    bool mayBeAnonymous() override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     bool disableDefaultCtor() override { return false; }
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
@@ -77,8 +76,6 @@ public:
 
     void buildVtbl();
 
-    bool mayBeAnonymous() override;
-
     void addLocalClass(ClassDeclarations *) override;
 
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
@@ -88,7 +85,6 @@ public:
     bool allowMultipleInheritance() override { return true; }
     bool allowInheritFromStruct() override { return true; }
     bool needsInterfaceSemantic() const override { return false; }
-    void makeNested() override;
     void finalizeVtbl() override;
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
@@ -114,8 +110,6 @@ public:
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
-
-    bool mayBeAnonymous() override;
 
     const clang::RecordDecl *Definition();
 };

@@ -456,9 +456,10 @@ bool isPolymorphic(const clang::RecordDecl *D)
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
 {
     auto CanonDecl = D;
-    auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
-    auto& Diags = *calypso.pch.Diags;
+
+    if (!isMapped(D))
+        return nullptr;
 
 //     if (D->isInjectedClassName())
 //         return nullptr;
@@ -469,7 +470,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 
     if (!D->isCompleteDefinition() && D->getDefinition())
         D = D->getDefinition();
-    bool isDefined = D->isCompleteDefinition();
 
     int anon = 0;
     if (D->isAnonymousStructOrUnion())
@@ -530,32 +530,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         }
     }
 
-    if (!isDefined)
-        goto Ldeclaration;
-
-    if (CRD)
-    {
-        if (!D->isUnion() && !CRD->isDependentType())
-        {
-            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
-
-            // Clang declares and defines implicit ctors/assignment operators lazily,
-            // but before D's semantic passes we at least need to declare them
-            S.LookupDefaultConstructor(_CRD);
-            for (int i = 0; i < 2; i++)
-                S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0);
-
-            S.LookupDestructor(_CRD);
-
-            for (int i = 0; i < 2; i++)
-                for (int j = 0; j < 2; j++)
-                    for (int k = 0; k < 2; k++)
-                        S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, j ? true : false,
-                                                k ? clang::Qualifiers::Const : 0);
-        }
-    }
-
-Ldeclaration:
     if (anon)
         decldefs->push(new AnonDeclaration(loc, anon == 2, members));
     else
@@ -666,6 +640,10 @@ bool isMapped(const clang::Decl *D)
                     return false;
         }
     }
+
+    if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
+        if (RD->isLambda() && RD->getLambdaManglingNumber() == 0)
+            return false;
 
     return true;
 }
