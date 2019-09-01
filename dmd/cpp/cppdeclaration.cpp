@@ -137,6 +137,8 @@ DtorDeclaration::DtorDeclaration(Loc loc, StorageClass storage_class,
 {
     construct_DtorDeclaration(this, loc, loc, storage_class, id);
     this->CDD = CDD;
+
+    this->type = new_TypeFunction(nullptr, Type::tvoid, false, LINKcpp, this->storage_class);
 }
 
 DtorDeclaration::DtorDeclaration(const DtorDeclaration& o)
@@ -286,15 +288,6 @@ Dsymbol *AliasDeclaration::toAlias2()
     return toAlias();
 }
 
-void AliasDeclaration::accept(Visitor *v)
-{
-    if (v->_typeid() == TI_DsymbolSem1Visitor && !isUsed)
-        ; // resolve aliases lazily, the DMD way of evaluating everything leads to infinite recursion for some C++ templates
-          // ex.: typedef _Index_tuple<_Indexes, sizeof(_Indexes)> _Index_tuple<size_t... _Indexes>::__next;
-    else
-        v->visit(this);
-}
-
 IMPLEMENT_syntaxCopy(VarDeclaration, VD)
 IMPLEMENT_syntaxCopy(FuncDeclaration, FD)
 IMPLEMENT_syntaxCopy(CtorDeclaration, CCD)
@@ -407,7 +400,7 @@ void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
         S.InstantiateFunctionDefinition(D->getLocation(), D);
 }
 
-void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
+void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd)
 {
     auto& S = calypso.getSema();
 
@@ -418,7 +411,8 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
 
     if (D->isInvalidDecl())
     {
-        if (fd->parent->isTemplateInstance() && isCPP(fd->parent)) {
+        if (fd->parent->isTemplateInstance() && isCPP(fd->parent))
+        {
             auto c_ti = static_cast<cpp::TemplateInstance*>(fd->parent);
             c_ti->markInvalid();
         }
@@ -428,35 +422,12 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd, Scope *sc)
     const clang::FunctionDecl *Def;
     if (D->hasBody(Def))
     {
-        Scope *sc2 = sc->push();
-        sc2->func = fd;
-//         sc2->parent = fd;
-        sc2->callSuper = 0;
-        sc2->sbreak = NULL;
-        sc2->scontinue = NULL;
-        sc2->sw = NULL;
-        sc2->stc &= ~(STCauto | STCscope | STCstatic | STCabstract |
-                        STCdeprecated | STCoverride |
-                        STC_TYPECTOR | STCfinal | STCtls | STCgshared | STCref | STCreturn |
-                        STCproperty | STCnothrow | STCpure | STCsafe | STCtrusted | STCsystem);
-        sc2->protection = {Prot::public_, nullptr};
-        sc2->explicitProtection = 0;
-        sc2->aligndecl = NULL;
-        sc2->flags = sc->flags & ~SCOPEcontract;
-        sc2->flags &= ~SCOPEcompile;
-        sc2->tf = NULL;
-        sc2->os = NULL;
-        sc2->inLoop = 0;
-        sc2->userAttribDecl = NULL;
-        sc2->fieldinit = NULL;
-        sc2->fieldinit_dim = 0;
-
-        DeclReferencer declReferencer(sc->minst);
-        declReferencer.Traverse(fd->loc, sc2, Def->getBody());
+        DeclReferencer declReferencer(fd->getInstantiatingModule());
+        declReferencer.Traverse(fd->loc, Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
             for (auto& Init: Ctor->inits())
-                declReferencer.Traverse(fd->loc, sc2, Init->getInit());
+                declReferencer.Traverse(fd->loc, Init->getInit());
     }
 
     MarkModuleForGenIfNeeded(fd);
@@ -475,7 +446,7 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
     if (fd->isCtorDeclaration() || fd->isDtorDeclaration())
         fd->langPlugin()->markSymbolReferenced(fd->parent);
 
-    InstantiateAndTraverseFunctionBody(fd, fd->_scope);
+    InstantiateAndTraverseFunctionBody(fd);
 }
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f)

@@ -32,7 +32,6 @@ FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Expressions *arguments,
         int flags = 0);
 Expression *resolveProperties(Scope *sc, Expression *e);
-FuncDeclaration *hasIdentityOpAssign(AggregateDeclaration *ad, Scope *sc);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
 void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
@@ -198,38 +197,49 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
     if (!Def)
         return nullptr;
 
-    auto Name = calypso.toDeclarationName(ident);
-    for (auto Match: Def->lookup(Name))
-        dsymForDecl(ad, Match);
-
-    auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
-    if (CRD && !CRD->isUnion())
+    if (ident == Id::ctor || ident == Id::dtor || ident == Id::assign)
     {
-        auto& S = calypso.getSema();
-        auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
+        auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
 
-        // NOTE: Would mapping only non-trivial special members be preferable?
-        // It probably would make mapping more subject to unexpected variations..
+        if (CRD && ident == Id::ctor)
+            for (auto Ctor: CRD->ctors())
+                dsymForDecl(ad, Ctor);
 
-        if (ident == Id::ctor)
+        // Special members
+        if (CRD && !CRD->isUnion())
         {
-            dsymForDecl(ad, S.LookupDefaultConstructor(_CRD));
+            auto& S = calypso.getSema();
+            auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
-            for (int i = 0; i < 2; i++)
-                dsymForDecl(ad, S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
+            // NOTE: Would mapping only non-trivial special members be preferable?
+            // It probably would make mapping more subject to unexpected variations..
+
+            if (ident == Id::ctor)
+            {
+                dsymForDecl(ad, S.LookupDefaultConstructor(_CRD));
+
+                for (int i = 0; i < 2; i++)
+                    dsymForDecl(ad, S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
+            }
+            else if (ident == Id::dtor)
+            {
+                dsymForDecl(ad, S.LookupDestructor(_CRD));
+            }
+            else if (ident == Id::assign)
+            {
+                for (int i = 0; i < 2; i++)
+                    for (int j = 0; j < 2; j++)
+                        for (int k = 0; k < 2; k++)
+                            dsymForDecl(ad, S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
+                                        j ? true : false, k ? clang::Qualifiers::Const : 0));
+            }
         }
-        else if (ident == Id::dtor)
-        {
-            dsymForDecl(ad, S.LookupDestructor(_CRD));
-        }
-        else if (ident == Id::assign)
-        {
-            for (int i = 0; i < 2; i++)
-                for (int j = 0; j < 2; j++)
-                    for (int k = 0; k < 2; k++)
-                        dsymForDecl(ad, S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
-                                    j ? true : false, k ? clang::Qualifiers::Const : 0));
-        }
+    }
+    else
+    {
+        auto Name = calypso.toDeclarationName(ident);
+        for (auto Match: Def->lookup(Name))
+            dsymForDecl(ad, Match);
     }
 
     return ad->ScopeDsymbol::search(loc, ident, flags);
@@ -685,17 +695,6 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     _alias->addMember(sc, ad); // add to symbol table
 
     return ad->dtors[0];
-}
-
-::FuncDeclaration *LangPlugin::buildOpAssign(::StructDeclaration *sd, Scope *sc)
-{
-    if (auto f = hasIdentityOpAssign(sd, sc))
-    {
-        sd->hasIdentityAssign = true;
-        return f;
-    }
-
-    return nullptr; // do not build an opAssign if none was mapped
 }
 
 ::FuncDeclaration *LangPlugin::searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc)

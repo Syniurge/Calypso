@@ -263,11 +263,9 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
 }
 
 static Identifier *fullConversionMapIdent(Identifier *baseIdent,
-                                       const clang::CXXConversionDecl *D)
+                const clang::CXXConversionDecl *D, DeclMapper& mapper)
 {
     auto& Context = calypso.getASTContext();
-
-    DeclMapper mapper;
 
     auto T = D->getConversionType().getDesugaredType(Context);
     auto t = mapper.fromType(T, Loc());
@@ -459,10 +457,10 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D,
     auto FD = dyn_cast<clang::FunctionDecl>(D);
     if (spec.op && FD)
         ident = fullOperatorMapIdent(ident,
-                            FD->getOverloadedOperator());
+                        FD->getOverloadedOperator());
     else if (spec.t)
         ident = fullConversionMapIdent(ident,
-                    cast<clang::CXXConversionDecl>(D));
+                        cast<clang::CXXConversionDecl>(D), mapper);
 
     return ident;
 }
@@ -879,57 +877,7 @@ void PCH::update()
         loadFromPCH();
     }
 
-    auto& SrcMgr = AST->getSourceManager();
-    auto& PP = AST->getPreprocessor();
-
 //     PP.enableIncrementalProcessing();
-
-    /* Collect Clang module map files */
-    MMap = new ModuleMap(AST->getSourceManager(), *Diags,
-                            PP.getLangOpts(), &PP.getTargetInfo(), PP.getHeaderSearchInfo());
-
-    llvm::DenseSet<const clang::DirectoryEntry*> CheckedDirs;
-    auto lookForModuleMap = [&] (const clang::SrcMgr::SLocEntry& SLoc) {
-        if (SLoc.isExpansion())
-            return;
-
-        auto OrigEntry = SLoc.getFile().getContentCache()->OrigEntry;
-        if (!OrigEntry)
-            return;
-
-        auto Dir = OrigEntry->getDir();
-
-        if (CheckedDirs.count(Dir))
-            return;
-        CheckedDirs.insert(Dir);
-
-        std::error_code err;
-        llvm::sys::fs::directory_iterator DirIt(llvm::Twine(Dir->getName()), err), DirEnd;
-
-        for (; DirIt != DirEnd && !err; DirIt.increment(err))
-        {
-            auto path = DirIt->path();
-            auto extension = llvm::sys::path::extension(path);
-
-            if (extension.equals(".modulemap_d"))
-            {
-                auto MMapFile = AST->getFileManager().getFile(path);
-                assert(MMapFile);
-
-                if (MMap->parseModuleMapFile(MMapFile, false, Dir))
-                {
-                    ::error(Loc(), "Clang module map '%s/%s' file parsing failed",
-                            MMapFile->getDir()->getName().str().c_str(), MMapFile->getName().str().c_str());
-                    fatal();
-                }
-            }
-        }
-    };
-
-    for (size_t i = 0; i < SrcMgr.local_sloc_entry_size(); i++)
-        lookForModuleMap(SrcMgr.getLocalSLocEntry(i));
-    for (size_t i = 0; i < SrcMgr.loaded_sloc_entry_size(); i++)
-        lookForModuleMap(SrcMgr.getLoadedSLocEntry(i));
 
     // Since the out-of-dateness of headers are checked lazily for most of them, it might only be detected
     // by walking through all the SLoc entries. If an error occurred start over and trigger a loadFromHeaders.
@@ -937,17 +885,12 @@ void PCH::update()
     {
         Diags->Reset();
 
-        delete MMap;
-
         needHeadersReload = true;
         return update();
     }
 
     // Build the builtin type map
     calypso.builtinTypes.build(AST->getASTContext());
-
-    // Since macros aren't sorted by file (unlike decls) we build a map of macros in order to only go through every macro once
-    calypso.buildMacroMap();
 
     // Initialize the mangling context
     MangleCtx = AST->getASTContext().createMangleContext();
@@ -1072,34 +1015,10 @@ void LangPlugin::GenModSet::add(::Module *m)
     insert(objName);
 }
 
-void LangPlugin::semanticModules()
-{
-    // Do pass 2 semantic analysis
-    for (size_t i = 0; i < cpp::Module::amodules.dim; i++)
-    {
-        auto m = cpp::Module::amodules[i];
-        if (global.params.verbose)
-            fprintf(stderr, "semantic2 %s\n", m->toChars());
-        semantic2(m, nullptr);
-    }
-    if (global.errors)
-        fatal();
-    // Do pass 3 semantic analysis
-    for (size_t i = 0; i < cpp::Module::amodules.dim; i++)
-    {
-        auto m = cpp::Module::amodules[i];
-        if (global.params.verbose)
-            fprintf(stderr, "semantic3 %s\n", m->toChars());
-        semantic3(m, nullptr);
-    }
-    Module::runDeferredSemantic3();
-    if (global.errors)
-        fatal();
-}
-
 void LangPlugin::codegenModules()
 {
-    for (auto m: cpp::Module::amodules) {
+    for (auto& pair: cpp::Module::allCppModules) {
+        auto m = pair.second;
         m->checkAndAddOutputFile(m->objfile);
         global.params.objfiles.push(m->objfile->name.toChars());
     }

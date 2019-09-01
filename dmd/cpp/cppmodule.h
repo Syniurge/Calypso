@@ -42,15 +42,16 @@ public:
     bool needGen = false;
 
     static Package *rootPackage;    // package to store all C++ packages/modules, avoids name clashes (e.g std)
-    static Modules amodules;            // array of all modules
     static void init();
 
     Module(const char* filename, Identifier* ident);
 
-    static Module *get(const clang::Decl* rootDecl);
+    static Module *getModule(const clang::Decl* rootDecl);
     static Package *getPackage(const clang::Decl* NSorTU);
 
     static Module *load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef);
+
+    void importAll(Scope *sc) override {}
     Dsymbol *search(const Loc& loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
 
@@ -80,6 +81,14 @@ protected:
 
 bool isMapped(const clang::Decl *D);
 
+// Tweaks for special TypeQualifiedBuilder cases
+enum TypeQualifiedBuilderOpts
+{
+    TQ_None = 0,
+    TQ_OverOpSkipSpecArg = 1 << 0, // e.g skip "-" in opBinary!"-"
+    TQ_OverOpFullIdent = 1 << 1, // prefer the non-templated function over the forwarding template
+};
+
 class DeclMapper
 {
 public:
@@ -105,7 +114,7 @@ public:
     TemplateParameter *VisitTemplateParameter(const clang::NamedDecl *Param,
                                               const clang::TemplateArgument *SpecArg = nullptr); // in DMD explicit specializations use parameters, whereas Clang uses args
 
-    Dsymbol* VisitMacro(const clang::IdentifierInfo* II, const clang::Expr* E);
+    Dsymbol* dsymForMacro(Identifier* ident);
 
     template<typename PartialTy, typename SpecTy>
     Dsymbols *VisitTemplateSpecializationDecl(const SpecTy* D);
@@ -202,7 +211,7 @@ public:
     //
 
     Dsymbol* dsymForDecl(const clang::Decl* D);
-    Dsymbol* dsymForDecl(const clang::NamedDecl* D,);
+    Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 
     Module* getModule(const clang::Decl* rootDecl);
     Package* getPackage(const clang::Decl* rootDecl);
@@ -212,7 +221,7 @@ public:
         MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
 //         MapTemplateInstantiations = 1 << 1,
         MapExplicitSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
-        NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
+//         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 4,
         CreateTemplateInstance = 1 << 5,
     };

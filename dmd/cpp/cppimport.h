@@ -25,18 +25,6 @@ public:
     ::Module *loadModule(Scope* sc) override;
 };
 
-// Special import for lookups from C++ modules
-class GlobalImport : public ::Import
-{
-public:
-    CALYPSO_LANGPLUGIN
-
-    bool loaded = false;
-
-    GlobalImport(Loc loc);
-    void load(Scope *sc) override;
-};
-
 }
 
 #endif /* DMD_CPP_CPPIMPORT_H */

@@ -376,7 +376,6 @@ public:
     Expression callCpCtor(Scope *sc, Expression e);
 
     DtorDeclaration buildDtor(AggregateDeclaration ad, Scope *sc);
-    FuncDeclaration buildOpAssign(StructDeclaration sd, Scope *sc);
     FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);
 
     // ===== - - - - - ===== //
@@ -401,7 +400,6 @@ public:
     // ===== - - - - - ===== //
     // mars_mainBody hooks
 
-    void semanticModules();
     void codegenModules();
 
     // ===== - - - - - ===== //

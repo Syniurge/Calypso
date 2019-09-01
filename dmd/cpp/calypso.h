@@ -158,7 +158,6 @@ public:
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 
     ::DtorDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
-    ::FuncDeclaration *buildOpAssign(::StructDeclaration *sd, Scope *sc) override;
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
     bool isSymbolReferenced(Dsymbol *s) override;
@@ -173,7 +172,6 @@ public:
     void adjustLinkerArgs(std::vector<std::string>& args) override;
 
     // ==== mars_mainBody ====
-    void semanticModules() override;
     void codegenModules() override;
 
     // ==== CodeGen ====
@@ -286,8 +284,6 @@ public:
     std::unique_ptr<clangCG::CodeGenModule> CGM;  // selectively emit external C++ declarations, template instances, ...
 
     LangPlugin();
-
-    void buildMacroMap();
 
     clang::ASTUnit *getASTUnit() { return pch.AST.get(); }
     clang::ASTContext &getASTContext();

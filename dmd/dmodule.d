@@ -1021,7 +1021,7 @@ else
          * Ignore prevsc.
          */
         Scope* sc = Scope.createGlobal(this); // create root scope
-        addPreambule(); // CALYPSO
+        addPreambule(); // CALYPSO (LAZY FIXME remove)
         if (!symtab)
         {
             // Add all symbols into module's symbol table

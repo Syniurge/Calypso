@@ -146,8 +146,6 @@ public:
     Type *getType() override;
     Dsymbol *toAlias() override;
     Dsymbol *toAlias2() override;
-
-    void accept(Visitor *v) override;
 };
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f);
