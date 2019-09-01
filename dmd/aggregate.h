@@ -121,7 +121,7 @@ public:
     virtual void _key(); // CALYPSO force the C++ compiler to emit the vtable
     virtual Scope *newScope(Scope *sc);
     void setScope(Scope *sc);
-    virtual bool determineFields(); // CALYPSO
+    bool determineFields();
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
     virtual d_uns64 size(const Loc &loc); // CALYPSO

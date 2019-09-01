@@ -34,48 +34,6 @@ FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
 Expression *resolveProperties(Scope *sc, Expression *e);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
-void MarkAggregateReferencedImpl(AggregateDeclaration* ad)
-{
-    using namespace cpp;
-
-    auto D = dyn_cast<clang::CXXRecordDecl>(
-                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
-
-    if (D && D->hasDefinition()) {
-        auto& Context = calypso.getASTContext();
-        auto& S = calypso.getSema();
-
-        auto Key = Context.getCurrentKeyFunction(D);
-        const clang::FunctionDecl* Body;
-        if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body))) {
-            // As in C++, only mark virtual methods for codegen if the key method is defined
-            // If the definition isn't the current TU, assume that methods have been emitted
-            // by another TU.
-            S.MarkVTableUsed(D->getLocation(), D);
-
-            for (auto MD: D->methods())
-                if (MD->isVirtual()) {
-                    auto md = static_cast<::FuncDeclaration*>(
-                                    DeclMapper(ad).dsymForDecl(MD));
-                    MarkFunctionReferenced(md);
-                }
-
-            if (ad->defaultCtor)
-                calypso.markSymbolReferenced(ad->defaultCtor);
-            if (ad->dtor)
-                calypso.markSymbolReferenced(ad->dtor);
-        }
-
-//         DeclReferencer declReferencer(ad);
-//
-//         for (auto Field: D->fields())
-//             if (auto InClassInit = Field->getInClassInitializer())
-//                 declReferencer.Traverse(ad->loc, InClassInit);
-
-        markAggregateReferenced(ad);
-    }
-}
-
 namespace cpp
 {
 
@@ -214,23 +172,28 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
             // NOTE: Would mapping only non-trivial special members be preferable?
             // It probably would make mapping more subject to unexpected variations..
 
+            auto map = [&] (clang::Decl* D) {
+                if (D)
+                    dsymForDecl(ad, D);
+            };
+
             if (ident == Id::ctor)
             {
-                dsymForDecl(ad, S.LookupDefaultConstructor(_CRD));
+                map(S.LookupDefaultConstructor(_CRD));
 
                 for (int i = 0; i < 2; i++)
-                    dsymForDecl(ad, S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
+                    map(S.LookupCopyingConstructor(_CRD, i ? clang::Qualifiers::Const : 0));
             }
             else if (ident == Id::dtor)
             {
-                dsymForDecl(ad, S.LookupDestructor(_CRD));
+                map(S.LookupDestructor(_CRD));
             }
             else if (ident == Id::assign)
             {
                 for (int i = 0; i < 2; i++)
                     for (int j = 0; j < 2; j++)
                         for (int k = 0; k < 2; k++)
-                            dsymForDecl(ad, S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
+                            map(S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
                                         j ? true : false, k ? clang::Qualifiers::Const : 0));
             }
         }
@@ -604,6 +567,11 @@ Expression* ClassDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* v
     return buildVarInitializerImpl(this, sc, vd, exp);
 }
 
+Expression* UnionDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
+{
+    return buildVarInitializerImpl(this, sc, vd, exp);
+}
+
 Expression *ClassDeclaration::defaultInit(Loc loc)
 {
     if (!defaultCtor)
@@ -616,6 +584,10 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
 void ClassDeclaration::buildVtbl()
 {
+    if (vtblBuilt)
+        return;
+    vtblBuilt = true;
+
     if (auto bcd = isClassDeclarationOrNull(baseClass))
     {
         static_cast<cpp::ClassDeclaration*>(bcd)->buildVtbl();
@@ -634,7 +606,7 @@ void ClassDeclaration::buildVtbl()
         if (!md)
             continue;
 
-        if (md->vtblIndex) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
+        if (md->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
             continue;
 
         auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
@@ -787,8 +759,45 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
         return;
     isUsed = true;
 
-    if (ad->semanticRun >= PASSsemanticdone)
-        MarkAggregateReferencedImpl(ad);
+    auto D = dyn_cast<clang::CXXRecordDecl>(
+                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
+
+    if (D && D->hasDefinition()) {
+        auto& Context = calypso.getASTContext();
+        auto& S = calypso.getSema();
+
+        auto Key = Context.getCurrentKeyFunction(D);
+        const clang::FunctionDecl* Body;
+        if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body))) {
+            // As in C++, only mark virtual methods for codegen if the key method is defined
+            // If the definition isn't the current TU, assume that methods have been emitted
+            // by another TU.
+            S.MarkVTableUsed(D->getLocation(), D);
+
+            for (auto MD: D->methods())
+                if (MD->isVirtual()) {
+                    auto md = static_cast<::FuncDeclaration*>(
+                                    DeclMapper(ad).dsymForDecl(MD));
+                    MarkFunctionReferenced(md);
+                }
+
+            if (ad->defaultCtor)
+                calypso.markSymbolReferenced(ad->defaultCtor);
+            if (ad->dtor)
+                calypso.markSymbolReferenced(ad->dtor);
+        }
+
+//         DeclReferencer declReferencer(ad);
+//
+//         for (auto Field: D->fields())
+//             if (auto InClassInit = Field->getInClassInitializer())
+//                 declReferencer.Traverse(ad->loc, InClassInit);
+
+        markAggregateReferenced(ad);
+
+        if (auto cd = ad->isClassDeclaration())
+            static_cast<cpp::ClassDeclaration*>(cd)->buildVtbl();
+    }
 }
 
 }

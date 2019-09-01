@@ -477,7 +477,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         {
             a = new UnionDeclaration(loc, id, D);
         }
-        else if (isPolymorphic(D))
+        else if (!isPolymorphic(D))
         {
             a = new StructDeclaration(loc, id, D);
         }
@@ -512,6 +512,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
             if (CRD->isAbstract())
                 cd->isabstract = ABSyes;
         }
+
+        a->protection.kind = Prot::public_;
+        a->semanticRun = PASSsemantic3done;
+        a->symtab = new_DsymbolTable();
     }
 
     if (anon)
@@ -525,10 +529,6 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
             decldefs = CreateTemplateInstanceFor(ClassSpec, decldefs);
     }
-
-    a->protection.kind = Prot::public_;
-    a->semanticRun = PASSsemantic3done;
-    a->symtab = new_DsymbolTable();
 
     return decldefs;
 }
@@ -639,7 +639,10 @@ bool isMapped(const clang::Decl *D)
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     if (!isMapped(D))
+    {
+        setDsym(D, nullptr);
         return nullptr;
+    }
 
     // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
     // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
@@ -750,6 +753,45 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
     auto a = new Dsymbols;
     ::FuncDeclaration *fd;
+
+    auto fillSemInfo = [&] (::FuncDeclaration* fd)
+    {
+        fd->linkage = LINKcpp;
+        fd->protection.kind = fromProt(D->getAccess());
+
+        fd->originalType = tf;
+
+        auto sc = minst->_scope->push();
+        if (tf->isref)
+            sc->stc |= STCref;
+        if (tf->isscope)
+            sc->stc |= STCscope;
+        if (tf->isnothrow)
+            sc->stc |= STCnothrow;
+    //     sc->stc |= STCnogc;
+
+        if (fd->isCtorDeclaration())
+        {
+            auto CD = cast<clang::CXXConstructorDecl>(D);
+            auto ad = static_cast<AggregateDeclaration*>(dsymForDecl(CD->getParent()));
+
+            sc->flags |= SCOPEctor;
+            Type* tret = ad->handleType();
+            assert(tret);
+            tret = tret->addStorageClass(fd->storage_class | sc->stc);
+            tret = tret->addMod(fd->type->mod);
+            tf->next = tret;
+            sc->stc |= STCref; // CALYPSO-specific
+        }
+
+        sc->linkage = LINKcpp;
+
+        fd->type = typeSemantic(fd->type, fd->loc, sc);
+        sc->pop();
+
+        fd->semanticRun = PASSsemantic3done;
+    };
+
     if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
     {
         fd = new CtorDeclaration(loc, stc, tf, CD);
@@ -823,6 +865,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         // Add the overridable method (or the static function)
         fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
         setDsym(D, fd);
+        fillSemInfo(fd);
         a->push(fd);
 
         if (wrapInTemp && isFirstOverloadInScope)
@@ -838,6 +881,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
             decldefs->push(a_fwd);
 
             auto tempdecl = new_TemplateDeclaration(loc, opIdent, tpl, nullptr, decldefs);
+            tempdecl->semanticRun = PASSsemantic3done;
             a->push(tempdecl);
         }
 
@@ -851,39 +895,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
 
     setDsym(D, fd);
-
-    fd->linkage = LINKcpp;
-    fd->protection.kind = fromProt(D->getAccess());
-
-    fd->originalType = tf;
-
-    auto sc = minst->_scope->push();
-    if (tf->isref)
-        sc->stc |= STCref;
-    if (tf->isscope)
-        sc->stc |= STCscope;
-    if (tf->isnothrow)
-        sc->stc |= STCnothrow;
-//     sc->stc |= STCnogc;
-
-    if (fd->isCtorDeclaration())
-    {
-        auto CD = cast<clang::CXXConstructorDecl>(D);
-        auto ad = static_cast<AggregateDeclaration*>(dsymForDecl(CD->getParent()));
-
-        sc->flags |= SCOPEctor;
-        Type* tret = ad->handleType();
-        assert(tret);
-        tret = tret->addStorageClass(fd->storage_class | sc->stc);
-        tret = tret->addMod(fd->type->mod);
-        tf->next = tret;
-        sc->stc |= STCref; // CALYPSO-specific
-    }
-
-    sc->linkage = LINKcpp;
-
-    fd->type = typeSemantic(fd->type, fd->loc, sc);
-    sc->pop();
+    fillSemInfo(fd);
 
     if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
             D->getPrimaryTemplate() // forward-declared explicit specializations do not have their primary template set (stangely)
@@ -961,6 +973,8 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
     setDsym(D, td);
+
+    td->semanticRun = PASSsemantic3done;
 
     // FIXME: function overloads with volatile parameters?
 
@@ -1271,6 +1285,7 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
     setDsym(CanonDecl, e);
+    e->semanticRun = PASSsemantic3done;
 
     return oneSymbol(e);
 }
@@ -1295,7 +1310,9 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 
     auto em = new EnumMember(memberLoc, ident, value, nullptr, D);
     setDsym(D, em);
+
     em->ed = parent;
+    em->semanticRun = PASSsemantic3done;
 
     return oneSymbol(em);
 }
@@ -1308,7 +1325,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
         return dsymForDecl(ND);
 
     assert(isa<clang::TranslationUnitDecl>(D) && "Unhandled dsymForDecl(clang::Decl)");
-    return Module::getModule(D);
+    return getModule(D);
 }
 
 Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
@@ -1321,7 +1338,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     if (auto NS = dyn_cast<clang::NamespaceDecl>(D)) {
         if (NS->isInlineNamespace())
             return dsymForDecl(cast<clang::Decl>(NS->getDeclContext()));
-        return Module::getModule(NS);
+        return getModule(NS);
     }
 
     ScopeDsymbol* parent = nullptr;
@@ -1339,12 +1356,12 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         if (Func && Func->isOverloadedOperator())
         {
             if (auto Tag = isOverloadedOperatorWithTagOperand(D))
-                parent = Module::getModule(Tag); // non-member operators are part of the record module
+                parent = getModule(Tag); // non-member operators are part of the record module
         }
         else if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
-            parent = Module::getModule(D);
+            parent = getModule(D);
         else
-            parent = Module::getModule(Parent); // aka _
+            parent = getModule(Parent); // aka _
     }
     else
     {
@@ -1362,6 +1379,8 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     assert(D->d);
 
     auto sym = D->d->sym;
+    if (!sym)
+        return nullptr;
 
     if (!sym->parent)
     {
@@ -1398,20 +1417,20 @@ Module *DeclMapper::getModule(const clang::Decl* rootDecl)
         }
         objFilename += ident->toChars();
 
-        auto m = new Module(strdup(objFilename.c_str()), ident);
+        m = new Module(strdup(objFilename.c_str()), ident);
         m->rootDecl = rootDecl;
         m->parent = parent;
         m->importedFrom = importedFrom;
         m->loc = fromLoc(rootDecl->getLocation());
         m->members = new Dsymbols;
+        m->symtab = new_DsymbolTable();
+        m->setScope(Scope::createGlobal(m));
+        m->semanticRun = PASSsemantic3done;
 
         Module::allCppModules[rootDecl] = m;
         parent->symtab->insert(m);
 
         m->loadEmittedSymbolList();
-
-        auto sc = Scope::createGlobal(m);
-        m->setScope(sc);
 
         const char* objExt = nullptr;
         if (global.params.output_o)
@@ -1575,14 +1594,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     auto m = DeclMapper(nullptr, nullptr).getModule(rootDecl);
 
     if (id == calypso.id__)
-    {
-        if (isa<clang::TranslationUnitDecl>(DC))
-            for (auto& P: calypso.MacroMap)
-                if (auto s = m->mapper->VisitMacro(P.first, P.second))
-                    m->members->push(s);
-
         m->searchInlineNamespaces();
-    }
 
     return m;
 }
@@ -1758,7 +1770,7 @@ void Module::searchInlineNamespaces()
 bool isRecordMemberInModuleContext(clang::Decl* D)
 {
     auto Friend = dyn_cast<clang::FriendDecl>(D);
-    if (!D)
+    if (!Friend)
         return false;
 
     auto Friended = Friend->getFriendDecl();
@@ -1845,11 +1857,9 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
     auto DC = cast<clang::DeclContext>(rootDecl);
     auto Name = calypso.toDeclarationName(ident);
 
-    auto R = DC->lookup(Name);
-
     if (this->ident == calypso.id__)
     {
-        for (auto Match: R)
+        for (auto Match: DC->lookup(Name))
             if (isTopLevelInNamespaceModule(Match))
                 mapper.dsymForDecl(Match);
 
@@ -1860,12 +1870,14 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
 
         if (isa<clang::TranslationUnitDecl>(rootDecl)) // TODO: specific derived Module class for TU
             mapper.dsymForMacro(ident);
-
-        return symtab->lookup(ident);
+    }
+    else if (this->ident == ident)
+    {
+        mapper.dsymForDecl(rootDecl);
     }
     else
     {
-        for (auto Match: R)
+        for (auto Match: DC->lookup(Name))
             if (isRecordMemberInModuleContext(Match))
                 mapper.dsymForDecl(Match);
 
@@ -1877,9 +1889,9 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
             for (auto OO: nonMemberOverloadedOperators[Op].OOs)
                 mapper.dsymForDecl(OO);
         }
-
-        return symtab->lookup(ident);
     }
+
+    return symtab->lookup(ident);
 }
 
 void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op)

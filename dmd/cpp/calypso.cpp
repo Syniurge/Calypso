@@ -896,45 +896,45 @@ void PCH::update()
     MangleCtx = AST->getASTContext().createMangleContext();
 }
 
-void LangPlugin::buildMacroMap()
-{
-    auto& PP = getPreprocessor();
-    auto& Context = getASTContext();
-    auto& Sema = getSema();
-
-    for (auto& M: PP.macros())
-    {
-        auto II = M.getFirst();
-        if (!II->hasMacroDefinition())
-            continue;
-
-        auto MDir = M.getSecond().getLatest();
-        auto MInfo = MDir->getMacroInfo();
-
-        if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
-            continue;
-
-        auto MLoc = MDir->getLocation();
-        clang::Expr* Expr = nullptr;
-
-        if (MInfo->getNumTokens() == 0) {
-            unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
-            Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
-                                        Context.BoolTy, MLoc);
-        } else {
-            auto& Tok = MInfo->getReplacementToken(0);
-            if (Tok.getKind() != clang::tok::numeric_constant)
-                continue;
-
-            auto ResultExpr = Sema.ActOnNumericConstant(Tok);
-            if (!ResultExpr.isInvalid())
-                Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
-        }
-
-        if (Expr)
-            MacroMap.emplace_back(II, Expr);
-    }
-}
+// void LangPlugin::buildMacroMap()
+// {
+//     auto& PP = getPreprocessor();
+//     auto& Context = getASTContext();
+//     auto& Sema = getSema();
+//
+//     for (auto& M: PP.macros())
+//     {
+//         auto II = M.getFirst();
+//         if (!II->hasMacroDefinition())
+//             continue;
+//
+//         auto MDir = M.getSecond().getLatest();
+//         auto MInfo = MDir->getMacroInfo();
+//
+//         if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
+//             continue;
+//
+//         auto MLoc = MDir->getLocation();
+//         clang::Expr* Expr = nullptr;
+//
+//         if (MInfo->getNumTokens() == 0) {
+//             unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
+//             Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
+//                                         Context.BoolTy, MLoc);
+//         } else {
+//             auto& Tok = MInfo->getReplacementToken(0);
+//             if (Tok.getKind() != clang::tok::numeric_constant)
+//                 continue;
+//
+//             auto ResultExpr = Sema.ActOnNumericConstant(Tok);
+//             if (!ResultExpr.isInvalid())
+//                 Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
+//         }
+//
+//         if (Expr)
+//             MacroMap.emplace_back(II, Expr);
+//     }
+// }
 
 void PCH::save()
 {

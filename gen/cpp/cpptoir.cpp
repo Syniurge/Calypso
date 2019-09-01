@@ -150,7 +150,7 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
     {
         if (!ldcStor)
             return;
-        
+
         if (!clangStor)
         {
             ldcStor->setName(ArrayName);
@@ -206,7 +206,7 @@ void LangPlugin::leaveFunc()
 {
     if (!getASTUnit())
         return;
-    
+
     CGF()->AllocaInsertPt = nullptr;
     delete CGF();
     CGFStack.pop();
@@ -346,7 +346,7 @@ llvm::Type *LangPlugin::IrTypeStructHijack(::StructDeclaration *sd) // HACK but 
 {
     if (sd->ident == id_cpp_member_ptr)
     {
-        auto Ty = TypeMapper().toType(Loc(), sd->getType(), nullptr);
+        auto Ty = DeclMapper(nullptr, nullptr).toType(Loc(), sd->getType(), nullptr);
 
         if (auto MPT = Ty->getAs<clang::MemberPointerType>()) {
             auto T = CGM->getCXXABI().ConvertMemberPointerType(MPT);
@@ -372,9 +372,8 @@ llvm::Constant *LangPlugin::createStructLiteralConstant(StructLiteralExp *e)
 
     auto RD = getRecordDecl(e->sd);
 
-    TypeMapper tymap;
-    ExprMapper expmap(tymap);
-    tymap.addImplicitDecls = false;
+    DeclMapper mapper(nullptr, nullptr);
+    ExprMapper expmap(mapper);
 
     clang::APValue Value;
     expmap.toAPValue(Value, e);
@@ -546,11 +545,11 @@ void LangPlugin::toInitClass(TypeClass* tc, LLValue* dst)
 
 DValue *LangPlugin::toDynamicCast(Loc &loc, DValue *val, Type *_to)
 {
-    TypeMapper tymap;
+    DeclMapper mapper(nullptr, nullptr);
 
-    auto SrcRecordTy = tymap.toType(loc, getAggregateHandle(val->type)->getType(), nullptr);
-    auto DestTy = tymap.toType(loc, _to, nullptr);
-    auto DestRecordTy = tymap.toType(loc, getAggregateHandle(_to)->getType(), nullptr);
+    auto SrcRecordTy = mapper.toType(loc, getAggregateHandle(val->type)->getType(), nullptr);
+    auto DestTy = mapper.toType(loc, _to, nullptr);
+    auto DestRecordTy = mapper.toType(loc, getAggregateHandle(_to)->getType(), nullptr);
     clangCG::Address This(DtoRVal(val), clang::CharUnits::One());
 
     assert(!DestTy->isReferenceType()); // makes sure that the CastEnd argument won't be used
@@ -688,7 +687,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         DValue* argval = toElem((*arguments)[i]);
 
         auto argty = fnarg->type;
-        auto ArgTy = TypeMapper().toType(loc, argty,
+        auto ArgTy = DeclMapper(nullptr, nullptr).toType(loc, argty,
                                         fd->_scope, fnarg->storageClass);
 
         auto ad = getAggregateSym(argval->type);

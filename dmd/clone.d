@@ -252,9 +252,6 @@ private bool needOpAssign(StructDeclaration sd)
  */
 FuncDeclaration buildOpAssign(StructDeclaration sd, Scope* sc)
 {
-    if (auto lp = sd.langPlugin()) // CALYPSO
-        return lp.buildOpAssign(sd, sc);
-
     if (FuncDeclaration f = hasIdentityOpAssign(sd, sc))
     {
         sd.hasIdentityAssign = true;

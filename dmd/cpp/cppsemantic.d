@@ -268,8 +268,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         }
         sd.semanticTypeInfoMembers();
 
-        if (sd.langPlugin.isSymbolReferenced(sd))
-            MarkAggregateReferencedImpl(sd);
+//         if (sd.langPlugin.isSymbolReferenced(sd))
+//             MarkAggregateReferencedImpl(sd);
 
         sd.semanticRun = PASS.semantic3done;
 
@@ -433,8 +433,8 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         cldec.dtor = buildDtor(cldec, sc2);
         cldec.tidtor = buildExternDDtor(cldec, sc2);
 
-        if (cldec.langPlugin.isSymbolReferenced(cldec))
-            MarkAggregateReferencedImpl(cldec);
+//         if (cldec.langPlugin.isSymbolReferenced(cldec))
+//             MarkAggregateReferencedImpl(cldec);
 
         cldec.semanticRun = PASS.semantic3done;
 
@@ -840,7 +840,3 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
         }
     }
 }
-
-private:
-
-extern (C++) void MarkAggregateReferencedImpl(AggregateDeclaration ad);

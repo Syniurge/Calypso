@@ -4685,6 +4685,9 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
                         sym._scope._module.addDeferredSemantic(sym);
                     cldec.baseok = Baseok.none;
                 }
+
+                if (auto lp = sym.langPlugin)
+                    lp.markSymbolReferenced(sym); // CALYPSO
             L7:
             }
 
@@ -4750,6 +4753,9 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
                 }
 
                 b.sym = sym;
+
+                if (auto lp = sym.langPlugin)
+                    lp.markSymbolReferenced(sym); // CALYPSO
 
                 auto bcd = isClassDeclarationOrNull(sym); // CALYPSO
                 if (!bcd || bcd.baseok < Baseok.done)

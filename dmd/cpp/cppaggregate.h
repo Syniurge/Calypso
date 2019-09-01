@@ -30,7 +30,7 @@ class StructDeclaration : public ::StructDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD, *_Def;
+    const clang::RecordDecl *RD, *_Def = nullptr;
     bool isUsed = false;
     bool membersCompleted = false;
 
@@ -60,9 +60,11 @@ class ClassDeclaration : public ::ClassDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::CXXRecordDecl *RD, *_Def;
+    const clang::CXXRecordDecl *RD, *_Def = nullptr;
     bool isUsed = false;
+
     bool membersCompleted = false;
+    bool vtblBuilt = false;
 
     ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
                      Dsymbols* members, const clang::CXXRecordDecl *RD);
@@ -85,7 +87,6 @@ public:
     bool allowMultipleInheritance() override { return true; }
     bool allowInheritFromStruct() override { return true; }
     bool needsInterfaceSemantic() const override { return false; }
-    void finalizeVtbl() override;
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
@@ -99,7 +100,7 @@ class UnionDeclaration : public ::UnionDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::RecordDecl *RD, *_Def;
+    const clang::RecordDecl *RD, *_Def = nullptr;
     bool membersCompleted = false;
 
     d_uns64 size(const Loc &loc) override;
@@ -110,6 +111,7 @@ public:
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
+    Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
     const clang::RecordDecl *Definition();
 };
@@ -131,7 +133,5 @@ const clang::RecordDecl *getRecordDecl(::Type *t);
 ::FuncDeclaration *findOverriddenMethod(::FuncDeclaration* md, ::ClassDeclaration* base );
 
 }
-
-void MarkAggregateReferencedImpl(AggregateDeclaration* ad);
 
 #endif /* DMD_CPP_CPPAGGREGATE_H */

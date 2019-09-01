@@ -1676,6 +1676,13 @@ public:
         return false;
     }
 
+    /************************
+     * For "lazy" foreign ScopeDsymbol, populate and reorder the members
+     */
+    void complete() // CALYPSO
+    {
+    }
+
     extern (D) alias ForeachDg = int delegate(size_t idx, Dsymbol s);
 
     /***************************************
@@ -2112,14 +2119,6 @@ extern (C++) final class ForwardingScopeDsymbol : ScopeDsymbol
     override void importScope(Dsymbol s, Prot protection)
     {
         forward.importScope(s, protection);
-    }
-
-
-    /************************
-     * For "lazy" foreign ScopeDsymbol, populate and reorder the members
-     */
-    void complete() // CALYPSO
-    {
     }
 
     override const(char)* kind()const{ return "local scope"; }

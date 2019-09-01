@@ -46,9 +46,6 @@ public:
 
     Module(const char* filename, Identifier* ident);
 
-    static Module *getModule(const clang::Decl* rootDecl);
-    static Package *getPackage(const clang::Decl* NSorTU);
-
     static Module *load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef);
 
     void importAll(Scope *sc) override {}

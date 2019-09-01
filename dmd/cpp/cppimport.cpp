@@ -29,7 +29,7 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
 ::Module* Import::loadModule(Scope* sc)
 {
     calypso.pch.update();
-    
+
     bool isTypedef;
     ::Module* m = Module::load(loc, packages, id, isTypedef);
 

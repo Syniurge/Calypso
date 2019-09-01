@@ -751,9 +751,6 @@ version (IN_LLVM) {} else
     if (global.errors)
         fatal();
 
-    foreach (lp; langPlugins) // CALYPSO
-        lp.semanticModules();
-
 version (IN_LLVM)
 {
     extraLDCSpecificSemanticAnalysis(modules);
