@@ -7038,7 +7038,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         {
             TemplateDeclaration tempdecl = this.tempdecl.isTemplateDeclaration();
             assert(tempdecl);
-            assert(tempdecl._scope);
+            assert(tempdecl._scope || tempdecl.langPlugin()); // CALYPSO
             // Deduce tdtypes
             tdtypes.setDim(tempdecl.parameters.dim);
             if (!tempdecl.matchWithInstance(sc, this, &tdtypes, fargs, 2))

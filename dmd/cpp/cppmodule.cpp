@@ -1277,7 +1277,7 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 
     em->ed = parent;
     em->storage_class |= STCmanifest;
-    em->type = parent->memtype;
+    em->type = parent->type;
     em->semanticRun = PASSsemantic3done;
 
     return oneSymbol(em);
@@ -1493,11 +1493,11 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
     isTypedef = false;
 
-    const clang::Decl *rootDecl, *D = nullptr;
+    const clang::Decl *rootDecl = nullptr;
 
     if (id == calypso.id__)
     {
-        rootDecl = D = cast<clang::Decl>(DC)->getCanonicalDecl();
+        rootDecl = cast<clang::Decl>(DC)->getCanonicalDecl();
     }
     else
     {
@@ -1505,12 +1505,12 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
         if (packages->dim == 1)
         {
             if (id == calypso.id___va_list_tag)
-                D = cast<clang::NamedDecl>(Context.getVaListTagDecl());
+                rootDecl = cast<clang::NamedDecl>(Context.getVaListTagDecl());
             else if (id == calypso.id___NSConstantString_tag)
-                D = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
+                rootDecl = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
         }
 
-        if (!D)
+        if (!rootDecl)
         {
             auto R = DC->lookup(calypso.toDeclarationName(id));
             if (R.empty())
@@ -1535,13 +1535,13 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
                 if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
                 {
-                    D = Match;
+                    rootDecl = Match;
                     break;
                 }
             }
         }
 
-        if (!D)
+        if (!rootDecl)
         {
             ::error(loc, "C++ modules have to be enums, records (class/struct, template or not), typedefs or _.\n"
                          "Importing a typedef is equivalent to \"import (C++) _ : 'typedef';\"\n"
@@ -1549,12 +1549,7 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
             fatal();
         }
 
-        D = cast<clang::NamedDecl>(const_cast<clang::Decl*>(getCanonicalDecl(D)));
-
-        if (auto CTD = dyn_cast<clang::ClassTemplateDecl>(D))
-            rootDecl = CTD->getTemplatedDecl();
-        else
-            rootDecl = D;
+        rootDecl = getCanonicalDecl(rootDecl);
     }
 
     auto m = DeclMapper(nullptr, nullptr).getModule(rootDecl);
@@ -1820,11 +1815,12 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
 
     DeclMapper mapper(this);
 
-    auto DC = cast<clang::DeclContext>(rootDecl);
     auto Name = calypso.toDeclarationName(ident);
 
     if (this->ident == calypso.id__)
     {
+        auto DC = cast<clang::DeclContext>(rootDecl);
+
         for (auto Match: DC->lookup(Name))
             if (isTopLevelInNamespaceModule(Match))
                 mapper.dsymForDecl(Match);
@@ -1843,9 +1839,10 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
     }
     else
     {
-        for (auto Match: DC->lookup(Name))
-            if (isRecordMemberInModuleContext(Match))
-                mapper.dsymForDecl(Match);
+        if (auto DC = dyn_cast<clang::DeclContext>(rootDecl))
+            for (auto Match: DC->lookup(Name))
+                if (isRecordMemberInModuleContext(Match))
+                    mapper.dsymForDecl(Match);
 
         if (Name.getNameKind() == clang::DeclarationName::CXXOperatorName)
         {
@@ -1866,8 +1863,7 @@ void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op
         return;
     nonMemberOverloadedOperators[Op].searched = true;
 
-    auto RD = dyn_cast<clang::RecordDecl>(rootDecl);
-    if (!RD)
+    if (!isa<clang::RecordDecl>(rootDecl) && !isa<clang::ClassTemplateDecl>(rootDecl))
         return;
 
     auto& Context = calypso.getASTContext();
