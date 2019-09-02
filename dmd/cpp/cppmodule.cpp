@@ -4,14 +4,15 @@
 #include "attrib.h"
 #include "declaration.h"
 #include "enum.h"
+#include "expression.h"
+#include "id.h"
 #include "identifier.h"
 #include "import.h"
 #include "init.h"
 #include "identifier.h"
-#include "template.h"
 #include "scope.h"
 #include "statement.h"
-#include "id.h"
+#include "template.h"
 #include "driver/cl_options.h"
 
 #include "cpp/calypso.h"
@@ -26,14 +27,11 @@
 #include <stdlib.h>
 #include <string>
 
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Basic/TargetInfo.h"
-#include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Sema/Sema.h"
@@ -246,6 +244,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     DECLEXPLICIT(ClassTemplateSpecialization)
     DECLEXPLICIT(VarTemplateSpecialization)
     DECL(Enum)
+    DECL(EnumConstant)
     DECLWF(Record)
     DECLWF(Function)
     DECLWF(Value)
@@ -1184,10 +1183,11 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
     if (!D->isExplicitSpecialization())
         return nullptr;
 
-    auto Partial = dyn_cast<PartialTy>(D);
     // NOTE: D's partial specializations != C++'s partial specializations
     // The mapping provides a "close" but not exact approximation of equivalent template specs in D (for reflection),
     // but TemplateDeclaration::findBestMatch is skipped since the choice is done by Clang anyway.
+
+    auto Partial = dyn_cast<PartialTy>(D);
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
@@ -1219,38 +1219,9 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
         if (AI) AI++;
     }
 
-    if (Partial)
-        // SEMI-HACK: even if we don't map partial specialization arguments, we still need to call fromTemplateArgument() to import module dependencies
-        for (auto& SpecArg: D->getTemplateArgs().asArray())
-            FromType(*this, loc).fromTemplateArgument(&SpecArg);
-
-    auto decldefs = VisitSpecDecl(*this, D);
-    if (!decldefs)
-        return nullptr;
-
-    auto s = new Dsymbols;
-    auto td = new TemplateDeclaration(loc, id, tpl, decldefs, D);
-    s->push(td);
-
-    if (!Partial)
-    {
-        auto tiargs = new Objects;
-        for (auto tp: *tpl)
-            tiargs->push(tp->specialization());
-
-        auto explicit_ti = new TemplateInstance(loc, td->ident, tiargs);
-        explicit_ti->tempdecl = td;
-        explicit_ti->havetempdecl = true;
-        explicit_ti->semantictiargsdone = true;
-        explicit_ti->isForeignInst = true;
-        explicit_ti->Inst = const_cast<SpecTy*>(D);
-        explicit_ti->members = decldefs; // NOTE: it doesn't matter that td and ti share the same members, semantic(td) doesn't do any change to them
-        explicit_ti->tdtypes.setDim(tiargs->dim);
-        memcpy(explicit_ti->tdtypes.data, tiargs->data, tiargs->dim * sizeof(void*));
-        s->push(explicit_ti);
-    }
-
-    return s;
+    auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
+    td->semanticRun = PASSsemantic3done;
+    return oneSymbol(td);
 }
 
 // WARNING: this is for explicit or partial specs, this might need a better name
@@ -1285,6 +1256,8 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 
     auto e = new EnumDeclaration(loc, ident, memtype, D);
     setDsym(CanonDecl, e);
+    e->members = new Dsymbols;
+    e->symtab = new_DsymbolTable();
     e->semanticRun = PASSsemantic3done;
 
     return oneSymbol(e);
@@ -1292,26 +1265,19 @@ Dsymbols *DeclMapper::VisitEnumDecl(const clang::EnumDecl* D)
 
 Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 {
-    auto memberLoc = fromLoc(D->getLocation());
+    auto loc = fromLoc(D->getLocation());
     auto ident = fromIdentifier(D->getIdentifier());
 
     auto parent = static_cast<EnumDeclaration*>(
                 dsymForDecl(cast<clang::Decl>(getDeclContextOpaque(D))));
+    auto value = ExprMapper(*this).fromAPInt(loc, D->getInitVal(), clang::QualType());
 
-    Expression *value = nullptr;
-
-    if (auto InitE = D->getInitExpr())
-    {
-        value = ExprMapper(*this).fromExpression(InitE);
-        value = new_CastExp(memberLoc, value, parent->memtype); // SEMI-HACK (?)
-                                // the type returned by 1LU << ... will be ulong yet
-                                // we may need an int (see wctype.h
-    }
-
-    auto em = new EnumMember(memberLoc, ident, value, nullptr, D);
+    auto em = new EnumMember(loc, ident, value, nullptr, D);
     setDsym(D, em);
 
     em->ed = parent;
+    em->storage_class |= STCmanifest;
+    em->type = parent->memtype;
     em->semanticRun = PASSsemantic3done;
 
     return oneSymbol(em);

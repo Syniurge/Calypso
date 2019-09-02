@@ -549,20 +549,15 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
         return ti;
     }
 
-    makeForeignInstance(ti, sc);
-
-    ti->semanticRun = PASSinit;
-    ti->hash = 0;
-    return ti;
-}
-
-void TemplateDeclaration::makeForeignInstance(TemplateInstance* ti, Scope* sc)
-{
     correctTempDecl(ti);
     ti->isForeignInst = true;
     ti->havetempdecl = true;
 
-    ti->correctTiargs(sc);
+    ti->correctTiargs();
+
+    ti->semanticRun = PASSinit;
+    ti->hash = 0;
+    return ti;
 }
 
 TemplateInstUnion TemplateDeclaration::hasExistingClangInst(::TemplateInstance* ti)
@@ -733,7 +728,7 @@ Objects* TemplateInstance::tiargsForMangling()
     return primTiargs ? primTiargs : tiargs;
 }
 
-void TemplateInstance::correctTiargs(Scope* sc)
+void TemplateInstance::correctTiargs()
 {
     auto InstND = Inst.dyn_cast<clang::NamedDecl*>();
 
