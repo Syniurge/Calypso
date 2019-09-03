@@ -253,11 +253,11 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 #undef DECL
 #undef DECLWF
 
-    bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
-
-    // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
-    // to be the TemplateInstance, that we create if requested
-    if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
+//     bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
+//
+//     // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
+//     // to be the TemplateInstance, that we create if requested
+//     if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
         if (ND && ND->d && s)
             const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
@@ -1190,6 +1190,10 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
 
     auto Partial = dyn_cast<PartialTy>(D);
 
+    assert(Partial); // NOTE: mapping explicit specs to TemplateDeclaration is disabled,
+                     // to simplify the handling of C++ templates and because at the time
+                     // of writing it wouldn't add anything to reflection
+
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
 
@@ -1286,15 +1290,17 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 
 /*****/
 
+template <DeclMapperFlags flags>
 Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
 {
     if (auto ND = dyn_cast<clang::NamedDecl>(D))
-        return dsymForDecl(ND);
+        return dsymForDecl<flags>(ND);
 
     assert(isa<clang::TranslationUnitDecl>(D) && "Unhandled dsymForDecl(clang::Decl)");
     return getModule(D);
 }
 
+template <DeclMapperFlags flags>
 Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 {
     D = cast<clang::NamedDecl>(getCanonicalDecl(D));
@@ -1304,7 +1310,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (auto NS = dyn_cast<clang::NamespaceDecl>(D)) {
         if (NS->isInlineNamespace())
-            return dsymForDecl(cast<clang::Decl>(NS->getDeclContext()));
+            return dsymForDecl<NoFlag>(cast<clang::Decl>(NS->getDeclContext()));
         return getModule(NS);
     }
 
@@ -1332,7 +1338,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     }
     else
     {
-        auto s = dsymForDecl(Parent);
+        auto s = dsymForDecl<NoFlag>(Parent);
         assert(s->isScopeDsymbol());
         parent = static_cast<ScopeDsymbol*>(s);
     }
@@ -1342,7 +1348,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         minst = ti->minst;
 
     DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
-                    DeclMapper::CreateTemplateInstance);
+                    DeclMapper::CreateTemplateInstance | flags);
     assert(D->d);
 
     auto sym = D->d->sym;
@@ -1362,10 +1368,21 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     return D->d->sym;
 }
 
+template <DeclMapperFlags flags>
+Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    return DeclMapper(sds).dsymForDecl<flags>(D);
+}
+
+template Dsymbol* dsymForDecl<DeclMapper::NoFlag>(ScopeDsymbol* sds, const clang::Decl* D);
+template Dsymbol* dsymForDecl<DeclMapper::MapExplicitSpecs>(ScopeDsymbol* sds, const clang::Decl* D);
+
 // ***** //
 
-Module *DeclMapper::getModule(const clang::Decl* rootDecl)
+Module *DeclMapper::getModule(const clang::Decl* D)
 {
+    auto rootDecl = getSpecializedDeclOrExplicit(D);
+
     Module* m = Module::allCppModules[rootDecl];
 
     if (!m)
@@ -1416,17 +1433,17 @@ Module *DeclMapper::getModule(const clang::Decl* rootDecl)
     return m;
 }
 
-Package *DeclMapper::getPackage(const clang::Decl* rootDecl)
+Package *DeclMapper::getPackage(const clang::Decl* D)
 {
-    if (isa<clang::TranslationUnitDecl>(rootDecl))
+    if (isa<clang::TranslationUnitDecl>(D))
         return Module::rootPackage;
 
-    auto Parent = cast<clang::Decl>(getDeclContextOpaque(rootDecl));
+    auto Parent = cast<clang::Decl>(getDeclContextOpaque(D));
 
-    if (isa<clang::TagDecl>(rootDecl) || isa<clang::ClassTemplateDecl>(rootDecl))
+    if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
         return getPackage(Parent);
 
-    auto NS = cast<clang::NamespaceDecl>(rootDecl);
+    auto NS = cast<clang::NamespaceDecl>(D);
     if (NS->d) {
         assert(NS->d->sym->isPackage());
         return static_cast<Package*>(NS->d->sym);
@@ -1441,11 +1458,6 @@ Package *DeclMapper::getPackage(const clang::Decl* rootDecl)
     pkg->symtab = new_DsymbolTable();
 
     return pkg;
-}
-
-Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
-{
-    return DeclMapper(sds).dsymForDecl(D);
 }
 
 // ***** //

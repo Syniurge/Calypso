@@ -53,7 +53,6 @@ public:
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
-    ::TemplateDeclaration *getCorrespondingTempDecl(TemplateInstUnion Inst);
     void correctTempDecl(TemplateInstance *ti);
 
     bool allowTupleParameterAnywhere() override { return true; }

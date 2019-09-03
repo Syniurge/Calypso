@@ -177,6 +177,13 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 //         paramscope.pop();
 
         tempinst.symtab = new DsymbolTable();
+
+        foreach (s; *tempinst.members)
+        {
+            assert(!s.parent);
+            s.parent = tempinst;
+            s.addMember(null, tempinst);
+        }
     }
 }
 

@@ -365,13 +365,13 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 
     assert(!ti->members); // members were already set during decl mapping??
 
-    DeclMapper mapper(ti->minst, ti->minst);
-
     auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
-    Dsymbol* inst = mapper.dsymForDecl(Inst);
+
+    DeclMapper mapper(ti->minst, ti->minst);
+    mapper.VisitDecl(Inst);
 
     auto a = new Dsymbols;
-    if (inst)
+    if (auto inst = Inst->d->sym)
     {
         a->push(inst);
         c_ti->aliasdecl = inst;
@@ -629,26 +629,23 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     return TemplateInstUnion();
 }
 
-::TemplateDeclaration* TemplateDeclaration::getCorrespondingTempDecl(TemplateInstUnion Inst)
+void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 {
     const clang::Decl* RealTemp;
 
-    if (auto SpecDecl = Inst.dyn_cast<clang::NamedDecl*>())
+    if (auto SpecDecl = ti->Inst.dyn_cast<clang::NamedDecl*>())
         RealTemp = getSpecializedDeclOrExplicit(SpecDecl);
     else
     {
-        auto TST = Inst.get<const clang::TemplateSpecializationType*>();
+        auto TST = ti->Inst.get<const clang::TemplateSpecializationType*>();
         RealTemp = TST->getTemplateName().getAsTemplateDecl();
     }
 
-    auto sym = dsymForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
+    auto sym = dsymForDecl<DeclMapper::MapExplicitSpecs>(
+                        static_cast<ScopeDsymbol*>(this->parent), RealTemp);
     assert(sym->isTemplateDeclaration());
-    return static_cast<TemplateDeclaration*>(sym);
-}
 
-void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
-{
-    ti->tempdecl = getCorrespondingTempDecl(ti->Inst);
+    ti->tempdecl = static_cast<TemplateDeclaration*>(sym);
 
     assert(ti->tempdecl && isCPP(ti->tempdecl));
 }

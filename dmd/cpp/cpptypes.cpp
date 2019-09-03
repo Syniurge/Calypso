@@ -1843,11 +1843,15 @@ const clang::Decl *getParent(const clang::Decl *D)
     return cast<clang::Decl>(D->getDeclContext());
 }
 
+// WARNING: currently Calypso doesn't map explicit specializations as TemplateDeclaration
+// anymore, so getSpecializedDeclOrExplicit is a misnomer, but kept as a reminder
+// and in case it starts mapping as TemplateDeclaration again for reflection
 const clang::Decl *getSpecializedDeclOrExplicit(const clang::Decl *Spec)
 {
     if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(Spec))
     {
-        if (ClassSpec->isExplicitSpecialization())
+//         if (ClassSpec->isExplicitSpecialization())
+        if (isa<clang::ClassTemplatePartialSpecializationDecl>(Spec))
             return Spec;
 
         auto U = ClassSpec->getSpecializedTemplateOrPartial();
@@ -1857,17 +1861,31 @@ const clang::Decl *getSpecializedDeclOrExplicit(const clang::Decl *Spec)
         else
             return U.get<clang::ClassTemplatePartialSpecializationDecl*>();
     }
+    else if (auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(Spec))
+    {
+//         if (VarSpec->isExplicitSpecialization())
+        if (isa<clang::VarTemplatePartialSpecializationDecl>(Spec))
+            return Spec;
+
+        auto U = VarSpec->getSpecializedTemplateOrPartial();
+
+        if (U.is<clang::VarTemplateDecl*>())
+            return U.get<clang::VarTemplateDecl*>();
+        else
+            return U.get<clang::VarTemplatePartialSpecializationDecl*>();
+    }
     else if (auto FuncSpec = dyn_cast<clang::FunctionDecl>(Spec))
     {
         assert(FuncSpec->getPrimaryTemplate());
 
-        if (FuncSpec->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization)
-            return Spec;
+//         if (FuncSpec->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization)
+//             return Spec;
 
         return FuncSpec->getPrimaryTemplate();
     }
 
-    llvm_unreachable("Not a template spec?");
+    return Spec;
+//     llvm_unreachable("Not a template spec?");
 }
 
 }

@@ -763,6 +763,8 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
                     const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
 
     if (D && D->hasDefinition()) {
+        ad->size(ad->loc);
+
         auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
 
