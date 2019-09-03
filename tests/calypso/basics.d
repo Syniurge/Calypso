@@ -146,5 +146,5 @@ void main()
     writeln("funcTempSizeOf(_char) = ", funcTempSizeOf(_char));
     writeln("funcTempSizeOf(_short) = ", funcTempSizeOf(_short));
     writeln("funcTempSizeOf(_double) = ", funcTempSizeOf(_double));
-//     writeln("funcTempSizeOf(_testStruct) = ", funcTempSizeOf(_testStruct));
+    writeln("funcTempSizeOf(_testStruct) = ", funcTempSizeOf(_testStruct));
 }

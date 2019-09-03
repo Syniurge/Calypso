@@ -179,8 +179,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
 //   return clang::ItaniumVTableBuilder::ComputeBaseOffset(Context, BaseRD, DerivedRD);
 }
 
-// HACK? We're generating C++ thunk-like functions at codegen time!
-// Since they are final they shouldn't affect the aggregate they're member of, but still...
+// HACK? We're generating C++ thunk-like functions at codegen time
 //
 // Pro: this avoids redundant "manual" function code generation (even though thunks are simple)
 // Con: Clang's way of doing things avoids meddling with the AST, doesn't have any hard-to-foresee consequence
@@ -192,7 +191,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     auto loc = callee->loc;
 
     // generate a name
-    llvm::SmallString<256> thunkName;
+    llvm::SmallString<64> thunkName;
     llvm::raw_svector_ostream Out(thunkName);
 
     Out << "_DCXT";
@@ -212,6 +211,7 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
                                 calleetf->next, 0, LINKcpp, STCfinal);
     auto fthunk = new_FuncDeclaration(loc, loc,
                     thunkId, STCfinal, tf);
+    parent->vtblFinal.push(fthunk);
 
     // build arg list
     auto params = calleetf->parameters;
@@ -367,7 +367,7 @@ struct DCXXVTableAdjuster
                 continue;
 
             cpp::FuncDeclaration *cxxmd = nullptr;
-            if (auto overmd = findOverriddenMethod(md, dcxxInfo.mostDerivedCXXBase))
+            if (auto overmd = findOverriddenMethod(md, dcxxInfo.mostDerivedCXXBase)) // TODO: use dsymForDecl?
             {
                 assert(isCPP(overmd));
                 cxxmd = static_cast<cpp::FuncDeclaration*>(overmd);

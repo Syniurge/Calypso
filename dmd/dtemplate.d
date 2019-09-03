@@ -2753,7 +2753,7 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
 
         Ltd2:
             // td is the new best match
-            assert(td._scope);
+            assert(td._scope || td.langPlugin); // CALYPSO
             td_best = td;
             ti_best = null;
             property = 0;   // (backward compatibility)
@@ -2862,7 +2862,7 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
 
         Ltd:                // td is the new best match
             //printf("Ltd\n");
-            assert(td._scope);
+            assert(td._scope || td.langPlugin); // CALYPSO
             td_best = td;
             ti_best = ti;
             property = 0;   // (backward compatibility)
@@ -2900,7 +2900,7 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
         /* The best match is td_best with arguments tdargs.
          * Now instantiate the template.
          */
-        assert(td_best._scope);
+        assert(td_best._scope || td_best.langPlugin); // CALYPSO
         if (!sc)
             sc = td_best._scope; // workaround for Type.aliasthisOf
 
