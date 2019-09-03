@@ -297,6 +297,7 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->Inst = const_cast<SpecTy*>(D);
 
     ti->members = decldefs;
+    ti->symtab = new_DsymbolTable();
     for (auto s: *decldefs)
         s->addMember(nullptr, ti);
 

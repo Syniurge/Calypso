@@ -227,7 +227,7 @@ bool TemplateDeclaration::evaluateConstraint(::TemplateInstance* ti, Scope* sc, 
     auto& Diags = calypso.getDiagnostics();
     auto Temp = getPrimaryTemplate();
 
-    DeclMapper mapper(ti);
+    DeclMapper mapper(sc->minst, sc->minst);
     ExprMapper expmap(mapper);
 
     clang::TemplateArgumentListInfo Args;
@@ -372,7 +372,10 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 
     auto a = new Dsymbols;
     if (inst)
+    {
         a->push(inst);
+        c_ti->aliasdecl = inst;
+    }
     return a;
 }
 
@@ -555,7 +558,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 
     ti->correctTiargs();
 
-    ti->semanticRun = PASSinit;
+    ti->semanticRun = PASSinit; // FIXME not necessary anymore
     ti->hash = 0;
     return ti;
 }
@@ -575,7 +578,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
 
     auto& S = calypso.getSema();
 
-    DeclMapper mapper(ti);
+    DeclMapper mapper(sc->minst, sc->minst);
     ExprMapper expmap(mapper);
 
     auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(getDefinition(getPrimaryTemplate()));

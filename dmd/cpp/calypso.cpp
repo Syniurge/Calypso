@@ -518,7 +518,7 @@ clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
 }
 
 clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
-{
+{/*if (ident == Id::opBinary) { return Ctx.DeclarationNameTable.getCXXConstructorName}*/
     return clang::DeclarationName(toIdentifierInfo(ident));
 }
 

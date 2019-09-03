@@ -90,44 +90,6 @@ extern(C++) final class CppSemanticVisitor : DsymbolSemanticVisitor
 
         tempinst.addMember(sc, sc.scopesym);
 
-        if (!tempinst.members)
-            return;
-
-        Scope* _scope = tempinst.tempdecl._scope;
-        _scope = _scope.push(tempinst.argsym);
-        _scope.tinst = tempinst.isDummy ? null : tempinst;
-        _scope.minst = tempinst.minst;
-
-        // Do semantic() analysis on template instance members
-        Scope* sc2;
-        sc2 = _scope.push(tempinst);
-        sc2.parent = tempinst;
-        sc2.tinst = tempinst.isDummy ? null : tempinst;
-        sc2.minst = tempinst.minst;
-
-        for (size_t i = 0; i < tempinst.members.dim; i++)
-        {
-            Dsymbol s = (*tempinst.members)[i];
-            s.dsymbolSemantic(sc2);
-        }
-
-        if (tempinst.aliasdecl)
-        {
-            /* https://issues.dlang.org/show_bug.cgi?id=13816
-            * AliasDeclaration tries to resolve forward reference
-            * twice (See inuse check in AliasDeclaration.toAlias()). It's
-            * necessary to resolve mutual references of instantiated symbols, but
-            * it will left a true recursive alias in tuple declaration - an
-            * AliasDeclaration A refers TupleDeclaration B, and B contains A
-            * in its elements.  To correctly make it an error, we strictly need to
-            * resolve the alias of eponymous member.
-            */
-            tempinst.aliasdecl = tempinst.aliasdecl.toAlias2();
-        }
-
-        sc2.pop();
-        _scope.pop();
-
         // Give additional context info if error occurred during instantiation
 //         if (global.errors != errorsave)
 //         {
