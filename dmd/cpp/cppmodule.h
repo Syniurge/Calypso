@@ -35,6 +35,7 @@ public:
     TemplateInstances tempinsts; // not added to members, but listed here to get emitted
 
     static std::map<const clang::Decl *, cpp::Module*> allCppModules;
+    static Modules amodules_cpp; // redundant with allCppModules, but used by codegenModules
 
     // List of C++ symbols emitted in the existing object file
     // If a C++ symbol not in this list was referenced, the module needs to be re-gen'd

@@ -69,6 +69,7 @@ File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
 
 Package *Module::rootPackage;
 std::map<const clang::Decl*, Module*> Module::allCppModules;
+Modules Module::amodules_cpp;
 
 void Module::init()
 {
@@ -1412,6 +1413,7 @@ Module *DeclMapper::getModule(const clang::Decl* D)
         m->semanticRun = PASSsemantic3done;
 
         Module::allCppModules[rootDecl] = m;
+        Module::amodules_cpp.push(m);
         parent->symtab->insert(m);
 
         m->loadEmittedSymbolList();
