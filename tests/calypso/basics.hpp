@@ -109,6 +109,7 @@ namespace test {
     template<>
      class tempWithPartialSpecs<bool, 5> // explicit spec
     {
+    public:
         const char *toChars() { return "Explicit spec (T = bool, N = 5)"; }
     };
 
