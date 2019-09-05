@@ -25,6 +25,7 @@
 using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
+using llvm::dyn_cast_or_null;
 
 FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Objects *tiargs,
@@ -126,7 +127,7 @@ inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
             ad->_Def = ad->RD;
     }
 
-    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // making sure that the canon decl is still the same (FIXME might be completely unnecessary)
+    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // might be completely unnecessary
     return ad->_Def;
 }
 
@@ -595,28 +596,50 @@ void ClassDeclaration::buildVtbl()
         vtbl.setDim(bcd->vtbl.dim);
         memcpy(vtbl.tdata(), bcd->vtbl.tdata(), sizeof(void*) * vtbl.dim);
     }
+    else
+        vtbl.push(this);
 
     clang::CXXFinalOverriderMap FinalOverriders;
     RD->getFinalOverriders(FinalOverriders);
 
+    for (auto& vtblEntry: vtbl)
+    {
+        if (vtblEntry->isClassDeclaration())
+            continue;
+
+        auto virtmd = static_cast<::FuncDeclaration*>(vtblEntry);
+        auto VirtMD = cast<clang::CXXMethodDecl>(getFD(virtmd));
+
+        auto OverMD = FinalOverriders[VirtMD].begin()->second.front().Method;
+        auto overmd = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
+
+        assert(virtmd->vtblIndex != -1);
+
+        if (overmd != virtmd)
+        {
+            overmd->vtblIndex = virtmd->vtblIndex;
+            overmd->foverrides.push(virtmd);
+            vtblEntry = overmd;
+        }
+    }
+
     for (const auto &Overrider : FinalOverriders)
     {
+        auto VirtMD = Overrider.first;
+        auto virtmd = static_cast<FuncDeclaration*>(dsymForDecl(this, VirtMD));
+
         auto OverMD = Overrider.second.begin()->second.front().Method;
-        auto md = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
-        if (!md)
+        auto overmd = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
+
+        if (!overmd)
+            continue;
+        assert(virtmd);
+
+        if (overmd->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
             continue;
 
-        if (md->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
-            continue;
-
-        auto vi = md->findVtblIndex(&vtbl, vtbl.dim);
-        if (vi < 0)
-        {
-            md->vtblIndex = vtbl.dim;
-            vtbl.push(md);
-        }
-        else
-            md->vtblIndex = vi;
+        overmd->vtblIndex = vtbl.dim;
+        vtbl.push(overmd);
     }
 }
 
@@ -752,6 +775,18 @@ static bool& getIsUsed(::AggregateDeclaration* ad)
         return static_cast<cpp::StructDeclaration*>(ad)->isUsed;
 }
 
+static const clang::RecordDecl* getDefinition(::AggregateDeclaration* ad)
+{
+    if (ad->isClassDeclaration())
+        return static_cast<cpp::ClassDeclaration*>(ad)->Definition();
+    else if (ad->isStructDeclaration())
+        return static_cast<cpp::StructDeclaration*>(ad)->Definition();
+    else {
+        assert(ad->isUnionDeclaration());
+        return static_cast<cpp::UnionDeclaration*>(ad)->Definition();
+    }
+}
+
 void MarkAggregateReferenced(::AggregateDeclaration* ad)
 {
     auto& isUsed = getIsUsed(ad);
@@ -759,11 +794,12 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
         return;
     isUsed = true;
 
-    auto D = dyn_cast<clang::CXXRecordDecl>(
-                    const_cast<clang::RecordDecl*>(getRecordDecl(ad)));
-
-    if (D && D->hasDefinition()) {
+    if (auto D = dyn_cast_or_null<clang::CXXRecordDecl>(
+                    const_cast<clang::RecordDecl*>(getDefinition(ad)))) {
         ad->size(ad->loc);
+
+        if (auto cd = ad->isClassDeclaration())
+            static_cast<cpp::ClassDeclaration*>(cd)->buildVtbl();
 
         auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
@@ -796,9 +832,6 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
 //                 declReferencer.Traverse(ad->loc, InClassInit);
 
         markAggregateReferenced(ad);
-
-        if (auto cd = ad->isClassDeclaration())
-            static_cast<cpp::ClassDeclaration*>(cd)->buildVtbl();
     }
 }
 

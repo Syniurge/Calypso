@@ -159,15 +159,6 @@ EnumDeclaration::EnumDeclaration(const EnumDeclaration &o)
 {
 }
 
-void EnumDeclaration::accept(Visitor *v)
-{
-    v->visit(this);
-
-    if (v->_typeid() == TI_DsymbolSem1Visitor)
-        if (!defaultval && !members)
-            defaultval = defaultInit(memtype, loc); // C++ enums may be empty, and EnumDeclaration::getDefaultValue() errors if both defaultval and members are null
-}
-
 void EnumDeclaration::addMember(Scope *sc, ScopeDsymbol *sds)
 {
     Dsymbol::addMember(sc, sds);
@@ -234,11 +225,6 @@ Dsymbol* EnumMember::syntaxCopy(Dsymbol* s)
     assert(isCPP(s) && s->isEnumMember());
     static_cast<cpp::EnumMember*>(s)->ECD = ECD;
     return ::EnumMember::syntaxCopy(s);
-}
-
-void EnumMember::accept(Visitor *v)
-{
-    v->visit(this);
 }
 
 void EnumMember::addMember(Scope *sc, ScopeDsymbol *sds)

@@ -322,8 +322,7 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
 
 Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 {
-    auto& Context = calypso.getASTContext();
-    ExprMapper expmap(*this);
+    auto CanonDecl = D;
 
     if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
         D = Indirect->getVarDecl();
@@ -332,6 +331,10 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
         if (auto Var = dyn_cast<clang::VarDecl>(D))
             if (Var->getDescribedVarTemplate())
                 return nullptr;
+
+    if (auto Var = dyn_cast<clang::VarDecl>(D))
+        if (auto Def = Var->getDefinition())
+            D = Def;
 
     if (auto Field = dyn_cast<clang::FieldDecl>(D))
     {
@@ -367,11 +370,11 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     if (!t)
         return nullptr;
 
-    if (t->isConst())
-        t = t->immutableOf();
+//     if (t->isConst())
+//         t = t->immutableOf();
 
     auto a = new VarDeclaration(loc, id, D, t);
-    setDsym(D, a);
+    setDsym(CanonDecl, a);
 
     a->linkage = LINKcpp;
     a->protection.kind = fromProt(D->getAccess());
@@ -391,13 +394,16 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
         if (Var->isStaticDataMember())
             a->storage_class |= STCstatic;
 
-        if ((Var->isConstexpr() || t->isImmutable()) &&
+        if ((Var->isConstexpr() || t->isConst()) &&
                 Var->getAnyInitializer())
         {
             // we avoid initializer expressions except for const/constexpr variables
             auto Init = Var->getAnyInitializer();
             clang::APValue Eval;
             llvm::SmallVector<clang::PartialDiagnosticAt, 2> Diags;
+
+            auto& Context = calypso.getASTContext();
+            ExprMapper expmap(*this);
 
             Expression *e = nullptr;
             if (!Init->isValueDependent() && Init->EvaluateAsInitializer(Eval, Context, Var, Diags))

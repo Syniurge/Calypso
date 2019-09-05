@@ -113,8 +113,6 @@ public:
     void complete() override;
 
     Expression *getDefaultValue(const Loc &loc) override;
-
-    void accept(Visitor *v) override;
 };
 
 class EnumMember : public ::EnumMember
@@ -128,8 +126,6 @@ public:
                const clang::EnumConstantDecl *ECD);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
-
-    void accept(Visitor *v) override;
 };
 
 class AliasDeclaration : public ::AliasDeclaration
