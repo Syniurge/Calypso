@@ -200,11 +200,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
         }
     }
     else
-    {
-        auto Name = calypso.toDeclarationName(ident);
-        for (auto Match: Def->lookup(Name))
-            dsymForDecl(ad, Match);
-    }
+        mapDecls(ad, Def, ident);
 
     return ad->ScopeDsymbol::search(loc, ident, flags);
 }
@@ -265,7 +261,10 @@ inline void ad_complete(AggTy* ad)
               !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
             continue;
 
-        newMembers->push(dsymForDecl(ad, M));
+        if (auto sym = dsymForDecl(ad, M))
+            newMembers->push(sym);
+        if (auto td = dsymForDecl<true>(ad, M))
+            newMembers->push(td);
     }
 
     delete ad->members;
@@ -320,15 +319,26 @@ void ad_determineSize(AggTy *ad)
     ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
     ad->structsize = RL.getSize().getQuantity();
 
+    DeclMapper mapper(ad);
+
     typedef clang::DeclContext::specific_decl_iterator<clang::ValueDecl> Value_iterator;
     for (Value_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
     {
-        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I)/* &&
+        auto D = *I;
+
+        if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
+            D = cast<clang::FieldDecl>(Indirect->chain().back());
+
+        if (!isa<clang::FieldDecl>(D)/* &&
             !isa<clang::MSPropertyDecl>(*I) (TODO)*/)
             continue;
 
-        auto Field = *I;
-        auto vd = static_cast<VarDeclaration*>(dsymForDecl(ad, Field));
+        auto Field = D;
+        auto sym = mapper.dsymForDecl(Field);
+        if (!sym)
+            continue; // anonymous record, indirect fields will be added instead
+
+        auto vd = static_cast<VarDeclaration*>(sym);
         ad->fields.push(vd);
 
         vd->offsetInBits = Context.getFieldOffset(Field);
@@ -625,15 +635,11 @@ void ClassDeclaration::buildVtbl()
 
     for (const auto &Overrider : FinalOverriders)
     {
-        auto VirtMD = Overrider.first;
-        auto virtmd = static_cast<FuncDeclaration*>(dsymForDecl(this, VirtMD));
-
         auto OverMD = Overrider.second.begin()->second.front().Method;
         auto overmd = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
 
-        if (!overmd)
+        if (!overmd || overmd->parent != this)
             continue;
-        assert(virtmd);
 
         if (overmd->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
             continue;

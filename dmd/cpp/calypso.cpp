@@ -31,7 +31,6 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 #include "clang/Lex/HeaderSearch.h"
-#include "clang/Lex/ModuleMap.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -518,7 +517,18 @@ clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
 }
 
 clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
-{/*if (ident == Id::opBinary) { return Ctx.DeclarationNameTable.getCXXConstructorName}*/
+{
+    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+
+    if (ident == Id::call)
+        return DeclarationNames.getCXXOperatorName(clang::OO_Call);
+    else if (ident == Id::index)
+        return DeclarationNames.getCXXOperatorName(clang::OO_Subscript);
+    else if (ident == Id::eq)
+        return DeclarationNames.getCXXOperatorName(clang::OO_EqualEqual);
+    else if (ident == Id::assign)
+        return DeclarationNames.getCXXOperatorName(clang::OO_Equal);
+
     return clang::DeclarationName(toIdentifierInfo(ident));
 }
 
@@ -895,46 +905,6 @@ void PCH::update()
     // Initialize the mangling context
     MangleCtx = AST->getASTContext().createMangleContext();
 }
-
-// void LangPlugin::buildMacroMap()
-// {
-//     auto& PP = getPreprocessor();
-//     auto& Context = getASTContext();
-//     auto& Sema = getSema();
-//
-//     for (auto& M: PP.macros())
-//     {
-//         auto II = M.getFirst();
-//         if (!II->hasMacroDefinition())
-//             continue;
-//
-//         auto MDir = M.getSecond().getLatest();
-//         auto MInfo = MDir->getMacroInfo();
-//
-//         if (!MInfo->isObjectLike() || MInfo->isUsedForHeaderGuard() || MInfo->getNumTokens() > 1)
-//             continue;
-//
-//         auto MLoc = MDir->getLocation();
-//         clang::Expr* Expr = nullptr;
-//
-//         if (MInfo->getNumTokens() == 0) {
-//             unsigned BoolSize = Context.getIntWidth(Context.BoolTy);
-//             Expr = clang::IntegerLiteral::Create(Context, llvm::APInt(BoolSize, 1),
-//                                         Context.BoolTy, MLoc);
-//         } else {
-//             auto& Tok = MInfo->getReplacementToken(0);
-//             if (Tok.getKind() != clang::tok::numeric_constant)
-//                 continue;
-//
-//             auto ResultExpr = Sema.ActOnNumericConstant(Tok);
-//             if (!ResultExpr.isInvalid())
-//                 Expr = ResultExpr.get(); // numeric_constant tokens might not be valid numerical expressions, e.g #define _SDT_ASM_ADDR .8byte
-//         }
-//
-//         if (Expr)
-//             MacroMap.emplace_back(II, Expr);
-//     }
-// }
 
 void PCH::save()
 {

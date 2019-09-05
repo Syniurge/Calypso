@@ -261,32 +261,84 @@ bool TemplateDeclaration::earlyFunctionValidityCheck(::TemplateInstance* ti, Sco
 
 void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Expressions* fargs)
 {
-    if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) && !ti->havetempdecl)
+    if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) &&
+        !isa<clang::FunctionDecl>(TempOrSpec) &&
+        !ti->havetempdecl)
     {
         ti->havetempdecl = true;
         ti->tempdecl = primaryTemplate();
     }
 }
 
+static MATCH matchWithInstanceNonTemplated(TemplateDeclaration* tempdecl, Scope *sc, ::TemplateInstance *ti,
+                                             Objects *dedtypes, Expressions *fargs, int flag)
+{
+    dedtypes->zero();
+
+    // If more arguments than parameters, no match
+    if (ti->tiargs->dim > tempdecl->parameters->dim)
+        return MATCHnomatch;
+
+    assert(dedtypes->dim == tempdecl->parameters->dim);
+    assert(dedtypes->dim >= ti->tiargs->dim);
+
+    // Attempt type deduction
+    MATCH m = MATCHexact;
+    size_t argi = 0; // CALYPSO
+    for (size_t i = 0; i < dedtypes->dim; i++)
+    {
+        auto tp = (*tempdecl->parameters)[i];
+
+        MATCH m2 = tp->matchArg(ti->loc, sc /* HACK-ish, everything is already semantic'd */,
+                                ti->tiargs, i, &argi /* CALYPSO */,
+                                tempdecl->parameters, dedtypes, nullptr);
+        if (m2 == MATCHnomatch)
+            return MATCHnomatch;
+
+        if (m2 < m)
+            m = m2;
+    }
+
+    if (!flag)
+    {
+        /* Any parameter left without a type gets the type of
+            * its corresponding arg
+            */
+        for (size_t i = 0; i < dedtypes->dim; i++)
+        {
+            if (!(*dedtypes)[i])
+            {
+                assert(i < ti->tiargs->dim);
+                (*dedtypes)[i] = static_cast<Type*>((*ti->tiargs)[i]);
+            }
+        }
+    }
+
+    return m;
+}
+
 MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
                                              Objects *dedtypes, Expressions *fargs, int flag)
 {
-    // Give only the primary template a chance to match
+    // Special case of a wrapped non-templated overloaded operator
+    if (isNonTemplateWrapper())
+        return matchWithInstanceNonTemplated(this, sc, ti, dedtypes, fargs, flag);
+
+    // Else, give only the primary template a chance to match
     // The "best matching" is done dy Sema, and then foreignInstance corrects ti->tempdecl
     assert(isa<clang::RedeclarableTemplateDecl>(TempOrSpec));
 
-    MATCH m = MATCHexact;
-    TemplateInstUnion Inst = hasExistingClangInst(ti);
+    TemplateInstUnion Inst;
+    assert(!hasExistingClangInst(ti));
 
-    if (!Inst)
-    {
-        if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
-            m = functionTemplateMatch(ti, fargs, Inst);
-        else {
-            Inst = getClangInst(sc, ti, ti->tiargs);
-            if (!Inst)
-                m = MATCHnomatch;
-        }
+    MATCH m = MATCHexact;
+
+    if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
+        m = functionTemplateMatch(ti, fargs, Inst);
+    else {
+        Inst = getClangInst(sc, ti, ti->tiargs);
+        if (!Inst)
+            m = MATCHnomatch;
     }
 
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
@@ -303,16 +355,23 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
 {
     DeclMapper mapper(sc->minst, sc->minst);
 
-    auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
-                                       : getTemplateArgs(Inst);
+    Objects* cpptdtypes;
 
-    const clang::TemplateParameterList* ParamList;
-    if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
-        ParamList = PartialSpec->getTemplateParameters();
+    if (!isNonTemplateWrapper())
+    {
+        auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
+                                        : getTemplateArgs(Inst);
+
+        const clang::TemplateParameterList* ParamList;
+        if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
+            ParamList = PartialSpec->getTemplateParameters();
+        else
+            ParamList = getPrimaryTemplate()->getTemplateParameters();
+
+        cpptdtypes = mapper.fromTemplateArguments<true>(loc, InstArgs, ParamList);
+    }
     else
-        ParamList = getPrimaryTemplate()->getTemplateParameters();
-
-    auto cpptdtypes = mapper.fromTemplateArguments<true>(loc, InstArgs, ParamList);
+        cpptdtypes = new Objects; // special case for non-templated overloaded operators
 
     SpecValue spec(mapper);
     if (Inst.is<clang::NamedDecl*>())
@@ -336,17 +395,18 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
 // Fortunately Sema has a method helping refine DMD's result
 MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* td2, Expressions* fargs)
 {
-    auto Prim = getPrimaryTemplate();
-    assert(isa<clang::FunctionTemplateDecl>(Prim));
+    auto Prim1 = getPrimaryTemplate();
+    auto Prim2 = isCPP(td2) ? static_cast<cpp::TemplateDeclaration*>(td2)->getPrimaryTemplate() : nullptr;
 
-    if (!isCPP(td2))
-        return ::TemplateDeclaration::leastAsSpecialized(sc, td2, fargs);
+    if (!Prim1 && !Prim2)
+        return ::TemplateDeclaration::leastAsSpecialized(sc, td2, fargs); // both are non-templated overloaded operators
+    else if (!Prim1 || !Prim2)
+        return Prim2 ? MATCHexact : MATCHnomatch; // only one of the two is a templated overloaded operator, the non-templated one is always the more specialized
+
+    auto FuncTemp1 = cast<clang::FunctionTemplateDecl>(Prim1);
+    auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(Prim2);
 
     auto& Sema = calypso.getSema();
-
-    auto c_td2 = static_cast<cpp::TemplateDeclaration*>(td2);
-    auto FuncTemp1 = cast<clang::FunctionTemplateDecl>(Prim);
-    auto FuncTemp2 = cast<clang::FunctionTemplateDecl>(c_td2->getPrimaryTemplate());
 
     const unsigned TDF_IgnoreQualifiers = 0x02;
     auto Better1 = clang::isAtLeastAsSpecializedAs_(Sema, clang::SourceLocation(), FuncTemp1, FuncTemp2,
@@ -358,6 +418,14 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
     return MATCHnomatch;
 }
 
+Dsymbol* TemplateDeclaration::wrappedNonTemplateSymbol()
+{
+    if (!isNonTemplateWrapper())
+        return nullptr;
+
+    return DeclMapper(this).dsymForDecl(TempOrSpec);
+}
+
 Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 {
     assert(isForeignInstance(ti));
@@ -366,12 +434,21 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     assert(!ti->members); // members were already set during decl mapping??
 
     auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
+    Dsymbol* inst = nullptr;
 
-    DeclMapper mapper(ti->minst, ti->minst);
-    mapper.VisitDecl(Inst);
+    if (auto sym = wrappedNonTemplateSymbol())
+    {
+        inst = new_AliasDeclaration(loc, sym->ident, sym);
+        inst->semanticRun = PASSsemantic3done;
+    }
+    else
+    {
+        DeclMapper(ti->minst, ti->minst).VisitDecl(Inst);
+        inst = Inst->d->sym;
+    }
 
     auto a = new Dsymbols;
-    if (auto inst = Inst->d->sym)
+    if (inst)
     {
         a->push(inst);
         c_ti->aliasdecl = inst;
@@ -446,8 +523,8 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
 {
     auto& S = calypso.getSema();
 
-    if (!isa<clang::RedeclarableTemplateDecl>(TempOrSpec))
-        return MATCHnomatch; // only primary templates may be matched
+    if (isNonTemplateWrapper())
+        return ::TemplateDeclaration::deduceFunctionTemplateMatch(ti, sc, fd, tthis, fargs);
 
     DeclMapper mapper(sc->minst, sc->minst);
 
@@ -507,7 +584,7 @@ clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* Temp
     if (auto FD = dyn_cast<clang::FunctionDecl>(TempOrSpec))
         return FD->getPrimaryTemplate();
 
-    llvm_unreachable("Unhandled primary template");
+    return nullptr;
 }
 
 clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()
@@ -520,7 +597,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     auto Prim = getPrimaryTemplate()->getCanonicalDecl();
 
     assert(parent->isScopeDsymbol());
-    auto sym = dsymForDecl(static_cast<ScopeDsymbol*>(parent), getPrimaryTemplate());
+    auto sym = dsymForDecl(static_cast<ScopeDsymbol*>(parent), Prim);
     assert(sym && sym->isTemplateDeclaration());
 
     return static_cast<TemplateDeclaration*>(sym);
@@ -576,19 +653,22 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     if (auto existingInst = hasExistingClangInst(ti))
         return existingInst;
 
-    auto& S = calypso.getSema();
+    if (isNonTemplateWrapper())
+        return const_cast<clang::NamedDecl*>(TempOrSpec);
 
-    DeclMapper mapper(sc->minst, sc->minst);
-    ExprMapper expmap(mapper);
-
-    auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(getDefinition(getPrimaryTemplate()));
+    auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(
+                                getDefinition(getPrimaryTemplate()));
 
     if (!tdtypes)
         tdtypes = &ti->tdtypes;
 
+    DeclMapper mapper(sc->minst, sc->minst);
+    ExprMapper expmap(mapper);
+
     clang::TemplateArgumentListInfo Args;
     fillTemplateArgumentListInfo(loc, sc, Args, tdtypes, Temp, mapper, expmap);
 
+    auto& S = calypso.getSema();
     clang::TemplateName Name(Temp);
 
     if (isa<clang::ClassTemplateDecl>(Temp) ||
@@ -631,6 +711,12 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
 
 void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 {
+    if (isNonTemplateWrapper())
+    {
+        ti->tempdecl = this;
+        return;
+    }
+
     const clang::Decl* RealTemp;
 
     if (auto SpecDecl = ti->Inst.dyn_cast<clang::NamedDecl*>())
@@ -641,13 +727,18 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
         RealTemp = TST->getTemplateName().getAsTemplateDecl();
     }
 
-    auto sym = dsymForDecl<DeclMapper::MapExplicitSpecs>(
-                        static_cast<ScopeDsymbol*>(this->parent), RealTemp);
-    assert(sym->isTemplateDeclaration());
+    auto sym = templateForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
+    assert(sym && sym->isTemplateDeclaration());
 
     ti->tempdecl = static_cast<TemplateDeclaration*>(sym);
 
     assert(ti->tempdecl && isCPP(ti->tempdecl));
+}
+
+bool TemplateDeclaration::isNonTemplateWrapper()
+{
+    auto FD = dyn_cast<clang::FunctionDecl>(TempOrSpec);
+    return FD && !FD->getPrimaryTemplate();
 }
 
 void TemplateDeclaration::accept(Visitor *v)

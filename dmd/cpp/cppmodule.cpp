@@ -188,6 +188,14 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
     const_cast<clang::NamedDecl*>(D)->d->sym = sym;
 }
 
+inline void setDwrapper(const clang::NamedDecl* D, TemplateDeclaration* wrapper)
+{
+    if (!D->d)
+        const_cast<clang::NamedDecl*>(D)->d = new DData;
+    assert(D->d->wrapper == nullptr);
+    const_cast<clang::NamedDecl*>(D)->d->wrapper = wrapper;
+}
+
 }
 
 bool isExplicitSpecialization(const clang::Decl *D)
@@ -222,9 +230,9 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     if (D != getCanonicalDecl(D))
         return nullptr;
 
-    auto ND = dyn_cast<clang::NamedDecl>(D);
-    if (ND && ND->d && ND->d->mapped_syms)
-        return ND->d->mapped_syms;
+//     auto ND = dyn_cast<clang::NamedDecl>(D);
+//     if (ND && ND->d && ND->d->mapped_syms)
+//         return ND->d->mapped_syms;
 
     Dsymbols *s = nullptr;
 
@@ -236,14 +244,9 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     else if (const clang::BASE##Decl *BASE##D = \
                             dyn_cast<clang::BASE##Decl>(D)) \
         s = Visit##BASE##Decl(BASE##D, flags);
-#define DECLEXPLICIT(BASE) \
-    else if ((flags & MapExplicitSpecs) && isa<clang::BASE##Decl>(D)) \
-        s = Visit##BASE##Decl(cast<clang::BASE##Decl>(D));
 
     if (0) ;
     DECL(TypedefName)
-    DECLEXPLICIT(ClassTemplateSpecialization)
-    DECLEXPLICIT(VarTemplateSpecialization)
     DECL(Enum)
     DECL(EnumConstant)
     DECLWF(Record)
@@ -254,13 +257,40 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 #undef DECL
 #undef DECLWF
 
-//     bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
+//     bool mappedInnerSpec = !(flags & MapExplicitAndPartialSpecs) && isExplicitSpecialization(D);
 //
 //     // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
 //     // to be the TemplateInstance, that we create if requested
 //     if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
-        if (ND && ND->d && s)
-            const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
+//         if (ND && ND->d && s)
+//             const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
+
+    return s;
+}
+
+Dsymbols *DeclMapper::VisitPartialOrWrappedDecl(const clang::Decl *D)
+{
+    if (D != getCanonicalDecl(D))
+        return nullptr;
+
+    Dsymbols *s = nullptr;
+
+#define DECL(BASE) \
+    else if (const clang::BASE##Decl *BASE##D = \
+                            dyn_cast<clang::BASE##Decl>(D)) \
+        s = Visit##BASE##Decl(BASE##D);
+#define DECLWF(BASE) \
+    else if (const clang::BASE##Decl *BASE##D = \
+                            dyn_cast<clang::BASE##Decl>(D)) \
+        s = Visit##BASE##Decl(BASE##D, WrapExplicitSpecsAndOverloadedOperators);
+
+    if (0) ;
+    DECL(ClassTemplateSpecialization)
+    DECL(VarTemplateSpecialization)
+    DECLWF(Function)
+
+#undef DECL
+#undef DECLWF
 
     return s;
 }
@@ -324,13 +354,12 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 {
     auto CanonDecl = D;
 
-    if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
-        D = Indirect->getVarDecl();
+    assert(!isa<clang::IndirectFieldDecl>(D));
 
-    if (!(flags & MapTemplatePatterns))
-        if (auto Var = dyn_cast<clang::VarDecl>(D))
-            if (Var->getDescribedVarTemplate())
-                return nullptr;
+//     if (!(flags & MapTemplatePatterns))
+//         if (auto Var = dyn_cast<clang::VarDecl>(D))
+//             if (Var->getDescribedVarTemplate())
+//                 return nullptr;
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
         if (auto Def = Var->getDefinition())
@@ -383,6 +412,8 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     if (t->isConst())
         a->storage_class |= STCconst;
 
+    const clang::Expr* Init = nullptr;
+
     if (auto Var = dyn_cast<clang::VarDecl>(D))
     {
         if (Var->hasExternalStorage())
@@ -396,35 +427,41 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
         if ((Var->isConstexpr() || t->isConst()) &&
                 Var->getAnyInitializer())
-        {
-            // we avoid initializer expressions except for const/constexpr variables
-            auto Init = Var->getAnyInitializer();
-            clang::APValue Eval;
-            llvm::SmallVector<clang::PartialDiagnosticAt, 2> Diags;
+            Init = Var->getAnyInitializer(); // we avoid initializer expressions
+                                             // except for const/constexpr variables
+    }
+    else if (auto Field = dyn_cast<clang::FieldDecl>(D))
+        Init = Field->getInClassInitializer();
 
-            auto& Context = calypso.getASTContext();
-            ExprMapper expmap(*this);
+    if (Init)
+    {
+        auto& Context = calypso.getASTContext();
+        ExprMapper expmap(*this);
 
-            Expression *e = nullptr;
-            if (!Init->isValueDependent() && Init->EvaluateAsInitializer(Eval, Context, Var, Diags))
-                e = expmap.fromAPValue(loc, Eval, Var->getType()); // evaluating integer and boolean expressions is always preferable, because in some rare cases
-                    // DMD and Clang's intepretations differ, one important instance being -1u < 0u (true for DMD, false for Clang)
+        clang::Expr::EvalResult Result;
 
-            if (!e)
-                e = expmap.fromExpression(Var->getAnyInitializer(), true);
+        Expression *e = nullptr;
+        if (!Init->isValueDependent() && Init->EvaluateAsConstantExpr(Result,
+                                                clang::Expr::EvaluateForCodeGen, Context))
+            e = expmap.fromAPValue(loc, Result.Val, D->getType());
+                // NOTE: Evaluating integer and boolean expressions is always preferable,
+                // because in some rare cases DMD and Clang's intepretations differ,
+                // one important instance being -1u < 0u (true for DMD, false for Clang)
 
-            if (e && e->op != TOKnull)
-                if (Init->isInstantiationDependent() || Init->isEvaluatable(Context))
-                    a->_init = new_ExpInitializer(loc, e);
-        }
+        if (!e)
+            e = expmap.fromExpression(Init, true);
+
+        if (e && e->op != TOKnull)
+            if (Init->isInstantiationDependent() || Init->isEvaluatable(Context))
+                a->_init = new_ExpInitializer(loc, e);
     }
 
     a->semanticRun = PASSsemantic3done;
     decldefs->push(a);
 
     auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(D);
-    if (VarSpec && !VarSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-        decldefs = CreateTemplateInstanceFor(VarSpec, decldefs);
+    if (VarSpec && (flags & CreateTemplateInstance))
+        CreateTemplateInstanceFor(VarSpec, decldefs);
 
     return decldefs;
 }
@@ -446,9 +483,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!isMapped(D))
         return nullptr;
 
-//     if (D->isInjectedClassName())
-//         return nullptr;
-    assert(!D->isInjectedClassName());
+    if (D->isInjectedClassName())
+        return nullptr;
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
@@ -533,8 +569,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         decldefs->push(a);
 
         auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(D);
-        if (ClassSpec && !ClassSpec->isExplicitSpecialization() && (flags & CreateTemplateInstance))
-            decldefs = CreateTemplateInstanceFor(ClassSpec, decldefs);
+        if (ClassSpec && (flags & CreateTemplateInstance))
+            CreateTemplateInstanceFor(ClassSpec, decldefs);
     }
 
     return decldefs;
@@ -555,7 +591,8 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 //     if (!t)
 //         return nullptr;
 
-    auto a = new AliasDeclaration(loc, id, nullptr, D);
+    auto a = new AliasDeclaration(loc, id, Type::tvoid, D);
+    a->type = nullptr; // Type::tvoid was to get past the ctor's assert
     setDsym(D, a);
     return oneSymbol(a);
 }
@@ -567,12 +604,9 @@ TemplateParameters *initTempParams(Loc loc, SpecValue &spec)
 
     if (spec.op)
     {
-        auto dstringty = new_TypeIdentifier(loc, Id::object);
-        dstringty->addIdent(Id::string);
-
         auto tp_specvalue = new_StringExp(loc, const_cast<char*>(spec.op));
         p = new_TemplateValueParameter(loc, calypso.id_op,
-                                            dstringty, tp_specvalue, nullptr);
+                                        Type::tstring, tp_specvalue, nullptr);
     }
     else if (spec.t)
         p = new_TemplateTypeParameter(loc, calypso.id_type, spec.t, nullptr);
@@ -646,16 +680,6 @@ bool isMapped(const clang::Decl *D)
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     if (!isMapped(D))
-    {
-        setDsym(D, nullptr);
-        return nullptr;
-    }
-
-    // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
-    // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
-    // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
-    // they get mapped only once.
-    if (!(flags & MapExplicitSpecs) && isExplicitSpecialization(D))
         return nullptr;
 
 //     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
@@ -663,12 +687,6 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 //         return nullptr;
 
     auto loc = fromLoc(D->getLocation());
-    auto MD = dyn_cast<clang::CXXMethodDecl>(D);
-    auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
-
-//     if (D->isInvalidDecl())
-//         return nullptr;
-
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
     volatileNumber = 0; // reset the number of volatile qualifiers found
@@ -682,39 +700,110 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
     assert(tf->ty == Tfunction);
 
-    // If a function has overloads with the same signature except for volatile qualifiers, volatile overloads need to be
-    // renamed to not interfere with the non-volatile ones (ex. std::atomic).
+    // If a function has overloads with the same signature except for volatile qualifiers,
+    // volatile overloads need to be renamed to not interfere with the non-volatile ones
+    // (ex. std::atomic).
     bool prefixVolatile = false;
     auto funcVolatileNumber = volatileNumber;
     if (funcVolatileNumber)
-    {
-            auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
+    { // yikes
+        auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
 
-            for (auto Match: R)
-            {
-                if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
-                    Match = MatchTemp->getTemplatedDecl();
+        for (auto Match: R)
+        {
+            if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
+                Match = MatchTemp->getTemplatedDecl();
 
-                if (Match->getCanonicalDecl() == D->getCanonicalDecl())
-                    continue;
+            if (Match->getCanonicalDecl() == D->getCanonicalDecl())
+                continue;
 
-                auto Overload = dyn_cast<clang::FunctionDecl>(Match);
-                if (!Overload || Overload->isTemplateInstantiation())
-                    continue;
-                auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
-                volatileNumber = 0;
-                FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
+            auto Overload = dyn_cast<clang::FunctionDecl>(Match);
+            if (!Overload || Overload->isTemplateInstantiation())
+                continue;
+            auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
+            volatileNumber = 0;
+            FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
 
-                if (volatileNumber < funcVolatileNumber) {
-                    prefixVolatile = true;
-                    break;
-                }
-
-                if (volatileNumber == funcVolatileNumber)
-                    if (opts::cppVerboseDiags)
-                        ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
+            if (volatileNumber < funcVolatileNumber) {
+                prefixVolatile = true;
+                break;
             }
+
+            if (volatileNumber == funcVolatileNumber)
+                if (opts::cppVerboseDiags)
+                    ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
+        }
     }
+
+    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
+        if (!prefixVolatile)
+            return baseIdent;
+
+        std::string idStr(baseIdent->toChars(), baseIdent->length());
+        // insert _vtlNUM_ backwards
+        idStr.insert(0, "_");
+        idStr.insert(0, std::to_string(funcVolatileNumber));
+        idStr.insert(0, "_vtl");
+
+        if (opts::cppVerboseDiags)
+            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
+        return Identifier::idPool(idStr.c_str(), idStr.size());
+    };
+
+    if (flags & WrapExplicitSpecsAndOverloadedOperators)
+    {
+        TemplateParameters* tpl = nullptr;
+
+        SpecValue spec(*this);
+        auto ident = getIdentifierOrNull(D, &spec); // will return nullptr if this is an overloaded operator not supported by D
+
+        // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
+        // Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
+
+        if (!ident)
+            return nullptr; // TODO map the unsupported operators anyway
+
+        if (spec && !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation()))
+        {
+            assert(D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D));
+            tpl = initTempParams(loc, spec);
+        }
+
+        if (D->getPrimaryTemplate())
+        {
+            assert(D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization);
+            // NOTE: forward-declared explicit specializations do not have their primary template set (stangely)
+
+            if (!tpl)
+                tpl = new TemplateParameters;
+
+            auto FT = D->getPrimaryTemplate();
+            auto TPL = FT->getTemplateParameters();
+            auto AI = D->getTemplateSpecializationArgs()->asArray().begin();
+
+            for (auto PI = TPL->begin(), PE = TPL->end();
+                PI != PE; PI++)
+            {
+                auto tp = VisitTemplateParameter(*PI, AI);
+                if (!tp)
+                    return nullptr;
+                tpl->push(tp);
+
+                if (AI) AI++;
+            }
+        }
+
+        if (!tpl)
+            return nullptr;
+
+        auto td = new TemplateDeclaration(loc, applyVolatilePrefix(ident), tpl, nullptr, D);
+        setDwrapper(D, td);
+        td->semanticRun = PASSsemantic3done;
+        return oneSymbol(td);
+    }
+
+    auto MD = dyn_cast<clang::CXXMethodDecl>(D);
+    auto CCD = dyn_cast<clang::CXXConstructorDecl>(D);
 
     StorageClass stc = STCundefined;
     if (MD)
@@ -743,23 +832,22 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
     tf->addSTC(stc);
 
-    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
-        if (!prefixVolatile)
-            return baseIdent;
-
-        std::string idStr(baseIdent->toChars(), baseIdent->length());
-        // insert _vtlNUM_ backwards
-        idStr.insert(0, "_");
-        idStr.insert(0, std::to_string(funcVolatileNumber));
-        idStr.insert(0, "_vtl");
-
-        if (opts::cppVerboseDiags)
-            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
-        return Identifier::idPool(idStr.c_str(), idStr.size());
-    };
-
-    auto a = new Dsymbols;
     ::FuncDeclaration *fd;
+
+    if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
+    {
+        fd = new CtorDeclaration(loc, stc, tf, CD);
+    }
+    else if (auto DD = dyn_cast<clang::CXXDestructorDecl>(D))
+    {
+        fd = new DtorDeclaration(loc, stc, Id::dtor, DD);
+    }
+    else
+    {
+        auto id = getExtendedIdentifier(D, *this);
+        id = applyVolatilePrefix(id);
+        fd = new FuncDeclaration(loc, id, stc, tf, D);
+    }
 
     auto fillSemInfo = [&] (::FuncDeclaration* fd)
     {
@@ -799,144 +887,15 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd->semanticRun = PASSsemantic3done;
     };
 
-    if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
-    {
-        fd = new CtorDeclaration(loc, stc, tf, CD);
-    }
-    else if (auto DD = dyn_cast<clang::CXXDestructorDecl>(D))
-    {
-        fd = new DtorDeclaration(loc, stc, Id::dtor, DD);
-    }
-    else if (D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D))
-    {
-        SpecValue spec(*this);
-        auto opIdent = getIdentifierOrNull(D, &spec); // will return nullptr if the operator isn't supported by D
-                            // TODO map the unsupported operators anyway
-
-        if (!opIdent)
-            return nullptr;
-
-        // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
-        //   Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
-
-        auto FuncTemp = D->getPrimaryTemplate();
-        auto Name = FuncTemp ? FuncTemp->getDeclName() : D->getDeclName(); // if D is a template instantiation of a conversion operator,
-            // then if the destination type depends on the the template parameters the decl name won't be found by the lookup inside the parent,
-            // we need to take the primary template name. Ex.: operator Vec<float, 3>(); instantiated from template<_Tp, int n> operator Vec<_Tp, n>();
-
-        auto R = getDeclContextOpaque(D)->lookup(Name);
-        std::function<bool(const clang::NamedDecl*)> pred;
-        SpecValue spec2(*this);
-        if (isa<clang::TagDecl>(D->getDeclContext()))
-            pred = [&](const clang::NamedDecl* _D)
-                { return opIdent == getIdentifierOrNull(_D, &spec2); }; // member operator, simplest case
-        else
-        {
-            // non member overloaded operators are trickier, since they end up in different modules and we need one alias per module
-            auto OpTyDecl = isOverloadedOperatorWithTagOperand(D);
-            if (!OpTyDecl)
-                pred = [&](const clang::NamedDecl* _D)
-                    { return opIdent == getIdentifierOrNull(_D, &spec2) && !isOverloadedOperatorWithTagOperand(_D); };
-            else
-                pred = [&](const clang::NamedDecl* _D)
-                    { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
-        }
-
-#if defined(_MSC_VER)
-        // MSVC's find_if tries to assign a new value to First, whose operator= is disabled
-        auto FirstOverload = R.begin();
-        {
-            auto _Last = R.end();
-            for (; FirstOverload != _Last; ++FirstOverload)
-                if (pred(*FirstOverload))
-                    break;
-        }
-#else
-        auto FirstOverload = std::find_if(R.begin(), R.end(), pred);
-#endif
-        assert(FirstOverload != R.end());
-        bool isFirstOverloadInScope = (*FirstOverload)->getCanonicalDecl() == D->getCanonicalDecl();
-
-        bool wrapInTemp = spec &&
-                    !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
-                    !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation());  // if we're instantiating a templated overloaded operator, we're after the function
-
-        Identifier *fullIdent;
-        if (wrapInTemp)
-            fullIdent = getExtendedIdentifier(D, *this);
-        else
-            fullIdent = opIdent;
-
-        auto funcIdent = applyVolatilePrefix(fullIdent);
-
-        // Add the overridable method (or the static function)
-        fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
-        setDsym(D, fd);
-        fillSemInfo(fd);
-        a->push(fd);
-
-        if (wrapInTemp && isFirstOverloadInScope)
-        {
-            // Add the opUnary/opBinary/... template declaration aliasing fullIdent if none exists(important!)
-            auto tpl = initTempParams(loc, spec);
-
-            auto a_fwd = new_AliasDeclaration(loc, opIdent,
-                                        new_TypeIdentifier(loc, fullIdent));
-
-            // Enclose the forwarding function within the template declaration
-            auto decldefs = new Dsymbols;
-            decldefs->push(a_fwd);
-
-            auto tempdecl = new_TemplateDeclaration(loc, opIdent, tpl, nullptr, decldefs);
-            tempdecl->semanticRun = PASSsemantic3done;
-            a->push(tempdecl);
-        }
-
-        return a;
-    }
-    else
-    {
-        auto id = fromIdentifier(D->getIdentifier());
-        id = applyVolatilePrefix(id);
-        fd = new FuncDeclaration(loc, id, stc, tf, D);
-    }
-
-    setDsym(D, fd);
     fillSemInfo(fd);
+    setDsym(D, fd);
 
-    if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-            D->getPrimaryTemplate() // forward-declared explicit specializations do not have their primary template set (stangely)
-            /*&& !(flags & MapTemplateInstantiations)*/)
-    {
-        auto tpl = new TemplateParameters;
-
-        auto FT = D->getPrimaryTemplate();
-        auto TPL = FT->getTemplateParameters();
-        auto AI = D->getTemplateSpecializationArgs()->asArray().begin();
-
-        for (auto PI = TPL->begin(), PE = TPL->end();
-            PI != PE; PI++)
-        {
-            auto tp = VisitTemplateParameter(*PI, AI);
-            if (!tp)
-                return nullptr;
-            tpl->push(tp);
-
-            if (AI) AI++;
-        }
-
-        auto decldefs = new Dsymbols;
-        decldefs->push(fd);
-        auto td = new TemplateDeclaration(loc, fd->ident, tpl, decldefs, D);
-        return oneSymbol(td);
-    }
-    else if (isTemplateInstantiation(D) &&
+    if ((isTemplateInstantiation(D) || isExplicitSpecialization(D)) &&
              D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
              (flags & CreateTemplateInstance))
-        a = CreateTemplateInstanceFor(D, a);
+        CreateTemplateInstanceFor(D, oneSymbol(fd));
 
-    a->push(fd);
-    return a;
+    return oneSymbol(fd);
 }
 
 bool isTemplateParameterPack(const clang::NamedDecl *Param)
@@ -961,10 +920,6 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
     if (!id)
         return nullptr; // TODO: map unsupported overloaded operators
 
-    auto CTD = dyn_cast<clang::ClassTemplateDecl>(D);
-    auto FTD = dyn_cast<clang::FunctionTemplateDecl>(D);
-    auto VTD = dyn_cast<clang::VarTemplateDecl>(D);
-
     auto Def = getDefinition(D);
 
     auto tpl = initTempParams(loc, spec);
@@ -987,45 +942,6 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     auto a = new Dsymbols;
     a->push(td);
-
-    if (false) // NOTE: mapping explicit and partial specs isn't needed since cpp::TemplateInstance
-               // will route to the correct spec. And there might a massive amount of explicit specs
-               // in some cases (such as Qt's QTypeInfo), so mapping them lazily is a *huge* win.
-    {
-        // Append explicit and partial specializations to the returned symbols as well
-        if (CTD)
-        {
-            llvm::SmallVector<clang::ClassTemplatePartialSpecializationDecl *, 2> PS;
-            const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
-
-            for (auto Spec: CTD->specializations())
-                if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
-                    a->append(sp);
-
-            for (auto PartialSpec: PS)
-                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                    a->append(sp);
-        }
-        else if (FTD)
-        {
-            for (auto Spec: FTD->specializations())
-                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                    a->append(sp);
-        }
-        else if (VTD)
-        {
-            llvm::SmallVector<clang::VarTemplatePartialSpecializationDecl *, 2> PS;
-            const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
-
-            for (auto Spec: VTD->specializations())
-                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
-                    a->append(sp);
-
-            for (auto PartialSpec: PS)
-                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
-                    a->append(sp);
-        }
-    }
 
     return a;
 }
@@ -1233,6 +1149,7 @@ Dsymbols* cpp::DeclMapper::VisitTemplateSpecializationDecl(const SpecTy* D)
 
     auto td = new TemplateDeclaration(loc, id, tpl, new Dsymbols, D);
     td->semanticRun = PASSsemantic3done;
+    setDwrapper(D, td);
     return oneSymbol(td);
 }
 
@@ -1297,27 +1214,35 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 
 /*****/
 
-template <DeclMapperFlags flags>
+template <bool wantPartialOrWrappedDecl>
 Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
 {
     if (auto ND = dyn_cast<clang::NamedDecl>(D))
-        return dsymForDecl<flags>(ND);
+        return dsymForDecl<wantPartialOrWrappedDecl>(ND);
 
     assert(isa<clang::TranslationUnitDecl>(D) && "Unhandled dsymForDecl(clang::Decl)");
     return getModule(D);
 }
 
-template <DeclMapperFlags flags>
+template <bool wantPartialOrWrappedDecl>
 Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 {
     D = cast<clang::NamedDecl>(getCanonicalDecl(D));
 
-    if (D->d)
+    if (wantPartialOrWrappedDecl)
+    {
+        if (!D->d)
+            dsymForDecl<false>(D);
+        if (D->d->wrapper)
+            return D->d->wrapper; // NOTE: hence if null because unsupported it will go through dsymForDecl again
+    }
+    else if (D->d)
         return D->d->sym;
 
-    if (auto NS = dyn_cast<clang::NamespaceDecl>(D)) {
+    if (auto NS = dyn_cast<clang::NamespaceDecl>(D))
+    {
         if (NS->isInlineNamespace())
-            return dsymForDecl<NoFlag>(cast<clang::Decl>(NS->getDeclContext()));
+            return dsymForDecl<false>(cast<clang::Decl>(NS->getDeclContext()));
         return getModule(NS);
     }
 
@@ -1329,23 +1254,28 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (IsParentNamespaceOrTU)
     {
+        auto ModDecl = D;
+
         auto Func = dyn_cast<clang::FunctionDecl>(D);
         if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
             Func = FuncTemp->getTemplatedDecl();
 
         if (Func && Func->isOverloadedOperator())
-        {
             if (auto Tag = isOverloadedOperatorWithTagOperand(D))
-                parent = getModule(Tag); // non-member operators are part of the record module
-        }
-        else if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
-            parent = getModule(D);
+                ModDecl = D; // non-member operators are part of the record module
+
+        if (auto CRD = dyn_cast<clang::CXXRecordDecl>(ModDecl))
+            if (auto Template = CRD->getDescribedClassTemplate())
+                ModDecl = Template;
+
+        if (isa<clang::TagDecl>(ModDecl) || isa<clang::ClassTemplateDecl>(ModDecl))
+            parent = getModule(ModDecl);
         else
             parent = getModule(Parent); // aka _
     }
     else
     {
-        auto s = dsymForDecl<NoFlag>(Parent);
+        auto s = dsymForDecl<false>(Parent);
         assert(s->isScopeDsymbol());
         parent = static_cast<ScopeDsymbol*>(s);
     }
@@ -1354,42 +1284,121 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     if (auto ti = parent->isInstantiated())
         minst = ti->minst;
 
-    DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
-                    DeclMapper::CreateTemplateInstance | flags);
-    assert(D->d);
+    DeclMapper mapper(minst, parent->getModule()->importedFrom);
 
-    auto sym = D->d->sym;
+    if (!wantPartialOrWrappedDecl)
+        mapper.VisitDecl(D, DeclMapper::CreateTemplateInstance);
+    else
+        mapper.VisitPartialOrWrappedDecl(D);
+
+    if (!D->d)
+    {
+        assert(!wantPartialOrWrappedDecl);
+        setDsym(D, nullptr);
+        return nullptr;
+    }
+
+    auto sym = wantPartialOrWrappedDecl ? D->d->wrapper : D->d->sym;
     if (!sym)
         return nullptr;
 
     if (!sym->parent)
     {
         if (!isa<clang::IndirectFieldDecl>(D))
-            parent->members->push(D->d->sym);
-        D->d->sym->addMember(nullptr, parent);
+            parent->members->push(sym);
+        sym->addMember(nullptr, parent);
     }
     else
         assert(sym->parent->isTemplateInstance() &&
                 "Parent already set but not a TemplateInstance?");
 
-    return D->d->sym;
+    return sym;
 }
 
-template <DeclMapperFlags flags>
+template <bool wantPartialOrWrappedDecl>
 Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
 {
-    return DeclMapper(sds).dsymForDecl<flags>(D);
+    return DeclMapper(sds).dsymForDecl<wantPartialOrWrappedDecl>(D);
 }
 
-template Dsymbol* dsymForDecl<DeclMapper::NoFlag>(ScopeDsymbol* sds, const clang::Decl* D);
-template Dsymbol* dsymForDecl<DeclMapper::MapExplicitSpecs>(ScopeDsymbol* sds, const clang::Decl* D);
+template Dsymbol* dsymForDecl<false>(ScopeDsymbol* sds, const clang::Decl* D);
+template Dsymbol* dsymForDecl<true>(ScopeDsymbol* sds, const clang::Decl* D);
+
+void dsymAndWrapperForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    DeclMapper(sds).dsymAndWrapperForDecl(D);
+}
+
+Dsymbol* templateForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    if (isa<clang::RedeclarableTemplateDecl>(D))
+        return dsymForDecl(sds, D);
+    else
+        return dsymForDecl</*wantPartialOrWrappedDecl =*/true>(sds, D);
+}
+
+void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident)
+{
+    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+    DeclMapper mapper(sds);
+
+    auto mapOperator = [&] (clang::OverloadedOperatorKind Op)
+    {
+        auto Name = DeclarationNames.getCXXOperatorName(Op);
+        for (auto Match: DC->lookup(Name))
+            mapper.dsymAndWrapperForDecl(Match);
+    };
+
+    if (ident == Id::opUnary)
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
+                       clang::OO_Arrow, clang::OO_ArrowStar})
+            mapOperator(OO);
+    else if (ident == Id::opBinary)
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
+                       clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
+                       clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+            mapOperator(OO);
+    else if (ident == Id::opOpAssign)
+        for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
+                       clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
+                       clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
+                       clang::OO_GreaterGreaterEqual})
+            mapOperator(OO);
+    else if (ident == Id::cmp)
+        /*mapOperator(clang::OO_EqualEqual)*/; // FIXME
+        // NOTE: other overloaded operators only map to one DeclarationName so don't require
+        // special treatment
+    else if (ident == Id::_cast)
+    {
+        typedef clang::DeclContext::specific_decl_iterator<clang::CXXConversionDecl> Conv_iterator;
+        for (Conv_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+            mapper.dsymAndWrapperForDecl(*I);
+
+        typedef clang::DeclContext::specific_decl_iterator<clang::FunctionTemplateDecl> FuncTemp_iterator;
+        for (FuncTemp_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+            if ((*I)->getDeclName().getNameKind() == clang::DeclarationName::CXXConversionFunctionName)
+                mapper.dsymAndWrapperForDecl(*I);
+    }
+    else
+    {
+        auto Name = calypso.toDeclarationName(ident);
+
+        for (auto Match: DC->lookup(Name))
+            mapper.dsymAndWrapperForDecl(Match);
+    }
+}
 
 // ***** //
 
 Module *DeclMapper::getModule(const clang::Decl* D)
 {
-    auto rootDecl = getSpecializedDeclOrExplicit(D);
+    if (auto ND = dyn_cast<clang::NamedDecl>(D))
+        if (auto Prim = getPrimaryTemplate(ND))
+            D = Prim;
 
+    auto rootDecl = getCanonicalDecl(D);
     Module* m = Module::allCppModules[rootDecl];
 
     if (!m)
@@ -1581,6 +1590,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     return m;
 }
 
+// ***** //
+
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                                 const clang::NamedDecl *SpecificTag)
 {
@@ -1668,41 +1679,53 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
     return true;
 }
 
-static void mapNamespace(Module* m, const clang::DeclContext *DC)
-{
-    llvm::SmallVector<clang::DeclContext*, 1> Ctxs;
-    const_cast<clang::DeclContext*>(DC)->collectAllContexts(Ctxs);
-
-    for (auto Ctx: Ctxs)
-    {
-        auto CanonCtx = cast<clang::Decl>(Ctx)->getCanonicalDecl();
-
-        for (auto D = Ctx->decls_begin(), DE = Ctx->decls_end(); D != DE; ++D)
-        {
-            if (cast<clang::Decl>(D->getDeclContext())->getCanonicalDecl() != CanonCtx)
-                continue;  // only map declarations that are semantically within the DeclContext
-
-            auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
-            if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
-            {
-                mapNamespace(m, cast<clang::DeclContext>(*D));
-                continue;
-            }
-            else if (!isTopLevelInNamespaceModule(*D))
-                continue;
-
-            dsymForDecl(m, *D);
-        }
-    }
-}
-
 void Module::complete()
 {
-    members->setDim(0);
+    Dsymbols* newMembers = new Dsymbols;
+    newMembers->reserve(members->dim);
+
+    DeclMapper mapper(this);
+
+    auto addSymAndWrapper = [&](const clang::Decl* D)
+    {
+        if (auto sym = mapper.dsymForDecl(D))
+            newMembers->push(sym);
+        if (auto td = mapper.dsymForDecl<true>(D))
+            newMembers->push(td);
+    };
 
     if (ident == calypso.id__)
     { // Hardcoded module with all the top-level non-tag decls + the anonymous tags of a namespace
-        mapNamespace(this, cast<clang::DeclContext>(rootDecl));
+        std::function<void(const clang::DeclContext *DC)> mapNamespace =
+                [&] (const clang::DeclContext *DC)
+        {
+            llvm::SmallVector<clang::DeclContext*, 1> Ctxs;
+            const_cast<clang::DeclContext*>(DC)->collectAllContexts(Ctxs);
+
+            for (auto Ctx: Ctxs)
+            {
+                auto CanonCtx = cast<clang::Decl>(Ctx)->getCanonicalDecl();
+
+                for (auto D = Ctx->decls_begin(), DE = Ctx->decls_end(); D != DE; ++D)
+                {
+                    if (cast<clang::Decl>(D->getDeclContext())->getCanonicalDecl() != CanonCtx)
+                        continue;  // only map declarations that are semantically within the DeclContext
+
+                    auto InnerNS = dyn_cast<clang::NamespaceDecl>(*D);
+                    if ((InnerNS && InnerNS->isInline()) || isa<clang::LinkageSpecDecl>(*D))
+                    {
+                        mapNamespace(cast<clang::DeclContext>(*D));
+                        continue;
+                    }
+                    else if (!isTopLevelInNamespaceModule(*D))
+                        continue;
+
+                    addSymAndWrapper(*D);
+                }
+            }
+        };
+
+        mapNamespace(cast<clang::DeclContext>(rootDecl));
     }
     else if (auto Tag = dyn_cast<clang::TagDecl>(rootDecl))
     {
@@ -1720,7 +1743,7 @@ void Module::complete()
             if (DeclCtx && DeclCtx->isDependentContext())
                 continue;
 
-            dsymForDecl(this, Decl);
+            addSymAndWrapper(Decl);
         }
 
         // Add the non-member overloaded operators that are meant to work with this record/enum
@@ -1730,9 +1753,12 @@ void Module::complete()
             searchNonMemberOverloadedOperators(Op);
 
             for (auto OO: nonMemberOverloadedOperators[Op].OOs)
-                dsymForDecl(this, OO);
+                addSymAndWrapper(OO);
         }
     }
+
+    delete members;
+    members = newMembers;
 }
 
 void Module::searchInlineNamespaces()
@@ -1774,7 +1800,7 @@ clang::Expr* exprFromMacro(const clang::IdentifierInfo* II)
     auto& Context = calypso.getASTContext();
     auto& Sema = calypso.getSema();
 
-    if (PP.isMacroDefined(II))
+    if (!PP.isMacroDefined(II))
         return nullptr;
 
     auto MInfo = PP.getMacroInfo(II);
@@ -1806,6 +1832,7 @@ clang::Expr* exprFromMacro(const clang::IdentifierInfo* II)
 Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
 {
     auto TU = calypso.getASTContext().getTranslationUnitDecl();
+    auto parent = getModule(TU);
 
     auto II = calypso.toIdentifierInfo(ident);
 
@@ -1824,12 +1851,16 @@ Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
     auto e = expmap.fromExpression(E);
     auto ie = new_ExpInitializer(loc, e);
 
-    auto v = new_VarDeclaration(loc, nullptr, ident, ie);
+    auto v = new_VarDeclaration(loc, e->type, ident, ie);
     v->storage_class = STCmanifest;
+
+    parent->members->push(v);
+    v->addMember(nullptr, parent);
+
     return v;
 }
 
-Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
+Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags) // FIXME non member operators call mapDecls
 {
     if (auto s = symtab->lookup(ident))
         return s;
@@ -1844,26 +1875,26 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
 
         for (auto Match: DC->lookup(Name))
             if (isTopLevelInNamespaceModule(Match))
-                mapper.dsymForDecl(Match);
+                mapper.dsymAndWrapperForDecl(Match);
 
         for (auto NS: inlineNamespaces)
             for (auto Match: NS->lookup(Name))
                 if (isTopLevelInNamespaceModule(Match))
-                    mapper.dsymForDecl(Match);
+                    mapper.dsymAndWrapperForDecl(Match);
 
-        if (isa<clang::TranslationUnitDecl>(rootDecl)) // TODO: specific derived Module class for TU
+        if (isa<clang::TranslationUnitDecl>(rootDecl)) // TODO: specific derived Module class for TU?
             mapper.dsymForMacro(ident);
     }
     else if (this->ident == ident)
     {
-        mapper.dsymForDecl(rootDecl);
+        mapper.dsymAndWrapperForDecl(rootDecl);
     }
     else
     {
         if (auto DC = dyn_cast<clang::DeclContext>(rootDecl))
             for (auto Match: DC->lookup(Name))
                 if (isRecordMemberInModuleContext(Match))
-                    mapper.dsymForDecl(Match);
+                    mapper.dsymAndWrapperForDecl(Match);
 
         if (Name.getNameKind() == clang::DeclarationName::CXXOperatorName)
         {
@@ -1871,7 +1902,7 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
             searchNonMemberOverloadedOperators(Op);
 
             for (auto OO: nonMemberOverloadedOperators[Op].OOs)
-                mapper.dsymForDecl(OO);
+                mapper.dsymAndWrapperForDecl(OO);
         }
     }
 

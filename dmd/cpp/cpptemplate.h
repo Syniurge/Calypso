@@ -14,6 +14,9 @@
 namespace clang
 {
 class Decl;
+class NamedDecl;
+class RedeclarableTemplateDecl;
+class TemplateSpecializationType;
 }
 
 namespace cpp
@@ -55,6 +58,9 @@ public:
     static bool isForeignInstance(::TemplateInstance *ti);
     void correctTempDecl(TemplateInstance *ti);
 
+    bool isNonTemplateWrapper();
+    Dsymbol* wrappedNonTemplateSymbol();
+
     bool allowTupleParameterAnywhere() override { return true; }
 
     void accept(Visitor *v) override;
@@ -89,6 +95,8 @@ public:
     clang::NamedDecl* getInstND();
     const clang::TemplateSpecializationType* getInstTST();
 };
+
+clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* TempOrSpec);
 
 }
 

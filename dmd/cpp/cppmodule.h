@@ -98,6 +98,7 @@ public:
      * Declarations
      */
     Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
+    Dsymbols *VisitPartialOrWrappedDecl(const clang::Decl *D); // return only TemplateDeclaration for partial specs, or as wrappers for explicit specs and overloaded/conversion operators
 
     Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
@@ -119,6 +120,30 @@ public:
 
     template<typename SpecTy>
     Dsymbols* CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decldefs);
+
+    enum Flags
+    {
+        NoFlag = 0,
+//         MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
+//         MapTemplateInstantiations = 1 << 1,
+//         MapExplicitAndPartialSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
+//         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
+        MapAnonRecord = 1 << 4,
+        CreateTemplateInstance = 1 << 5, // Create a TemplateInstance and attach it to minst
+        WrapExplicitSpecsAndOverloadedOperators = 1 << 6, // Create the TemplateDeclaration wrapper for explicit template specializations or for non-templated overloaded operators
+    };
+
+    template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::Decl* D);
+    template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
+
+    inline void dsymAndWrapperForDecl(const clang::Decl* D)
+    {
+        dsymForDecl<false>(D);
+        dsymForDecl<true>(D);
+    }
+
+    Module* getModule(const clang::Decl* D);
+    Package* getPackage(const clang::Decl* D);
 
     // Entry points when mapping instances during semantic()
 //     Dsymbol *VisitInstancedClassTemplate(const clang::ClassTemplateSpecializationDecl *D);
@@ -206,33 +231,19 @@ public:
                                                  const clang::TemplateTypeParmType *T = nullptr);
     Identifier *getIdentifierForTemplateTemplateParm(const clang::TemplateTemplateParmDecl *D);
 
-    //
-
-    enum Flags
-    {
-        NoFlag = 0,
-        MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
-//         MapTemplateInstantiations = 1 << 1,
-        MapExplicitSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
-//         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
-        MapAnonRecord = 1 << 4,
-        CreateTemplateInstance = 1 << 5,
-    };
-
-    template<Flags flags = NoFlag> Dsymbol* dsymForDecl(const clang::Decl* D);
-    template<Flags flags = NoFlag> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
-
-    Module* getModule(const clang::Decl* D);
-    Package* getPackage(const clang::Decl* D);
-
 
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };
 
 typedef DeclMapper::Flags DeclMapperFlags;
 
-template<DeclMapperFlags flags = DeclMapper::NoFlag>
+template<bool wantPartialOrWrappedDecl = false>
 Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D);
+
+void dsymAndWrapperForDecl(ScopeDsymbol* sds, const clang::Decl* D);
+Dsymbol* templateForDecl(ScopeDsymbol* sds, const clang::Decl* D);
+
+void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident);
 
 const clang::Decl *getCanonicalDecl(const clang::Decl *D); // the only difference with D->getCanonicalDecl() is that if the canonical decl is an out-of-line friend' decl and the actual decl is declared, this returns the latter instead of the former
 

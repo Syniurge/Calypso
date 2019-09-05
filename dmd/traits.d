@@ -1449,6 +1449,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
             return 0;
         }
 
+        sds.complete(); // CALYPSO
         ScopeDsymbol._foreach(sc, sds.members, &pushIdentsDg);
         auto cd = sds.isClassDeclaration();
         if (cd && e.ident == Id.allMembers)
@@ -1463,6 +1464,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
                 {
                     auto ab = (*cd.baseclasses)[i].sym; // CALYPSO
                     assert(ab);
+                    ab.complete(); // CALYPSO
                     ScopeDsymbol._foreach(null, ab.members, &pushIdentsDg);
                     auto cb = ab.isClassDeclaration();
                     if (cb && cb.baseclasses.dim)

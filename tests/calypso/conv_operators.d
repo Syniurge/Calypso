@@ -16,5 +16,5 @@ void main()
     // Issue #65: https://github.com/Syniurge/Calypso/issues/65
     import (C++) B;
     B b;
-    int bx=b.x;
+    int bx = b.x;
 }
