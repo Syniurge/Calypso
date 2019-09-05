@@ -217,6 +217,7 @@ public:
 //         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 4,
         CreateTemplateInstance = 1 << 5,
+        UnwrapNonTemplatedFunction = 1 << 6, // Do not create the TemplateDeclaraton wrapper for explicit function specializations or for non-templated overloaded operators but map the actual non-templated function
     };
 
     template<Flags flags = NoFlag> Dsymbol* dsymForDecl(const clang::Decl* D);

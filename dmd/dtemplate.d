@@ -7094,7 +7094,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
 
                 dedtypes.setDim(td.parameters.dim);
                 dedtypes.zero();
-                assert(td.semanticRun != PASS.init || td.langPlugin()); // CALYPSO
+                assert(td.semanticRun != PASS.init);
 
                 MATCH m = td.matchWithInstance(sc, this, &dedtypes, fargs, 0);
                 //printf("matchWithInstance = %d\n", m);

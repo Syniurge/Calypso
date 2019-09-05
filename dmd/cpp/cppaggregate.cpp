@@ -626,15 +626,11 @@ void ClassDeclaration::buildVtbl()
 
     for (const auto &Overrider : FinalOverriders)
     {
-        auto VirtMD = Overrider.first;
-        auto virtmd = static_cast<FuncDeclaration*>(dsymForDecl(this, VirtMD));
-
         auto OverMD = Overrider.second.begin()->second.front().Method;
         auto overmd = static_cast<FuncDeclaration*>(dsymForDecl(this, OverMD));
 
-        if (!overmd)
+        if (!overmd || overmd->parent != this)
             continue;
-        assert(virtmd);
 
         if (overmd->vtblIndex != -1) // FIXME? in C++ a method can override two base methods, so can't be represented by vtblIndex
             continue;

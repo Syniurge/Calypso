@@ -55,6 +55,9 @@ public:
     static bool isForeignInstance(::TemplateInstance *ti);
     void correctTempDecl(TemplateInstance *ti);
 
+    bool isNonTemplateWrapper();
+    Dsymbol* wrappedNonTemplateSymbol();
+
     bool allowTupleParameterAnywhere() override { return true; }
 
     void accept(Visitor *v) override;

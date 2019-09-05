@@ -223,8 +223,8 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
         return nullptr;
 
     auto ND = dyn_cast<clang::NamedDecl>(D);
-    if (ND && ND->d && ND->d->mapped_syms)
-        return ND->d->mapped_syms;
+//     if (ND && ND->d && ND->d->mapped_syms)
+//         return ND->d->mapped_syms;
 
     Dsymbols *s = nullptr;
 
@@ -259,8 +259,8 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 //     // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
 //     // to be the TemplateInstance, that we create if requested
 //     if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
-        if (ND && ND->d && s)
-            const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
+//         if (ND && ND->d && s)
+//             const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
     return s;
 }
@@ -566,12 +566,9 @@ TemplateParameters *initTempParams(Loc loc, SpecValue &spec)
 
     if (spec.op)
     {
-        auto dstringty = new_TypeIdentifier(loc, Id::object);
-        dstringty->addIdent(Id::string);
-
         auto tp_specvalue = new_StringExp(loc, const_cast<char*>(spec.op));
         p = new_TemplateValueParameter(loc, calypso.id_op,
-                                            dstringty, tp_specvalue, nullptr);
+                                        Type::tstring, tp_specvalue, nullptr);
     }
     else if (spec.t)
         p = new_TemplateTypeParameter(loc, calypso.id_type, spec.t, nullptr);
@@ -683,33 +680,100 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     bool prefixVolatile = false;
     auto funcVolatileNumber = volatileNumber;
     if (funcVolatileNumber)
-    {
-            auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
+    { // yikes
+        auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
 
-            for (auto Match: R)
-            {
-                if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
-                    Match = MatchTemp->getTemplatedDecl();
+        for (auto Match: R)
+        {
+            if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
+                Match = MatchTemp->getTemplatedDecl();
 
-                if (Match->getCanonicalDecl() == D->getCanonicalDecl())
-                    continue;
+            if (Match->getCanonicalDecl() == D->getCanonicalDecl())
+                continue;
 
-                auto Overload = dyn_cast<clang::FunctionDecl>(Match);
-                if (!Overload || Overload->isTemplateInstantiation())
-                    continue;
-                auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
-                volatileNumber = 0;
-                FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
+            auto Overload = dyn_cast<clang::FunctionDecl>(Match);
+            if (!Overload || Overload->isTemplateInstantiation())
+                continue;
+            auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
+            volatileNumber = 0;
+            FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
 
-                if (volatileNumber < funcVolatileNumber) {
-                    prefixVolatile = true;
-                    break;
-                }
-
-                if (volatileNumber == funcVolatileNumber)
-                    if (opts::cppVerboseDiags)
-                        ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
+            if (volatileNumber < funcVolatileNumber) {
+                prefixVolatile = true;
+                break;
             }
+
+            if (volatileNumber == funcVolatileNumber)
+                if (opts::cppVerboseDiags)
+                    ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
+        }
+    }
+
+    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
+        if (!prefixVolatile)
+            return baseIdent;
+
+        std::string idStr(baseIdent->toChars(), baseIdent->length());
+        // insert _vtlNUM_ backwards
+        idStr.insert(0, "_");
+        idStr.insert(0, std::to_string(funcVolatileNumber));
+        idStr.insert(0, "_vtl");
+
+        if (opts::cppVerboseDiags)
+            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
+        return Identifier::idPool(idStr.c_str(), idStr.size());
+    };
+
+    if (!(flags & UnwrapNonTemplatedFunction))
+    {
+        TemplateParameters* tpl = nullptr;
+
+        SpecValue spec(*this);
+        auto ident = getIdentifierOrNull(D, &spec); // will return nullptr if this is an overloaded operator not supported by D
+
+        // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
+        // Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
+
+        if (!ident)
+            return nullptr; // TODO map the unsupported operators anyway
+
+        if (spec && !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation()))
+        {
+            assert(D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D));
+            tpl = initTempParams(loc, spec);
+        }
+
+        if (D->getPrimaryTemplate())
+        {
+            assert(D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization);
+            // NOTE: forward-declared explicit specializations do not have their primary template set (stangely)
+
+            if (!tpl)
+                tpl = new TemplateParameters;
+
+            auto FT = D->getPrimaryTemplate();
+            auto TPL = FT->getTemplateParameters();
+            auto AI = D->getTemplateSpecializationArgs()->asArray().begin();
+
+            for (auto PI = TPL->begin(), PE = TPL->end();
+                PI != PE; PI++)
+            {
+                auto tp = VisitTemplateParameter(*PI, AI);
+                if (!tp)
+                    return nullptr;
+                tpl->push(tp);
+
+                if (AI) AI++;
+            }
+        }
+
+        if (tpl)
+        {
+            auto td = new TemplateDeclaration(loc, applyVolatilePrefix(ident), tpl, nullptr, D);
+            td->semanticRun = PASSsemantic3done;
+            setDsym(D, td);
+            return oneSymbol(td);
+        }
     }
 
     StorageClass stc = STCundefined;
@@ -739,23 +803,22 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     }
     tf->addSTC(stc);
 
-    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
-        if (!prefixVolatile)
-            return baseIdent;
-
-        std::string idStr(baseIdent->toChars(), baseIdent->length());
-        // insert _vtlNUM_ backwards
-        idStr.insert(0, "_");
-        idStr.insert(0, std::to_string(funcVolatileNumber));
-        idStr.insert(0, "_vtl");
-
-        if (opts::cppVerboseDiags)
-            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
-        return Identifier::idPool(idStr.c_str(), idStr.size());
-    };
-
-    auto a = new Dsymbols;
     ::FuncDeclaration *fd;
+
+    if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
+    {
+        fd = new CtorDeclaration(loc, stc, tf, CD);
+    }
+    else if (auto DD = dyn_cast<clang::CXXDestructorDecl>(D))
+    {
+        fd = new DtorDeclaration(loc, stc, Id::dtor, DD);
+    }
+    else
+    {
+        auto id = getExtendedIdentifier(D, *this);
+        id = applyVolatilePrefix(id);
+        fd = new FuncDeclaration(loc, id, stc, tf, D);
+    }
 
     auto fillSemInfo = [&] (::FuncDeclaration* fd)
     {
@@ -795,144 +858,19 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         fd->semanticRun = PASSsemantic3done;
     };
 
-    if (auto CD = dyn_cast<clang::CXXConstructorDecl>(D))
-    {
-        fd = new CtorDeclaration(loc, stc, tf, CD);
-    }
-    else if (auto DD = dyn_cast<clang::CXXDestructorDecl>(D))
-    {
-        fd = new DtorDeclaration(loc, stc, Id::dtor, DD);
-    }
-    else if (D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D))
-    {
-        SpecValue spec(*this);
-        auto opIdent = getIdentifierOrNull(D, &spec); // will return nullptr if the operator isn't supported by D
-                            // TODO map the unsupported operators anyway
-
-        if (!opIdent)
-            return nullptr;
-
-        // NOTE: C++ overloaded operators might be virtual, unlike D which are always final (being templates)
-        //   Mapping the C++ operator to opBinary()() directly would make D lose info and overriding the C++ method impossible
-
-        auto FuncTemp = D->getPrimaryTemplate();
-        auto Name = FuncTemp ? FuncTemp->getDeclName() : D->getDeclName(); // if D is a template instantiation of a conversion operator,
-            // then if the destination type depends on the the template parameters the decl name won't be found by the lookup inside the parent,
-            // we need to take the primary template name. Ex.: operator Vec<float, 3>(); instantiated from template<_Tp, int n> operator Vec<_Tp, n>();
-
-        auto R = getDeclContextOpaque(D)->lookup(Name);
-        std::function<bool(const clang::NamedDecl*)> pred;
-        SpecValue spec2(*this);
-        if (isa<clang::TagDecl>(D->getDeclContext()))
-            pred = [&](const clang::NamedDecl* _D)
-                { return opIdent == getIdentifierOrNull(_D, &spec2); }; // member operator, simplest case
-        else
-        {
-            // non member overloaded operators are trickier, since they end up in different modules and we need one alias per module
-            auto OpTyDecl = isOverloadedOperatorWithTagOperand(D);
-            if (!OpTyDecl)
-                pred = [&](const clang::NamedDecl* _D)
-                    { return opIdent == getIdentifierOrNull(_D, &spec2) && !isOverloadedOperatorWithTagOperand(_D); };
-            else
-                pred = [&](const clang::NamedDecl* _D)
-                    { return opIdent == getIdentifierOrNull(_D, &spec2) && isOverloadedOperatorWithTagOperand(_D, OpTyDecl); };
-        }
-
-#if defined(_MSC_VER)
-        // MSVC's find_if tries to assign a new value to First, whose operator= is disabled
-        auto FirstOverload = R.begin();
-        {
-            auto _Last = R.end();
-            for (; FirstOverload != _Last; ++FirstOverload)
-                if (pred(*FirstOverload))
-                    break;
-        }
-#else
-        auto FirstOverload = std::find_if(R.begin(), R.end(), pred);
-#endif
-        assert(FirstOverload != R.end());
-        bool isFirstOverloadInScope = (*FirstOverload)->getCanonicalDecl() == D->getCanonicalDecl();
-
-        bool wrapInTemp = spec &&
-                    !D->getDescribedFunctionTemplate() &&  // if it's a templated overloaded operator then the template declaration is already taken care of
-                    !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation());  // if we're instantiating a templated overloaded operator, we're after the function
-
-        Identifier *fullIdent;
-        if (wrapInTemp)
-            fullIdent = getExtendedIdentifier(D, *this);
-        else
-            fullIdent = opIdent;
-
-        auto funcIdent = applyVolatilePrefix(fullIdent);
-
-        // Add the overridable method (or the static function)
-        fd = new FuncDeclaration(loc, funcIdent, stc, tf, D);
-        setDsym(D, fd);
-        fillSemInfo(fd);
-        a->push(fd);
-
-        if (wrapInTemp && isFirstOverloadInScope)
-        {
-            // Add the opUnary/opBinary/... template declaration aliasing fullIdent if none exists(important!)
-            auto tpl = initTempParams(loc, spec);
-
-            auto a_fwd = new_AliasDeclaration(loc, opIdent,
-                                        new_TypeIdentifier(loc, fullIdent));
-
-            // Enclose the forwarding function within the template declaration
-            auto decldefs = new Dsymbols;
-            decldefs->push(a_fwd);
-
-            auto tempdecl = new_TemplateDeclaration(loc, opIdent, tpl, nullptr, decldefs);
-            tempdecl->semanticRun = PASSsemantic3done;
-            a->push(tempdecl);
-        }
-
-        return a;
-    }
-    else
-    {
-        auto id = fromIdentifier(D->getIdentifier());
-        id = applyVolatilePrefix(id);
-        fd = new FuncDeclaration(loc, id, stc, tf, D);
-    }
-
-    setDsym(D, fd);
     fillSemInfo(fd);
 
-    if (D->getTemplateSpecializationKind() == clang::TSK_ExplicitSpecialization &&
-            D->getPrimaryTemplate() // forward-declared explicit specializations do not have their primary template set (stangely)
-            /*&& !(flags & MapTemplateInstantiations)*/)
-    {
-        auto tpl = new TemplateParameters;
+    if (!D->d)
+        setDsym(D, fd);
+    // NOTE: if D->d is already set then the function is wrapped inside a TemplateDeclaration,
+    // and the wrapper is the one that should get associated with the Clang declaration
 
-        auto FT = D->getPrimaryTemplate();
-        auto TPL = FT->getTemplateParameters();
-        auto AI = D->getTemplateSpecializationArgs()->asArray().begin();
-
-        for (auto PI = TPL->begin(), PE = TPL->end();
-            PI != PE; PI++)
-        {
-            auto tp = VisitTemplateParameter(*PI, AI);
-            if (!tp)
-                return nullptr;
-            tpl->push(tp);
-
-            if (AI) AI++;
-        }
-
-        auto decldefs = new Dsymbols;
-        decldefs->push(fd);
-        auto td = new TemplateDeclaration(loc, fd->ident, tpl, decldefs, D);
-        return oneSymbol(td);
-    }
-    else if (isTemplateInstantiation(D) &&
+    if (isTemplateInstantiation(D) &&
              D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
              (flags & CreateTemplateInstance))
-        a = CreateTemplateInstanceFor(D, a);
+        return CreateTemplateInstanceFor(D, oneSymbol(fd));
 
-    a->push(fd);
-    return a;
+    return oneSymbol(fd);
 }
 
 bool isTemplateParameterPack(const clang::NamedDecl *Param)
