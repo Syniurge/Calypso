@@ -446,9 +446,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     if (!isMapped(D))
         return nullptr;
 
-//     if (D->isInjectedClassName())
-//         return nullptr;
-    assert(!D->isInjectedClassName());
+    if (D->isInjectedClassName())
+        return nullptr;
 
     auto decldefs = new Dsymbols;
     auto loc = fromLoc(D->getLocation());
@@ -646,10 +645,7 @@ bool isMapped(const clang::Decl *D)
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     if (!isMapped(D))
-    {
-        setDsym(D, nullptr);
         return nullptr;
-    }
 
     // Sometimes the canonical decl of an explicit spec isn't the one in the parent DeclContext->decls
     // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
@@ -1356,12 +1352,14 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     DeclMapper(minst, parent->getModule()->importedFrom).VisitDecl(D,
                     DeclMapper::CreateTemplateInstance | flags);
-    assert(D->d);
+
+    if (!D->d)
+    {
+        setDsym(D, nullptr);
+        return nullptr;
+    }
 
     auto sym = D->d->sym;
-    if (!sym)
-        return nullptr;
-
     if (!sym->parent)
     {
         if (!isa<clang::IndirectFieldDecl>(D))
@@ -1581,6 +1579,8 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     return m;
 }
 
+// ***** //
+
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                                 const clang::NamedDecl *SpecificTag)
 {
@@ -1774,7 +1774,7 @@ clang::Expr* exprFromMacro(const clang::IdentifierInfo* II)
     auto& Context = calypso.getASTContext();
     auto& Sema = calypso.getSema();
 
-    if (PP.isMacroDefined(II))
+    if (!PP.isMacroDefined(II))
         return nullptr;
 
     auto MInfo = PP.getMacroInfo(II);
@@ -1806,6 +1806,7 @@ clang::Expr* exprFromMacro(const clang::IdentifierInfo* II)
 Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
 {
     auto TU = calypso.getASTContext().getTranslationUnitDecl();
+    auto parent = getModule(TU);
 
     auto II = calypso.toIdentifierInfo(ident);
 
@@ -1824,8 +1825,12 @@ Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
     auto e = expmap.fromExpression(E);
     auto ie = new_ExpInitializer(loc, e);
 
-    auto v = new_VarDeclaration(loc, nullptr, ident, ie);
+    auto v = new_VarDeclaration(loc, e->type, ident, ie);
     v->storage_class = STCmanifest;
+
+    parent->members->push(v);
+    v->addMember(nullptr, parent);
+
     return v;
 }
 

@@ -265,7 +265,8 @@ inline void ad_complete(AggTy* ad)
               !isa<clang::RedeclarableTemplateDecl>(M) && !isa<clang::TypedefNameDecl>(M))
             continue;
 
-        newMembers->push(dsymForDecl(ad, M));
+        if (auto sym = dsymForDecl(ad, M))
+            newMembers->push(sym);
     }
 
     delete ad->members;
