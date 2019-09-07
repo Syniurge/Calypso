@@ -261,7 +261,9 @@ bool TemplateDeclaration::earlyFunctionValidityCheck(::TemplateInstance* ti, Sco
 
 void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Expressions* fargs)
 {
-    if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) && !ti->havetempdecl)
+    if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) &&
+        !isa<clang::FunctionDecl>(TempOrSpec) &&
+        !ti->havetempdecl)
     {
         ti->havetempdecl = true;
         ti->tempdecl = primaryTemplate();
@@ -418,6 +420,8 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
 
 Dsymbol* TemplateDeclaration::wrappedNonTemplateSymbol()
 {
+    assert(isNonTemplateWrapper());
+
     if (members)
         return (*members)[0];
 
@@ -726,7 +730,7 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
         RealTemp = TST->getTemplateName().getAsTemplateDecl();
     }
 
-    auto sym = dsymForDecl<DeclMapper::MapExplicitSpecs>(
+    auto sym = dsymForDecl<DeclMapper::MapExplicitAndPartialSpecs>(
                         static_cast<ScopeDsymbol*>(this->parent), RealTemp);
     assert(sym->isTemplateDeclaration());
 

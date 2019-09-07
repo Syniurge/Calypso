@@ -200,11 +200,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
         }
     }
     else
-    {
-        auto Name = calypso.toDeclarationName(ident);
-        for (auto Match: Def->lookup(Name))
-            dsymForDecl(ad, Match);
-    }
+        mapDecls(ad, Def, ident);
 
     return ad->ScopeDsymbol::search(loc, ident, flags);
 }

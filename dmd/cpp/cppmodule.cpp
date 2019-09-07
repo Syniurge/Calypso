@@ -237,7 +237,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
                             dyn_cast<clang::BASE##Decl>(D)) \
         s = Visit##BASE##Decl(BASE##D, flags);
 #define DECLEXPLICIT(BASE) \
-    else if ((flags & MapExplicitSpecs) && isa<clang::BASE##Decl>(D)) \
+    else if ((flags & MapExplicitAndPartialSpecs) && isa<clang::BASE##Decl>(D)) \
         s = Visit##BASE##Decl(cast<clang::BASE##Decl>(D));
 
     if (0) ;
@@ -254,7 +254,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 #undef DECL
 #undef DECLWF
 
-//     bool mappedInnerSpec = !(flags & MapExplicitSpecs) && isExplicitSpecialization(D);
+//     bool mappedInnerSpec = !(flags & MapExplicitAndPartialSpecs) && isExplicitSpecialization(D);
 //
 //     // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
 //     // to be the TemplateInstance, that we create if requested
@@ -648,7 +648,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     // but the decl in FunctionTemplateDecl->specs, ex.: __convert_to_v in locale_facets.h
     // Which is why we map each spec in VisitRedeclarableTemplateDecl and need a flag to ensure that
     // they get mapped only once.
-    if (!(flags & MapExplicitSpecs) && isExplicitSpecialization(D))
+    if (!(flags & MapExplicitAndPartialSpecs) && isExplicitSpecialization(D))
         return nullptr;
 
 //     if (!(flags & MapTemplateInstantiations) && D->isTemplateInstantiation() &&
@@ -933,17 +933,17 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
             const_cast<clang::ClassTemplateDecl*>(CTD)->getPartialSpecializations(PS);
 
             for (auto Spec: CTD->specializations())
-                if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitSpecs))
+                if (auto sp = VisitDecl(Spec->getCanonicalDecl(), MapExplicitAndPartialSpecs))
                     a->append(sp);
 
             for (auto PartialSpec: PS)
-                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitAndPartialSpecs))
                     a->append(sp);
         }
         else if (FTD)
         {
             for (auto Spec: FTD->specializations())
-                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitAndPartialSpecs))
                     a->append(sp);
         }
         else if (VTD)
@@ -952,11 +952,11 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
             const_cast<clang::VarTemplateDecl*>(VTD)->getPartialSpecializations(PS);
 
             for (auto Spec: VTD->specializations())
-                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitSpecs))
+                if (auto sp = VisitDecl(getCanonicalDecl(Spec), MapExplicitAndPartialSpecs))
                     a->append(sp);
 
             for (auto PartialSpec: PS)
-                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitSpecs))
+                if (auto sp = VisitDecl(PartialSpec->getCanonicalDecl(), MapExplicitAndPartialSpecs))
                     a->append(sp);
         }
     }
@@ -1318,7 +1318,60 @@ Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
 }
 
 template Dsymbol* dsymForDecl<DeclMapper::NoFlag>(ScopeDsymbol* sds, const clang::Decl* D);
-template Dsymbol* dsymForDecl<DeclMapper::MapExplicitSpecs>(ScopeDsymbol* sds, const clang::Decl* D);
+template Dsymbol* dsymForDecl<DeclMapper::MapExplicitAndPartialSpecs>(ScopeDsymbol* sds, const clang::Decl* D);
+
+void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident)
+{
+    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+    DeclMapper mapper(sds);
+
+    auto mapOperator = [&] (clang::OverloadedOperatorKind Op)
+    {
+        auto Name = DeclarationNames.getCXXOperatorName(Op);
+        for (auto Match: DC->lookup(Name))
+            mapper.dsymForDecl(Match);
+    };
+
+    if (ident == Id::opUnary)
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
+                       clang::OO_Arrow, clang::OO_ArrowStar})
+            mapOperator(OO);
+    else if (ident == Id::opBinary)
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
+                       clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
+                       clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+            mapOperator(OO);
+    else if (ident == Id::opOpAssign)
+        for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
+                       clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
+                       clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
+                       clang::OO_GreaterGreaterEqual})
+            mapOperator(OO);
+    else if (ident == Id::cmp)
+        /*mapOperator(clang::OO_EqualEqual)*/; // FIXME
+        // NOTE: other overloaded operators only map to one DeclarationName so don't require
+        // special treatment
+    else if (ident == Id::_cast)
+    {
+        typedef clang::DeclContext::specific_decl_iterator<clang::CXXConversionDecl> Conv_iterator;
+        for (Conv_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+            mapper.dsymForDecl(*I);
+
+        typedef clang::DeclContext::specific_decl_iterator<clang::FunctionTemplateDecl> FuncTemp_iterator;
+        for (FuncTemp_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+            if ((*I)->getDeclName().getNameKind() == clang::DeclarationName::CXXConversionFunctionName)
+                mapper.dsymForDecl(*I);
+    }
+    else
+    {
+        auto Name = calypso.toDeclarationName(ident);
+
+        for (auto Match: DC->lookup(Name))
+            mapper.dsymForDecl(Match);
+    }
+}
 
 // ***** //
 
