@@ -46,6 +46,7 @@ int StaticCount::assigns = 0;
 
 class StaticCountDerived : public StaticCount
 {
+public:
     StaticCountDerived() : StaticCount() {}
     StaticCountDerived(const StaticCountDerived &o)  : StaticCount(o) {}
 

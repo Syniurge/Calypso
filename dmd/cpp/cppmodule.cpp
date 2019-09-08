@@ -1479,12 +1479,32 @@ Package *DeclMapper::getPackage(const clang::Decl* D)
 
 // ***** //
 
+void loadCppCore()
+{
+    Identifiers packages;
+    packages.push(calypso.id_cpp);
+    auto dst = Package::resolve(&packages, nullptr, nullptr);
+
+    auto sym = dst->lookup(calypso.id_core);
+    if (sym)
+        return; // already loaded
+
+    auto cpp_core_module = ::Module::load(Loc(), &packages, calypso.id_core);
+    cpp_core_module->importedFrom = ::Module::rootModule;
+    cpp_core_module->importAll(nullptr);
+    dsymbolSemantic(cpp_core_module, nullptr);
+    semantic2(cpp_core_module, nullptr);
+    semantic3(cpp_core_module, nullptr);
+}
+
 Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
 {
     if (!calypso.getASTUnit()) {
         ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\") first");
         fatal();
     }
+
+    loadCppCore();
 
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
