@@ -518,6 +518,8 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
     auto CRD = dyn_cast<clang::CXXRecordDecl>(D);
     auto members = new Dsymbols;
 
+    assert(!CRD || !CRD->getDescribedClassTemplate());
+
     AggregateDeclaration *a;
     if (!anon)
     {
@@ -1027,8 +1029,8 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
                     return nullptr;
             }
 
-            if (NTTPD->hasDefaultArgument())
-                tp_defaultvalue = expmap.fromExpression(NTTPD->getDefaultArgument());
+//             if (NTTPD->hasDefaultArgument()) // LAZY NOTE: default args should never be needed, since they're evaluated by matchWithInstance
+//                 tp_defaultvalue = expmap.fromExpression(NTTPD->getDefaultArgument());
 
             tp = new_TemplateValueParameter(loc, id, valTy,
                                         tp_specvalue, tp_defaultvalue);
@@ -1054,8 +1056,8 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
                     return nullptr;
             }
 
-            if (TTPD->hasDefaultArgument())
-                tp_defaulttype = fromType(TTPD->getDefaultArgument(), loc);
+//             if (TTPD->hasDefaultArgument())
+//                 tp_defaulttype = fromType(TTPD->getDefaultArgument(), loc);
 
             tp = new_TemplateTypeParameter(loc, id, tp_spectype, tp_defaulttype);
         }
@@ -1079,9 +1081,9 @@ TemplateParameter *DeclMapper::VisitTemplateParameter(const clang::NamedDecl *Pa
                     return nullptr;
             }
 
-            if (TempTemp->hasDefaultArgument())
-                tp_defaulttype = FromType(*this, loc).fromTemplateName(
-                        TempTemp->getDefaultArgument().getArgument().getAsTemplate());
+//             if (TempTemp->hasDefaultArgument())
+//                 tp_defaulttype = FromType(*this, loc).fromTemplateName(
+//                         TempTemp->getDefaultArgument().getArgument().getAsTemplate());
 
             tp = new_TemplateAliasParameter(loc, id, nullptr, tp_spectype, tp_defaulttype);
         }
