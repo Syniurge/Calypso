@@ -319,6 +319,7 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
 
     auto tempdecl = dsymForDecl(TempDecl);
     assert(tempdecl && tempdecl->isTemplateDeclaration());
+    auto c_td = static_cast<TemplateDeclaration*>(tempdecl);
 
     auto loc = (*decldefs)[0]->loc;
     auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
@@ -327,6 +328,12 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->inst = ti;
     ti->Inst = const_cast<SpecTy*>(D);
 
+    auto cpptdtypes = c_td->tdtypesFromInst(minst->_scope, ti->Inst, true);
+    ti->tdtypes.setDim(cpptdtypes->dim);
+    memcpy(ti->tdtypes.tdata(), cpptdtypes->tdata(), cpptdtypes->dim * sizeof(void*));
+    delete cpptdtypes;
+
+    ti->parent = tempdecl->parent;
     ti->members = decldefs;
     ti->symtab = new_DsymbolTable();
     for (auto s: *decldefs)
@@ -338,8 +345,8 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->semantictiargsdone = true;
     ti->semanticRun = PASSsemantic3done;
 
-    assert(!static_cast<TemplateDeclaration*>(tempdecl)->findExistingInstance(ti, nullptr));
-    static_cast<TemplateDeclaration*>(tempdecl)->addInstance(ti);
+    assert(!c_td->findExistingInstance(ti, nullptr));
+    c_td->addInstance(ti);
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
