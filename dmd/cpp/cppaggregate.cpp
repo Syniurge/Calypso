@@ -496,7 +496,7 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 }
 
 template <typename AggTy>
-Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
+Expression* ad_buildVarInitializer(AggTy *ad, Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
     if (exp->op == TOKstructliteral)
         return nullptr;
@@ -570,17 +570,17 @@ Expression* buildVarInitializerImpl(AggTy *ad, Scope* sc, ::VarDeclaration* vd, 
 
 Expression* StructDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
-    return buildVarInitializerImpl(this, sc, vd, exp);
+    return ad_buildVarInitializer(this, sc, vd, exp);
 }
 
 Expression* ClassDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
-    return buildVarInitializerImpl(this, sc, vd, exp);
+    return ad_buildVarInitializer(this, sc, vd, exp);
 }
 
 Expression* UnionDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp)
 {
-    return buildVarInitializerImpl(this, sc, vd, exp);
+    return ad_buildVarInitializer(this, sc, vd, exp);
 }
 
 Expression *ClassDeclaration::defaultInit(Loc loc)
