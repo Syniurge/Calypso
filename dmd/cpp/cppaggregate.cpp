@@ -263,6 +263,8 @@ inline void ad_complete(AggTy* ad)
 
         if (auto sym = dsymForDecl(ad, M))
             newMembers->push(sym);
+        if (auto td = dsymForDecl<true>(ad, M))
+            newMembers->push(td);
     }
 
     delete ad->members;

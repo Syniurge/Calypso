@@ -57,7 +57,8 @@ namespace clangCG = clang::CodeGen;
 struct DData
 {
     Dsymbol* sym = nullptr;
-    Dsymbols* mapped_syms = nullptr; // the result of DeclMapper::VisitDecl() calls
+    Dsymbol* wrapper = nullptr; // template declarations for partial/explicit template specializations or overloaded operators
+    Dsymbols* mapped_syms = nullptr; // the result of DeclMapper::VisitDecl() calls // TODO remove
 };
 
 /***********************/

@@ -420,16 +420,10 @@ MATCH TemplateDeclaration::leastAsSpecialized(Scope* sc, ::TemplateDeclaration* 
 
 Dsymbol* TemplateDeclaration::wrappedNonTemplateSymbol()
 {
-    assert(isNonTemplateWrapper());
+    if (!isNonTemplateWrapper())
+        return nullptr;
 
-    if (members)
-        return (*members)[0];
-
-    DeclMapper mapper(this);
-    members = mapper.VisitDecl(TempOrSpec, DeclMapper::UnwrapNonTemplatedFunction);
-    assert(members && members->dim);
-
-    return (*members)[0];
+    return DeclMapper(this).dsymForDecl(TempOrSpec);
 }
 
 Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
@@ -439,19 +433,22 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
 
     assert(!ti->members); // members were already set during decl mapping??
 
-    if (isNonTemplateWrapper())
+    auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
+    Dsymbol* inst = nullptr;
+
+    if (auto sym = wrappedNonTemplateSymbol())
     {
-        c_ti->aliasdecl = wrappedNonTemplateSymbol();
-        return members;
+        inst = new_AliasDeclaration(loc, sym->ident, sym);
+        inst->semanticRun = PASSsemantic3done;
+    }
+    else
+    {
+        DeclMapper(ti->minst, ti->minst).VisitDecl(Inst);
+        inst = Inst->d->sym;
     }
 
-    auto Inst = c_ti->Inst.get<clang::NamedDecl*>();
-
-    DeclMapper mapper(ti->minst, ti->minst);
-    mapper.VisitDecl(Inst, DeclMapper::UnwrapNonTemplatedFunction);
-
     auto a = new Dsymbols;
-    if (auto inst = Inst->d->sym)
+    if (inst)
     {
         a->push(inst);
         c_ti->aliasdecl = inst;
@@ -730,9 +727,8 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
         RealTemp = TST->getTemplateName().getAsTemplateDecl();
     }
 
-    auto sym = dsymForDecl<DeclMapper::MapExplicitAndPartialSpecs>(
-                        static_cast<ScopeDsymbol*>(this->parent), RealTemp);
-    assert(sym->isTemplateDeclaration());
+    auto sym = templateForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
+    assert(sym && sym->isTemplateDeclaration());
 
     ti->tempdecl = static_cast<TemplateDeclaration*>(sym);
 
