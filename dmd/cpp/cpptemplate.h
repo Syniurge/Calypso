@@ -14,6 +14,9 @@
 namespace clang
 {
 class Decl;
+class NamedDecl;
+class RedeclarableTemplateDecl;
+class TemplateSpecializationType;
 }
 
 namespace cpp
@@ -92,6 +95,8 @@ public:
     clang::NamedDecl* getInstND();
     const clang::TemplateSpecializationType* getInstTST();
 };
+
+clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* TempOrSpec);
 
 }
 

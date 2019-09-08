@@ -319,15 +319,26 @@ void ad_determineSize(AggTy *ad)
     ad->alignment = ad->alignsize = RL.getAlignment().getQuantity();
     ad->structsize = RL.getSize().getQuantity();
 
+    DeclMapper mapper(ad);
+
     typedef clang::DeclContext::specific_decl_iterator<clang::ValueDecl> Value_iterator;
     for (Value_iterator I(ad->RD->decls_begin()), E(ad->RD->decls_end()); I != E; I++)
     {
-        if (!isa<clang::FieldDecl>(*I) && !isa<clang::IndirectFieldDecl>(*I)/* &&
+        auto D = *I;
+
+        if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
+            D = cast<clang::FieldDecl>(Indirect->chain().back());
+
+        if (!isa<clang::FieldDecl>(D)/* &&
             !isa<clang::MSPropertyDecl>(*I) (TODO)*/)
             continue;
 
-        auto Field = *I;
-        auto vd = static_cast<VarDeclaration*>(dsymForDecl(ad, Field));
+        auto Field = D;
+        auto sym = mapper.dsymForDecl(Field);
+        if (!sym)
+            continue; // anonymous record, indirect fields will be added instead
+
+        auto vd = static_cast<VarDeclaration*>(sym);
         ad->fields.push(vd);
 
         vd->offsetInBits = Context.getFieldOffset(Field);

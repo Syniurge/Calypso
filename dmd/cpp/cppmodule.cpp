@@ -354,13 +354,12 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 {
     auto CanonDecl = D;
 
-    if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
-        D = Indirect->getVarDecl();
+    assert(!isa<clang::IndirectFieldDecl>(D));
 
-    if (!(flags & MapTemplatePatterns))
-        if (auto Var = dyn_cast<clang::VarDecl>(D))
-            if (Var->getDescribedVarTemplate())
-                return nullptr;
+//     if (!(flags & MapTemplatePatterns))
+//         if (auto Var = dyn_cast<clang::VarDecl>(D))
+//             if (Var->getDescribedVarTemplate())
+//                 return nullptr;
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
         if (auto Def = Var->getDefinition())
@@ -413,6 +412,8 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
     if (t->isConst())
         a->storage_class |= STCconst;
 
+    const clang::Expr* Init = nullptr;
+
     if (auto Var = dyn_cast<clang::VarDecl>(D))
     {
         if (Var->hasExternalStorage())
@@ -426,27 +427,33 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
         if ((Var->isConstexpr() || t->isConst()) &&
                 Var->getAnyInitializer())
-        {
-            // we avoid initializer expressions except for const/constexpr variables
-            auto Init = Var->getAnyInitializer();
-            clang::APValue Eval;
-            llvm::SmallVector<clang::PartialDiagnosticAt, 2> Diags;
+            Init = Var->getAnyInitializer(); // we avoid initializer expressions
+                                             // except for const/constexpr variables
+    }
+    else if (auto Field = dyn_cast<clang::FieldDecl>(D))
+        Init = Field->getInClassInitializer();
 
-            auto& Context = calypso.getASTContext();
-            ExprMapper expmap(*this);
+    if (Init)
+    {
+        auto& Context = calypso.getASTContext();
+        ExprMapper expmap(*this);
 
-            Expression *e = nullptr;
-            if (!Init->isValueDependent() && Init->EvaluateAsInitializer(Eval, Context, Var, Diags))
-                e = expmap.fromAPValue(loc, Eval, Var->getType()); // evaluating integer and boolean expressions is always preferable, because in some rare cases
-                    // DMD and Clang's intepretations differ, one important instance being -1u < 0u (true for DMD, false for Clang)
+        clang::Expr::EvalResult Result;
 
-            if (!e)
-                e = expmap.fromExpression(Var->getAnyInitializer(), true);
+        Expression *e = nullptr;
+        if (!Init->isValueDependent() && Init->EvaluateAsConstantExpr(Result,
+                                                clang::Expr::EvaluateForCodeGen, Context))
+            e = expmap.fromAPValue(loc, Result.Val, D->getType());
+                // NOTE: Evaluating integer and boolean expressions is always preferable,
+                // because in some rare cases DMD and Clang's intepretations differ,
+                // one important instance being -1u < 0u (true for DMD, false for Clang)
 
-            if (e && e->op != TOKnull)
-                if (Init->isInstantiationDependent() || Init->isEvaluatable(Context))
-                    a->_init = new_ExpInitializer(loc, e);
-        }
+        if (!e)
+            e = expmap.fromExpression(Init, true);
+
+        if (e && e->op != TOKnull)
+            if (Init->isInstantiationDependent() || Init->isEvaluatable(Context))
+                a->_init = new_ExpInitializer(loc, e);
     }
 
     a->semanticRun = PASSsemantic3done;
@@ -1232,7 +1239,8 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     else if (D->d)
         return D->d->sym;
 
-    if (auto NS = dyn_cast<clang::NamespaceDecl>(D)) {
+    if (auto NS = dyn_cast<clang::NamespaceDecl>(D))
+    {
         if (NS->isInlineNamespace())
             return dsymForDecl<false>(cast<clang::Decl>(NS->getDeclContext()));
         return getModule(NS);
@@ -1246,17 +1254,22 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (IsParentNamespaceOrTU)
     {
+        auto ModDecl = D;
+
         auto Func = dyn_cast<clang::FunctionDecl>(D);
         if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
             Func = FuncTemp->getTemplatedDecl();
 
         if (Func && Func->isOverloadedOperator())
-        {
             if (auto Tag = isOverloadedOperatorWithTagOperand(D))
-                parent = getModule(Tag); // non-member operators are part of the record module
-        }
-        else if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
-            parent = getModule(D);
+                ModDecl = D; // non-member operators are part of the record module
+
+        if (auto CRD = dyn_cast<clang::CXXRecordDecl>(ModDecl))
+            if (auto Template = CRD->getDescribedClassTemplate())
+                ModDecl = Template;
+
+        if (isa<clang::TagDecl>(ModDecl) || isa<clang::ClassTemplateDecl>(ModDecl))
+            parent = getModule(ModDecl);
         else
             parent = getModule(Parent); // aka _
     }
@@ -1381,8 +1394,11 @@ void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident
 
 Module *DeclMapper::getModule(const clang::Decl* D)
 {
-    auto rootDecl = getCanonicalDecl(getSpecializedDeclOrExplicit(D));
+    if (auto ND = dyn_cast<clang::NamedDecl>(D))
+        if (auto Prim = getPrimaryTemplate(ND))
+            D = Prim;
 
+    auto rootDecl = getCanonicalDecl(D);
     Module* m = Module::allCppModules[rootDecl];
 
     if (!m)

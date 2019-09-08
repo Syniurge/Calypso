@@ -584,7 +584,7 @@ clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* Temp
     if (auto FD = dyn_cast<clang::FunctionDecl>(TempOrSpec))
         return FD->getPrimaryTemplate();
 
-    llvm_unreachable("Unhandled primary template");
+    return nullptr;
 }
 
 clang::RedeclarableTemplateDecl *TemplateDeclaration::getPrimaryTemplate()

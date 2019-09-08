@@ -124,7 +124,7 @@ public:
     enum Flags
     {
         NoFlag = 0,
-        MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
+//         MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
 //         MapTemplateInstantiations = 1 << 1,
 //         MapExplicitAndPartialSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
 //         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion

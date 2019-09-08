@@ -2721,6 +2721,9 @@ void functionResolve(Match* m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiar
             if (!fd)
                 return 0;
 
+            if (fd == m.lastf)
+                return 0; // CALYPSO DMD BUG? If multiple same-named TemplateDeclaration contain an alias to the same function or a bunch of function overloads then the previous resolveFuncCall call will return the same fd for each TemplateDeclaration and functionResolve will think there's ambiguity
+
             if (fd.type.ty != Tfunction)
             {
                 m.lastf = fd;   // to propagate "error match"
