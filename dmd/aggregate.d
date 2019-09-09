@@ -1014,7 +1014,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         size(loc);
         assert(sizeok == Sizeok.done); // forward ref
 
-        if (!ctor)
+        if (!search(farg.loc, Id.ctor))
             return null;
 
         auto e = new NoImplicitCtorExp(farg.loc, farg);

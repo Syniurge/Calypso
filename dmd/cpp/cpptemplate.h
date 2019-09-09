@@ -45,7 +45,7 @@ public:
     Dsymbols* copySyntaxTree(::TemplateInstance *ti) override;
     MATCH deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc, ::FuncDeclaration *&fd, Type *tthis, Expressions *fargs) override;
 
-    MATCH functionTemplateMatch(::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
+    MATCH functionTemplateMatch(Scope *sc, ::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
 
     Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance = false);
 

@@ -326,7 +326,7 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->isForeignInst = true;
     ti->inst = ti;
-    ti->Inst = const_cast<SpecTy*>(D);
+    ti->Inst = const_cast<SpecTy*>(cast<SpecTy>(getCanonicalDecl(D)));
 
     auto cpptdtypes = c_td->tdtypesFromInst(minst->_scope, ti->Inst, true);
     ti->tdtypes.setDim(cpptdtypes->dim);
@@ -683,6 +683,16 @@ bool isMapped(const clang::Decl *D)
     return true;
 }
 
+inline Dsymbol* dummyOnemember(Loc loc, Identifier* ident)
+{
+    auto tf = new_TypeFunction(nullptr, Type::tvoid, 0, LINKd);
+
+    if (ident == Id::ctor)
+        return new_CtorDeclaration(loc, loc, 0, tf);
+    else
+        return new_FuncDeclaration(loc, loc, ident, 0, tf);
+}
+
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
 {
     if (!isMapped(D))
@@ -805,6 +815,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         auto td = new TemplateDeclaration(loc, applyVolatilePrefix(ident), tpl, nullptr, D);
         setDwrapper(D, td);
         td->semanticRun = PASSsemantic3done;
+        td->onemember = dummyOnemember(loc, ident); // HACK: Create a dummy oneMember for functionResolve
         return oneSymbol(td);
     }
 
@@ -944,10 +955,14 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     td->semanticRun = PASSsemantic3done;
 
-    // FIXME: function overloads with volatile parameters?
+    // HACK: Create a dummy oneMember for functionResolve
+    if (isa<clang::FunctionTemplateDecl>(D))
+        td->onemember = dummyOnemember(loc, id);
 
     auto a = new Dsymbols;
     a->push(td);
+
+    // FIXME: function overloads with volatile parameters?
 
     return a;
 }
@@ -1313,6 +1328,23 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         if (!isa<clang::IndirectFieldDecl>(D))
             parent->members->push(sym);
         sym->addMember(nullptr, parent);
+
+        auto ad = static_cast<AggregateDeclaration*>(parent);
+        if (sym->ident == Id::ctor)
+        {
+            assert(parent->isAggregateDeclaration());
+            if (!ad->ctor)
+                ad->ctor = sym;
+        }
+        else if (auto dtor = sym->isDtorDeclaration())
+        {
+            assert(parent->isAggregateDeclaration());
+            if (!ad->dtor)
+                ad->dtor = dtor;
+        }
+
+        if (sym->ident)
+            parent->search(parent->loc, sym->ident); // NOTE: this could be lazier..
     }
     else
         assert(sym->parent->isTemplateInstance() &&

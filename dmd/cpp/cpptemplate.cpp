@@ -270,63 +270,13 @@ void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Ex
     }
 }
 
-static MATCH matchWithInstanceNonTemplated(TemplateDeclaration* tempdecl, Scope *sc, ::TemplateInstance *ti,
-                                             Objects *dedtypes, Expressions *fargs, int flag)
-{
-    dedtypes->zero();
-
-    // If more arguments than parameters, no match
-    if (ti->tiargs->dim > tempdecl->parameters->dim)
-        return MATCHnomatch;
-
-    assert(dedtypes->dim == tempdecl->parameters->dim);
-    assert(dedtypes->dim >= ti->tiargs->dim);
-
-    // Attempt type deduction
-    MATCH m = MATCHexact;
-    size_t argi = 0; // CALYPSO
-    for (size_t i = 0; i < dedtypes->dim; i++)
-    {
-        auto tp = (*tempdecl->parameters)[i];
-
-        MATCH m2 = tp->matchArg(ti->loc, sc /* HACK-ish, everything is already semantic'd */,
-                                ti->tiargs, i, &argi /* CALYPSO */,
-                                tempdecl->parameters, dedtypes, nullptr);
-        if (m2 == MATCHnomatch)
-            return MATCHnomatch;
-
-        if (m2 < m)
-            m = m2;
-    }
-
-    if (!flag)
-    {
-        /* Any parameter left without a type gets the type of
-            * its corresponding arg
-            */
-        for (size_t i = 0; i < dedtypes->dim; i++)
-        {
-            if (!(*dedtypes)[i])
-            {
-                assert(i < ti->tiargs->dim);
-                (*dedtypes)[i] = static_cast<Type*>((*ti->tiargs)[i]);
-            }
-        }
-    }
-
-    return m;
-}
-
 MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
                                              Objects *dedtypes, Expressions *fargs, int flag)
 {
-    // Special case of a wrapped non-templated overloaded operator
-    if (isNonTemplateWrapper())
-        return matchWithInstanceNonTemplated(this, sc, ti, dedtypes, fargs, flag);
-
-    // Else, give only the primary template a chance to match
+    // Give only the primary template a chance to match if it's not the special case of
+    // a wrapped non-templated overloaded operator
     // The "best matching" is done dy Sema, and then foreignInstance corrects ti->tempdecl
-    assert(isa<clang::RedeclarableTemplateDecl>(TempOrSpec));
+    assert(isa<clang::RedeclarableTemplateDecl>(TempOrSpec) || isNonTemplateWrapper());
 
     TemplateInstUnion Inst;
     assert(!hasExistingClangInst(ti));
@@ -334,7 +284,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     MATCH m = MATCHexact;
 
     if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
-        m = functionTemplateMatch(ti, fargs, Inst);
+        m = functionTemplateMatch(sc, ti, fargs, Inst);
     else {
         Inst = getClangInst(sc, ti, ti->tiargs);
         if (!Inst)
@@ -456,9 +406,35 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     return a;
 }
 
-MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Expressions *fargs,
-                                                 TemplateInstUnion& Inst)
+static MATCH functionTemplateMatchNonTemplated(TemplateDeclaration* tempdecl, Scope *sc,
+                            ::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst)
 {
+    // If more arguments than parameters, no match
+    if (ti->tiargs->dim > tempdecl->parameters->dim)
+        return MATCHnomatch;
+
+    Objects dedtypes;
+    dedtypes.setDim(1);
+    assert(dedtypes.dim == tempdecl->parameters->dim);
+
+    size_t argi = 0;
+    auto tp = (*tempdecl->parameters)[0];
+
+    MATCH m = tp->matchArg(ti->loc, sc /* HACK-ish, everything is already semantic'd */,
+                            ti->tiargs, 0, &argi /* CALYPSO */,
+                            tempdecl->parameters, &dedtypes, nullptr);
+    if (m)
+        Inst = const_cast<clang::NamedDecl*>(tempdecl->TempOrSpec);
+
+    return m;
+}
+
+MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *ti,
+                                                 Expressions *fargs, TemplateInstUnion& Inst)
+{
+    if (isNonTemplateWrapper())
+        return functionTemplateMatchNonTemplated(this, sc, ti, fargs, Inst);
+
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
 
@@ -474,14 +450,33 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
 
     clang::TemplateArgumentListInfo ExplicitTemplateArgs;
     if (ti->tiargs && !isConversion)
+    {
+        SpecValue spec(mapper);
+        getIdentifierOrNull(FunctionTemplate, &spec);
+
+        if (spec)
+        {
+            Objects dedtypes;
+            dedtypes.setDim(1);
+            assert(parameters->dim >= 1);
+
+            auto tp = (*parameters)[0];
+            size_t argi = 0;
+            MATCH m = tp->matchArg(ti->loc, sc, ti->tiargs, 0, &argi, parameters, &dedtypes, nullptr);
+
+            if (m == MATCHnomatch)
+                return MATCHnomatch;
+        }
+
         fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
                                      FunctionTemplate, mapper, expmap);
+    }
 
     clang::FunctionDecl *Specialization;
 
     if (isConversion)
     {
-        assert(ti->tiargs && ti->tiargs->dim == 1);
+        assert(ti->tiargs && ti->tiargs->dim >= 1);
         Type* to = isType((*ti->tiargs)[0]);
         clang::QualType To = mapper.toType(ti->loc, to, /*sc=*/ nullptr);
 
@@ -521,20 +516,13 @@ MATCH TemplateDeclaration::functionTemplateMatch(::TemplateInstance *ti, Express
 MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc,
                             ::FuncDeclaration *&fd, Type *tthis, Expressions *fargs)
 {
-    auto& S = calypso.getSema();
-
-    if (isNonTemplateWrapper())
-        return ::TemplateDeclaration::deduceFunctionTemplateMatch(ti, sc, fd, tthis, fargs);
-
-    DeclMapper mapper(sc->minst, sc->minst);
-
     TemplateInstUnion Inst;
 
-    if (functionTemplateMatch(ti, fargs, Inst) != MATCHexact)
+    if (functionTemplateMatch(sc, ti, fargs, Inst) != MATCHexact)
         return MATCHnomatch;
 
-    MATCH match = MATCHexact;
-    MATCH matchTiargs = MATCHexact;
+    MATCH matchCall = MATCHexact,
+          matchTiargs = MATCHexact;
 
     auto dedtypes = tdtypesFromInst(sc, Inst, false);
     ti->tdtypes.dim = dedtypes->dim;
@@ -546,18 +534,20 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     auto FPT = FuncInst->getType()->castAs<clang::FunctionProtoType>();
 
     if (auto AT = dyn_cast<clang::AutoType>(FPT->getReturnType()))
-        if (!AT->isSugared()) { // not sugared if undeduced
+        if (!AT->isSugared())
+        { // not sugared if undeduced
+            auto& S = calypso.getSema();
+
             InstantiateFunctionDefinition(S, FuncInst);
             FPT = FuncInst->getType()->castAs<clang::FunctionProtoType>();
         }
 
-    auto oldtf = (TypeFunction *) fd->type;
-    fd->type = DeclMapper::FromType(mapper, ti->loc).fromTypeFunction(FPT, FuncInst);
-    auto partial = doHeaderInstantiation(ti, sc, fd, tthis, fargs);
-    fd->type = oldtf;
-    fd = partial;
+    DeclMapper mapper(this);
+    auto tf = DeclMapper::FromType(mapper, ti->loc).fromTypeFunction(FPT, FuncInst);
+    fd->type = tf;
 
-    return (MATCH)(match | (matchTiargs<<4));
+    matchCall = tf->callMatch(tthis, fargs, 0);
+    return (MATCH)(matchCall | (matchTiargs<<4));
 }
 
 bool TemplateDeclaration::isForeignInstance(::TemplateInstance *ti)
@@ -671,6 +661,8 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
     auto& S = calypso.getSema();
     clang::TemplateName Name(Temp);
 
+    clang::NamedDecl* InstDecl = nullptr;
+
     if (isa<clang::ClassTemplateDecl>(Temp) ||
         isa<clang::TypeAliasTemplateDecl>(Temp))
     {
@@ -682,8 +674,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
                     return TST;
 
             auto RT = Ty->getAs<clang::RecordType>();
-            auto CTSD = cast<clang::ClassTemplateSpecializationDecl>(RT->getDecl());
-            return CTSD;
+            InstDecl = cast<clang::ClassTemplateSpecializationDecl>(RT->getDecl());
         }
     }
     else if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(Temp))
@@ -692,21 +683,22 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
                 FuncTemp->getInstantiatedFromMemberTemplate());
 
         if (auto FuncInst = instantiateFunctionDeclaration(Args, FuncTemp))
-            return FuncInst;
+            InstDecl = FuncInst;
     }
     else if (auto VarTemp = dyn_cast<clang::VarTemplateDecl>(Temp))
     {
         auto Result = S.CheckVarTemplateId(VarTemp, clang::SourceLocation(), Temp->getLocation(), Args);
         if (Result.isUsable())
-        {
-            auto VarInst = cast<clang::VarDecl>(Result.get());
-            return VarInst;
-        }
+            InstDecl = cast<clang::VarDecl>(Result.get());
     }
     else
         assert(false);
 
-    return TemplateInstUnion();
+    if (InstDecl)
+        return cast<clang::NamedDecl>(
+                        const_cast<clang::Decl*>(getCanonicalDecl(InstDecl)));
+    else
+        return TemplateInstUnion();
 }
 
 void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
