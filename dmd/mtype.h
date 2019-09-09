@@ -585,6 +585,8 @@ public:
 
     Type *substWildTo(unsigned mod);
 
+    MATCH callMatch(Type* tthis, Expressions* args, int flag = 0, const char** pMessage = NULL);
+
     void accept(Visitor *v) { v->visit(this); }
 };
 

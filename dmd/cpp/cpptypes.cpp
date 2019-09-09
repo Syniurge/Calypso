@@ -960,7 +960,7 @@ TypeQualified *TypeQualifiedBuilder::get(const clang::Decl *D)
         {
             tqual = new_TypeIdentifier(from.loc, Id::empty); // start with the module scope operator . to protect against collisions
 
-            if (auto m = mapper.getModule(TopDecl))
+            if (auto m = mapper.dsymForDecl(TopDecl)->getModule())
             {
                 std::function<void(Dsymbol*)> add = [&] (Dsymbol* pkg) {
                     if (auto parent = pkg->parent)
@@ -1041,15 +1041,15 @@ TypeQualified *DeclMapper::FromType::typeQualifiedFor(clang::NamedDecl *D,
                         const clang::TemplateArgument *ArgBegin, const clang::TemplateArgument *ArgEnd,
                         TypeQualifiedBuilderOpts options)
 {
-    if (true) {
-        auto dsym = mapper.dsymForDecl(D);
-        if (!ArgBegin && dsym) {
-            assert(dsym->getType());
-            return (TypeQualified*) dsym->getType(); // FIXME
-        }
+    auto dsym = mapper.dsymForDecl(D);
+    if (!ArgBegin && dsym) {
+        assert(dsym->getType());
+        return (TypeQualified*) dsym->getType(); // FIXME
     }
 
-    auto Root = mapper.getModule(D)->rootDecl;
+    auto mod = dsym->getModule();
+    assert(mod && isCPP(mod));
+    auto Root = static_cast<cpp::Module*>(mod)->rootDecl;
     if (!Root)
         return nullptr; // FIXME struct {} Val;
 
