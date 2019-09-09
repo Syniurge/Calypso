@@ -576,19 +576,14 @@ const clang::Decl *getDecl(Dsymbol *s)
 /***********************/
 
 // see CodeGenModule::getMangledName()
-const char *LangPlugin::mangle(Dsymbol *s)
+void LangPlugin::mangle(Dsymbol *s, std::string& str)
 {
     assert(isCPP(s));
 
     auto ND = cast<clang::NamedDecl>(getDecl(s));
-
-    auto &FoundStr = MangledDeclNames[getCanonicalDecl(ND)];
-    if (!FoundStr.empty())
-        return FoundStr.c_str();
-
     auto MangleCtx = pch.MangleCtx;
 
-    llvm::SmallString<256> Buffer;
+    llvm::SmallString<128> Buffer;
     llvm::StringRef Str;
     if (MangleCtx->shouldMangleDeclName(ND)) {
         llvm::raw_svector_ostream Out(Buffer);
@@ -605,8 +600,7 @@ const char *LangPlugin::mangle(Dsymbol *s)
         Str = II->getName();
     }
 
-    Str.str().swap(FoundStr);
-    return FoundStr.c_str();
+    Str.str().swap(str);
 }
 
 /***********************/

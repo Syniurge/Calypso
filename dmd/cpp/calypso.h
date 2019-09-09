@@ -233,7 +233,6 @@ public:
     // ==== ==== ====
     PCH pch;
     llvm::StringSet<> TargetFeatures;
-    llvm::MapVector<const clang::Decl*, std::string> MangledDeclNames;
 
     std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMap;
 
@@ -296,7 +295,7 @@ public:
 
     std::string getCacheFilename(const char *suffix = nullptr);
 
-    const char *mangle(Dsymbol *s);
+    void mangle(Dsymbol *s, std::string& str);
     void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
 
     std::unordered_map<const Identifier*, clang::IdentifierInfo*> IIMap;
