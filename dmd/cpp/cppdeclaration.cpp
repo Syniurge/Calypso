@@ -262,7 +262,7 @@ Dsymbol *AliasDeclaration::toAlias()
 {
     if (!aliassym)
         aliassym = getType()->toDsymbol(nullptr);
-    return aliassym;
+    return aliassym ? aliassym->toAlias() : this;
 }
 
 Dsymbol *AliasDeclaration::toAlias2()
