@@ -28,26 +28,22 @@ using llvm::dyn_cast;
 void MarkModuleForGenIfNeeded(Dsymbol *s)
 {
     assert(isCPP(s));
-    calypso.mangle(s);
 
-    const clang::Decl* D;
-    if (auto fd = s->isFuncDeclaration())
-        D = getFD(fd);
-    else if (auto vd = s->isVarDeclaration())
-        D = static_cast<cpp::VarDeclaration*>(vd)->VD;
-    else
-        llvm_unreachable("Unhandled symbol");
-
-    auto& MangledName = calypso.MangledDeclNames[getCanonicalDecl(D)];
     auto minst = s->getInstantiatingModule();
-    assert(minst && !MangledName.empty());
+    assert(minst);
+    if (!isCPP(minst))
+        return;
 
-    if (isCPP(minst)) {
-        auto c_minst = static_cast<cpp::Module*>(minst);
-        if (!c_minst->emittedSymbols.count(MangledName)) {
+    std::string MangledName;
+    calypso.mangle(s, MangledName);
+
+    auto c_minst = static_cast<cpp::Module*>(minst);
+    if (!c_minst->emittedSymbols.count(MangledName)) {
+        if (!c_minst->needGen) {
             c_minst->needGen = true;
-            c_minst->emittedSymbols.insert(MangledName);
+            c_minst->emittedSymbols.clear(); // esp. important in case of separate compilation
         }
+        c_minst->emittedSymbols.insert(MangledName);
     }
 }
 
