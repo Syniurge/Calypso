@@ -305,9 +305,10 @@ void ad_determineSize(AggTy *ad)
     assert(ad->sizeok != SIZEOKdone);
     ad->sizeok = SIZEOKdone;
 
-    if (ad->RD->isInvalidDecl() || !ad->RD->getDefinition())
+    auto Def = ad->Definition();
+    if (!Def || Def->isInvalidDecl())
     {
-       // if it's a forward reference, consider the record empty
+       // if it's a forward reference or invalid record, consider the record empty
         ad->structsize = 1;
         ad->alignsize = 1;
         return;

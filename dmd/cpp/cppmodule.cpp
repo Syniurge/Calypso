@@ -595,14 +595,11 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 
     auto loc = fromLoc(D->getLocation());
     auto id = fromIdentifier(D->getIdentifier());
-//     auto t = fromType(D->getUnderlyingType(), loc);
-
-//     if (!t)
-//         return nullptr;
 
     auto a = new AliasDeclaration(loc, id, Type::tvoid, D);
     a->type = nullptr; // Type::tvoid was to get past the ctor's assert
     setDsym(D, a);
+    a->semanticRun = PASSsemantic3done;
     return oneSymbol(a);
 }
 
