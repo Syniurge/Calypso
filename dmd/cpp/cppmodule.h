@@ -136,11 +136,7 @@ public:
     template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::Decl* D);
     template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 
-    inline void dsymAndWrapperForDecl(const clang::Decl* D)
-    {
-        dsymForDecl<false>(D);
-        dsymForDecl<true>(D);
-    }
+    inline void dsymAndWrapperForDecl(const clang::Decl* D);
 
     Module* getModule(const clang::Decl* D);
     Package* getPackage(const clang::Decl* D);

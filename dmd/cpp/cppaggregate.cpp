@@ -327,9 +327,6 @@ void ad_determineSize(AggTy *ad)
     {
         auto D = *I;
 
-        if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
-            D = cast<clang::FieldDecl>(Indirect->chain().back());
-
         if (!isa<clang::FieldDecl>(D)/* &&
             !isa<clang::MSPropertyDecl>(*I) (TODO)*/)
             continue;

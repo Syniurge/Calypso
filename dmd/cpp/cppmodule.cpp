@@ -1325,6 +1325,9 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (!sym->parent)
     {
+        if (sym->ident)
+            parent->search(parent->loc, sym->ident); // NOTE: this could be lazier..
+
         if (!isa<clang::IndirectFieldDecl>(D))
             parent->members->push(sym);
         sym->addMember(nullptr, parent);
@@ -1342,9 +1345,6 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
             if (!ad->dtor)
                 ad->dtor = dtor;
         }
-
-        if (sym->ident)
-            parent->search(parent->loc, sym->ident); // NOTE: this could be lazier..
     }
     else
         assert(sym->parent->isTemplateInstance() &&
@@ -1361,6 +1361,15 @@ Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D)
 
 template Dsymbol* dsymForDecl<false>(ScopeDsymbol* sds, const clang::Decl* D);
 template Dsymbol* dsymForDecl<true>(ScopeDsymbol* sds, const clang::Decl* D);
+
+void DeclMapper::dsymAndWrapperForDecl(const clang::Decl* D)
+{
+    if (auto Indirect = dyn_cast<clang::IndirectFieldDecl>(D))
+        D = cast<clang::FieldDecl>(Indirect->chain().back());
+
+    dsymForDecl<false>(D);
+    dsymForDecl<true>(D);
+}
 
 void dsymAndWrapperForDecl(ScopeDsymbol* sds, const clang::Decl* D)
 {
