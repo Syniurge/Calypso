@@ -279,14 +279,14 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     assert(isa<clang::RedeclarableTemplateDecl>(TempOrSpec) || isNonTemplateWrapper());
 
     TemplateInstUnion Inst;
-    assert(!hasExistingClangInst(ti));
+    assert(!isCPP(ti));
 
     MATCH m = MATCHexact;
 
     if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
         m = functionTemplateMatch(sc, ti, fargs, Inst);
     else {
-        Inst = getClangInst(sc, ti, ti->tiargs);
+        Inst = getClangInst(sc, ti->tiargs);
         if (!Inst)
             m = MATCHnomatch;
     }
@@ -294,14 +294,14 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst, isForeignInstance(ti)));
+    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst, true));
     assert(cpptdtypes->dim == dedtypes->dim);
     memcpy(dedtypes->tdata(), cpptdtypes->tdata(), dedtypes->dim * sizeof(void*));
 
     return m;
 }
 
-Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance)
+Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool primaryArgs)
 {
     DeclMapper mapper(sc->minst, sc->minst);
 
@@ -309,8 +309,8 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
 
     if (!isNonTemplateWrapper())
     {
-        auto InstArgs = forForeignInstance ? getTemplateInstantiationArgs(Inst)
-                                        : getTemplateArgs(Inst);
+        auto InstArgs = primaryArgs ? getTemplateArgs(Inst)
+                                    : getTemplateInstantiationArgs(Inst);
 
         const clang::TemplateParameterList* ParamList;
         if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
@@ -524,7 +524,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     MATCH matchCall = MATCHexact,
           matchTiargs = MATCHexact;
 
-    auto dedtypes = tdtypesFromInst(sc, Inst, false);
+    auto dedtypes = tdtypesFromInst(sc, Inst, true);
     ti->tdtypes.dim = dedtypes->dim;
     ti->tdtypes.data = dedtypes->data;
     ti->tiargs = &ti->tdtypes;
@@ -596,37 +596,62 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 ::TemplateInstance* TemplateDeclaration::foreignInstance(::TemplateInstance* tithis,
                                                        Scope* sc)
 {
-    if (isForeignInstance(tithis))
-        return nullptr;
+    assert(!isCPP(tithis));
 
-    cpp::TemplateInstance* ti;
-    if (isCPP(tithis))
-        ti = static_cast<cpp::TemplateInstance *>(tithis);
-    else
-    {
-        ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
-        ti->semantictiargsdone = true;
-        ti->tdtypes.setDim(tithis->tdtypes.dim);
-        memcpy(ti->tdtypes.data, tithis->tdtypes.data, ti->tdtypes.dim * sizeof(void*));
-    }
+    auto Inst = getClangInst(sc, &tithis->tdtypes);
+    assert(Inst);
 
-    if (!ti->Inst)
-        ti->Inst = getClangInst(sc, ti);
+    if (auto D = Inst.dyn_cast<clang::NamedDecl*>())
+        if (D->d && !isNonTemplateWrapper())
+        {  // A TemplateInstance already exists
+            // NOTE: findExistingInstance() looks into the primary TemplateDeclaration's instances,
+            // but when the actual template is a partial or explicit spec, then those primary existing
+            // instances are aliases for the instances added to the true TemplateDeclaration, and the
+            // alias might not have been created yet
 
-    if (!ti->Inst)
-    {
-        assert(ti->errors);
-        return ti;
-    }
+            auto sym = D->d->sym;
+            assert(sym && sym->parent && sym->parent->isTemplateInstance());
 
-    correctTempDecl(ti);
+            auto tempinst = static_cast<::TemplateInstance*>(sym->parent);
+            assert(isCPP(tempinst));
+            return tempinst;
+        }
+
+    auto ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
+    ti->semantictiargsdone = true;
     ti->isForeignInst = true;
-    ti->havetempdecl = true;
 
+    ti->Inst = Inst;
+
+    auto tdtypes = tdtypesFromInst(sc, ti->Inst, false);
+    ti->tdtypes.dim = tdtypes->dim;
+    ti->tdtypes.data = tdtypes->data;
+
+    auto tempdecl = correctTempDecl(ti);
+    ti->havetempdecl = true;
     ti->correctTiargs();
 
-    ti->semanticRun = PASSinit; // FIXME not necessary anymore
-    ti->hash = 0;
+    ti->tinst = sc->tinst;
+    ti->minst = sc->minst;
+
+    assert(!tempdecl->findExistingInstance(ti, nullptr));
+
+    ti->inst = ti;
+    ti->parent = ti->enclosing ? ti->enclosing : parent; // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
+
+    ti->appendToModuleMember();
+    tempdecl->addInstance(ti);
+
+    ti->members = tempdecl->copySyntaxTree(ti);
+    ti->symtab = new_DsymbolTable();
+
+    for (auto s: *ti->members)
+    {
+        assert(!s->parent);
+        s->addMember(nullptr, ti);
+    }
+
+    ti->semanticRun = PASSsemantic3done;
     return ti;
 }
 
@@ -638,19 +663,13 @@ TemplateInstUnion TemplateDeclaration::hasExistingClangInst(::TemplateInstance* 
     return TemplateInstUnion();
 }
 
-TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes)
+TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, Objects* tdtypes)
 {
-    if (auto existingInst = hasExistingClangInst(ti))
-        return existingInst;
-
     if (isNonTemplateWrapper())
         return const_cast<clang::NamedDecl*>(TempOrSpec);
 
     auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(
                                 getDefinition(getPrimaryTemplate()));
-
-    if (!tdtypes)
-        tdtypes = &ti->tdtypes;
 
     DeclMapper mapper(sc->minst, sc->minst);
     ExprMapper expmap(mapper);
@@ -701,12 +720,12 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstanc
         return TemplateInstUnion();
 }
 
-void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
+TemplateDeclaration* TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
 {
     if (isNonTemplateWrapper())
     {
         ti->tempdecl = this;
-        return;
+        return this;
     }
 
     const clang::Decl* RealTemp;
@@ -720,11 +739,10 @@ void TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
     }
 
     auto sym = templateForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
-    assert(sym && sym->isTemplateDeclaration());
+    assert(sym && sym->isTemplateDeclaration() && isCPP(sym));
 
-    ti->tempdecl = static_cast<TemplateDeclaration*>(sym);
-
-    assert(ti->tempdecl && isCPP(ti->tempdecl));
+    ti->tempdecl = sym;
+    return static_cast<TemplateDeclaration*>(ti->tempdecl);
 }
 
 bool TemplateDeclaration::isNonTemplateWrapper()

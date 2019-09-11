@@ -87,6 +87,12 @@ enum TypeQualifiedBuilderOpts
     TQ_OverOpFullIdent = 1 << 1, // prefer the non-templated function over the forwarding template
 };
 
+// Additional flags for symbol search
+enum CppSearchFlag : int
+{
+    MapOverloads = 0x1000,
+};
+
 class DeclMapper
 {
 public:
@@ -98,7 +104,7 @@ public:
      * Declarations
      */
     Dsymbols *VisitDecl(const clang::Decl *D, unsigned flags = 0);
-    Dsymbols *VisitPartialOrWrappedDecl(const clang::Decl *D); // return only TemplateDeclaration for partial specs, or as wrappers for explicit specs and overloaded/conversion operators
+    Dsymbols *VisitPartialOrWrappedDecl(const clang::Decl *D, unsigned flags = 0); // return only TemplateDeclaration for partial specs, or as wrappers for explicit specs and overloaded/conversion operators
 
     Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
@@ -126,15 +132,15 @@ public:
         NoFlag = 0,
 //         MapTemplatePatterns = 1 << 0, // If not set pattern declarations describing templates will be discarded by VisitDecl (currently only VarDecl)
 //         MapTemplateInstantiations = 1 << 1,
-//         MapExplicitAndPartialSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
+        MapExplicitAndPartialSpecs = 1 << 2, // If not set explicit and partial specs will be discarded by VisitDecl
 //         NamedValueWithAnonRecord = 1 << 3, // Only set when called from VisitValueDecl for e.g union {...} myUnion
         MapAnonRecord = 1 << 4,
         CreateTemplateInstance = 1 << 5, // Create a TemplateInstance and attach it to minst
         WrapExplicitSpecsAndOverloadedOperators = 1 << 6, // Create the TemplateDeclaration wrapper for explicit template specializations or for non-templated overloaded operators
     };
 
-    template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::Decl* D);
-    template<bool wantPartialOrWrappedDecl = false> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
+    template<unsigned flags = NoFlag> Dsymbol* dsymForDecl(const clang::Decl* D);
+    template<unsigned flags = NoFlag> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 
     inline void dsymAndWrapperForDecl(const clang::Decl* D);
 
@@ -231,9 +237,7 @@ public:
     static Identifier *getIdentifierForTemplateNonTypeParm(const clang::NonTypeTemplateParmDecl *NTTPD);
 };
 
-typedef DeclMapper::Flags DeclMapperFlags;
-
-template<bool wantPartialOrWrappedDecl = false>
+template<unsigned flags = DeclMapper::NoFlag>
 Dsymbol* dsymForDecl(ScopeDsymbol* sds, const clang::Decl* D);
 
 void dsymAndWrapperForDecl(ScopeDsymbol* sds, const clang::Decl* D);
