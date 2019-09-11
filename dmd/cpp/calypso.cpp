@@ -77,7 +77,10 @@ RootObject *SpecValue::toTemplateArg(Loc loc)
 {
     assert(op || t);
     if (op)
-        return new_StringExp(loc, const_cast<char*>(op));
+    {
+        auto e = new_StringExp(loc, const_cast<char*>(op));
+        return expressionSemantic(e, nullptr);
+    }
     else
         return t;
 }
@@ -516,7 +519,7 @@ clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
     return II;
 }
 
-clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
+clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident, const clang::RecordDecl* RD)
 {
     auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
 
@@ -528,6 +531,17 @@ clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident)
         return DeclarationNames.getCXXOperatorName(clang::OO_EqualEqual);
     else if (ident == Id::assign)
         return DeclarationNames.getCXXOperatorName(clang::OO_Equal);
+
+    if (RD)
+    {
+        auto RecordTy = getASTContext().getCanonicalType(
+                    clang::QualType(RD->getTypeForDecl(), 0));
+
+        if (ident == Id::ctor)
+            return DeclarationNames.getCXXConstructorName(RecordTy);
+        else if (ident == Id::dtor)
+            return DeclarationNames.getCXXDestructorName(RecordTy);
+    }
 
     return clang::DeclarationName(toIdentifierInfo(ident));
 }

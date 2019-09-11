@@ -301,7 +301,7 @@ public:
     std::unordered_map<const Identifier*, clang::IdentifierInfo*> IIMap;
 
     clang::IdentifierInfo* toIdentifierInfo(Identifier* ident); // remove the 'ℂ' if present
-    clang::DeclarationName toDeclarationName(Identifier* ident);
+    clang::DeclarationName toDeclarationName(Identifier* ident, const clang::RecordDecl* RD = nullptr);
 
 private:
     void updateCGFInsertPoint();    // CGF has its own IRBuilder, it's not an issue if we set its insert point correctly

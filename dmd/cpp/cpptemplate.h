@@ -47,16 +47,16 @@ public:
 
     MATCH functionTemplateMatch(Scope *sc, ::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
 
-    Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool forForeignInstance = false);
+    Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool primaryArgs = true);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
 
     TemplateInstUnion hasExistingClangInst(::TemplateInstance* ti);
-    TemplateInstUnion getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes = nullptr);
+    TemplateInstUnion getClangInst(Scope* sc, Objects* tdtypes);
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
-    void correctTempDecl(TemplateInstance *ti);
+    TemplateDeclaration* correctTempDecl(TemplateInstance *ti);
 
     bool isNonTemplateWrapper();
     Dsymbol* wrappedNonTemplateSymbol();

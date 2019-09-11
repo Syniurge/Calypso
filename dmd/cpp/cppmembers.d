@@ -125,6 +125,8 @@ extern(C++) final class CppAddMemberVisitor : Visitor
 
     override void visit(TemplateInstance tempinst)
     {
+        assert(false);
+
         if (tempinst.symtab)
             return;
 

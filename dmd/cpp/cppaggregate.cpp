@@ -149,8 +149,9 @@ const clang::RecordDecl *UnionDeclaration::Definition()
 template <typename AggTy>
 inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flags)
 {
-    if (auto s = ad->ScopeDsymbol::search(loc, ident, flags))
-        return s;
+    if (!(flags & MapOverloads))
+        if (auto s = ad->ScopeDsymbol::search(loc, ident, flags))
+            return s;
 
     auto Def = ad->Definition();
     if (!Def)
@@ -161,8 +162,12 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
         auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
 
         if (CRD && ident == Id::ctor)
-            for (auto Ctor: CRD->ctors())
-                dsymForDecl(ad, Ctor);
+        {
+            auto Name = calypso.toDeclarationName(ident, Def);
+
+            for (auto Match: Def->lookup(Name))
+                dsymAndWrapperForDecl(ad, Match);
+        }
 
         // Special members
         if (CRD && !CRD->isUnion())
@@ -263,7 +268,7 @@ inline void ad_complete(AggTy* ad)
 
         if (auto sym = dsymForDecl(ad, M))
             newMembers->push(sym);
-        if (auto td = dsymForDecl<true>(ad, M))
+        if (auto td = dsymForDecl<DeclMapper::WrapExplicitSpecsAndOverloadedOperators>(ad, M))
             newMembers->push(td);
     }
 
