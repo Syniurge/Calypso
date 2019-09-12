@@ -314,7 +314,9 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
                                     : getTemplateInstantiationArgs(Inst);
 
         const clang::TemplateParameterList* ParamList;
-        if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
+        auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec);
+
+        if (!primaryArgs && PartialSpec)
             ParamList = PartialSpec->getTemplateParameters();
         else
             ParamList = getPrimaryTemplate()->getTemplateParameters();
