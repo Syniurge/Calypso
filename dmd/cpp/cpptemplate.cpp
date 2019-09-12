@@ -136,6 +136,20 @@ const clang::TemplateParameterList *getPartialTemplateSpecParameters(const clang
     return nullptr;
 }
 
+const clang::TemplateParameterList *getTemplateParameters(const clang::Decl *D)
+{
+    if (auto TPL = getPartialTemplateSpecParameters(D))
+        return TPL;
+    else if (auto ClassTemp = dyn_cast<clang::ClassTemplateDecl>(D))
+        return ClassTemp->getTemplateParameters();
+    else if (auto FuncTemp = dyn_cast<clang::FunctionTemplateDecl>(D))
+        return FuncTemp->getTemplateParameters();
+    else if (auto VarTemp = dyn_cast<clang::VarTemplateDecl>(D))
+        return VarTemp->getTemplateParameters();
+
+    return nullptr;
+}
+
 const clang::TemplateArgumentList *getTemplateArgs(const clang::Decl *D)
 {
     if (auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
@@ -314,8 +328,8 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
                                     : getTemplateInstantiationArgs(Inst);
 
         const clang::TemplateParameterList* ParamList;
-        if (auto PartialSpec = dyn_cast<clang::ClassTemplatePartialSpecializationDecl>(TempOrSpec))
-            ParamList = PartialSpec->getTemplateParameters();
+        if (!primaryArgs)
+            ParamList = getTemplateParameters(TempOrSpec);
         else
             ParamList = getPrimaryTemplate()->getTemplateParameters();
 

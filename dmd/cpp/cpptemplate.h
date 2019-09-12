@@ -97,6 +97,8 @@ public:
 };
 
 clang::RedeclarableTemplateDecl *getPrimaryTemplate(const clang::NamedDecl* TempOrSpec);
+const clang::TemplateParameterList *getTemplateParameters(const clang::Decl *D);
+const clang::TemplateArgumentList *getTemplateArgs(const clang::Decl *D);
 
 }
 

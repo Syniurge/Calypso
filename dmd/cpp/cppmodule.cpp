@@ -299,43 +299,31 @@ Dsymbols *DeclMapper::VisitPartialOrWrappedDecl(const clang::Decl *D, unsigned f
 }
 
 template<typename SpecTy>
-clang::RedeclarableTemplateDecl* getSpecializedTemplateWithArgs(const SpecTy* D,
-                                        const clang::TemplateArgumentList*& TempArgs)
-{
-    TempArgs = &D->getTemplateArgs();
-    return D->getSpecializedTemplate();
-}
-
-template<>
-clang::RedeclarableTemplateDecl* getSpecializedTemplateWithArgs<clang::FunctionDecl>(const clang::FunctionDecl* D,
-                                        const clang::TemplateArgumentList*& TempArgs)
-{
-    TempArgs = D->getTemplateSpecializationArgs();
-    return D->getPrimaryTemplate();
-}
-
-template<typename SpecTy>
 Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decldefs)
 {
-    const clang::TemplateArgumentList* TempArgs;
-    auto TempDecl = getSpecializedTemplateWithArgs(D, TempArgs);
+    auto TempDecl = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(D));
+    auto PrimParams = getTemplateParameters(getPrimaryTemplate(TempDecl));
+    auto PrimArgs = getTemplateArgs(D);
 
-    auto tempdecl = dsymForDecl(TempDecl);
+    auto tempdecl = templateForDecl(TempDecl);
     assert(tempdecl && tempdecl->isTemplateDeclaration());
     auto c_td = static_cast<TemplateDeclaration*>(tempdecl);
 
     auto loc = (*decldefs)[0]->loc;
-    auto tiargs = fromTemplateArguments<false>(loc, TempArgs, TempDecl->getTemplateParameters());
+    auto tiargs = fromTemplateArguments<false>(loc, PrimArgs, PrimParams);
     auto ti = new TemplateInstance(loc, static_cast<TemplateDeclaration*>(tempdecl), tiargs);
     ti->isForeignInst = true;
     ti->inst = ti;
     ti->Inst = const_cast<SpecTy*>(cast<SpecTy>(getCanonicalDecl(D)));
+    ti->minst = minst;
 
     auto cpptdtypes = c_td->tdtypesFromInst(minst ? minst->_scope : nullptr, ti->Inst, false);
         // NOTE: minst may be null for speculative instances, e.g from hasCopyCtor()
     ti->tdtypes.setDim(cpptdtypes->dim);
     memcpy(ti->tdtypes.tdata(), cpptdtypes->tdata(), cpptdtypes->dim * sizeof(void*));
     delete cpptdtypes;
+
+    ti->correctTiargs(); // set ti->primTiargs
 
     ti->parent = tempdecl->parent;
     ti->members = decldefs;
@@ -355,7 +343,6 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     decldefs = new Dsymbols;
     decldefs->push(ti);
 
-    ti->minst = minst;
     ti->appendToModuleMember();
 
     return decldefs;
@@ -367,14 +354,16 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
     assert(!isa<clang::IndirectFieldDecl>(D));
 
-//     if (!(flags & MapTemplatePatterns))
-//         if (auto Var = dyn_cast<clang::VarDecl>(D))
-//             if (Var->getDescribedVarTemplate())
-//                 return nullptr;
+    if (isa<clang::VarTemplatePartialSpecializationDecl>(D))
+        return nullptr;
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
+    {
+        assert(!Var->getDescribedVarTemplate());
+
         if (auto Def = Var->getDefinition())
             D = Def;
+    }
 
     if (auto Field = dyn_cast<clang::FieldDecl>(D))
     {
@@ -495,6 +484,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         return nullptr;
 
     if (D->isInjectedClassName())
+        return nullptr;
+
+    if (isa<clang::ClassTemplatePartialSpecializationDecl>(D))
         return nullptr;
 
     auto decldefs = new Dsymbols;
@@ -775,6 +767,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
     if (flags & WrapExplicitSpecsAndOverloadedOperators)
     {
+        if (D->isTemplateInstantiation() && D->getTemplateSpecializationInfo()) // i.e is instantiated but not from a template member
+            return nullptr;
+
         TemplateParameters* tpl = nullptr;
 
         SpecValue spec(*this);
@@ -786,7 +781,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         if (!ident)
             return nullptr; // TODO map the unsupported operators anyway
 
-        if (spec && !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation()))
+        if (spec)
         {
             assert(D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D));
             tpl = initTempParams(loc, spec);
@@ -1311,16 +1306,10 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         parent = static_cast<ScopeDsymbol*>(s);
     }
 
-    auto minst = this->minst;
-    if (auto ti = parent->isInstantiated())
-        minst = ti->minst;
-
-    DeclMapper mapper(minst, parent->getModule()->importedFrom);
-
     if (!wantPartialOrWrappedDecl)
-        mapper.VisitDecl(D, flags | DeclMapper::CreateTemplateInstance);
+        VisitDecl(D, flags | DeclMapper::CreateTemplateInstance);
     else
-        mapper.VisitPartialOrWrappedDecl(D, flags);
+        VisitPartialOrWrappedDecl(D, flags);
 
     if (!D->d)
     {
@@ -1392,13 +1381,18 @@ void dsymAndWrapperForDecl(ScopeDsymbol* sds, const clang::Decl* D)
     DeclMapper(sds).dsymAndWrapperForDecl(D);
 }
 
-Dsymbol* templateForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+Dsymbol* DeclMapper::templateForDecl(const clang::Decl* D)
 {
     if (isa<clang::RedeclarableTemplateDecl>(D))
-        return dsymForDecl(sds, D);
+        return dsymForDecl(D);
     else
-        return dsymForDecl<DeclMapper::WrapExplicitSpecsAndOverloadedOperators|
-                           DeclMapper::MapExplicitAndPartialSpecs>(sds, D);
+        return dsymForDecl<WrapExplicitSpecsAndOverloadedOperators|
+                           MapExplicitAndPartialSpecs>(D);
+}
+
+Dsymbol* templateForDecl(ScopeDsymbol* sds, const clang::Decl* D)
+{
+    return DeclMapper(sds).templateForDecl(D);
 }
 
 void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident)

@@ -1850,8 +1850,8 @@ const clang::Decl *getSpecializedDeclOrExplicit(const clang::Decl *Spec)
 {
     if (auto ClassSpec = dyn_cast<clang::ClassTemplateSpecializationDecl>(Spec))
     {
-//         if (ClassSpec->isExplicitSpecialization())
-        if (isa<clang::ClassTemplatePartialSpecializationDecl>(Spec))
+        if (/*ClassSpec->isExplicitSpecialization() ||
+                */isa<clang::ClassTemplatePartialSpecializationDecl>(Spec))
             return Spec;
 
         auto U = ClassSpec->getSpecializedTemplateOrPartial();
@@ -1863,8 +1863,8 @@ const clang::Decl *getSpecializedDeclOrExplicit(const clang::Decl *Spec)
     }
     else if (auto VarSpec = dyn_cast<clang::VarTemplateSpecializationDecl>(Spec))
     {
-//         if (VarSpec->isExplicitSpecialization())
-        if (isa<clang::VarTemplatePartialSpecializationDecl>(Spec))
+        if (/*VarSpec->isExplicitSpecialization() ||
+                */isa<clang::VarTemplatePartialSpecializationDecl>(Spec))
             return Spec;
 
         auto U = VarSpec->getSpecializedTemplateOrPartial();
