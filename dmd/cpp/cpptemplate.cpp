@@ -303,7 +303,8 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
 
 Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool primaryArgs)
 {
-    DeclMapper mapper(sc->minst, sc->minst);
+    auto minst = sc ? sc->minst : nullptr;
+    DeclMapper mapper(minst, minst);
 
     Objects* cpptdtypes;
 
