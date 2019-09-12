@@ -331,7 +331,8 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->inst = ti;
     ti->Inst = const_cast<SpecTy*>(cast<SpecTy>(getCanonicalDecl(D)));
 
-    auto cpptdtypes = c_td->tdtypesFromInst(minst->_scope, ti->Inst, true);
+    auto cpptdtypes = c_td->tdtypesFromInst(minst ? minst->_scope : nullptr, ti->Inst, false);
+        // NOTE: minst may be null for speculative instances, e.g from hasCopyCtor()
     ti->tdtypes.setDim(cpptdtypes->dim);
     memcpy(ti->tdtypes.tdata(), cpptdtypes->tdata(), cpptdtypes->dim * sizeof(void*));
     delete cpptdtypes;
@@ -879,7 +880,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
         fd->originalType = tf;
 
-        auto sc = minst->_scope->push();
+        auto sc = new Scope;
+        memset(sc, 0, sizeof(Scope));
+
         if (tf->isref)
             sc->stc |= STCref;
         if (tf->isscope)
@@ -905,7 +908,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         sc->linkage = LINKcpp;
 
         fd->type = typeSemantic(fd->type, fd->loc, sc);
-        sc->pop();
+        delete sc;
 
         fd->semanticRun = PASSsemantic3done;
     };

@@ -85,7 +85,7 @@ struct Scope
     Module *minst;              // root module where the instantiated templates should belong to
     TemplateInstance *tinst;    // enclosing template instance
 
-    unsigned char callSuper;    // primitive flow analysis for constructors
+    unsigned short callSuper;    // primitive flow analysis for constructors // CALYPSO DMD BUG (ushort in ctorflow.d)
     unsigned char *fieldinit;
     size_t fieldinit_dim;
 
@@ -116,7 +116,7 @@ struct Scope
 
     static Scope *alloc(); // CALYPSO
 
-    Scope();
+//     Scope(); // disabled for CALYPSO
 
     static Scope* createGlobal(Module* _module); // CALYPSO
 
