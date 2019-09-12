@@ -192,10 +192,8 @@ Expression *EnumDeclaration::getDefaultValue(const Loc &loc)
     auto I = ED->enumerator_begin();
 
     if (I == ED->enumerator_end())
-    {
-        error(loc, "forward reference of `%s.init`", toChars());
-        defaultval = new_ErrorExp();
-    }
+        // no members or forward declaration (e.g std::regex_constants::syntax_option_type)
+        defaultval = memtype->defaultInitLiteral(loc);
     else
     {
         auto em = static_cast<EnumMember*>(dsymForDecl(this, *I));
@@ -370,6 +368,8 @@ void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D)
     auto FPT = D->getType()->getAs<clang::FunctionProtoType>();
     if (FPT && clang::isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
         S.ResolveExceptionSpec(D->getLocation(), FPT);
+
+    assert(S.getCurScope());
 
     S.MarkFunctionReferenced(D->getLocation(), D);
     if (Diags.hasErrorOccurred())

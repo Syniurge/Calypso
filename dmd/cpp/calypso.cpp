@@ -801,17 +801,10 @@ void PCH::loadNewHeaders()
     auto& PP = AST->getPreprocessor();
     auto& S = AST->getSema();
 
-    auto* Consumer = &S.getASTConsumer();
-
-    if (!S.OpaqueParser)
-        S.OpaqueParser = new clang::Parser(PP, S, /*SkipFunctionBodies=*/ false);
+    assert(S.OpaqueParser);
     auto& P = *static_cast<clang::Parser*>(S.OpaqueParser);
 
-    if (!P.getCurScope()) {
-        P.EnterScope(clang::Scope::DeclScope);
-        S.CurContext = nullptr;
-        S.ActOnTranslationUnitScope(P.getCurScope());
-    }
+    auto* Consumer = &S.getASTConsumer();
 
     for (; nextHeader < headers.size(); nextHeader++) {
         const clang::DirectoryLookup *CurDir;
@@ -893,6 +886,20 @@ void PCH::update()
     } else {
         // Give the existing PCH a try
         loadFromPCH();
+    }
+
+    // Recreate a Parser and CurScope for later function template instantiations
+    auto& PP = AST->getPreprocessor();
+    auto& S = AST->getSema();
+
+    if (!S.OpaqueParser)
+        S.OpaqueParser = new clang::Parser(PP, S, /*SkipFunctionBodies=*/ false);
+    auto& P = *static_cast<clang::Parser*>(S.OpaqueParser);
+
+    if (!P.getCurScope()) {
+        P.EnterScope(clang::Scope::DeclScope);
+        S.CurContext = nullptr;
+        S.ActOnTranslationUnitScope(P.getCurScope());
     }
 
 //     PP.enableIncrementalProcessing();
