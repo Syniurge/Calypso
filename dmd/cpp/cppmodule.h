@@ -143,6 +143,7 @@ public:
     template<unsigned flags = NoFlag> Dsymbol* dsymForDecl(const clang::NamedDecl* D);
 
     inline void dsymAndWrapperForDecl(const clang::Decl* D);
+    Dsymbol* templateForDecl(const clang::Decl* D);
 
     Module* getModule(const clang::Decl* D);
     Package* getPackage(const clang::Decl* D);
