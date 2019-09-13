@@ -354,14 +354,16 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 
     assert(!isa<clang::IndirectFieldDecl>(D));
 
-//     if (!(flags & MapTemplatePatterns))
-//         if (auto Var = dyn_cast<clang::VarDecl>(D))
-//             if (Var->getDescribedVarTemplate())
-//                 return nullptr;
+    if (isa<clang::VarTemplatePartialSpecializationDecl>(D))
+        return nullptr;
 
     if (auto Var = dyn_cast<clang::VarDecl>(D))
+    {
+        assert(!Var->getDescribedVarTemplate());
+
         if (auto Def = Var->getDefinition())
             D = Def;
+    }
 
     if (auto Field = dyn_cast<clang::FieldDecl>(D))
     {
@@ -482,6 +484,9 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         return nullptr;
 
     if (D->isInjectedClassName())
+        return nullptr;
+
+    if (isa<clang::ClassTemplatePartialSpecializationDecl>(D))
         return nullptr;
 
     auto decldefs = new Dsymbols;
@@ -762,6 +767,9 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
 
     if (flags & WrapExplicitSpecsAndOverloadedOperators)
     {
+        if (D->isTemplateInstantiation() && D->getTemplateSpecializationInfo()) // i.e is instantiated but not from a template member
+            return nullptr;
+
         TemplateParameters* tpl = nullptr;
 
         SpecValue spec(*this);
@@ -773,7 +781,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         if (!ident)
             return nullptr; // TODO map the unsupported operators anyway
 
-        if (spec && !(D->isFunctionTemplateSpecialization() && D->isTemplateInstantiation()))
+        if (spec)
         {
             assert(D->isOverloadedOperator() || isa<clang::CXXConversionDecl>(D));
             tpl = initTempParams(loc, spec);
@@ -1298,16 +1306,10 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         parent = static_cast<ScopeDsymbol*>(s);
     }
 
-    auto minst = this->minst;
-    if (auto ti = parent->isInstantiated())
-        minst = ti->minst;
-
-    DeclMapper mapper(minst, parent->getModule()->importedFrom);
-
     if (!wantPartialOrWrappedDecl)
-        mapper.VisitDecl(D, flags | DeclMapper::CreateTemplateInstance);
+        VisitDecl(D, flags | DeclMapper::CreateTemplateInstance);
     else
-        mapper.VisitPartialOrWrappedDecl(D, flags);
+        VisitPartialOrWrappedDecl(D, flags);
 
     if (!D->d)
     {
