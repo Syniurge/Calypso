@@ -15,6 +15,7 @@
 
 #include <map>
 #include <unordered_set>
+#include "llvm/ADT/SmallPtrSet.h"
 
 namespace clang
 {
@@ -23,7 +24,7 @@ class Decl;
 
 namespace cpp {
 
-class DeclMapper;
+typedef llvm::SmallPtrSet<const clang::Decl*, 2> InstantiatedDeclSet;
 
 class Module : public ::Module
 {
@@ -36,6 +37,9 @@ public:
 
     static std::map<const clang::Decl *, cpp::Module*> allCppModules;
     static Modules amodules_cpp; // redundant with allCppModules, but used by codegenModules
+
+    // List of unmapped declarations "instantiated" by this module
+    InstantiatedDeclSet instantiatedDecls;
 
     // List of C++ symbols emitted in the existing object file
     // If a C++ symbol not in this list was referenced, the module needs to be re-gen'd
@@ -254,6 +258,8 @@ void InstantiateFunctionDefinition(clang::Sema &S, clang::FunctionDecl* D);
 void MarkFunctionReferenced(::FuncDeclaration* fd);
 bool isTemplateInstantiation(const clang::Decl *D);
 bool isTemplateParameterPack(const clang::NamedDecl *Param);
+
+void markModuleForGenIfNeeded(Dsymbol *s);
 
 }
 

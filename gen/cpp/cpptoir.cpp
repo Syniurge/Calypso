@@ -54,6 +54,19 @@ using llvm::isa;
 
 namespace clangCG = clang::CodeGen;
 
+void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD);
+
+void EmitInstantiatedDecls(std::unique_ptr<clangCG::CodeGenModule>& CGM, Dsymbol* sinst)
+{
+    for (auto D: instantiatedDecls(sinst))
+    {
+        if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
+            EmitRecord(CGM, RD);
+        else
+            CGM->EmitTopLevelDecl(const_cast<clang::Decl*>(D));
+    }
+}
+
 void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
 {
     auto AST = getASTUnit();
@@ -61,11 +74,6 @@ void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
         return;
 
     pch.save(); // save the numerous instantiations done by DMD back into the PCH
-
-    if (isCPP(m)) {
-        auto c_m = static_cast<cpp::Module*>(m);
-        c_m->saveEmittedSymbolList();
-    }
 
     auto& Context = getASTContext();
 
@@ -82,6 +90,12 @@ void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
         CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache);
 
     type_infoWrappers.clear();
+
+    if (isCPP(m)) {
+        auto c_m = static_cast<cpp::Module*>(m);
+        EmitInstantiatedDecls(CGM, c_m);
+        c_m->saveEmittedSymbolList();
+    }
 }
 
 void removeDuplicateModuleFlags(llvm::Module *lm)
@@ -187,9 +201,6 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
 
     CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache); // save the CodeGenTypes state
     CGM.reset();
-
-    if (!global.errors && m && isCPP(m))
-        calypso.genModSet.add(m);
 }
 
 void LangPlugin::enterFunc(::FuncDeclaration *fd)
@@ -829,6 +840,8 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 
     if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->getLLVMFunc()->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+
+    EmitInstantiatedDecls(CGM, fdecl);
 }
 
 void LangPlugin::addBaseClassData(AggrTypeBuilder &b, ::AggregateDeclaration *base)
@@ -930,50 +943,50 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
     return true;
 }
 
-// Even if never visible from D, C++ functions may depend on these methods, so they still need to be emitted
-static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
-                                      clang::Sema& S,
-                                      clang::CXXRecordDecl* RD)
-{
-    if (!RD || RD->isInvalidDecl() || !RD->getDefinition())
-        return;
-
-    auto Emit = [&] (clang::CXXMethodDecl *D) {
-        if (!D || D->isInvalidDecl() || D->isDeleted())
-            return;
-          
-        if (!isMapped(D))
-        {
-            auto R = ResolvedFunc::get(CGM, D); // mark it used
-            if (R.Func->isDeclaration())
-                CGM.EmitTopLevelDecl(D); // mark it emittable
-        }
-
-        // For MSVC 
-        if (CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft) {
-            if (auto Dtor = dyn_cast<const clang::CXXDestructorDecl>(D)) {
-                auto structorType = Dtor->getParent()->getNumVBases() == 0 ?
-                    clangCG::StructorType::Complete : clangCG::StructorType::Base;
-                auto FInfo = &CGM.getTypes().arrangeCXXStructorDeclaration(Dtor, structorType);
-                CGM.getAddrOfCXXStructor(Dtor, structorType, FInfo,
-                    CGM.getTypes().GetFunctionType(*FInfo), true);
-                CGM.EmitGlobal(clang::GlobalDecl(Dtor, clangCG::toCXXDtorType(structorType)));
-            }
-        }
-    };
-
-    Emit(S.LookupDefaultConstructor(RD));
-    for (int i = 0; i < 2; i++)
-        Emit(S.LookupCopyingConstructor(RD, i ? clang::Qualifiers::Const : 0));
-
-    Emit(S.LookupDestructor(RD));
-
-    for (int i = 0; i < 2; i++)
-        for (int j = 0; j < 2; j++)
-            for (int k = 0; k < 2; k++)
-                Emit(S.LookupCopyingAssignment(RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
-                                            k ? clang::Qualifiers::Const : 0));
-}
+// // Even if never visible from D, C++ functions may depend on these methods, so they still need to be emitted
+// static void EmitUnmappedRecordMethods(clangCG::CodeGenModule& CGM,
+//                                       clang::Sema& S,
+//                                       clang::CXXRecordDecl* RD)
+// {
+//     if (!RD || RD->isInvalidDecl() || !RD->getDefinition())
+//         return;
+//
+//     auto Emit = [&] (clang::CXXMethodDecl *D) {
+//         if (!D || D->isInvalidDecl() || D->isDeleted())
+//             return;
+//
+//         if (!isMapped(D))
+//         {
+//             auto R = ResolvedFunc::get(CGM, D); // mark it used
+//             if (R.Func->isDeclaration())
+//                 CGM.EmitTopLevelDecl(D); // mark it emittable
+//         }
+//
+//         // For MSVC
+//         if (CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft) {
+//             if (auto Dtor = dyn_cast<const clang::CXXDestructorDecl>(D)) {
+//                 auto structorType = Dtor->getParent()->getNumVBases() == 0 ?
+//                     clangCG::StructorType::Complete : clangCG::StructorType::Base;
+//                 auto FInfo = &CGM.getTypes().arrangeCXXStructorDeclaration(Dtor, structorType);
+//                 CGM.getAddrOfCXXStructor(Dtor, structorType, FInfo,
+//                     CGM.getTypes().GetFunctionType(*FInfo), true);
+//                 CGM.EmitGlobal(clang::GlobalDecl(Dtor, clangCG::toCXXDtorType(structorType)));
+//             }
+//         }
+//     };
+//
+//     Emit(S.LookupDefaultConstructor(RD));
+//     for (int i = 0; i < 2; i++)
+//         Emit(S.LookupCopyingConstructor(RD, i ? clang::Qualifiers::Const : 0));
+//
+//     Emit(S.LookupDestructor(RD));
+//
+//     for (int i = 0; i < 2; i++)
+//         for (int j = 0; j < 2; j++)
+//             for (int k = 0; k < 2; k++)
+//                 Emit(S.LookupCopyingAssignment(RD, i ? clang::Qualifiers::Const : 0, j ? true : false,
+//                                             k ? clang::Qualifiers::Const : 0));
+// }
 
 void LangPlugin::toDefineStruct(::StructDeclaration* decl)
 {
@@ -981,12 +994,12 @@ void LangPlugin::toDefineStruct(::StructDeclaration* decl)
     if (c_sd->RD->isInvalidDecl() || decl->isUnionDeclaration())
         return;
 
-    if (c_sd->isUsed) {
-        auto& S = getSema();
-        if (auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD))
-            EmitUnmappedRecordMethods(*CGM, S,
-                const_cast<clang::CXXRecordDecl *>(RD));
-    }
+//     if (c_sd->isUsed) {
+//         auto& S = getSema();
+//         if (auto RD = dyn_cast<clang::CXXRecordDecl>(c_sd->RD))
+//             EmitUnmappedRecordMethods(*CGM, S,
+//                 const_cast<clang::CXXRecordDecl *>(RD));
+//     }
 
     // Define the __initZ symbol.
     IrAggr *ir = getIrAggr(decl);
@@ -1013,31 +1026,35 @@ void LangPlugin::toDefineStruct(::StructDeclaration* decl)
     }
 }
 
+void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD)
+{
+    auto& Context = calypso.getASTContext();
+//     auto& S = getSema();
+
+    const clang::FunctionDecl *keyDef = nullptr;
+    const clang::CXXMethodDecl *key =
+                Context.getCurrentKeyFunction(RD);
+    if (key && !RD->hasAttr<clang::DLLImportAttr>())
+        key->hasBody(keyDef);
+
+    CGM->RecordBeingDefined = RD;
+    if (RD->isDynamicClass() && (!key || keyDef))
+        CGM->EmitVTable(const_cast<clang::CXXRecordDecl*>(RD));
+
+//     EmitUnmappedRecordMethods(*CGM, S,
+//         const_cast<clang::CXXRecordDecl *>(c_cd->RD));
+
+    CGM->RecordBeingDefined = nullptr;
+}
+
 void LangPlugin::toDefineClass(::ClassDeclaration* decl)
 {
     auto c_cd = static_cast<cpp::ClassDeclaration*>(decl);
     if (c_cd->RD->isInvalidDecl())
         return;
 
-    if (c_cd->isUsed) {
-        auto& Context = getASTContext();
-        auto& S = getSema();
-
-        const clang::FunctionDecl *keyDef = nullptr;
-        const clang::CXXMethodDecl *key =
-                    Context.getCurrentKeyFunction(c_cd->RD);
-        if (key && !c_cd->RD->hasAttr<clang::DLLImportAttr>())
-            key->hasBody(keyDef);
-
-        CGM->RecordBeingDefined = c_cd->RD;
-        if (c_cd->RD->isDynamicClass() && (!key || keyDef))
-            CGM->EmitVTable(const_cast<clang::CXXRecordDecl*>(c_cd->RD));
-
-        EmitUnmappedRecordMethods(*CGM, S,
-            const_cast<clang::CXXRecordDecl *>(c_cd->RD));
-
-        CGM->RecordBeingDefined = nullptr;
-    }
+    if (c_cd->isUsed)
+        EmitRecord(CGM, c_cd->RD);
 
     IrAggr *ir = getIrAggr(decl);
     const auto lwc = DtoLinkage(decl);

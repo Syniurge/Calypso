@@ -5,6 +5,7 @@
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppexpression.h"
 #include "cpp/cppimport.h"
+#include "cpp/cppmodule.h"
 #include "cpp/cpptemplate.h"
 #include "cpp/ddmdstructor.h"
 #include "cpp/ddmdvisitor.h"
@@ -24,28 +25,6 @@ namespace cpp
 using llvm::isa;
 using llvm::cast;
 using llvm::dyn_cast;
-
-void MarkModuleForGenIfNeeded(Dsymbol *s)
-{
-    assert(isCPP(s));
-
-    auto minst = s->getInstantiatingModule();
-    assert(minst);
-    if (!isCPP(minst))
-        return;
-
-    std::string MangledName;
-    calypso.mangle(s, MangledName);
-
-    auto c_minst = static_cast<cpp::Module*>(minst);
-    if (!c_minst->emittedSymbols.count(MangledName)) {
-        if (!c_minst->needGen) {
-            c_minst->needGen = true;
-            c_minst->emittedSymbols.clear(); // esp. important in case of separate compilation
-        }
-        c_minst->emittedSymbols.insert(MangledName);
-    }
-}
 
 VarDeclaration::VarDeclaration(Loc loc, Identifier *id,
                                const clang::ValueDecl *VD, Type *t, Initializer *init)
@@ -99,7 +78,7 @@ void MarkVarReferenced(::VarDeclaration* vd)
         S.InstantiateVariableDefinition(Var->getLocation(), Var);
 
     if (vd->isDataseg())
-        MarkModuleForGenIfNeeded(vd);
+        markModuleForGenIfNeeded(vd);
 }
 
 FuncDeclaration::FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
@@ -276,36 +255,85 @@ IMPLEMENT_syntaxCopy(EnumDeclaration, ED)
 
 /***********************/
 
-DeclReferencer::DeclReferencer(::Module* minst)
-  : mapper(minst, minst), expmap(mapper)
+DeclReferencer::DeclReferencer(::FuncDeclaration* fdinst)
+  : fdinst(fdinst)
 {
 }
 
-void DeclReferencer::Traverse(Loc loc, clang::Stmt *S)
+void DeclReferencer::Traverse(const clang::FunctionDecl* D)
 {
-    this->loc = loc;
-    TraverseStmt(S);
+    const clang::FunctionDecl *Def;
+    if (D->hasBody(Def))
+    {
+        TraverseStmt(Def->getBody());
+
+        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
+            for (auto& Init: Ctor->inits())
+                TraverseStmt(Init->getInit());
+    }
+}
+
+bool isTemplateInstantiation(const clang::NamedDecl* D)
+{
+    if (auto Func = dyn_cast<clang::FunctionDecl>(D))
+        return Func->isTemplateInstantiation();
+    if (auto Var = dyn_cast<clang::VarDecl>(D))
+        return clang::isTemplateInstantiation(Var->getTemplateSpecializationKind());
+    return false;
 }
 
 bool DeclReferencer::Reference(const clang::NamedDecl *D)
 {
     assert(!D->isInvalidDecl() && "Missed an invalid caller, fix Clang");
 
-    for (const clang::Decl *DI = D; !isa<clang::TranslationUnitDecl>(DI); DI = cast<clang::Decl>(DI->getDeclContext()))
-        if (auto RD = dyn_cast<clang::CXXRecordDecl>(DI))
-            if (RD->isLocalClass())
-                return true; // are local records emitted when emitting a function?
+    D = cast<clang::NamedDecl>(getCanonicalDecl(D));
 
-    if (auto VD = dyn_cast<clang::VarDecl>(D))
-        if (!VD->isFileVarDecl())
-            return true;
+    auto Func = dyn_cast<clang::FunctionDecl>(D);
+    auto Var = dyn_cast<clang::VarDecl>(D);
 
-    if (auto FD = dyn_cast<clang::FunctionDecl>(D))
-        if (FD->getBuiltinID())
-            return true;
+    if (Var && !Var->isFileVarDecl())
+        return true;
 
-    if (auto sym = mapper.dsymForDecl(D))
+    if (Func && Func->getBuiltinID())
+        return true;
+
+    if (!D->d)
+        const_cast<clang::NamedDecl*>(D)->d = new cpp::DData;
+
+    if (auto sym = D->d->sym)
         calypso.markSymbolReferenced(sym);
+    else if (!D->d->instantiatedBy)
+    {
+        if (isTemplateInstantiation(D) && !isCPP(fdinst->getInstantiatingModule()))
+        {
+            D->d->instantiatedBy = fdinst;
+            instantiatedDecls(fdinst).insert(D);
+        }
+        else
+        {
+            auto Parent = GetNonNestedContext(D);
+            auto parentMod = DeclMapper(fdinst).getModule(Parent);
+
+            D->d->instantiatedBy = parentMod;
+            parentMod->instantiatedDecls.insert(D);
+        }
+
+        if (Func)
+            Traverse(Func);
+        else if (auto Record = dyn_cast<clang::CXXRecordDecl>(D))
+        {
+            auto& Context = calypso.getASTContext();
+
+            auto Key = Context.getCurrentKeyFunction(Record);
+            const clang::FunctionDecl* Body;
+            if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body)))
+            {
+                for (auto MD: Record->methods())
+                    if (MD->isVirtual())
+                        Reference(MD);
+            }
+        }
+    }
 
     return true;
 }
@@ -401,18 +429,10 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd)
         return;
     }
 
-    const clang::FunctionDecl *Def;
-    if (D->hasBody(Def))
-    {
-        DeclReferencer declReferencer(fd->getInstantiatingModule());
-        declReferencer.Traverse(fd->loc, Def->getBody());
+    DeclReferencer declReferencer(fd);
+    declReferencer.Traverse(D);
 
-        if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
-            for (auto& Init: Ctor->inits())
-                declReferencer.Traverse(fd->loc, Init->getInit());
-    }
-
-    MarkModuleForGenIfNeeded(fd);
+    markModuleForGenIfNeeded(fd);
 }
 
 void MarkFunctionReferenced(::FuncDeclaration* fd)
@@ -492,6 +512,21 @@ void LangPlugin::markSymbolReferenced(Dsymbol *s)
         MarkVarReferenced(vd);
     else if (auto ad = s->isAggregateDeclaration())
         MarkAggregateReferenced(ad);
+}
+
+InstantiatedDeclSet& instantiatedDecls(Dsymbol* instantiatedBy)
+{
+    if (instantiatedBy->isCtorDeclaration())
+        return static_cast<CtorDeclaration*>(instantiatedBy)->instantiatedDecls;
+    else if (instantiatedBy->isDtorDeclaration())
+        return static_cast<DtorDeclaration*>(instantiatedBy)->instantiatedDecls;
+    else if (instantiatedBy->isFuncDeclaration())
+        return static_cast<FuncDeclaration*>(instantiatedBy)->instantiatedDecls;
+    else
+    {
+        assert(instantiatedBy->isModule());
+        return static_cast<Module*>(instantiatedBy)->instantiatedDecls;
+    }
 }
 
 }

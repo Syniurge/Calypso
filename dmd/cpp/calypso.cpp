@@ -567,34 +567,11 @@ Loc fromLoc(clang::SourceLocation L)
     return loc;
 }
 
-const clang::Decl *getDecl(Dsymbol *s)
-{
-    assert(isCPP(s));
-
-#define RETRIEVE(DECL, MEMBER) \
-    if (s->is##DECL()) return static_cast<cpp::DECL*>(s)->MEMBER;
-
-    RETRIEVE(StructDeclaration, RD)
-    RETRIEVE(ClassDeclaration, RD)
-    RETRIEVE(EnumDeclaration, ED)
-    RETRIEVE(EnumMember, ECD)
-    RETRIEVE(CtorDeclaration, CCD)
-    RETRIEVE(DtorDeclaration, CDD)
-    RETRIEVE(FuncDeclaration, FD)
-    RETRIEVE(VarDeclaration, VD)
-
-#undef RETRIEVE
-    llvm_unreachable("Unhandled getDecl");
-}
-
 /***********************/
 
 // see CodeGenModule::getMangledName()
-void LangPlugin::mangle(Dsymbol *s, std::string& str)
+void LangPlugin::mangle(const clang::NamedDecl *ND, std::string& str)
 {
-    assert(isCPP(s));
-
-    auto ND = cast<clang::NamedDecl>(getDecl(s));
     auto MangleCtx = pch.MangleCtx;
 
     llvm::SmallString<128> Buffer;
@@ -605,6 +582,8 @@ void LangPlugin::mangle(Dsymbol *s, std::string& str)
             MangleCtx->mangleCXXCtor(D, clang::Ctor_Complete, Out);
         else if (const auto *D = dyn_cast<clang::CXXDestructorDecl>(ND))
             MangleCtx->mangleCXXDtor(D, clang::Dtor_Complete, Out);
+        else if (auto RD = dyn_cast<clang::RecordDecl>(ND))
+            MangleCtx->mangleCXXRTTI(clang::QualType(RD->getTypeForDecl(), 0), Out);
         else
             MangleCtx->mangleName(ND, Out);
         Str = Out.str();
@@ -955,55 +934,23 @@ void PCH::save()
     needSaving = false;
 }
 
-void LangPlugin::GenModSet::parse()
-{
-    if (parsed)
-        return;
-
-    parsed = true;
-    clear();
-
-    auto genFilename = calypso.getCacheFilename(".gen");
-    if (!llvm::sys::fs::exists(genFilename))
-        return;
-
-    std::ifstream fgenList(genFilename);
-    if (!fgenList)
-    {
-        ::error(Loc(), "Reading .gen file failed");
-        fatal();
-    }
-
-    std::string line;
-    while (std::getline(fgenList, line))
-        if (llvm::sys::fs::exists(line))
-            insert(strdup(line.c_str()));
-}
-
-void LangPlugin::GenModSet::add(::Module *m)
-{
-    auto objName = m->objfile->name.toChars();
-    assert(parsed);
-    if (count(objName))
-        return;
-
-    auto genFilename = calypso.getCacheFilename(".gen");
-    std::ofstream fgenList(genFilename, std::ios_base::out | std::ios_base::app);
-    if (!fgenList)
-    {
-        ::error(Loc(), "Writing .gen file failed");
-        fatal();
-    }
-
-    fgenList << objName << "\n";
-
-    insert(objName);
-}
-
 void LangPlugin::codegenModules()
 {
     for (auto& pair: cpp::Module::allCppModules) {
         auto m = pair.second;
+
+        for (auto D: m->instantiatedDecls)
+        {
+            std::string MangledName;
+            calypso.mangle(cast<clang::NamedDecl>(D), MangledName);
+
+            if (!m->needGen) {
+                m->needGen = true;
+                m->emittedSymbols.clear();
+            }
+            m->emittedSymbols.insert(MangledName);
+        }
+
         m->checkAndAddOutputFile(m->objfile);
         global.params.objfiles.push(m->objfile->name.toChars());
     }
@@ -1015,10 +962,8 @@ bool LangPlugin::needsCodegen(::Module *m)
     assert(isCPP(m));
     auto c_m = static_cast<cpp::Module*>(m);
 
-    genModSet.parse();
-
     auto objName = m->objfile->name.toChars();
-    return c_m->needGen || !genModSet.count(objName);
+    return c_m->needGen;
 }
 
 int LangPlugin::doesHandleImport(const char* lang)
