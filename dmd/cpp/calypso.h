@@ -57,8 +57,11 @@ namespace clangCG = clang::CodeGen;
 struct DData
 {
     Dsymbol* sym = nullptr;
+    bool hasSym = false; // TODO replace by llvm::PointerIntPair (once Callisto is stable)
+
     Dsymbol* wrapper = nullptr; // template declarations for partial/explicit template specializations or overloaded operators
-    Dsymbols* mapped_syms = nullptr; // the result of DeclMapper::VisitDecl() calls // TODO remove
+
+    Dsymbol* instantiatedBy = nullptr; // if the declaration hasn't been mapped but was referenced/instantiated (i.e sym is null), it will get attached to the instantiating module or function
 };
 
 /***********************/
@@ -234,8 +237,6 @@ public:
     PCH pch;
     llvm::StringSet<> TargetFeatures;
 
-    std::vector<std::pair<const clang::IdentifierInfo*, clang::Expr*>> MacroMap;
-
     BuiltinTypes &builtinTypes;
 
     ::ClassDeclaration *type_info_ptr; // wrapper around std::type_info for EH
@@ -266,14 +267,6 @@ public:
 
     int cxxStdlibType;
 
-    struct GenModSet : public llvm::StringSet<> // already compiled modules
-    {
-        bool parsed = false;
-
-        void parse();
-        void add(::Module *m);
-    } genModSet;
-
     // settings
     const char *cachePrefix = "calypso_cache"; // prefix of cached files (list of headers, PCH)
 
@@ -295,7 +288,7 @@ public:
 
     std::string getCacheFilename(const char *suffix = nullptr);
 
-    void mangle(Dsymbol *s, std::string& str);
+    void mangle(const clang::NamedDecl *D, std::string& str);
     void mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer *buf);
 
     std::unordered_map<const Identifier*, clang::IdentifierInfo*> IIMap;

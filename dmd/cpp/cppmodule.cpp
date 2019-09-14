@@ -182,10 +182,16 @@ inline Dsymbols *oneSymbol(Dsymbol *s)
 
 inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
 {
+    auto D_ = const_cast<clang::NamedDecl*>(D);
+
     if (!D->d)
-        const_cast<clang::NamedDecl*>(D)->d = new DData;
+        D_->d = new DData;
     assert(D->d->sym == nullptr);
-    const_cast<clang::NamedDecl*>(D)->d->sym = sym;
+    D_->d->sym = sym;
+    D_->d->hasSym = true;
+
+    if (auto instantiatedBy = D->d->instantiatedBy)
+        instantiatedDecls(instantiatedBy).erase(D);
 }
 
 inline void setDwrapper(const clang::NamedDecl* D, TemplateDeclaration* wrapper)
@@ -230,10 +236,6 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     if (D != getCanonicalDecl(D))
         return nullptr;
 
-//     auto ND = dyn_cast<clang::NamedDecl>(D);
-//     if (ND && ND->d && ND->d->mapped_syms)
-//         return ND->d->mapped_syms;
-
     Dsymbols *s = nullptr;
 
 #define DECL(BASE) \
@@ -256,14 +258,6 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
 
 #undef DECL
 #undef DECLWF
-
-//     bool mappedInnerSpec = !(flags & MapExplicitAndPartialSpecs) && isExplicitSpecialization(D);
-//
-//     // We don't want to attach the "inner" decl of template insts/specs to the module, it needs
-//     // to be the TemplateInstance, that we create if requested
-//     if (!mappedInnerSpec && (!isTemplateInstantiation(D) || (flags & CreateTemplateInstance)))
-//         if (ND && ND->d && s)
-//             const_cast<clang::NamedDecl*>(ND)->d->mapped_syms = s;
 
     return s;
 }
@@ -1257,12 +1251,12 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (wantPartialOrWrappedDecl)
     {
-        if (!D->d)
+        if (!D->d || !D->d->hasSym)
             dsymForDecl<NoFlag>(D);
         if (D->d->wrapper)
             return D->d->wrapper; // NOTE: hence if null because unsupported it will go through dsymForDecl again
     }
-    else if (D->d)
+    else if (D->d && D->d->hasSym)
         return D->d->sym;
 
     if (auto NS = dyn_cast<clang::NamespaceDecl>(D))
@@ -1311,7 +1305,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     else
         VisitPartialOrWrappedDecl(D, flags);
 
-    if (!D->d)
+    if (!D->d || !D->d->hasSym)
     {
         assert(!wantPartialOrWrappedDecl);
         setDsym(D, nullptr);
@@ -1502,7 +1496,11 @@ Module *DeclMapper::getModule(const clang::Decl* D)
             objExt = global.s_ext;
 
         if (objExt)
+        {
             m->objfile = setOutCalypsoFile(global.params.objdir, m->arg, objExt);
+            if (!FileName::exists(m->objfile->toChars()))
+                m->needGen = true;
+        }
     }
 
     return m;
@@ -2017,6 +2015,50 @@ void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op
 
             nonMemberOverloadedOperators[Op].OOs.push_back(getCanonicalDecl(OverOp));
         }
+    }
+}
+
+// ===== //
+
+const clang::Decl *getDecl(Dsymbol *s)
+{
+    assert(isCPP(s));
+
+#define RETRIEVE(DECL, MEMBER) \
+    if (s->is##DECL()) return static_cast<cpp::DECL*>(s)->MEMBER;
+
+    RETRIEVE(StructDeclaration, RD)
+    RETRIEVE(ClassDeclaration, RD)
+    RETRIEVE(EnumDeclaration, ED)
+    RETRIEVE(EnumMember, ECD)
+    RETRIEVE(CtorDeclaration, CCD)
+    RETRIEVE(DtorDeclaration, CDD)
+    RETRIEVE(FuncDeclaration, FD)
+    RETRIEVE(VarDeclaration, VD)
+
+#undef RETRIEVE
+    llvm_unreachable("Unhandled getDecl");
+}
+
+void markModuleForGenIfNeeded(Dsymbol *s)
+{
+    assert(isCPP(s));
+
+    auto minst = s->getInstantiatingModule();
+    assert(minst);
+    if (!isCPP(minst))
+        return;
+
+    std::string MangledName;
+    calypso.mangle(cast<clang::NamedDecl>(getDecl(s)), MangledName);
+
+    auto c_minst = static_cast<cpp::Module*>(minst);
+    if (!c_minst->emittedSymbols.count(MangledName)) {
+        if (!c_minst->needGen) {
+            c_minst->needGen = true;
+            c_minst->emittedSymbols.clear(); // esp. important in case of separate compilation
+        }
+        c_minst->emittedSymbols.insert(MangledName);
     }
 }
 

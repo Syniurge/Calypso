@@ -18,6 +18,7 @@
 #include "../declaration.h"
 
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 namespace clang
 {
@@ -47,6 +48,8 @@ public:
     bool isOverlappedWith(::VarDeclaration *v2) override;
 };
 
+typedef llvm::SmallPtrSet<const clang::Decl*, 2> InstantiatedDeclSet;
+
 class FuncDeclaration : public ::FuncDeclaration
 {
 public:
@@ -54,6 +57,8 @@ public:
 
     const clang::FunctionDecl *FD;
     bool isUsed = false;
+
+    InstantiatedDeclSet instantiatedDecls;
 
     FuncDeclaration(Loc loc, Identifier *id, StorageClass storage_class,
                     Type* type, const clang::FunctionDecl *FD);
@@ -72,6 +77,8 @@ public:
     const clang::CXXConstructorDecl *CCD;
     bool isUsed = false;
 
+    InstantiatedDeclSet instantiatedDecls;
+
     CtorDeclaration(Loc loc, StorageClass storage_class,
                     Type* type, const clang::CXXConstructorDecl *CCD);
     CtorDeclaration(const CtorDeclaration&);
@@ -87,6 +94,8 @@ public:
 
     const clang::CXXDestructorDecl *CDD;
     bool isUsed = false;
+
+    InstantiatedDeclSet instantiatedDecls;
 
     DtorDeclaration(Loc loc, StorageClass storage_class,
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
@@ -159,15 +168,10 @@ const clang::FunctionDecl *getFD(::FuncDeclaration *f);
 
 // *************** //
 
-class NestedDeclMapper;
-
 // Run semantic() on referenced functions and record decls to instantiate templates and have them codegen'd
 class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
 {
-    friend class NestedDeclMapper;
-
-    DeclMapper mapper;
-    ExprMapper expmap;
+    ::FuncDeclaration* fdinst;
 
     Loc loc;
 
@@ -177,9 +181,9 @@ class DeclReferencer : public clang::RecursiveASTVisitor<DeclReferencer>
     bool VisitDeclRef(const clang::NamedDecl *D);
 
 public:
-    DeclReferencer(::Module* minst);
+    DeclReferencer(::FuncDeclaration* fdinst);
 
-    void Traverse(Loc loc, clang::Stmt *S);
+    void Traverse(const clang::FunctionDecl* D);
 
     bool VisitCXXConstructExpr(const clang::CXXConstructExpr *E);
     bool VisitCXXNewExpr(const clang::CXXNewExpr *E);
@@ -201,6 +205,8 @@ inline bool& getIsUsed(::FuncDeclaration* fd)
     else
         return static_cast<cpp::FuncDeclaration*>(fd)->isUsed;
 }
+
+InstantiatedDeclSet& instantiatedDecls(Dsymbol* instantiatedBy);
 
 }
 
