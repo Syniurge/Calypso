@@ -613,6 +613,9 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 {
     assert(!isCPP(tithis));
 
+    cpp::TemplateInstance* ti = nullptr;
+    cpp::TemplateDeclaration* tempdecl = nullptr;
+
     auto Inst = getClangInst(sc, &tithis->tdtypes);
     assert(Inst);
 
@@ -625,55 +628,62 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
             // alias might not have been created yet
 
             auto sym = D->d->sym;
-            assert(sym && sym->parent && sym->parent->isTemplateInstance());
+            assert(sym && sym->parent && sym->parent->isTemplateInstance() && isCPP(sym->parent));
 
-            auto tempinst = static_cast<::TemplateInstance*>(sym->parent);
-            assert(isCPP(tempinst));
-            return tempinst;
+            ti = static_cast<cpp::TemplateInstance*>(sym->parent);
+            tempdecl = static_cast<cpp::TemplateDeclaration*>(ti->tempdecl);
+
+            if (!ti->minst)
+            {
+                ti->minst = tithis->minst;
+                ti->tinst = tithis->tinst;
+            }
         }
 
-    auto ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
-    ti->semantictiargsdone = true;
-    ti->isForeignInst = true;
-
-    ti->Inst = Inst;
-
-    auto tdtypes = tdtypesFromInst(sc, ti->Inst, false);
-    ti->tdtypes.dim = tdtypes->dim;
-    ti->tdtypes.data = tdtypes->data;
-
-    auto tempdecl = correctTempDecl(ti);
-    ti->havetempdecl = true;
-    ti->correctTiargs();
-
-    ti->tinst = tithis->tinst;
-    ti->minst = tithis->minst;
-
-    assert(!tempdecl->findExistingInstance(ti, nullptr));
-
-    ti->inst = ti;
-    ti->parent = ti->enclosing ? ti->enclosing : parent; // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
-
-    if (auto mi = ti->minst)
+    if (!ti)
     {
-        mi->members->push(ti);
-        ti->memberOf = mi;
+        ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
+        ti->semantictiargsdone = true;
+        ti->isForeignInst = true;
 
-        // NOTE: appendToModuleMember() is weird, it attaches the instance to the root/codegen module importing the module containing the tempdecl, why is that even needed?
-        // and in our case attaching to the "wrong" module breaks the needsGen logic
-    }
-    tempdecl->addInstance(ti);
+        ti->Inst = Inst;
 
-    ti->members = tempdecl->copySyntaxTree(ti);
-    ti->symtab = new_DsymbolTable();
+        auto tdtypes = tdtypesFromInst(sc, ti->Inst, false);
+        ti->tdtypes.dim = tdtypes->dim;
+        ti->tdtypes.data = tdtypes->data;
 
-    for (auto s: *ti->members)
-    {
-        assert(!s->parent);
-        s->addMember(nullptr, ti);
+        tempdecl = correctTempDecl(ti);
+        ti->havetempdecl = true;
+        ti->correctTiargs();
+
+        ti->tinst = tithis->tinst;
+        ti->minst = tithis->minst;
+
+        assert(!tempdecl->findExistingInstance(ti, nullptr));
+
+        ti->inst = ti;
+        ti->parent = ti->enclosing ? ti->enclosing : parent; // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
+
+        ti->members = tempdecl->copySyntaxTree(ti);
+        ti->symtab = new_DsymbolTable();
+
+        for (auto s: *ti->members)
+        {
+            assert(!s->parent);
+            s->addMember(nullptr, ti);
+        }
+
+        ti->semanticRun = PASSsemantic3done;
     }
 
-    ti->semanticRun = PASSsemantic3done;
+    if (ti->minst)
+    {
+        // force templateInstanceSemantic() to go back to foreignInstance()
+        // until ti isn't speculative anymore
+        ti->appendToModuleMember();
+        tempdecl->addInstance(ti);
+    }
+
     return ti;
 }
 
@@ -830,6 +840,24 @@ Identifier *TemplateInstance::getIdent()
     tiargs = a;
 
     return result;
+}
+
+Dsymbols* TemplateInstance::appendToModuleMember()
+{
+    if (minst)
+    {
+        minst->members->push(this);
+        memberOf = minst;
+
+        return minst->members;
+    }
+
+    // NOTE: DMD's appendToModuleMember() is weird, it attaches the instance to
+    //  the root/codegen module importing the module containing the tempdecl,
+    //  why is that even needed?
+    //  and in our case attaching to the "wrong" module breaks the needsGen logic
+
+    return nullptr;
 }
 
 size_t TemplateInstance::correspondingParamIdx(size_t argi)

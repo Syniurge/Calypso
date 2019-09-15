@@ -82,6 +82,7 @@ public:
     void addMember(Scope *sc, ScopeDsymbol *sds) override;
     Identifier *getIdent() override;
     void declareParameters(Scope *sc) override {}
+    Dsymbols* appendToModuleMember() override;
     size_t correspondingParamIdx(size_t argi) override;
     TemplateParameter* correspondingParam(size_t argi) override;
     Objects* tiargsForMangling() override;

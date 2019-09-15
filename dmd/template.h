@@ -328,7 +328,7 @@ public:
     TemplateDeclaration* firstTempDecl(); // CALYPSO returns the first overload
     static bool semanticTiargs(const Loc &loc, Scope *sc, Objects *tiargs, int flags); // CALYPSO
     virtual bool semanticTiargs(Scope *sc); // CALYPSO
-    Dsymbols* appendToModuleMember();
+    virtual Dsymbols* appendToModuleMember();
     virtual void declareParameters(Scope *sc); // CALYPSO
 
     // CALYPSO variadic template generalization (pretty intrusive...)
