@@ -654,7 +654,14 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     ti->inst = ti;
     ti->parent = ti->enclosing ? ti->enclosing : parent; // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
 
-    ti->appendToModuleMember();
+    if (auto mi = ti->minst)
+    {
+        mi->members->push(ti);
+        ti->memberOf = mi;
+
+        // NOTE: appendToModuleMember() is weird, it attaches the instance to the root/codegen module importing the module containing the tempdecl, why is that even needed?
+        // and in our case attaching to the "wrong" module breaks the needsGen logic
+    }
     tempdecl->addInstance(ti);
 
     ti->members = tempdecl->copySyntaxTree(ti);

@@ -431,8 +431,6 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd)
 
     DeclReferencer declReferencer(fd);
     declReferencer.Traverse(D);
-
-    markModuleForGenIfNeeded(fd);
 }
 
 void MarkFunctionReferenced(::FuncDeclaration* fd)
@@ -449,6 +447,8 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
         fd->langPlugin()->markSymbolReferenced(fd->parent);
 
     InstantiateAndTraverseFunctionBody(fd);
+
+    markModuleForGenIfNeeded(fd);
 }
 
 const clang::FunctionDecl *getFD(::FuncDeclaration *f)

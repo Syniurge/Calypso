@@ -16,6 +16,7 @@
 #include <map>
 #include <unordered_set>
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringSet.h"
 
 namespace clang
 {
@@ -43,7 +44,7 @@ public:
 
     // List of C++ symbols emitted in the existing object file
     // If a C++ symbol not in this list was referenced, the module needs to be re-gen'd
-    std::unordered_set<std::string> emittedSymbols;
+    llvm::StringSet<> emittedSymbols;
     bool needGen = false;
 
     static Package *rootPackage;    // package to store all C++ packages/modules, avoids name clashes (e.g std)

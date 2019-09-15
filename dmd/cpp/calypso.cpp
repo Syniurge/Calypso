@@ -944,11 +944,14 @@ void LangPlugin::codegenModules()
             std::string MangledName;
             calypso.mangle(cast<clang::NamedDecl>(D), MangledName);
 
-            if (!m->needGen) {
-                m->needGen = true;
-                m->emittedSymbols.clear();
+            if (!m->emittedSymbols.count(MangledName))
+            {
+                if (!m->needGen) {
+                    m->needGen = true;
+                    m->emittedSymbols.clear();
+                }
+                m->emittedSymbols.insert(MangledName);
             }
-            m->emittedSymbols.insert(MangledName);
         }
 
         m->checkAndAddOutputFile(m->objfile);
