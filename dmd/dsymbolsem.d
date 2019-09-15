@@ -5498,14 +5498,14 @@ void templateInstanceSemantic(TemplateInstance tempinst, Scope* sc, Expressions*
     }
 
     // Get the enclosing template instance from the scope tinst
-    tempinst.tinst = sc.tinst;
+    tempinst.tinst = sc ? sc.tinst : null; // CALYPSO sc may be null for speculative instances (because tempdecl._scope is always null)
 
     // Get the instantiating module from the scope minst
-    tempinst.minst = sc.minst;
+    tempinst.minst = sc ? sc.minst : null; // CALYPSO
     // https://issues.dlang.org/show_bug.cgi?id=10920
     // If the enclosing function is non-root symbol,
     // this instance should be speculative.
-    if (!tempinst.tinst && sc.func && sc.func.inNonCodegen()) // CALYPSO
+    if (!tempinst.tinst && sc && sc.func && sc.func.inNonCodegen()) // CALYPSO
     {
         tempinst.minst = null;
     }
@@ -5555,14 +5555,11 @@ void templateInstanceSemantic(TemplateInstance tempinst, Scope* sc, Expressions*
      */
     tempinst.inst = tempdecl.findExistingInstance(tempinst, fargs);
     TemplateInstance errinst = null;
+
     if (!tempinst.inst)
-    {
         if (auto foreignInst = tempdecl.foreignInstance(tempinst, sc))  // CALYPSO
-        {
             tempinst.inst = foreignInst;
-            foreignInst.dsymbolSemantic(sc);
-        }
-    }
+
     if (!tempinst.inst)
     {
         // So, we need to implement 'this' instance.

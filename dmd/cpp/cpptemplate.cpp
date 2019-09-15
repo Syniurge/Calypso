@@ -646,8 +646,8 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     ti->havetempdecl = true;
     ti->correctTiargs();
 
-    ti->tinst = sc->tinst;
-    ti->minst = sc->minst;
+    ti->tinst = tithis->tinst;
+    ti->minst = tithis->minst;
 
     assert(!tempdecl->findExistingInstance(ti, nullptr));
 
@@ -686,7 +686,7 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, Objects* tdtypes)
     auto Temp = const_cast<clang::RedeclarableTemplateDecl*>(
                                 getDefinition(getPrimaryTemplate()));
 
-    DeclMapper mapper(sc->minst, sc->minst);
+    DeclMapper mapper(this);
     ExprMapper expmap(mapper);
 
     clang::TemplateArgumentListInfo Args;
