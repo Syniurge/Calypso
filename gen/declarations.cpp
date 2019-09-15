@@ -135,8 +135,11 @@ public:
     }
 
     if (auto lp = decl->langPlugin())  // CALYPSO
-      if (!lp->isSymbolReferenced(decl))
+      if (!lp->isSymbolReferenced(decl)) {
+        for (auto m : *decl->members)
+          m->accept(this);
         return;
+      }
 
     DtoResolveStruct(decl);
     decl->ir->setDefined();
@@ -199,8 +202,11 @@ public:
     }
 
     if (auto lp = decl->langPlugin())  // CALYPSO
-      if (!lp->isSymbolReferenced(decl))
+      if (!lp->isSymbolReferenced(decl)) {
+        for (auto m : *decl->members)
+          m->accept(this);
         return;
+      }
 
     if (decl->members && decl->symtab) {
 

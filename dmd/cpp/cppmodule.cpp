@@ -140,7 +140,7 @@ void Module::saveEmittedSymbolList()
     llvm::raw_string_ostream os(buf);
 
     for (auto& symname: emittedSymbols)
-        os << symname << "\n";
+        os << symname.first() << "\n";
     os.flush();
     buf.pop_back();
 
