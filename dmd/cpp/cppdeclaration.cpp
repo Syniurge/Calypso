@@ -72,6 +72,10 @@ void MarkVarReferenced(::VarDeclaration* vd)
     if (!Var)
         return;
 
+    auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(Var));
+    if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+        instantiatedDecls(instantiatedBy).erase(CanonDecl);
+
     auto& S = calypso.getSema();
 
     if (Var->getTemplateSpecializationKind() == clang::TSK_ImplicitInstantiation)
@@ -440,6 +444,10 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
     if (isUsed)
         return;
     isUsed = true;
+
+    auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(getFD(fd)));
+    if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+        instantiatedDecls(instantiatedBy).erase(CanonDecl);
 
     // Member *structor calls do not appear in the AST, hence DeclReferencer won't mark them
     // referenced and we have to do it here

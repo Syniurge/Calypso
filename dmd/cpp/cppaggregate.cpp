@@ -733,7 +733,9 @@ const clang::RecordDecl *getRecordDecl(::AggregateDeclaration *ad)
 {
     assert(isCPP(ad));
 
-    if (auto sd = ad->isStructDeclaration())
+    if (auto ud = ad->isUnionDeclaration())
+        return static_cast<UnionDeclaration*>(ud)->RD;
+    else if (auto sd = ad->isStructDeclaration())
         return static_cast<StructDeclaration*>(sd)->RD;
     else if (auto cd = ad->isClassDeclaration())
         return static_cast<ClassDeclaration*>(cd)->RD;
@@ -802,6 +804,10 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
     if (isUsed)
         return;
     isUsed = true;
+
+    auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(getRecordDecl(ad)));
+    if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+        instantiatedDecls(instantiatedBy).erase(CanonDecl);
 
     if (auto D = dyn_cast_or_null<clang::CXXRecordDecl>(
                     const_cast<clang::RecordDecl*>(getDefinition(ad)))) {

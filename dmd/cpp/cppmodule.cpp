@@ -189,9 +189,6 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
     assert(D->d->sym == nullptr);
     D_->d->sym = sym;
     D_->d->hasSym = true;
-
-    if (auto instantiatedBy = D->d->instantiatedBy)
-        instantiatedDecls(instantiatedBy).erase(D);
 }
 
 inline void setDwrapper(const clang::NamedDecl* D, TemplateDeclaration* wrapper)
@@ -332,12 +329,15 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->semanticRun = PASSsemantic3done;
 
     assert(!c_td->findExistingInstance(ti, nullptr));
-    c_td->addInstance(ti);
+
+    if (ti->minst)
+    {
+        c_td->addInstance(ti);
+        ti->appendToModuleMember();
+    }
 
     decldefs = new Dsymbols;
     decldefs->push(ti);
-
-    ti->appendToModuleMember();
 
     return decldefs;
 }

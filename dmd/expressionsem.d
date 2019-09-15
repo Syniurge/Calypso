@@ -4642,7 +4642,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
         }
         assert(t1.ty == Tfunction);
 
-        if (sc.isD()) // CALYPSO
+        if (sc.isD()) // CALYPSO FIXME sc.isD shouln't be needed (fix ExprMapper to return semantic'd exprs)
             markCalleeReferenced(exp);
 
         Expression argprefix;
@@ -5679,9 +5679,9 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
             exp.type = fd.type;
             assert(exp.type);
 
-            if (sc.isD()) // CALYPSO
-                if (auto lp = fd.langPlugin())
-                    lp.markSymbolReferenced(fd);
+//             if (sc.isD()) // CALYPSO
+//                 if (auto lp = fd.langPlugin())
+//                     lp.markSymbolReferenced(fd); // FIXME: we don't want to mark the function if this is the first overload and function resolving hasn't been done yet (i.e CallExp(DotVarExp, ..)) however we may want to reference it in other cases
         }
         else if (OverDeclaration od = exp.var.isOverDeclaration())
         {
