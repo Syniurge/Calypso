@@ -836,6 +836,8 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
 
             if (ad->defaultCtor)
                 calypso.markSymbolReferenced(ad->defaultCtor);
+
+            ad->search(ad->loc, Id::dtor);
             if (ad->dtor)
                 calypso.markSymbolReferenced(ad->dtor);
         }

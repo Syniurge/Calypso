@@ -54,18 +54,7 @@ using llvm::isa;
 
 namespace clangCG = clang::CodeGen;
 
-void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD);
-
-void EmitInstantiatedDecls(std::unique_ptr<clangCG::CodeGenModule>& CGM, Dsymbol* sinst)
-{
-    for (auto D: instantiatedDecls(sinst))
-    {
-        if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
-            EmitRecord(CGM, RD);
-        else
-            CGM->EmitTopLevelDecl(const_cast<clang::Decl*>(D));
-    }
-}
+void EmitInstantiatedDecls(std::unique_ptr<clangCG::CodeGenModule>& CGM, Dsymbol* sinst);
 
 void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
 {
@@ -325,6 +314,28 @@ struct ResolvedFunc
         return result;
     }
 };
+
+void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD);
+
+void EmitInstantiatedDecls(std::unique_ptr<clangCG::CodeGenModule>& CGM, Dsymbol* sinst)
+{
+    for (auto D: instantiatedDecls(sinst))
+    {
+        if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
+            EmitRecord(CGM, RD);
+        else
+        {
+            if (auto FD = dyn_cast<clang::FunctionDecl>(D))
+            {
+                ResolvedFunc::get(*CGM, FD);
+                if (FD->isDefined())
+                    D = FD->getDefinition();
+            }
+
+            CGM->EmitTopLevelDecl(const_cast<clang::Decl*>(D));
+        }
+    }
+}
 
 llvm::Type *LangPlugin::toType(::Type *t)
 {

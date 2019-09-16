@@ -351,6 +351,12 @@ bool DeclReferencer::Reference(const clang::Type *T)
     return true;
 }
 
+bool DeclReferencer::VisitCXXDefaultInitExpr(const clang::CXXDefaultInitExpr *E)
+{
+    // NOTE: Fields with in-class initializers show up in CXXCtorInitializer as CXXDefaultInitExpr
+    return TraverseStmt(const_cast<clang::Expr*>(E->getExpr()));
+}
+
 bool DeclReferencer::VisitCXXConstructExpr(const clang::CXXConstructExpr *E)
 {
     auto ConstructedType = E->getType();

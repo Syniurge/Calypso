@@ -185,6 +185,7 @@ public:
 
     void Traverse(const clang::FunctionDecl* D);
 
+    bool VisitCXXDefaultInitExpr(const clang::CXXDefaultInitExpr *E);
     bool VisitCXXConstructExpr(const clang::CXXConstructExpr *E);
     bool VisitCXXNewExpr(const clang::CXXNewExpr *E);
     bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E);
