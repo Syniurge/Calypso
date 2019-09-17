@@ -387,7 +387,7 @@ Type *DeclMapper::FromType::operator()(const clang::QualType _T)
 
     // restrict qualifiers are inconsequential
 
-    return t;
+    return merge(t);
 }
 
 Type *DeclMapper::FromType::fromType(const clang::QualType T)
@@ -1087,7 +1087,7 @@ Type *DeclMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType
     tiargs->push(tc);
     auto ti = new_TemplateInstance(loc, calypso.id_cpp_member_ptr, tiargs);
 
-    auto t = new_TypeIdentifier(loc, Id::empty);
+    auto t = new_TypeIdentifier(loc, Id::empty); // LAZY FIXME!
     t->addIdent(calypso.id_cpp);
     t->addIdent(calypso.id_core);
     t->addInst(ti);
@@ -1413,7 +1413,7 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         mapper.volatileNumber++;
 
     auto& S = calypso.getSema();
-    auto& Diags = calypso.getDiagnostics();
+//     auto& Diags = calypso.getDiagnostics();
 
     auto params = new Parameters;
     params->reserve(T->getNumParams());
@@ -1465,8 +1465,11 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
                 if (DefaultArgExpr) // might be null if BuildCXXDefaultArgExpr returned ExprError
                     defaultArg = ExprMapper(mapper).fromExpression(DefaultArgExpr);
 
-                if (Diags.hasErrorOccurred())
-                    Diags.Reset();
+                if (defaultArg && !T->isDependentType() && mapper.minst->_scope) // FIXME: this is temporary until ExprMapper always return semantic'd expressions
+                    defaultArg = expressionSemantic(defaultArg, mapper.minst->_scope);
+
+//                 if (Diags.hasErrorOccurred())
+//                     Diags.Reset();
             }
 
             PI++;
@@ -1507,6 +1510,8 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
 
     auto tf = new_TypeFunction(params, rt, 0, linkage, stc);
     tf = static_cast<TypeFunction*>(tf->addSTC(stc));
+    if (!T->isDependentType())
+        tf->deco = merge(tf)->deco;
     return tf;
 }
 
