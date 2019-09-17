@@ -272,8 +272,25 @@ void DeclReferencer::Traverse(const clang::FunctionDecl* D)
         TraverseStmt(Def->getBody());
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
+        {
             for (auto& Init: Ctor->inits())
                 TraverseStmt(Init->getInit());
+
+            auto FPT = Ctor->getType()->castAs<clang::FunctionProtoType>();
+            if (FPT->canThrow())
+            {
+                // Reference field dtors, which do not appear in the AST
+                auto Record = Ctor->getParent();
+                for (auto Field: Record->fields())
+                    if (auto RT = Field->getType()->getAs<clang::RecordType>())
+                    {
+                        auto CRD = dyn_cast<clang::CXXRecordDecl>(RT->getDecl());
+                        if (CRD && !CRD->hasTrivialDestructor())
+                            if (auto FieldDtor = CRD->getDestructor())
+                                Reference(FieldDtor);
+                    }
+            }
+        }
     }
 }
 
