@@ -559,7 +559,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
 
     DeclMapper mapper(this);
     auto tf = DeclMapper::FromType(mapper, ti->loc).fromTypeFunction(FPT, FuncInst);
-    fd->type = tf;
+    fd->type = typeSemantic(tf, ti->loc, sc);
 
     matchCall = tf->callMatch(tthis, fargs, 0);
     return (MATCH)(matchCall | (matchTiargs<<4));
