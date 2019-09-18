@@ -191,6 +191,7 @@ public:
     bool VisitCXXDeleteExpr(const clang::CXXDeleteExpr *E);
     bool VisitDeclRefExpr(const clang::DeclRefExpr *E);
     bool VisitMemberExpr(const clang::MemberExpr *E);
+    bool VisitCXXMemberCallExpr(const clang::CXXMemberCallExpr *E);
 
     bool shouldVisitImplicitCode() const { return true; }
 };

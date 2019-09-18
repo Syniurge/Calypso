@@ -349,6 +349,10 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
             const clang::FunctionDecl* Body;
             if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body)))
             {
+                for (auto& B: Record->bases())
+                    if (auto BaseRecord = B.getType()->getAsCXXRecordDecl())
+                        Reference(BaseRecord);
+
                 for (auto MD: Record->methods())
                     if (MD->isVirtual())
                         Reference(MD);
@@ -412,6 +416,15 @@ bool DeclReferencer::VisitDeclRefExpr(const clang::DeclRefExpr *E)
 bool DeclReferencer::VisitMemberExpr(const clang::MemberExpr *E)
 {
     return VisitDeclRef(E->getMemberDecl());
+}
+
+bool DeclReferencer::VisitCXXMemberCallExpr(const clang::CXXMemberCallExpr *E)
+{
+    if (auto Method = E->getMethodDecl())
+        if (Method->isVirtual())
+            return Reference(E->getRecordDecl());
+
+    return true;
 }
 
 /***********************/
