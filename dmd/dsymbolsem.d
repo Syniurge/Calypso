@@ -4675,6 +4675,9 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
                 cldec.baseClass = sym;
                 b.sym = cldec.baseClass;
 
+                if (auto lp = sym.langPlugin)
+                    lp.markSymbolReferenced(sym); // CALYPSO
+
                 if (!bcd || bcd.baseok < Baseok.done) // CALYPSO NOTE: is it necessary to do it for a Struct base? this is how it was done in pre-DDMD Calypso, so for now
                     resolveBase(sym.dsymbolSemantic(null)); // Try to resolve forward reference
                 if (bcd && bcd.baseok < Baseok.done)
@@ -4684,9 +4687,6 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
                         sym._scope._module.addDeferredSemantic(sym);
                     cldec.baseok = Baseok.none;
                 }
-
-                if (auto lp = sym.langPlugin)
-                    lp.markSymbolReferenced(sym); // CALYPSO
             L7:
             }
 

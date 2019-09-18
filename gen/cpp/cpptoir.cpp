@@ -43,6 +43,9 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <memory>
 
+#include "driver/cl_options.h"
+#include <fstream>
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cpp
@@ -630,9 +633,13 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     LLValue* vthis = DtoLVal(inst);
     auto Ty = toFunctionType(fdecl);
     
+    auto Dtor = dyn_cast<clang::CXXDestructorDecl>(MD);
+    clang::GlobalDecl GD = Dtor ? clang::GlobalDecl(Dtor, clang::Dtor_Complete) : MD;
+
     clangCG::Address This(vthis, clang::CharUnits::One());
+
     auto F = CGM->getCXXABI().getVirtualFunctionPointer(
-                            *CGF(), MD, This, Ty, clang::SourceLocation());
+                                *CGF(), GD, This, Ty, clang::SourceLocation());
     return F.getFunctionPointer();
 }
 
@@ -841,6 +848,8 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
     irFty.funcType = resolved.Ty;
 }
 
+File *setOutCalypsoFile(const char *path, const char *arg, const char *ext);
+
 void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 {
     if (!getIsUsed(fdecl))
@@ -851,6 +860,29 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 
     if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->getLLVMFunc()->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+
+#if 1
+    if (!gIR->dmodule->langPlugin())
+    { // for debugging purposes
+        std::string filename;
+        if (!opts::cppCacheDir.empty())
+            filename = opts::cppCacheDir.c_str();
+        filename += "/";
+        filename += gIR->dmodule->arg;
+
+        std::fstream symlistfile(filename, std::fstream::out | std::fstream::app);
+        if (!symlistfile.is_open())
+            ::error(Loc(), "failed to open sym list file");
+
+        for (auto D: instantiatedDecls(fdecl))
+        {
+            std::string MangledName;
+            calypso.mangle(cast<clang::NamedDecl>(D), MangledName);
+
+            symlistfile << MangledName << "\n";
+        }
+    }
+#endif
 
     EmitInstantiatedDecls(CGM, fdecl);
 }
