@@ -353,9 +353,16 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
                     if (auto BaseRecord = B.getType()->getAsCXXRecordDecl())
                         Reference(BaseRecord);
 
+                auto& S = calypso.getSema();
+                S.MarkVTableUsed(Record->getLocation(), const_cast<clang::CXXRecordDecl*>(Record));
+
                 for (auto MD: Record->methods())
                     if (MD->isVirtual())
                         Reference(MD);
+
+                if (Record && !Record->hasTrivialDestructor())
+                    if (auto Dtor = Record->getDestructor())
+                        Reference(Dtor);
             }
         }
     }

@@ -43,6 +43,8 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <memory>
 
+void delete_File(File* o);
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cpp
@@ -841,6 +843,8 @@ void LangPlugin::toResolveFunction(::FuncDeclaration* fdecl)
     irFty.funcType = resolved.Ty;
 }
 
+File *setOutCalypsoFile(const char *path, const char *arg, const char *ext);
+
 void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 {
     if (!getIsUsed(fdecl))
@@ -851,6 +855,32 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 
     if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->getLLVMFunc()->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
+
+#if 1
+    if (!gIR->dmodule->langPlugin())
+    {
+        std::string buf;
+        llvm::raw_string_ostream os(buf);
+
+        for (auto D: instantiatedDecls(fdecl))
+        {
+            std::string MangledName;
+            calypso.mangle(cast<clang::NamedDecl>(D), MangledName);
+
+            os << MangledName << "\n";
+        }
+
+        os.flush();
+        buf.pop_back();
+
+        auto symlistfile = setOutCalypsoFile(global.params.objdir, "future", "slist");
+        symlistfile->setbuffer(const_cast<void*>((const void*) buf.data()), buf.size());
+        if (symlistfile->write())
+            ::error(Loc(), "Writing the symbol list file failed");
+        symlistfile->setbuffer(nullptr, 0);
+        delete_File(symlistfile);
+    }
+#endif
 
     EmitInstantiatedDecls(CGM, fdecl);
 }
