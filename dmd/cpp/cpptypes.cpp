@@ -450,7 +450,7 @@ Type *DeclMapper::FromType::fromTypeUnqual(const clang::Type *T)
 
     if (Pointer || Reference || BlockPointer)
     {
-        auto pointeeT = Reference ? Reference->getPointeeTypeAsWritten() :
+        auto pointeeT = Reference ? Reference->getPointeeType() :
                 (Pointer ? Pointer->getPointeeType() : BlockPointer->getPointeeType());
         auto pt = fromType(pointeeT);
         if (!pt)

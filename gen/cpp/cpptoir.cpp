@@ -43,7 +43,8 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <memory>
 
-void delete_File(File* o);
+#include "driver/cl_options.h"
+#include <fstream>
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -858,27 +859,24 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
 
 #if 1
     if (!gIR->dmodule->langPlugin())
-    {
-        std::string buf;
-        llvm::raw_string_ostream os(buf);
+    { // for debugging purposes
+        std::string filename;
+        if (!opts::cppCacheDir.empty())
+            filename = opts::cppCacheDir.c_str();
+        filename += "/";
+        filename += gIR->dmodule->arg;
+
+        std::fstream symlistfile(filename, std::fstream::out | std::fstream::app);
+        if (!symlistfile.is_open())
+            ::error(Loc(), "failed to open sym list file");
 
         for (auto D: instantiatedDecls(fdecl))
         {
             std::string MangledName;
             calypso.mangle(cast<clang::NamedDecl>(D), MangledName);
 
-            os << MangledName << "\n";
+            symlistfile << MangledName << "\n";
         }
-
-        os.flush();
-        buf.pop_back();
-
-        auto symlistfile = setOutCalypsoFile(global.params.objdir, "future", "slist");
-        symlistfile->setbuffer(const_cast<void*>((const void*) buf.data()), buf.size());
-        if (symlistfile->write())
-            ::error(Loc(), "Writing the symbol list file failed");
-        symlistfile->setbuffer(nullptr, 0);
-        delete_File(symlistfile);
     }
 #endif
 

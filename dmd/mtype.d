@@ -6613,6 +6613,11 @@ int attributesApply(TypeFunction tf, void* param, int function(void*, string) fp
     if (res)
         return res;
 
+    if (tf.ismove) // CALYPSO
+        res = fp(param, "move");
+    if (res)
+        return res;
+
     if (tf.isref)
         res = fp(param, "ref");
     if (res)
