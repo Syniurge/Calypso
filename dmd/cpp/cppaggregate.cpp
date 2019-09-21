@@ -319,6 +319,15 @@ void ad_determineSize(AggTy *ad)
         return;
     }
 
+    if (ad->isClassDeclaration())
+    {
+        auto cd = static_cast<cpp::ClassDeclaration*>((void*)ad);
+        cd->determineBases();
+
+        for (auto b: *cd->baseclasses)
+            b->sym->size(b->sym->loc);
+    }
+
     auto& Context = calypso.getASTContext();
     auto& RL = Context.getASTRecordLayout(ad->RD);
 
@@ -599,11 +608,11 @@ Expression *ClassDeclaration::defaultInit(Loc loc)
 }
 
 // NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
-void ClassDeclaration::buildVtbl()
+void ClassDeclaration::determineBases()
 {
-    if (vtblBuilt)
+    if (baseok == BASEOKsemanticdone)
         return;
-    vtblBuilt = true;
+    baseok = BASEOKsemanticdone;
 
     auto RD = Definition();
 
@@ -622,9 +631,21 @@ void ClassDeclaration::buildVtbl()
     }
 //     cd->interfaces = cd->baseclasses.tdata()[(cd->baseClass ? 1 : 0) .. cd->baseclasses.dim];
 
-    baseok = BASEOKdone;
     if (RD->isAbstract())
         isabstract = ABSyes;
+
+}
+
+// NOTE: the "D" vtbl isn't used unless a D class inherits from a C++ one
+void ClassDeclaration::buildVtbl()
+{
+    if (vtblBuilt)
+        return;
+    vtblBuilt = true;
+
+    auto RD = Definition();
+
+    determineBases();
 
     if (auto bcd = isClassDeclarationOrNull(baseClass))
     {

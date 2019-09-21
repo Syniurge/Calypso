@@ -76,6 +76,7 @@ public:
 
     d_uns64 size(const Loc &loc) override;
 
+    void determineBases();
     void buildVtbl();
 
     void addLocalClass(ClassDeclarations *) override;

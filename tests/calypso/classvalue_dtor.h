@@ -9,6 +9,7 @@ public:
 };
 
 class C : public B {
+public:
     int* keyhole;
     int val;
     C(int* keyhole, int val) : keyhole(keyhole), val(val) {}
@@ -20,6 +21,7 @@ class C : public B {
 };
 
 class D : public B {
+public:
     static unsigned refs;
     static bool hasZeroRefs() { return !refs; }
 
