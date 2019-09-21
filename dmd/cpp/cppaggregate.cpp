@@ -406,6 +406,9 @@ template <typename AggTy>
 {
     auto RD = cast<clang::CXXRecordDecl>(getRecordDecl(base));
 
+    if (auto lp = cd->langPlugin())
+        lp->markSymbolReferenced(cd); // TODO: we need to go lazier
+
     if (!base->isBaseOf2(cd))
         return false;
 

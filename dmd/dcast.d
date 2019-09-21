@@ -1600,7 +1600,17 @@ Expression castTo(Expression e, Scope* sc, Type t)
              *      class/interface A to B  (will be a dynamic cast if possible)
              */
             if (tob.ty == t1b.ty && tob_isR && t1b_isR)
+            {
+                // CALYPSO C++ dynamic casts need typeinfo to be emitted
+                //  (isn't there a better place to do this?)
+                if (auto ad1 = getAggregateHandle(t1b))
+                    if (auto lp = ad1.langPlugin())
+                        lp.markSymbolReferenced(ad1);
+                if (auto ad2 = getAggregateHandle(tob))
+                    if (auto lp = ad2.langPlugin())
+                        lp.markSymbolReferenced(ad2);
                 goto Lok;
+            }
 
             // typeof(null) <-- non-null references or values
             if (tob.ty == Tnull && t1b.ty != Tnull)
