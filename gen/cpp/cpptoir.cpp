@@ -633,9 +633,13 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     LLValue* vthis = DtoLVal(inst);
     auto Ty = toFunctionType(fdecl);
     
+    auto Dtor = dyn_cast<clang::CXXDestructorDecl>(MD);
+    clang::GlobalDecl GD = Dtor ? clang::GlobalDecl(Dtor, clang::Dtor_Complete) : MD;
+
     clangCG::Address This(vthis, clang::CharUnits::One());
+
     auto F = CGM->getCXXABI().getVirtualFunctionPointer(
-                            *CGF(), MD, This, Ty, clang::SourceLocation());
+                                *CGF(), GD, This, Ty, clang::SourceLocation());
     return F.getFunctionPointer();
 }
 

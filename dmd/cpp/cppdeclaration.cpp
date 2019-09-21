@@ -492,8 +492,8 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
         instantiatedDecls(instantiatedBy).erase(CanonDecl);
 
-    // Member *structor calls do not appear in the AST, hence DeclReferencer won't mark them
-    // referenced and we have to do it here
+//     // Member *structor calls do not appear in the AST, hence DeclReferencer won't mark them
+//     // referenced and we have to do it here // FIXME: shouldn't be needed, record should be referenced in DeclReferencer
     if (fd->isCtorDeclaration() || fd->isDtorDeclaration())
         fd->langPlugin()->markSymbolReferenced(fd->parent);
 

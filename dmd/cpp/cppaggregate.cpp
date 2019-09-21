@@ -602,6 +602,27 @@ void ClassDeclaration::buildVtbl()
         return;
     vtblBuilt = true;
 
+    auto RD = Definition();
+
+    // Base classes should be lazily mapped when the derived class gets referenced
+    // Especially when the derived class isn't instantiated, then there's no definition yet
+    // and Clang hasn't determined the base classes yet
+    for (auto& B: RD->bases())
+    {
+        auto brt = DeclMapper(this).fromType(B.getType(), loc);
+        auto b = new BaseClass(brt);
+        b->sym = getAggregateSym(brt);
+        baseclasses->push(b);
+
+        if (!baseClass)
+            baseClass = b->sym;
+    }
+//     cd->interfaces = cd->baseclasses.tdata()[(cd->baseClass ? 1 : 0) .. cd->baseclasses.dim];
+
+    baseok = BASEOKdone;
+    if (RD->isAbstract())
+        isabstract = ABSyes;
+
     if (auto bcd = isClassDeclarationOrNull(baseClass))
     {
         static_cast<cpp::ClassDeclaration*>(bcd)->buildVtbl();

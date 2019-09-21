@@ -463,11 +463,28 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
 // For simplicity's sake (or confusion's) let's call records with either virtual functions or bases polymorphic
 bool isPolymorphic(const clang::RecordDecl *D)
 {
-    if (!D->isCompleteDefinition() && D->getDefinition())
-        D = D->getDefinition();
+    if (!D->isCompleteDefinition())
+    {
+        if (D->getDefinition())
+            D = D->getDefinition();
+        else if (auto CTSD = dyn_cast<clang::ClassTemplateSpecializationDecl>(D))
+            if (!CTSD->isExplicitSpecialization())
+            {
+                const clang::RecordDecl* SpecRecord;
+
+                auto U = CTSD->getSpecializedTemplateOrPartial();
+                if (U.is<clang::ClassTemplateDecl*>())
+                    SpecRecord = U.get<clang::ClassTemplateDecl*>()->getTemplatedDecl();
+                else
+                    SpecRecord = U.get<clang::ClassTemplatePartialSpecializationDecl*>();
+
+                return isPolymorphic(SpecRecord);
+            }
+    }
+
     auto CRD = dyn_cast<clang::CXXRecordDecl>(D);
-        return CRD && D->isCompleteDefinition() &&
-            (CRD->getNumBases() || CRD->isPolymorphic());
+    return CRD && D->isCompleteDefinition() &&
+                (CRD->getNumBases() || CRD->isPolymorphic());
 }
 
 Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags)
@@ -526,34 +543,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         else
         {
             a = new ClassDeclaration(loc, id, /*baseclasses =*/ nullptr, members, CRD);
+            // NOTE: baseclasses are being mapped lazily during buildVtbl
         }
 
         setDsym(CanonDecl, a);
-
-        if (auto cd = a->isClassDeclaration())
-        {
-            assert(CRD);
-
-            // Base classes must be mapped after attaching the Dsymbol to the Clang declaration,
-            // in case the derived class gets referenced
-            for (auto& B: CRD->bases())
-            {
-                auto brt = fromType(B.getType(), loc);
-                auto b = new BaseClass(brt);
-                b->sym = getAggregateSym(brt);
-                cd->baseclasses->push(b);
-
-                if (!cd->baseClass)
-                    cd->baseClass = b->sym;
-            }
-
-//             cd->interfaces = cd->baseclasses.tdata()[(cd->baseClass ? 1 : 0) .. cd->baseclasses.dim];
-
-            cd->baseok = BASEOKdone;
-
-            if (CRD->isAbstract())
-                cd->isabstract = ABSyes;
-        }
 
         a->protection.kind = Prot::public_;
         a->semanticRun = PASSsemantic3done;
