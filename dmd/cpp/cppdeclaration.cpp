@@ -345,6 +345,9 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
         {
             auto& Context = calypso.getASTContext();
 
+            if (Record->hasDefinition())
+                Record = Record->getDefinition();
+
             auto Key = Context.getCurrentKeyFunction(Record);
             const clang::FunctionDecl* Body;
             if (!Key || (Key->hasBody(Body) && Context.DeclMustBeEmitted(Body)))
