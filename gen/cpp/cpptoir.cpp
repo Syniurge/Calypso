@@ -1069,10 +1069,13 @@ void LangPlugin::toDefineStruct(::StructDeclaration* decl)
     }
 }
 
-void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD)
+void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* D)
 {
     auto& Context = calypso.getASTContext();
-//     auto& S = getSema();
+
+    auto RD = D;
+    if (RD->hasDefinition())
+        RD = RD->getDefinition();
 
     const clang::FunctionDecl *keyDef = nullptr;
     const clang::CXXMethodDecl *key =
@@ -1083,9 +1086,6 @@ void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRe
     CGM->RecordBeingDefined = RD;
     if (RD->isDynamicClass() && (!key || keyDef))
         CGM->EmitVTable(const_cast<clang::CXXRecordDecl*>(RD));
-
-//     EmitUnmappedRecordMethods(*CGM, S,
-//         const_cast<clang::CXXRecordDecl *>(c_cd->RD));
 
     CGM->RecordBeingDefined = nullptr;
 }
