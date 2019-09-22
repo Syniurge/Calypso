@@ -372,9 +372,8 @@ void ad_determineSize(AggTy *ad)
     }
 
     auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
-    if (auto sd = ad->isStructDeclaration())
-        if (!CRD || CRD->ctor_begin() == CRD->ctor_end())
-            sd->zeroInit = true;
+    if (!CRD || (CRD->ctor_begin() == CRD->ctor_end() && !CRD->hasNonTrivialDefaultConstructor()))
+        ad->zeroInit = true;
 }
 
 // NOTE: size() gets called to "determine fields", but shouldn't the two be separate?
@@ -614,9 +613,6 @@ Expression* UnionDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* v
 
 Expression *ClassDeclaration::defaultInit(Loc loc)
 {
-    if (!defaultCtor)
-        return ::ClassDeclaration::defaultInit(loc);
-
     auto arguments = new Expressions;
     return new_CallExp(loc, new_TypeExp(loc, type), arguments);
 }

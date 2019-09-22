@@ -219,8 +219,7 @@ enum StructPOD : int
  * All `struct` declarations are an instance of this.
  */
 extern (C++) class StructDeclaration : AggregateDeclaration
-{
-    bool zeroInit;              // !=0 if initialize with 0 fill
+{ // CALYPSO some of the fields were moved to AggregateDeclaration for class value support
     bool hasIdentityAssign;     // true if has identity opAssign
     bool hasIdentityEquals;     // true if has identity opEquals
     bool hasNoFields;           // has no fields
@@ -247,7 +246,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     extern (D) this(const ref Loc loc, Identifier id, bool inObject)
     {
         super(loc, id);
-        zeroInit = false; // assume false until we do semantic processing
         ispod = StructPOD.fwd;
         // For forward references
         type = new TypeStruct(this);
