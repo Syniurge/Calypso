@@ -521,6 +521,10 @@ LLValue *DtoVirtualFunctionPointer(DValue *inst, FuncDeclaration *fdecl,
   assert(fdecl->isVirtual());
   assert(!fdecl->isFinalFunc());
   assert(inst->type->toBasetype()->ty == Tclass);
+
+  if (auto lp = fdecl->langPlugin()) // CALYPSO
+    return lp->codegen()->toVirtualFunctionPointer(inst, fdecl, name);
+
   // 0 is always ClassInfo/Interface* unless it is a CPP interface
   assert(fdecl->vtblIndex > 0 ||
          (fdecl->vtblIndex == 0 && fdecl->linkage == LINKcpp));
@@ -528,9 +532,6 @@ LLValue *DtoVirtualFunctionPointer(DValue *inst, FuncDeclaration *fdecl,
   // get instance
   LLValue *vthis = DtoClassHandle(inst); // CALYPSO
   IF_LOG Logger::cout() << "vthis: " << *vthis << '\n';
-
-  if (auto lp = fdecl->langPlugin()) // CALYPSO
-    return lp->codegen()->toVirtualFunctionPointer(inst, fdecl, name);
 
   LLValue *funcval = vthis;
   // get the vtbl for objects
