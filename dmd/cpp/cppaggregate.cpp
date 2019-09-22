@@ -204,6 +204,17 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
             }
         }
     }
+    else if (ident == Id::__xdtor)
+    {
+        if (auto dtor = ad->search(loc, Id::dtor, 0))
+        {
+            auto xdtor = new_AliasDeclaration(dtor->loc, Id::__xdtor, dtor);
+            ad->members->push(xdtor);
+            xdtor->addMember(nullptr, ad);
+        }
+        else
+            return nullptr;
+    }
     else
         mapDecls(ad, Def, ident);
 
@@ -271,6 +282,9 @@ inline void ad_complete(AggTy* ad)
         if (auto td = dsymForDecl<DeclMapper::WrapExplicitSpecsAndOverloadedOperators>(ad, M))
             newMembers->push(td);
     }
+
+    if (auto xdtor = ad->search(ad->loc, Id::__xdtor))
+        newMembers->push(xdtor);
 
     delete ad->members;
     ad->members = newMembers;
