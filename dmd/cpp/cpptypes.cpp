@@ -1840,7 +1840,7 @@ const clang::VarTemplateSpecializationDecl *getDefinition(const clang::VarTempla
     return D;
 }
 
-// skips anonymous tags, linkage specs and inline namespaces
+// skips linkage specs, inline namespaces, anonymous enums, and "true" anonymous structs or unions
 const clang::DeclContext *getDeclContextOpaque(const clang::Decl *D)
 {
     auto DC = D->getDeclContext();
@@ -1851,8 +1851,12 @@ const clang::DeclContext *getDeclContextOpaque(const clang::Decl *D)
     auto NamedDC = dyn_cast<clang::NamedDecl>(DC);
     if (NamedDC && NamedDC->getDeclName().isEmpty())
     {
-        if (auto Tag = llvm::dyn_cast<clang::TagDecl>(DC))
+        if (auto Tag = dyn_cast<clang::TagDecl>(DC))
             if (Tag->getTypedefNameForAnonDecl())
+                return DC;
+
+        if (auto Record = dyn_cast<clang::RecordDecl>(DC))
+            if (!Record->isAnonymousStructOrUnion())
                 return DC;
 
         return getDeclContextOpaque(NamedDC);
