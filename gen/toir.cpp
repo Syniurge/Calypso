@@ -553,7 +553,7 @@ public:
 
     DValue *r = toElem(e->e2);
 
-    if (e->e1->type->toBasetype()->ty == Tstruct && e->e2->op == TOKint64) {
+    if (isAggregateValue(e->e1->type->toBasetype()) && e->e2->op == TOKint64) { // CALYPSO
       Logger::println("performing aggregate zero initialization");
       assert(e->e2->toInteger() == 0);
       LLValue *lval = DtoLVal(lhs);
