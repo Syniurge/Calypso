@@ -1378,6 +1378,7 @@ extern (C++) class VarDeclaration : Declaration
         if (tv.isAggregateValue()) // CALYPSO
         {
             auto sd = tv.getAggregateSym();
+            sd.search(Loc.initial, Id.dtor); // CALYPSO
             if (!sd.dtor || sd.errors)
                 return null;
 
