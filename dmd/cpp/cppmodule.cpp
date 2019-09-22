@@ -538,7 +538,10 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
         }
         else if (!isPolymorphic(D))
         {
-            a = new StructDeclaration(loc, id, D);
+            auto sd = new StructDeclaration(loc, id, D);
+            sd->hasIdentityAssign = true; // currently DMD only checks hasIdentityAssign before attempting to
+                // overload an identity assignment, but even if true this is followed by a resolveFuncCall anyway
+            a = sd;
         }
         else
         {

@@ -375,7 +375,6 @@ public:
 
     Expression callCpCtor(Scope *sc, Expression e);
 
-    DtorDeclaration buildDtor(AggregateDeclaration ad, Scope *sc);
     FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);
 
     // ===== - - - - - ===== //

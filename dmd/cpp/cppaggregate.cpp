@@ -176,10 +176,10 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
             auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
             // NOTE: Would mapping only non-trivial special members be preferable?
-            // It probably would make mapping more subject to unexpected variations..
+            // It probably would make mapping subject to more unexpected variations..
 
-            auto map = [&] (clang::Decl* D) {
-                if (D)
+            auto map = [&] (clang::CXXMethodDecl* D) {
+                if (D) // TODO: add "= delete" tests
                     dsymForDecl(ad, D);
             };
 
@@ -197,10 +197,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
             else if (ident == Id::assign)
             {
                 for (int i = 0; i < 2; i++)
-                    for (int j = 0; j < 2; j++)
-                        for (int k = 0; k < 2; k++)
-                            map(S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0,
-                                        j ? true : false, k ? clang::Qualifiers::Const : 0));
+                    map(S.LookupCopyingAssignment(_CRD, i ? clang::Qualifiers::Const : 0, false, 0));
             }
         }
     }
@@ -472,55 +469,43 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
     return isBaseOfImpl(this, cd, poffset);
 }
 
-::CtorDeclaration* hasCopyCtor(AggregateDeclaration* ad, Scope* sc)
+template <typename AggTy>
+::CtorDeclaration* ad_hasCopyCtor(AggTy* ad, Scope* sc)
 {
-    if (!ad->ctor)
+    auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->Definition());
+    if (!CRD)
         return nullptr;
 
-    auto er = new_NullExp(ad->loc, ad->type);    // dummy rvalue
-    auto el = new_IdentifierExp(ad->loc, Id::p); // dummy lvalue
-    el->type = ad->type;
-    Expressions a;
-    a.setDim(1);
-    auto errors = global.startGagging();
-    sc = sc->push();
-    sc->tinst = nullptr;
-    sc->minst = nullptr;
+    auto& S = calypso.getSema();
+    auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
-    a[0] = er;
-    auto f = resolveFuncCall(ad->loc, sc, ad->ctor, nullptr, ad->type, &a, 1|8);
-    if (!f)
-    {
-        a[0] = el;
-        f = resolveFuncCall(ad->loc, sc, ad->ctor, nullptr, ad->type, &a, 1|8);
-    }
+    for (int i = 0; i < 2; i++)
+        if (auto Ctor = S.LookupCopyingConstructor(_CRD, i ? 0 : clang::Qualifiers::Const))
+            if (auto sym = dsymForDecl(ad, Ctor))
+            {
+                assert(sym->isCtorDeclaration());
+                return static_cast<::CtorDeclaration*>(sym);
+            }
 
-    sc = sc->pop();
-    global.endGagging(errors);
-    if (f)
-    {
-        if (f->errors)
-            return nullptr;
-        int varargs;
-        auto fparams = f->getParameters(&varargs);
-        if (fparams->dim >= 1)
-        {
-            auto fparam0 = Parameter::getNth(fparams, 0);
-            if (fparam0->type->toDsymbol(nullptr) != ad)
-                f = nullptr;
-        }
-    }
-    return f ? f->isCtorDeclaration() : nullptr;
+    return nullptr;
 }
 
 ::CtorDeclaration* StructDeclaration::hasCopyCtor(Scope* sc)
 {
-    return cpp::hasCopyCtor(this, sc);
+    return ad_hasCopyCtor(this, sc);
 }
 
 ::CtorDeclaration* ClassDeclaration::hasCopyCtor(Scope* sc)
 {
-    return cpp::hasCopyCtor(this, sc);
+    return ad_hasCopyCtor(this, sc);
+}
+
+inline ::CtorDeclaration* hasCopyCtor(AggregateDeclaration* sym, Scope* sc)
+{
+    assert(isCPP(sym));
+    return sym->isClassDeclaration() ?
+            static_cast<cpp::ClassDeclaration*>(sym)->hasCopyCtor(sc) :
+            static_cast<cpp::StructDeclaration*>(sym)->hasCopyCtor(sc);
 }
 
 template <typename AggTy>
@@ -738,22 +723,6 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
     arguments->push(e);
     e = new_CallExp(e->loc, new_TypeExp(e->loc, tv), arguments);
     return expressionSemantic(e, sc);
-}
-
-::DtorDeclaration *LangPlugin::buildDtor(::AggregateDeclaration *ad, Scope *sc)
-{
-    assert(ad->dtors.dim < 2);
-
-    if (ad->dtors.empty())
-        return nullptr; // forward reference
-
-    // On aggregate destruction the GC looks for a "__xdtor" member
-    auto _alias = new_AliasDeclaration(Loc(), Id::__xdtor, ad->dtors[0]);
-    dsymbolSemantic(_alias, sc);
-    ad->members->push(_alias);
-    _alias->addMember(sc, ad); // add to symbol table
-
-    return ad->dtors[0];
 }
 
 ::FuncDeclaration *LangPlugin::searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc)

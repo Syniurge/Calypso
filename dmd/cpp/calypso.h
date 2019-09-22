@@ -161,7 +161,6 @@ public:
 
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 
-    ::DtorDeclaration *buildDtor(::AggregateDeclaration *ad, Scope *sc) override;
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
     bool isSymbolReferenced(Dsymbol *s) override;
