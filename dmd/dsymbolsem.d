@@ -1116,7 +1116,7 @@ extern(C++) class DsymbolSemanticVisitor : Visitor // CALYPSO (made non-final an
                 dsym._init = new ExpInitializer(dsym.loc, e);
                 goto Ldtor;
             }
-            if (tv.ty == Tstruct && (cast(TypeStruct)tv).sym.zeroInit)
+            if (isAggregateValue(tv) && getAggregateSym(tv).zeroInit)
             {
                 /* If a struct is all zeros, as a special case
                  * set it's initializer to the integer 0.
