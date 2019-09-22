@@ -1125,16 +1125,16 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
     auto loc = fromLoc(D->getLocation());
     auto ident = fromIdentifier(D->getIdentifier());
 
-    auto parent = static_cast<EnumDeclaration*>(
-                dsymForDecl(cast<clang::Decl>(getDeclContextOpaque(D))));
+    auto parent = dsymForDecl(cast<clang::Decl>(D->getDeclContext()));
+    assert(parent->isEnumDeclaration());
     auto value = ExprMapper(*this).fromAPInt(loc, D->getInitVal(), clang::QualType());
 
     auto em = new EnumMember(loc, ident, value, nullptr, D);
     setDsym(D, em);
 
-    em->ed = parent;
+    em->ed = static_cast<EnumDeclaration*>(parent);
     em->storage_class |= STCmanifest;
-    em->type = parent->type;
+    em->type = em->ed->type;
     em->semanticRun = PASSsemantic3done;
 
     return oneSymbol(em);
