@@ -320,23 +320,34 @@ struct ResolvedFunc
 
 void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRecordDecl* RD);
 
+inline void EmitFunction(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::FunctionDecl* D)
+{
+    ResolvedFunc::get(*CGM, D);
+    if (D->isDefined())
+        D = D->getDefinition();
+
+    CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(D));
+}
+
+inline void EmitVariable(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::VarDecl* D)
+{
+    auto& Context = CGM->getContext();
+
+    D = D->getDefinition(Context);
+    if (D && D->hasGlobalStorage() && !D->hasExternalStorage())
+        CGM->EmitTopLevelDecl(const_cast<clang::VarDecl*>(D));
+}
+
 void EmitInstantiatedDecls(std::unique_ptr<clangCG::CodeGenModule>& CGM, Dsymbol* sinst)
 {
     for (auto D: instantiatedDecls(sinst))
     {
         if (auto RD = dyn_cast<clang::CXXRecordDecl>(D))
             EmitRecord(CGM, RD);
-        else
-        {
-            if (auto FD = dyn_cast<clang::FunctionDecl>(D))
-            {
-                ResolvedFunc::get(*CGM, FD);
-                if (FD->isDefined())
-                    D = FD->getDefinition();
-            }
-
-            CGM->EmitTopLevelDecl(const_cast<clang::Decl*>(D));
-        }
+        else if (auto FD = dyn_cast<clang::FunctionDecl>(D))
+            EmitFunction(CGM, FD);
+        else if (auto VD = dyn_cast<clang::VarDecl>(D))
+            EmitVariable(CGM, VD);
     }
 }
 
@@ -930,14 +941,10 @@ void LangPlugin::toDeclareVariable(::VarDeclaration* vd)
 
 void LangPlugin::toDefineVariable(::VarDeclaration* vd)
 {
-    auto& Context = getASTContext();
-
     auto c_vd = static_cast<cpp::VarDeclaration*>(vd);
     auto VD = cast<clang::VarDecl>(c_vd->VD);
 
-    VD = VD->getDefinition(Context);
-    if (VD && VD->hasGlobalStorage() && !VD->hasExternalStorage())
-        CGM->EmitTopLevelDecl(const_cast<clang::VarDecl*>(VD));
+    EmitVariable(CGM, VD);
 }
 
 // Handle ConstructExp initializers of struct and class vars
