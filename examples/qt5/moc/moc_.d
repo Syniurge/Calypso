@@ -22,6 +22,7 @@ public import
 
 public import (C++)
     QObject,
+    QObjectData,
     QMetaObject,
     QMetaObjectPrivate,
     MetaDataFlags,
@@ -320,7 +321,7 @@ public:
                     result ~= "\\0"; // add \0 at the end of each string
 
                 if (col && col + len >= 72) {
-                    result ~= "\"\n    \"";
+                    result ~= "\" ~\n    \"";
                     col = 0;
                 } else if (len && s[0] >= '0' && s[0] <= '9') {
                     result ~= "\"\"";
@@ -330,7 +331,7 @@ public:
                 while (idx < s.length) {
                     if (idx > 0) {
                         col = 0;
-                        result ~= "\"\n    \"";
+                        result ~= "\" ~\n    \"";
                     }
                     int spanLen = min(70, s.length - idx);
         //             // don't cut escape sequences at the end of a line
@@ -1259,7 +1260,7 @@ public:
 
     extern(C++) override const const(QMetaObject)* metaObject()
     {
-        auto d_ptr = QObject.d_ptr.data;
+        auto d_ptr = cast(QObjectData*)this.d_ptr.data();
         return d_ptr.metaObject ? d_ptr.dynamicMetaObject() : &staticMetaObject;
     }
 
