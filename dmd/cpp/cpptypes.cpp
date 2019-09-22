@@ -354,7 +354,17 @@ inline bool isTypeQualifed(Type *t)
     return t->ty == Tident || t->ty == Tinstance || t->ty == Ttypeof || t->ty == Treturn;
 }
 
-unsigned DeclMapper::volatileNumber = 0;
+inline clang::QualType getPointeeType(const clang::Type* T)
+{
+    if (auto Reference = dyn_cast<clang::ReferenceType>(T))
+        return Reference->getPointeeType();
+    else if (auto Pointer = dyn_cast<clang::PointerType>(T))
+        return Pointer->getPointeeType();
+    else if (auto BlockPointer = dyn_cast<clang::BlockPointerType>(T)) // OS X extension
+        return BlockPointer->getPointeeType();
+
+    return clang::QualType();
+}
 
 Type *DeclMapper::fromType(const clang::QualType T, Loc loc)
 {
@@ -382,8 +392,7 @@ Type *DeclMapper::FromType::operator()(const clang::QualType _T)
     if (T.isConstQualified())
         t = t->makeConst();
 
-    if (T.isVolatileQualified())
-        mapper.volatileNumber++;
+    // TODO: volatile qualifiers should be applied as attributes
 
     // restrict qualifiers are inconsequential
 
@@ -450,8 +459,7 @@ Type *DeclMapper::FromType::fromTypeUnqual(const clang::Type *T)
 
     if (Pointer || Reference || BlockPointer)
     {
-        auto pointeeT = Reference ? Reference->getPointeeType() :
-                (Pointer ? Pointer->getPointeeType() : BlockPointer->getPointeeType());
+        auto pointeeT = getPointeeType(T);
         auto pt = fromType(pointeeT);
         if (!pt)
             return nullptr;
@@ -1409,9 +1417,6 @@ Type* DeclMapper::FromType::fromTypePackExpansion(const clang::PackExpansionType
 TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoType* T,
         const clang::FunctionDecl *FD)
 {
-    if (T->isVolatile())
-        mapper.volatileNumber++;
-
     auto& S = calypso.getSema();
 //     auto& Diags = calypso.getDiagnostics();
 
@@ -1432,6 +1437,11 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
 
         if (!at)
             return nullptr;
+
+        auto Pointee = getPointeeType(I->getTypePtr());
+        if (I->isVolatileQualified() ||
+                (!Pointee.isNull() && Pointee.isVolatileQualified()))
+            stc |= STCvolatile;
 
         // Turn a TypeReference into « ref nextOf() » as early as possible as this helps function resolving
         if (at->ty == Treference)
@@ -1481,6 +1491,8 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     StorageClass stc = STCundefined;
     if (T->isConst())
         stc |= STCconst;
+    if (T->isVolatile())
+        stc |= STCvolatile;
 
     Type *rt;
     auto AutoTy = dyn_cast<clang::AutoType>(T->getReturnType());
@@ -1500,6 +1512,14 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
                 stc |= STCmove;
             rt = rt->nextOf();
         }
+        else if (FD && isa<clang::CXXConstructorDecl>(FD))
+        {
+            // Tweak constructor types to match DMD's
+            auto ad = static_cast<AggregateDeclaration*>(
+                    mapper.dsymForDecl(cast<clang::CXXConstructorDecl>(FD)->getParent()));
+            rt = ad->handleType();
+            stc |= STCref;
+        }
     }
 
     if (!clang::isUnresolvedExceptionSpec(T->getExceptionSpecType()) && T->isNothrow(false))
@@ -1510,6 +1530,7 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
 
     auto tf = new_TypeFunction(params, rt, 0, linkage, stc);
     tf = static_cast<TypeFunction*>(tf->addSTC(stc));
+
     if (!T->isDependentType())
         tf->deco = merge(tf)->deco;
     return tf;

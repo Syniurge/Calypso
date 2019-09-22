@@ -3148,6 +3148,8 @@ public:
             buf.writestring("auto ");
         if (p.storageClass & STC.return_)
             buf.writestring("return ");
+        if (p.storageClass & STC.volatile_) // CALYPSO
+            buf.writestring("volatile ");
         if (p.storageClass & STC.move)
             buf.writestring("move "); // CALYPSO
         if (p.storageClass & STC.out_)

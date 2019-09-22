@@ -400,6 +400,9 @@ public:
         else if (ta.isscope && !ta.isscopeinferred)
             buf.writestring("Nl");
 
+        if (ta.isvolatile) // CALYPSO
+            buf.writestring("Nv");
+
         switch (ta.trust)
         {
             case TRUST.trusted:
@@ -1094,6 +1097,8 @@ public:
         // 'return inout ref' is the same as 'inout ref'
         if ((p.storageClass & (STC.return_ | STC.wild)) == STC.return_)
             buf.writestring("Nk");
+        if (p.storageClass & STC.volatile_) // CALYPSO
+            buf.writestring("Nv");
         if (p.storageClass & STC.move)
             buf.writestring("R"); // CALYPSO: same character as Treference, but STCmove only ever appears with STCref i.e 'K' so it should be easy to distinguish the two in demanglers
         switch (p.storageClass & (STC.in_ | STC.out_ | STC.ref_ | STC.lazy_))

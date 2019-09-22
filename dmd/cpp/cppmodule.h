@@ -161,7 +161,6 @@ public:
     /*
      * Types
      */
-    static unsigned volatileNumber; // number of volatile qualifiers found, needs to be reset when mapping functions (LAZY does it?)
 
     // Clang -> DMD
     Type *fromType(const clang::QualType T, Loc loc);

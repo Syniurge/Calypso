@@ -4235,6 +4235,7 @@ extern (C++) final class TypeFunction : TypeNext
     bool isreturn;              // true: 'this' is returned by ref
     bool isscope;               // true: 'this' is scope
     bool isscopeinferred;       // true: 'this' is scope from inference
+    bool isvolatile;            // CALYPSO
     LINK linkage;               // calling convention
     TRUST trust;                // level of trust
     PURE purity = PURE.impure;
@@ -4271,6 +4272,9 @@ extern (C++) final class TypeFunction : TypeNext
             this.isscope = true;
         if (stc & STC.scopeinferred)
             this.isscopeinferred = true;
+
+        if (stc & STC.volatile_) // CALYPSO
+            this.isvolatile = true;
 
         this.trust = TRUST.default_;
         if (stc & STC.safe)
@@ -4788,6 +4792,10 @@ extern (C++) final class TypeFunction : TypeNext
                     else
                         m = arg.implicitConvTo(tprm);
                     //printf("match %d\n", m);
+
+                    // CALYPSO demote to (const)volatile if the parameter is volatile but the argument isn't
+                    if (m >= MATCH.constant && (p.storageClass & STC.volatile_)/+ && targ.? TODO+/)
+                        m = m == MATCH.exact ? MATCH.volatile_ : MATCH.constvolatile;
 
                     // CALYPSO explicit @implicit ctor
                     if (m == MATCH.nomatch && !(flag & 2))
@@ -6630,6 +6638,11 @@ int attributesApply(TypeFunction tf, void* param, int function(void*, string) fp
 
     if (tf.isscope && !tf.isscopeinferred)
         res = fp(param, "scope");
+    if (res)
+        return res;
+
+    if (tf.isvolatile) // CALYPSO
+        res = fp(param, "volatile");
     if (res)
         return res;
 

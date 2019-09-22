@@ -578,7 +578,9 @@ enum MATCH : int
     nomatch,   // no match
     implicitctor,  // match with implicit ctor calls // CALYPSO
     convert,   // match with conversions
+    constvolatile, // match with conversion to const volatile // CALYPSO
     constant,  // match with conversion to const
+    volatile_,      // match with conversion to volatile // CALYPSO
     exact,     // exact match
 }
 
