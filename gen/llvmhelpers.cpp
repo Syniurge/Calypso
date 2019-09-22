@@ -381,7 +381,7 @@ void DtoAssign(Loc &loc, DValue *lhs, DValue *rhs, int op,
 
   if (t->ty == Tbool) {
     DtoStoreZextI8(DtoRVal(rhs), DtoLVal(lhs));
-  } else if (t->ty == Tstruct || isClassValue(t)) { // CALYPSO
+  } else if (isAggregateValue(t)) { // CALYPSO
     // don't copy anything to empty structs
     if (getAggregateSym(t)->structsize > 0) {
       llvm::Value *src = DtoLVal(rhs);
