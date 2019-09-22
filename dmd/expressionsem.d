@@ -4347,6 +4347,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                     exp.error("super class constructor call must be in a constructor");
                     return setError();
                 }
+                cd.baseClass.search(exp.loc, Id.ctor); // CALYPSO
                 if (!cd.baseClass.ctor)
                 {
                     exp.error("no super class constructor for `%s`", cd.baseClass.toChars());
