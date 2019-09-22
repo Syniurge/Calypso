@@ -405,7 +405,9 @@ enum MATCH
     MATCHnomatch,       // no match
     MATCHimplicitctor,  // match with implicit ctor calls // CALYPSO
     MATCHconvert,       // match with conversions
+    MATCHconstvolatile, // match with conversion to const volatile // CALYPSO
     MATCHconst,         // match with conversion to const
+    MATCHvolatile,      // match with conversion to volatile // CALYPSO
     MATCHexact          // exact match
 };
 

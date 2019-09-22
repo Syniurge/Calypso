@@ -691,7 +691,6 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     auto loc = fromLoc(D->getLocation());
     auto FPT = D->getType()->castAs<clang::FunctionProtoType>();
 
-    volatileNumber = 0; // reset the number of volatile qualifiers found
     auto tf = FromType(*this, loc).fromTypeFunction(FPT, D);
     if (!tf)
     {
@@ -701,56 +700,6 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         return nullptr;
     }
     assert(tf->ty == Tfunction);
-
-    // If a function has overloads with the same signature except for volatile qualifiers,
-    // volatile overloads need to be renamed to not interfere with the non-volatile ones
-    // (ex. std::atomic).
-    bool prefixVolatile = false;
-    auto funcVolatileNumber = volatileNumber;
-    if (funcVolatileNumber)
-    { // yikes
-        auto R = getDeclContextOpaque(D)->lookup(D->getDeclName());
-
-        for (auto Match: R)
-        {
-            if (auto MatchTemp = dyn_cast<clang::FunctionTemplateDecl>(Match))
-                Match = MatchTemp->getTemplatedDecl();
-
-            if (Match->getCanonicalDecl() == D->getCanonicalDecl())
-                continue;
-
-            auto Overload = dyn_cast<clang::FunctionDecl>(Match);
-            if (!Overload || Overload->isTemplateInstantiation())
-                continue;
-            auto OverloadType = Overload->getType()->castAs<clang::FunctionProtoType>();
-            volatileNumber = 0;
-            FromType(*this, loc).fromTypeFunction(OverloadType, Overload);
-
-            if (volatileNumber < funcVolatileNumber) {
-                prefixVolatile = true;
-                break;
-            }
-
-            if (volatileNumber == funcVolatileNumber)
-                if (opts::cppVerboseDiags)
-                    ::warning(loc, "Same number of volatile qualifiers found in another overload, things might break if they end up with the same D function type");
-        }
-    }
-
-    auto applyVolatilePrefix = [&] (Identifier *baseIdent) {
-        if (!prefixVolatile)
-            return baseIdent;
-
-        std::string idStr(baseIdent->toChars(), baseIdent->length());
-        // insert _vtlNUM_ backwards
-        idStr.insert(0, "_");
-        idStr.insert(0, std::to_string(funcVolatileNumber));
-        idStr.insert(0, "_vtl");
-
-        if (opts::cppVerboseDiags)
-            ::warning(loc, "volatile overload %s renamed to %s", baseIdent->toChars(), idStr.c_str());
-        return Identifier::idPool(idStr.c_str(), idStr.size());
-    };
 
     if (flags & WrapExplicitSpecsAndOverloadedOperators)
     {
@@ -801,7 +750,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         if (!tpl)
             return nullptr;
 
-        auto td = new TemplateDeclaration(loc, applyVolatilePrefix(ident), tpl, nullptr, D);
+        auto td = new TemplateDeclaration(loc, ident, tpl, nullptr, D);
         setDwrapper(D, td);
         td->semanticRun = PASSsemantic3done;
         td->onemember = dummyOnemember(loc, ident); // HACK: Create a dummy oneMember for functionResolve
@@ -851,52 +800,16 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
     else
     {
         auto id = getExtendedIdentifier(D, *this);
-        id = applyVolatilePrefix(id);
         fd = new FuncDeclaration(loc, id, stc, tf, D);
     }
 
-    auto fillSemInfo = [&] (::FuncDeclaration* fd)
-    {
-        fd->linkage = LINKcpp;
-        fd->protection.kind = fromProt(D->getAccess());
-
-        fd->originalType = tf;
-
-        auto sc = new Scope;
-        memset(sc, 0, sizeof(Scope));
-
-        if (tf->isref)
-            sc->stc |= STCref;
-        if (tf->isscope)
-            sc->stc |= STCscope;
-        if (tf->isnothrow)
-            sc->stc |= STCnothrow;
-    //     sc->stc |= STCnogc;
-
-        if (fd->isCtorDeclaration())
-        {
-            auto CD = cast<clang::CXXConstructorDecl>(D);
-            auto ad = static_cast<AggregateDeclaration*>(dsymForDecl(CD->getParent()));
-
-            sc->flags |= SCOPEctor;
-            Type* tret = ad->handleType();
-            assert(tret);
-            tret = tret->addStorageClass(fd->storage_class | sc->stc);
-            tret = tret->addMod(fd->type->mod);
-            tf->next = tret;
-            sc->stc |= STCref; // CALYPSO-specific
-        }
-
-        sc->linkage = LINKcpp;
-
-        fd->type = typeSemantic(fd->type, fd->loc, sc);
-        delete sc;
-
-        fd->semanticRun = PASSsemantic3done;
-    };
-
     setDsym(D, fd);
-    fillSemInfo(fd);
+
+    fd->linkage = LINKcpp;
+    fd->protection.kind = fromProt(D->getAccess());
+    fd->originalType = tf;
+
+    fd->semanticRun = PASSsemantic3done;
 
     if ((isTemplateInstantiation(D) || isExplicitSpecialization(D)) &&
              D->getTemplatedKind() != clang::FunctionDecl::TK_MemberSpecialization &&
