@@ -848,8 +848,6 @@ DtorDeclaration buildDtor(AggregateDeclaration ad, Scope* sc)
     //printf("AggregateDeclaration::buildDtor() %s\n", ad.toChars());
     if (ad.isUnionDeclaration())
         return null;                    // unions don't have destructors
-    if (auto lp = ad.langPlugin()) // CALYPSO
-        return lp.buildDtor(ad, sc);
 
     StorageClass stc = STC.safe | STC.nothrow_ | STC.pure_ | STC.nogc;
     Loc declLoc = ad.dtors.dim ? ad.dtors[0].loc : ad.loc;

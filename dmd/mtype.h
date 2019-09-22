@@ -562,6 +562,7 @@ public:
     bool isnogc;        // true: is @nogc
     bool isproperty;    // can be called without parentheses
     bool isref;         // true: returns a reference
+    bool ismove;                // true: returns a C++ rvalue reference // CALYPSO: DMD needs to be made aware of C++ rvalue references to never select C++ overloads with rval ref parameters unless explicitly requested
     bool isreturn;      // true: 'this' is returned by ref
     bool isscope;       // true: 'this' is scope
     bool isscopeinferred; // true: 'this' is scope from inference

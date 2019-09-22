@@ -100,7 +100,6 @@ public:
 
     virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;
 
-    virtual DtorDeclaration *buildDtor(AggregateDeclaration *ad, Scope *sc) = 0;
     virtual FuncDeclaration *searchOpEqualsForXopEquals(StructDeclaration *sd, Scope *sc) = 0;
 
     // ===== - - - - - ===== //
