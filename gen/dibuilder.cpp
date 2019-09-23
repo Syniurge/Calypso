@@ -20,6 +20,7 @@
 #include "dmd/template.h"
 #include "driver/cl_options.h"
 #include "driver/ldc-version.h"
+#include "gen/cgforeign.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
 #include "gen/llvmhelpers.h"
@@ -557,6 +558,12 @@ DIType DIBuilder::CreateCompositeType(Type *type) {
 
   if (static_cast<llvm::MDNode *>(irAggr->diCompositeType) != nullptr) {
     return irAggr->diCompositeType;
+  }
+
+  if (auto lp = ad->langPlugin()) { // CALYPSO
+      irAggr->diCompositeType = lp->codegen()->DIGetRecordType(ad);
+      assert(irAggr->diCompositeType);
+      return irAggr->diCompositeType;
   }
 
   DIScope scope = nullptr;

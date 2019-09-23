@@ -232,6 +232,8 @@ public:
     void toEndCatch(IRState& irs, ::Catch *cj) override;
     llvm::GlobalVariable* toCatchScopeType(IRState& irs, Type *t) override;
 
+    llvm::DIType* DIGetRecordType(AggregateDeclaration* ad) override;
+
     // ==== ==== ====
     PCH pch;
     llvm::StringSet<> TargetFeatures;
