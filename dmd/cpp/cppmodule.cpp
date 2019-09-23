@@ -163,9 +163,9 @@ inline Prot::Kind fromProt(clang::AccessSpecifier AS)
         case clang::AS_public:
             return Prot::public_;
         case clang::AS_protected:
-            return Prot::protected_;
+//             return Prot::protected_;
         case clang::AS_private:
-            return Prot::private_;
+//             return Prot::private_;
         case clang::AS_none:
             return Prot::/*none*/public_;
     }
