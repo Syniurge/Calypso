@@ -1095,11 +1095,15 @@ Type *DeclMapper::FromType::fromTypeMemberPointer(const clang::MemberPointerType
     tiargs->push(tc);
     auto ti = new_TemplateInstance(loc, calypso.id_cpp_member_ptr, tiargs);
 
-    auto t = new_TypeIdentifier(loc, Id::empty); // LAZY FIXME!
+    auto t = new_TypeIdentifier(loc, Id::empty);
     t->addIdent(calypso.id_cpp);
     t->addIdent(calypso.id_core);
     t->addInst(ti);
-    return t;
+
+    if (!T->isDependentType())
+        return typeSemantic(t, Loc(), mapper.minst->_scope);
+    else
+        return t;
 }
 
 Type *DeclMapper::FromType::fromTypeElaborated(const clang::ElaboratedType *T)
