@@ -209,7 +209,9 @@ public:
     void toDefineFunction(::FuncDeclaration* fdecl) override;
     void toDeclareVariable(::VarDeclaration* vd) override;
     void toDefineVariable(::VarDeclaration* vd) override;
+    bool toResolveStruct(::StructDeclaration* sd) override;
     void toDefineStruct(::StructDeclaration* sd) override;
+    bool toResolveClass(::ClassDeclaration* cd) override;
     void toDefineClass(::ClassDeclaration* cd) override;
 
     bool toIsReturnInArg(CallExp* ce) override;
