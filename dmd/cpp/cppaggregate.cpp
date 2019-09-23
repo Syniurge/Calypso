@@ -117,9 +117,11 @@ inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
         auto& Context = calypso.getASTContext();
         auto& S = calypso.getSema();
 
-        if (S.RequireCompleteType(ad->RD->getLocation(), Context.getRecordType(ad->RD),
-                                  clang::diag::err_incomplete_type))
-            ad->error("No definition available");
+        S.RequireCompleteType(ad->RD->getLocation(), Context.getRecordType(ad->RD),
+                                  clang::diag::err_incomplete_type);
+//         if (S.RequireCompleteType(ad->RD->getLocation(), Context.getRecordType(ad->RD),
+//                                   clang::diag::err_incomplete_type))
+//             ad->error("No definition available");
 
         if (!ad->RD->isCompleteDefinition() && ad->RD->getDefinition())
             ad->_Def = ad->RD->getDefinition();
@@ -154,7 +156,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
             return s;
 
     auto Def = ad->Definition();
-    if (!Def)
+    if (!Def->isCompleteDefinition())
         return nullptr;
 
     if (ident == Id::ctor || ident == Id::dtor || ident == Id::assign)
@@ -228,6 +230,9 @@ Dsymbol *ClassDeclaration::search(const Loc &loc, Identifier *ident, int flags)
     auto s = ad_search(this, loc, ident, flags);
 
     if (!s)
+    {
+        determineBases();
+
         for (auto b: *baseclasses)
             if (b->sym)
             {
@@ -235,6 +240,7 @@ Dsymbol *ClassDeclaration::search(const Loc &loc, Identifier *ident, int flags)
                 if (s)
                     break;
             }
+    }
 
     return s;
 }
@@ -322,7 +328,7 @@ void ad_determineSize(AggTy *ad)
     ad->sizeok = SIZEOKdone;
 
     auto Def = ad->Definition();
-    if (!Def || Def->isInvalidDecl())
+    if (!Def->isCompleteDefinition() || Def->isInvalidDecl())
     {
        // if it's a forward reference or invalid record, consider the record empty
         ad->structsize = 1;
@@ -473,7 +479,7 @@ template <typename AggTy>
 ::CtorDeclaration* ad_hasCopyCtor(AggTy* ad, Scope* sc)
 {
     auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->Definition());
-    if (!CRD)
+    if (!CRD->isCompleteDefinition())
         return nullptr;
 
     auto& S = calypso.getSema();
@@ -610,6 +616,8 @@ void ClassDeclaration::determineBases()
     baseok = BASEOKsemanticdone;
 
     auto RD = Definition();
+    if (!RD->isCompleteDefinition())
+        return;
 
     // Base classes should be lazily mapped when the derived class gets referenced
     // Especially when the derived class isn't instantiated, then there's no definition yet
@@ -639,6 +647,8 @@ void ClassDeclaration::buildVtbl()
     vtblBuilt = true;
 
     auto RD = Definition();
+    if (!RD->isCompleteDefinition())
+        return;
 
     determineBases();
 
@@ -833,8 +843,10 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
         instantiatedDecls(instantiatedBy).erase(CanonDecl);
 
-    if (auto D = dyn_cast_or_null<clang::CXXRecordDecl>(
-                    const_cast<clang::RecordDecl*>(getDefinition(ad)))) {
+    auto D = dyn_cast_or_null<clang::CXXRecordDecl>(
+                    const_cast<clang::RecordDecl*>(getDefinition(ad)));
+    if (D && D->isCompleteDefinition())
+    {
         ad->size(ad->loc);
 
         if (auto cd = ad->isClassDeclaration())

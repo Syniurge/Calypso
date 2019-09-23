@@ -9,7 +9,6 @@ module moc.moc_;
 pragma (cppmap, "<QtCore>");
 pragma (cppmap, "<private/qmetaobject_p.h>");
 
-import cpp.core;
 import std.traits : isCallable, hasUDA;
 
 import (C++)
@@ -17,6 +16,7 @@ import (C++)
     Qt.ConnectionType;
 
 public import
+    cpp.core,
     cpp.memberptr,
     moc.types;
 
