@@ -82,7 +82,10 @@ IrTypeClass *IrTypeClass::get(ClassDeclaration *cd) {
 
   if (auto lp = cd->langPlugin()) { // CALYPSO
     t->type = lp->codegen()->toType(cd->type);
-    t->packed = llvm::cast<LLStructType>(t->type)->isPacked();
+
+    auto StructTy = llvm::cast<LLStructType>(t->type);
+    if (!StructTy->isOpaque())
+        t->packed = StructTy->isPacked();
     return t;
   }
 

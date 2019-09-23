@@ -82,6 +82,10 @@ void DtoResolveClass(ClassDeclaration *cd) {
                          cd->loc.toChars());
   LOG_SCOPE;
 
+  if (auto lp = cd->langPlugin())
+      if (lp->codegen()->toResolveClass(cd)) // CALYPSO
+        return;
+
   // make sure the base classes are processed first
   for (auto bc : *cd->baseclasses) {
     DtoResolveAggregate(bc->sym);  // CALYPSO

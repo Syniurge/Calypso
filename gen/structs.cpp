@@ -11,10 +11,12 @@
 
 #include "dmd/aggregate.h"
 #include "dmd/declaration.h"
+#include "dmd/import.h"
 #include "dmd/init.h"
 #include "dmd/module.h"
 #include "dmd/mtype.h"
 #include "gen/arrays.h"
+#include "gen/cgforeign.h"
 #include "gen/dvalue.h"
 #include "gen/functions.h"
 #include "gen/irstate.h"
@@ -44,6 +46,10 @@ void DtoResolveStruct(StructDeclaration *sd, Loc &callerLoc) {
 
   // make sure type exists
   DtoType(sd->type);
+
+  if (auto lp = sd->langPlugin())
+      if (lp->codegen()->toResolveStruct(sd)) // CALYPSO
+        return;
 
   // if it's a forward declaration, all bets are off. The type should be enough
   if (sd->sizeok != SIZEOKdone) {

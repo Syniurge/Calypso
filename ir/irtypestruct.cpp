@@ -41,21 +41,25 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
   LOG_SCOPE;
 
   // CALYPSO
+  llvm::Type* foreignType = nullptr;
+
   if (auto lp = sd->langPlugin())
-    t->type = lp->codegen()->toType(sd->type);
-          // what about default_fields
+    foreignType = lp->codegen()->toType(sd->type);
   else
     for (auto lp: langPlugins)
       if (auto Ty = lp->codegen()->IrTypeStructHijack(sd)) // Delightful HACK for __cpp_member_ptr
-        t->type = Ty;
+        foreignType = Ty;
 
-  auto StructTy = llvm::cast<LLStructType>(t->type);
-  if (!StructTy->isOpaque())
+  if (foreignType)
   {
-    t->packed = StructTy->isPacked();
-    return t;
+    t->type = foreignType;
+
+    auto StructTy = llvm::cast<LLStructType>(t->type);
+    if (!StructTy->isOpaque())
+      t->packed = StructTy->isPacked();
+
+    return t; // what about default_fields
   }
-  // end of CALYPSO insertions
 
   // if it's a forward declaration, all bets are off, stick with the opaque
   if (sd->sizeok != SIZEOKdone) {

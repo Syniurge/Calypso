@@ -1044,9 +1044,18 @@ bool LangPlugin::toConstructVar(::VarDeclaration *vd, llvm::Value *value, Expres
 //                                             k ? clang::Qualifiers::Const : 0));
 // }
 
+bool LangPlugin::toResolveStruct(::StructDeclaration* sd)
+{
+    sd->sizeok = SIZEOKdone; // if this is an opaque declaration
+    return false;
+}
+
 void LangPlugin::toDefineStruct(::StructDeclaration* decl)
 {
     auto c_sd = static_cast<cpp::StructDeclaration*>(decl);
+    if (!c_sd->isUsed || !c_sd->Definition()->isCompleteDefinition())
+        return;
+
     if (c_sd->RD->isInvalidDecl() || decl->isUnionDeclaration())
         return;
 
@@ -1103,14 +1112,22 @@ void EmitRecord(std::unique_ptr<clangCG::CodeGenModule>& CGM, const clang::CXXRe
     CGM->RecordBeingDefined = nullptr;
 }
 
+bool LangPlugin::toResolveClass(::ClassDeclaration* cd)
+{
+    cd->sizeok = SIZEOKdone; // if this is an opaque declaration
+    return false;
+}
+
 void LangPlugin::toDefineClass(::ClassDeclaration* decl)
 {
     auto c_cd = static_cast<cpp::ClassDeclaration*>(decl);
+    if (!c_cd->isUsed || !c_cd->Definition()->isCompleteDefinition())
+        return;
+
     if (c_cd->RD->isInvalidDecl())
         return;
 
-    if (c_cd->isUsed)
-        EmitRecord(CGM, c_cd->RD);
+    EmitRecord(CGM, c_cd->RD);
 
     IrAggr *ir = getIrAggr(decl);
     const auto lwc = DtoLinkage(decl);

@@ -42,7 +42,9 @@ public:
     virtual void toDefineFunction(FuncDeclaration* fdecl) = 0;
     virtual void toDeclareVariable(VarDeclaration* vd) = 0;
     virtual void toDefineVariable(VarDeclaration* vd) = 0;
+    virtual bool toResolveStruct(StructDeclaration* sd) = 0;
     virtual void toDefineStruct(StructDeclaration* sd) = 0;
+    virtual bool toResolveClass(ClassDeclaration* cd) = 0;
     virtual void toDefineClass(ClassDeclaration* cd) = 0;
 
     virtual bool toIsReturnInArg(CallExp* ce) = 0;

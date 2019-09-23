@@ -134,13 +134,6 @@ public:
       return;
     }
 
-    if (auto lp = decl->langPlugin())  // CALYPSO
-      if (!lp->isSymbolReferenced(decl)) {
-        for (auto m : *decl->members)
-          m->accept(this);
-        return;
-      }
-
     DtoResolveStruct(decl);
     decl->ir->setDefined();
 
@@ -201,15 +194,7 @@ public:
       return;
     }
 
-    if (auto lp = decl->langPlugin())  // CALYPSO
-      if (!lp->isSymbolReferenced(decl)) {
-        for (auto m : *decl->members)
-          m->accept(this);
-        return;
-      }
-
     if (decl->members && decl->symtab) {
-
       DtoResolveClass(decl);
       decl->ir->setDefined();
 
