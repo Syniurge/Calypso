@@ -1130,4 +1130,12 @@ void LangPlugin::toDefineClass(::ClassDeclaration* decl)
     setLinkage(lwc, classZ);
 }
 
+llvm::DIType* LangPlugin::DIGetRecordType(AggregateDeclaration* ad)
+{
+    auto RD = getRecordDecl(ad);
+    clang::QualType Ty(RD->getTypeForDecl(), 0);
+
+    return CGM->getModuleDebugInfo()->getOrCreateRecordType(Ty, RD->getLocation());
+}
+
 }
