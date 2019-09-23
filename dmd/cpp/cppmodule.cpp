@@ -98,11 +98,14 @@ void Module::addPreambule()
             packages->push(calypso.id_cpp);
             ::Import *im = new_Import(Loc(), packages, calypso.id_core, nullptr, true);
             members->shift(im);
+
+            im->addMember(_scope, this);
+            im->importAll(_scope);
         }
-        { // object
-            ::Import *im = new_Import(Loc(), nullptr, Id::object, nullptr, true);
-            members->shift(im);
-        }
+//         { // object
+//             ::Import *im = new_Import(Loc(), nullptr, Id::object, nullptr, true);
+//             members->shift(im);
+//         }
     }
 }
 
@@ -1410,6 +1413,8 @@ Module *DeclMapper::getModule(const clang::Decl* D)
             if (!FileName::exists(m->objfile->toChars()))
                 m->needGen = true;
         }
+
+        m->addPreambule();
     }
 
     return m;
