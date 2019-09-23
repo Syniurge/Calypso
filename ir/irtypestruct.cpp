@@ -40,11 +40,6 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
                          sd->loc.toChars());
   LOG_SCOPE;
 
-  // if it's a forward declaration, all bets are off, stick with the opaque
-  if (sd->sizeok != SIZEOKdone) {
-    return t;
-  }
-
   // CALYPSO
   if (auto lp = sd->langPlugin())
     t->type = lp->codegen()->toType(sd->type);
@@ -61,6 +56,11 @@ IrTypeStruct *IrTypeStruct::get(StructDeclaration *sd) {
     return t;
   }
   // end of CALYPSO insertions
+
+  // if it's a forward declaration, all bets are off, stick with the opaque
+  if (sd->sizeok != SIZEOKdone) {
+    return t;
+  }
 
   t->packed = isPacked(sd);
 
