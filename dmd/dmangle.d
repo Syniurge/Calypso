@@ -1092,7 +1092,7 @@ public:
 
     override void visit(Parameter p)
     {
-        if (p.storageClass & STC.scope_ && !(p.storageClass & STC.scopeinferred) && p.type.hasPointers()) // CALYPSO see D20180213T205916
+        if (p.storageClass & STC.scope_ && !(p.storageClass & STC.scopeinferred))
             buf.writeByte('M');
         // 'return inout ref' is the same as 'inout ref'
         if ((p.storageClass & (STC.return_ | STC.wild)) == STC.return_)
