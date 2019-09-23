@@ -1383,9 +1383,10 @@ private extern (C++) final class TypeSemanticVisitor : Visitor
                     }
                 }
 
-                if (fparam.storageClass & STC.scope_ && !fparam.type.hasPointers() && fparam.type.ty != Ttuple)
+                if (tf.linkage != LINK.cpp && // CALYPSO HACK? Reference parameters mapped by Calypso are always scope ref, so we need to be able to write extern(C++) functions with scope ref parameters for e.g std:: algorithms (FIXME: scope has changed since the initial implementation, this needs a different STC bit now)
+                    fparam.storageClass & STC.scope_ && !fparam.type.hasPointers() && fparam.type.ty != Ttuple)
                 {
-//                     fparam.storageClass &= ~TC.scope_; // CALYPSO: disabled, we accept "scope ref" for any type and those parameters take rvalues (the implementation is a hack atm but this makes writing D code over const T&-heavy C++ libraries bearable) // NOTE D20180213T205916: However hasPointers() is being checked during mangling to stay faithful to the vanilla D mangling
+                    fparam.storageClass &= ~STC.scope_;
                     if (!(fparam.storageClass & STC.ref_))
                         fparam.storageClass &= ~STC.return_;
                 }
