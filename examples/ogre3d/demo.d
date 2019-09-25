@@ -1,18 +1,18 @@
 /**
- * Ogre3D D demo based on the Lighting sample and the wiki tutorial framework.
+ * Ogre3D D demo based on the Lighting sample.
  *
  * Build with:
- *   (Linux)   $ clang++ -I/usr/local/include/OGRE -I/usr/local/include/OGRE/Overlay -I/usr/include/OIS -c BaseApplication.cpp -o BaseApplication.cpp.o
- *             $ ldc2 -wi -v -cpp-args -I/usr/local/include/OGRE -cpp-args -I/usr/local/include/OGRE/Overlay -cpp-args -I/usr/include/OIS -LBaseApplication.cpp.o -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-lstdc++ demo.d
- 
- *   (Windows) $ cl.exe /c /MD /EHsc /I Z:\boost /I Z:\OGRE-SDK\include\OGRE /I Z:\OGRE-SDK\include\OGRE\Overlay /I Z:\OGRE-SDK\include\OIS /FoBaseApplication.cpp.o BaseApplication.cpp
- *             $ ldc2.exe -wi -v -cpp-args -DBOOST_USE_WINDOWS_H -cpp-args -D_MT -cpp-args -D_DLL -cpp-args -fms-extensions -cpp-args -fdelayed-template-parsing -cpp-args -fms-compatibility -cpp-args -fms-compatibility-version=19 -cpp-args -IZ:\boost -cpp-args -IZ:\OGRE-SDK\include -cpp-args  -IZ:\OGRE-SDK\include\OGRE -cpp-args -IZ:\OGRE-SDK\include\OGRE\Overlay -cpp-args -IZ:\OGRE-SDK\include\OIS -LBaseApplication.cpp.o -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
+ *   (Linux)   $ ldc2 -wi -v -cpp-args "-I/usr/local/include/OGRE -I/usr/local/include/OGRE/Bites -I/usr/local/include/OGRE/Overlay -I/usr/local/include/OGRE/RTShaderSystem" -L-L/usr/local/lib -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread demo.d
+
+ *   (Windows) $ ldc2.exe -wi -v -cpp-args -DBOOST_USE_WINDOWS_H -cpp-args -D_MT -cpp-args -D_DLL -cpp-args -fms-extensions -cpp-args -fdelayed-template-parsing -cpp-args -fms-compatibility -cpp-args -fms-compatibility-version=19 -cpp-args -IZ:\boost -cpp-args -IZ:\OGRE-SDK\include -cpp-args  -IZ:\OGRE-SDK\include\OGRE -cpp-args -IZ:\OGRE-SDK\include\OGRE\Overlay -cpp-args -IZ:\OGRE-SDK\include\OIS -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
  */
 
-modmap (C++) "OGRE/Ogre.h";
-modmap (C++) "OGRE/InputContext.h";
-modmap (C++) "OGRE/SdkCameraMan.h";
-pragma (cppmap, "BaseApplication.h");
+pragma (cppmap, "OGRE/Ogre.h");
+pragma (cppmap, "OGRE/Bites/OgreApplicationContext.h");
+pragma (cppmap, "OGRE/Bites/OgreCameraMan.h");
+pragma (cppmap, "OGRE/Bites/OgreBitesConfigDialog.h");
+pragma (cppmap, "OGRE/Bites/OgreInput.h");
+pragma (cppmap, "OGRE/Bites/OgreTrays.h");
 
 import std.stdio, std.file, std.conv;
 
@@ -22,56 +22,81 @@ import (C++) Ogre._, Ogre.Math;
 import (C++) Ogre.Vector3, Ogre.Radian, Ogre.ColourValue;
 import (C++) Ogre.MovableObject, Ogre.Light, Ogre.Billboard,
         Ogre.BillboardSet, Ogre.RibbonTrail, Ogre.AnimationState,
-        Ogre.HardwareOcclusionQuery, Ogre.Animation,
+        Ogre.HardwareOcclusionQuery, Ogre.Animation, Ogre.Camera,
         Ogre.Root, Ogre.RenderSystem, Ogre.MaterialManager,
         Ogre.AutoParamDataSource, Ogre.Pass, Ogre.Renderable,
-        Ogre.FrameEvent, Ogre.ResourceGroupManager,
-        Ogre.ℂException, Ogre.LogManager, Ogre.LogMessageLevel;
-import (C++) OgreBites.SdkCameraMan, OgreBites.CameraStyle;
+        Ogre.FrameEvent, Ogre.ResourceGroupManager, Ogre.SceneManager,
+        Ogre.ℂException, Ogre.LogManager, Ogre.LogMessageLevel,
+        Ogre.RenderObjectListener, Ogre.Node;
 
-import (C++) BaseApplication;
+import (C++) Ogre.RTShader.ShaderGenerator;
+
+import (C++) OgreBites.ApplicationContext, OgreBites.CameraMan,
+             OgreBites.CameraStyle, OgreBites.MouseMotionEvent,
+             OgreBites.MouseButtonEvent, OgreBites.InputListener,
+             OgreBites.TrayManager, OgreBites.TrayLocation,
+             OgreBites.ApplicationContextBase, OgreBites._;
 
 immutable ubyte cPriorityMain = 50;
 immutable ubyte cPriorityQuery = 51;
 immutable ubyte cPriorityLights = 55;
 
-class DemoApplication : BaseApplication
+class DemoApplication : ApplicationContext
 {
 public:
     this()
     {
-        super();
-
-        version(Windows) {} else {
-            if (exists("/usr/local/share/OGRE/plugins.cfg"))
-                m_ResourcePath = "/usr/local/share/OGRE/";
-            else
-                m_ResourcePath = "/usr/share/OGRE/";
-        }
-        
-        version(Windows) {
-            m_ResourcePath = "./";
-        }
-        
-        assert(exists(to!string(m_ResourcePath.c_str)));
+        super("Ogre3D + D demo");
     }
-
-//   ~this() {}
 
 protected:
-    extern(C++) override void setupResources()
+    extern(C++) override void locateResources()
     {
-        super.setupResources();
+        super.locateResources();
 
-        ResourceGroupManager.getSingleton().addResourceLocation("resources/models", "FileSystem", "Popular");
-        ResourceGroupManager.getSingleton().addResourceLocation("resources/materials/scripts", "FileSystem", "Popular");
+        ResourceGroupManager.getSingleton()
+                    .addResourceLocation("resources/models", "FileSystem", "Popular");
+        ResourceGroupManager.getSingleton()
+                    .addResourceLocation("resources/materials/scripts", "FileSystem", "Popular");
     }
 
-    extern(C++) override void createScene()
+    extern(C++) override void setup()
     {
+        import core.stdc.stdlib : exit;
+
+        if (this.mRoot.showConfigDialog(getNativeConfigDialog()))
+            this.mRoot.initialise(false);
+        else
+            exit(0);
+
+        createWindow(this.mAppName);
+
+        locateResources();
+        initialiseRTShaderSystem();
+        loadResources();
+
+        this.mRoot.addFrameListener(this);
+
+        ApplicationContextBase.addInputListener(inputListener);
+
+        mSceneMgr = this.mRoot.createSceneManager();
+
+        // Register our scene with the RTSS
+        ShaderGenerator.getSingletonPtr().addSceneManager(mSceneMgr);
+
+        mTrayMgr = new TrayManager("InterfaceName", getRenderWindow());
+        mTrayMgr.showFrameStats(TrayLocation.TL_BOTTOMLEFT);
+        mTrayMgr.showLogo(TrayLocation.TL_BOTTOMRIGHT);
+        mTrayMgr.hideCursor();
+
+        createCamera();
+
         // Set our camera to orbit around the origin at a suitable distance
         mCameraMan.setStyle(CameraStyle.CS_ORBIT);
         mCameraMan.setYawPitchDist(Radian(0), Radian(0), 400);
+
+        // and tell it to render into the main window
+        getRenderWindow().addViewport(mCamera);
 
         // Create an ogre head and place it at the origin
         auto dlogo = mSceneMgr.createEntity("DLogo", "dlogo.mesh");
@@ -85,6 +110,21 @@ protected:
         setupLights();
     }
 
+    void createCamera()
+    {
+        auto camNode = mSceneMgr.getRootSceneNode().createChildSceneNode();
+        // Position it at 500 in Z direction
+        camNode.setPosition(Vector3(0,0,80));
+        // Look back along -Z
+        camNode.lookAt(Vector3(0,0,-300), Node.TransformSpace.TS_PARENT);
+
+        mCamera = mSceneMgr.createCamera("PlayerCam");
+        mCamera.setNearClipDistance(5);
+        camNode.attachObject(mCamera);
+
+        mCameraMan = new CameraMan(camNode);
+    }
+
     void setupLights()
     {
         mSceneMgr.setAmbientLight(ColourValue(0.1, 0.1, 0.1));  // Dim ambient lighting
@@ -93,7 +133,7 @@ protected:
         NameValuePairList params;
         params["numberOfChains"] = "2";
         params["maxElements"] = "80";
-        mTrail = cast(RibbonTrail*) cast(void*) mSceneMgr.createMovableObject("RibbonTrail", &params); // TODO implement dynamic casts
+        mTrail = cast(RibbonTrail*) mSceneMgr.createMovableObject("RibbonTrail", &params);
         mSceneMgr.getRootSceneNode().attachObject(mTrail);
         mTrail.setMaterialName("Examples/LightRibbonTrail");
         mTrail.setTrailLength(400);
@@ -118,8 +158,9 @@ protected:
         }
         if (mUseOcclusionQuery == false)
         {
-            LogManager.getSingleton().logMessage("Sample_Lighting - Error: failed to create hardware occlusion query",
-                                LogMessageLevel.LML_CRITICAL);
+            LogManager.getSingleton().logMessage(
+                    "Sample_Lighting - Error: failed to create hardware occlusion query",
+                    LogMessageLevel.LML_CRITICAL);
         }
 
         assert(mUseOcclusionQuery);
@@ -261,7 +302,7 @@ protected:
         // Setup the listener for the occlusion query
         if (mUseOcclusionQuery)
         {
-            mSceneMgr.addRenderObjectListener(this);
+            mSceneMgr.addRenderObjectListener(renderObjectListener);
             mDoOcclusionQuery = true;
         }
     }
@@ -309,44 +350,6 @@ protected:
         return super.frameRenderingQueued(evt);   // don't forget the parent class updates!
     }
 
-    // Event raised when render single object started.
-    extern(C++) override void notifyRenderSingleObject(Renderable* rend, const(Pass)* pass, const(AutoParamDataSource)* source,
-            const(LightList)* pLightList, bool suppressRenderStateChanges)
-    {
-        //
-        // The following code activates and deactivates the occlusion queries
-        // so that the queries only include the rendering of their intended targets
-        //
-
-        // Close the last occlusion query
-        // Each occlusion query should only last a single rendering
-        if (mActiveQuery != null)
-        {
-            mActiveQuery.endOcclusionQuery();
-            mActiveQuery = null;
-        }
-
-        // Open a new occlusion query
-        if (mDoOcclusionQuery == true)
-        {
-            // Check if a the object being rendered needs
-            // to be occlusion queried, and by which query instance.
-            if (rend == mLight1BBQueryArea)
-                mActiveQuery = mLight1QueryArea;
-            else if (rend == mLight1BBQueryVisible)
-                mActiveQuery = mLight1QueryVisible;
-            else if (rend == mLight2BBQueryArea)
-                mActiveQuery = mLight2QueryArea;
-            else if (rend == mLight2BBQueryVisible)
-                mActiveQuery = mLight2QueryVisible;
-
-            if (mActiveQuery != null)
-            {
-                mActiveQuery.beginOcclusionQuery();
-            }
-        }
-    }
-
     void cleanupContent()
     {
         auto renderSystem = Root.getSingleton().getRenderSystem();
@@ -359,6 +362,88 @@ protected:
         if (mLight2QueryVisible != null)
             renderSystem.destroyHardwareOcclusionQuery(mLight2QueryVisible);
     }
+
+    // Alternative to multiple inheritance: use nested classes
+    class DemoRenderObjectListener : RenderObjectListener
+    {
+        // Event raised when render single object started.
+        extern(C++) override void notifyRenderSingleObject(Renderable* rend,
+                        const(Pass)* pass, const(AutoParamDataSource)* source,
+                        const(LightList)* pLightList, bool suppressRenderStateChanges)
+        {
+            //
+            // The following code activates and deactivates the occlusion queries
+            // so that the queries only include the rendering of their intended targets
+            //
+
+            // Close the last occlusion query
+            // Each occlusion query should only last a single rendering
+            if (mActiveQuery != null)
+            {
+                mActiveQuery.endOcclusionQuery();
+                mActiveQuery = null;
+            }
+
+            // Open a new occlusion query
+            if (mDoOcclusionQuery == true)
+            {
+                // Check if a the object being rendered needs
+                // to be occlusion queried, and by which query instance.
+                if (rend == mLight1BBQueryArea)
+                    mActiveQuery = mLight1QueryArea;
+                else if (rend == mLight1BBQueryVisible)
+                    mActiveQuery = mLight1QueryVisible;
+                else if (rend == mLight2BBQueryArea)
+                    mActiveQuery = mLight2QueryArea;
+                else if (rend == mLight2BBQueryVisible)
+                    mActiveQuery = mLight2QueryVisible;
+
+                if (mActiveQuery != null)
+                {
+                    mActiveQuery.beginOcclusionQuery();
+                }
+            }
+        }
+    }
+
+    class DemoInputListener : InputListener
+    {
+    extern(C++):
+        override bool mouseMoved(ref scope const(MouseMotionEvent) evt)
+        {
+            if (mTrayMgr.mouseMoved(evt))
+                return true;
+
+            mCameraMan.mouseMoved(evt);
+            return true;
+        }
+
+        override bool mousePressed(ref scope const(MouseButtonEvent) evt)
+        {
+            if (mTrayMgr.mousePressed(evt))
+                return true;
+
+            mCameraMan.mousePressed(evt);
+            return true;
+        }
+
+        override bool mouseReleased(ref scope const(MouseButtonEvent) evt)
+        {
+            if (mTrayMgr.mouseReleased(evt))
+                return true;
+
+            mCameraMan.mouseReleased(evt);
+            return true;
+        }
+    }
+
+    DemoInputListener inputListener;
+    DemoRenderObjectListener renderObjectListener;
+
+    SceneManager* mSceneMgr;
+    Camera*       mCamera;
+    CameraMan*    mCameraMan;
+    TrayManager*  mTrayMgr;
 
     AnimationState* mGreenLightAnimState;
     AnimationState* mYellowLightAnimState;
@@ -384,6 +469,8 @@ protected:
 
 void main()
 {
-    auto app = new DemoApplication;
-    app.go();
+    DemoApplication app;
+    app.initApp();
+    app.getRoot().startRendering();
+    app.closeApp();
 }
