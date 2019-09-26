@@ -830,11 +830,13 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
         return new DImValue(resulttype, RV.getScalarVal());
     else if (RV.isAggregate())
     {
-        auto lval = new DLValue(tf->next, RV.getAggregatePointer());
-        if (tf->next == resulttype)
-            return lval;
+        if (tf->next->constConv(resulttype))
+            return new DLValue(tf->next, RV.getAggregatePointer());
         else
+        {
+            auto lval = new DLValue(tf->next, RV.getAggregatePointer());
             return DtoCast(loc, lval, resulttype);
+        }
     }
 
     llvm_unreachable("Complex RValue FIXME");
