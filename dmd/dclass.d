@@ -985,6 +985,10 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             vtbl.setDim(bcd.vtbl.dim);
             memcpy(vtbl.tdata(), bcd.vtbl.tdata(), (void*).sizeof * vtbl.dim);
 
+            if (auto lp = bcd.langPlugin())
+                foreach (s; vtbl) // CALYPSO
+                    lp.markSymbolReferenced(s);
+
             vthis = baseClass.vthis;
         }
         else
