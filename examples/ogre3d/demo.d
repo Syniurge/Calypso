@@ -350,7 +350,7 @@ protected:
         return super.frameRenderingQueued(evt);   // don't forget the parent class updates!
     }
 
-    void cleanupContent()
+    extern(C++) override void shutdown()
     {
         auto renderSystem = Root.getSingleton().getRenderSystem();
         if (mLight1QueryArea != null)
@@ -361,6 +361,8 @@ protected:
             renderSystem.destroyHardwareOcclusionQuery(mLight2QueryArea);
         if (mLight2QueryVisible != null)
             renderSystem.destroyHardwareOcclusionQuery(mLight2QueryVisible);
+
+        super.shutdown();
     }
 
     // Alternative to multiple inheritance: use nested classes
