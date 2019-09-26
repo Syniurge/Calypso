@@ -1,9 +1,9 @@
 /**
- * Ogre3D D demo based on the Lighting sample.
+ * Ogre3D D demo based on the Lighting sample. Requires Ogre3D 1.12 or later from the 1.x branch.
  *
  * Build with:
  *   (Linux)   $ ldc2 -wi -v -cpp-args "-I/usr/local/include/OGRE -I/usr/local/include/OGRE/Bites -I/usr/local/include/OGRE/Overlay -I/usr/local/include/OGRE/RTShaderSystem" -L-L/usr/local/lib -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread demo.d
-
+ *
  *   (Windows) $ ldc2.exe -wi -v -cpp-args -DBOOST_USE_WINDOWS_H -cpp-args -D_MT -cpp-args -D_DLL -cpp-args -fms-extensions -cpp-args -fdelayed-template-parsing -cpp-args -fms-compatibility -cpp-args -fms-compatibility-version=19 -cpp-args -IZ:\boost -cpp-args -IZ:\OGRE-SDK\include -cpp-args  -IZ:\OGRE-SDK\include\OGRE -cpp-args -IZ:\OGRE-SDK\include\OGRE\Overlay -cpp-args -IZ:\OGRE-SDK\include\OIS -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
  */
 
@@ -47,6 +47,9 @@ public:
     this()
     {
         super("Ogre3D + D demo");
+
+        inputListener = new DemoInputListener;
+        renderObjectListener = new DemoRenderObjectListener;
     }
 
 protected:
@@ -58,6 +61,11 @@ protected:
                     .addResourceLocation("resources/models", "FileSystem", "Popular");
         ResourceGroupManager.getSingleton()
                     .addResourceLocation("resources/materials/scripts", "FileSystem", "Popular");
+    }
+
+    extern(C++) override bool oneTimeConfig()
+    {
+        return true;
     }
 
     extern(C++) override void setup()
@@ -156,14 +164,13 @@ protected:
         {
             mUseOcclusionQuery = false;
         }
+
         if (mUseOcclusionQuery == false)
         {
             LogManager.getSingleton().logMessage(
                     "Sample_Lighting - Error: failed to create hardware occlusion query",
                     LogMessageLevel.LML_CRITICAL);
         }
-
-        assert(mUseOcclusionQuery);
 
         // Create the materials to be used by the objects used fo the occlusion query
         auto matBase = MaterialManager.getSingleton().getByName("BaseWhiteNoLighting");
@@ -471,7 +478,7 @@ protected:
 
 void main()
 {
-    DemoApplication app;
+    auto app = new DemoApplication;
     app.initApp();
     app.getRoot().startRendering();
     app.closeApp();

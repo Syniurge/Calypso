@@ -4310,6 +4310,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                     {
                         ue.e1 = (cast(DotTypeExp)ue.e1).e1;
                         exp.directcall = true;
+                        cd = ue.e1.type.isClassHandle(); // CALYPSO WARNING: will this break DMD?
                     }
                     else if (ue.e1.op == TOK.super_ || (ue.e1.op == TOK.star && (cast(PtrExp)ue.e1).e1.op == TOK.super_)) // CALYPSO
                         exp.directcall = true;
