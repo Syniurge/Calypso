@@ -1194,7 +1194,7 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
         if (Func && Func->isOverloadedOperator())
             if (auto Tag = isOverloadedOperatorWithTagOperand(D))
-                ModDecl = D; // non-member operators are part of the record module
+                ModDecl = Tag; // non-member operators are part of the record module
 
         if (auto CRD = dyn_cast<clang::CXXRecordDecl>(ModDecl))
             if (auto Template = CRD->getDescribedClassTemplate())
@@ -1873,7 +1873,7 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags) // FIXME n
                 if (isTopLevelInNamespaceModule(Match))
                     mapper.dsymAndWrapperForDecl(Match);
 
-        if (isa<clang::TranslationUnitDecl>(rootDecl)) // TODO: specific derived Module class for TU?
+        if (isa<clang::TranslationUnitDecl>(rootDecl))
             mapper.dsymForMacro(ident);
     }
     else if (this->ident == ident)
@@ -1924,8 +1924,8 @@ void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op
             if (!isOverloadedOperatorWithTagOperand(OverOp, cast<clang::NamedDecl>(rootDecl)))
                 continue;
 
-            if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
-                continue; // friend out-of-line decls are already mapped as part as the record
+//             if (OverOp->getFriendObjectKind() != clang::Decl::FOK_None && OverOp->isOutOfLine())
+//                 continue; // friend out-of-line decls are already mapped as part as the record
 
             nonMemberOverloadedOperators[Op].OOs.push_back(getCanonicalDecl(OverOp));
         }
