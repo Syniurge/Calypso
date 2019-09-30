@@ -35,9 +35,9 @@ struct ABI_libcxx
         return (c & get_vendor_and_language) == (kOurExceptionClass & get_vendor_and_language);
     }
 
-    import (C++) __cxxabiv1.libcxx.type_info,
-                 __cxxabiv1.libcxx.__cxa_exception,
-                 __cxxabiv1.libcxx.__cxa_dependent_exception;
+    import (C++) __cxxabiv1.libcxx.type_info : type_info;
+    import (C++) __cxxabiv1.libcxx.__cxa_exception : __cxa_exception;
+    import (C++) __cxxabiv1.libcxx.__cxa_dependent_exception : __cxa_dependent_exception;
     import (C++) __cxxabiv1.libcxx._ : cxa_exception_from_exception_unwind_exception,
                                        get_thrown_object_ptr;
 }
@@ -46,9 +46,9 @@ struct ABI_libstdcxx
 {
     alias is_exception_class = __is_gxx_exception_class;
 
-    import (C++) __cxxabiv1.libstdcxx.type_info,
-                 __cxxabiv1.libstdcxx.__cxa_exception,
-                 __cxxabiv1.libstdcxx.__cxa_dependent_exception;
+    import (C++) __cxxabiv1.libstdcxx.type_info : type_info;
+    import (C++) __cxxabiv1.libstdcxx.__cxa_exception : __cxa_exception;
+    import (C++) __cxxabiv1.libstdcxx.__cxa_dependent_exception : __cxa_dependent_exception;
     import (C++) __cxxabiv1.libstdcxx._ :
                         __is_gxx_exception_class,
                         cxa_exception_from_exception_unwind_exception = __get_exception_header_from_ue,
@@ -57,7 +57,7 @@ struct ABI_libstdcxx
 
 class CppHandler : ForeignHandler
 {
-    private bool doCatchImpl(ABI)(void* entry, _Unwind_Exception* exceptionObject) shared
+    private bool doCatchImpl(ABI)(void* entry, _Unwind_Exception* exceptionObject)
     {
         static ABI.type_info *getCatchTypeInfo(void* entry)
         {
@@ -88,7 +88,7 @@ class CppHandler : ForeignHandler
         return false;
     }
 
-    override bool doCatch(void* entry, _Unwind_Exception* exceptionObject) shared
+    override bool doCatch(void* entry, _Unwind_Exception* exceptionObject)
     {
         auto exception_class = exceptionObject.exception_class;
         if (ABI_libcxx.is_exception_class(exception_class))

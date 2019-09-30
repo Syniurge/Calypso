@@ -5033,7 +5033,7 @@ extern (C++) final class TypeFunction : TypeNext
 
     MATCH callMatch(Type tthis, Expressions* args, int flag = 0, const(char)** pMessage = null, Scope* sc = null) // CALYPSO
     {
-        return callMatch(tthis, (*args)[0..$], flag, pMessage, sc);
+        return callMatch(tthis, args ? (*args)[0..$] : [], flag, pMessage, sc);
     }
 
     extern (D) bool checkRetType(const ref Loc loc)

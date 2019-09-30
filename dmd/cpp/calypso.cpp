@@ -987,6 +987,8 @@ int LangPlugin::doesHandleImport(const char* lang)
 
 void LangPlugin::dsymbolSemantic(Dsymbol *dsym, Scope *sc)
 {
+    if (dsym->semanticRun >= PASSsemantic3done)
+        return;
     assert(false); // FIXME
 }
 

@@ -4430,7 +4430,7 @@ Expression defaultInit(Type mt, const ref Loc loc)
         case Taarray:
         case Tpointer:
         case Treference:
-        case Tdelegate:
+        case Tdelegate: return new NullExp(loc, mt);
         case Tclass:    return visitClass  (cast(TypeClass)mt); // CALYPSO
 
         default:        return mt.isTypeBasic() ?

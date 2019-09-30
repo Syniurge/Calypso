@@ -6109,11 +6109,12 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                 e = new CommaExp(exp.loc, exp.e1, e);
                 e = e.expressionSemantic(sc);
                 result = e;
-                if (sc.isD()) // CALYPSO
-                    if (auto lp = v.langPlugin())
-                        lp.markSymbolReferenced(v);
                 return;
             }
+
+            if (sc.isD() && v && v.isDataseg()) // CALYPSO
+                if (auto lp = v.langPlugin())
+                    lp.markSymbolReferenced(v);
         }
         //printf("-DotVarExp::semantic('%s')\n", toChars());
         result = exp;

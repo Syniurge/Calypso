@@ -424,7 +424,10 @@ Dsymbols *DeclMapper::VisitValueDecl(const clang::ValueDecl *D, unsigned flags)
                                              // except for const/constexpr variables
     }
     else if (auto Field = dyn_cast<clang::FieldDecl>(D))
+    {
+        a->storage_class |= STCfield;
         Init = Field->getInClassInitializer();
+    }
 
     if (Init)
     {

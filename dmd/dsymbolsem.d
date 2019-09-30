@@ -560,8 +560,11 @@ private uint setMangleOverride(Dsymbol s, const(char)[] sym)
  */
 extern(C++) void dsymbolSemantic(Dsymbol dsym, Scope* sc)
 {
-    if (auto lp = dsym.langPlugin())
-        lp.dsymbolSemantic(dsym, sc);
+    if (dsym.langPlugin() && !dsym.isImport())
+    {
+        if (auto lp = dsym.langPlugin())
+            return lp.dsymbolSemantic(dsym, sc);
+    }
     else
     {
         scope v = new DsymbolSemanticVisitor(sc);
