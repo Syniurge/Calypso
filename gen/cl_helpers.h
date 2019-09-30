@@ -28,12 +28,12 @@ typedef Array<const char *> Strings;
 namespace opts {
 namespace cl = llvm::cl;
 
-/// Duplicate the string and replace '/' with '\' on Windows.
-char *dupPathString(llvm::StringRef src);
+/// Duplicate the string (incl. null-termination) and replace '/' with '\' on
+/// Windows.
+DArray<const char> dupPathString(llvm::StringRef src);
 
 /// Helper function to handle -of, -od, etc.
-/// llvm::cl::opt<std::string> --> char*
-void initFromPathString(const char *&dest, const cl::opt<std::string> &src);
+DArray<const char> fromPathString(const cl::opt<std::string> &src);
 
 /// Helper class to determine values
 template <class DT> struct FlagParserDataType {};
@@ -161,11 +161,11 @@ private:
 
 /// Helper class for options that set multiple flags
 class MultiSetter {
-  std::vector<bool *> locations;
+  std::vector<CHECKENABLE *> locations;
   bool invert;
   explicit MultiSetter(bool); // not implemented, disable auto-conversion
 public:
-  MultiSetter(bool invert, bool *p, ...) LLVM_END_WITH_NULL;
+  MultiSetter(bool invert, CHECKENABLE *p, ...) LLVM_END_WITH_NULL;
 
   void operator=(bool val);
 };

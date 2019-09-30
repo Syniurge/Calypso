@@ -29,6 +29,10 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Instrumentation.h"
+#if LDC_LLVM_VER >= 800
+#include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
+#include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#endif
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
@@ -122,11 +126,20 @@ bool willCrossModuleInline() {
   return enableCrossModuleInlining == llvm::cl::BOU_TRUE;
 }
 
+#if LDC_LLVM_VER >= 800
+llvm::FramePointer::FP whichFramePointersToEmit() {
+  if (auto option = opts::framePointerUsage())
+    return *option;
+  return isOptimizationEnabled() ? llvm::FramePointer::None
+                                 : llvm::FramePointer::All;
+}
+#else
 bool willEliminateFramePointer() {
   const llvm::cl::boolOrDefault disableFPElimEnum = opts::disableFPElim();
   return disableFPElimEnum == llvm::cl::BOU_FALSE ||
          (disableFPElimEnum == llvm::cl::BOU_UNSET && isOptimizationEnabled());
 }
+#endif
 
 bool isOptimizationEnabled() { return optimizeLevel != 0; }
 
@@ -179,7 +192,11 @@ static void addAddressSanitizerPasses(const PassManagerBuilder &Builder,
 
 static void addMemorySanitizerPass(const PassManagerBuilder &Builder,
                                    PassManagerBase &PM) {
+#if LDC_LLVM_VER >= 800
+  PM.add(createMemorySanitizerLegacyPassPass());
+#else
   PM.add(createMemorySanitizerPass());
+#endif
 
   // MemorySanitizer inserts complex instrumentation that mostly follows
   // the logic of the original code, but operates on "shadow" values.
@@ -196,7 +213,11 @@ static void addMemorySanitizerPass(const PassManagerBuilder &Builder,
 
 static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
                                    PassManagerBase &PM) {
+#if LDC_LLVM_VER >= 800
+  PM.add(createThreadSanitizerLegacyPassPass());
+#else
   PM.add(createThreadSanitizerPass());
+#endif
 }
 
 static void addSanitizerCoveragePass(const PassManagerBuilder &Builder,

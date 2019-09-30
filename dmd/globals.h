@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -21,7 +21,6 @@ template <typename TYPE> struct Array;
 
 #if IN_LLVM
 #include "llvm/ADT/Triple.h"
-#include <cstdint>
 
 enum OUTPUTFLAG
 {
@@ -29,10 +28,15 @@ enum OUTPUTFLAG
     OUTPUTFLAGdefault, // for the .o default
     OUTPUTFLAGset      // for -output
 };
-
-using ubyte = uint8_t;
 #endif
 
+typedef unsigned char Diagnostic;
+enum
+{
+    DIAGNOSTICerror,  // generate an error
+    DIAGNOSTICinform, // generate a warning
+    DIAGNOSTICoff     // disable diagnostic
+};
 
 // The state of array bounds checking
 typedef unsigned char CHECKENABLE;
@@ -48,7 +52,9 @@ typedef unsigned char CHECKACTION;
 enum
 {
     CHECKACTION_D,        // call D assert on failure
-    CHECKACTION_C         // call C assert on failure
+    CHECKACTION_C,        // call C assert on failure
+    CHECKACTION_halt,     // cause program halt on failure
+    CHECKACTION_context   // call D assert with the error context on failure
 };
 
 enum CPU
@@ -70,6 +76,23 @@ enum CPU
     native              // the machine the compiler is being run on
 };
 
+enum JsonFieldFlags
+{
+    none         = 0,
+    compilerInfo = (1 << 0),
+    buildInfo    = (1 << 1),
+    modules      = (1 << 2),
+    semantics    = (1 << 3)
+};
+
+enum CppStdRevision
+{
+    CppStdRevisionCpp98 = 199711,
+    CppStdRevisionCpp11 = 201103,
+    CppStdRevisionCpp14 = 201402,
+    CppStdRevisionCpp17 = 201703
+};
+
 // Put command line switches in here
 struct Param
 {
@@ -88,11 +111,7 @@ struct Param
     bool vgc;           // identify gc usage
     bool vfield;        // identify non-mutable field variables
     bool vcomplex;      // identify complex/imaginary type usage
-#if !IN_LLVM
-    char symdebug;      // insert debug symbolic information
-#else
-    ubyte symdebug;     // insert debug symbolic information
-#endif
+    unsigned char symdebug;  // insert debug symbolic information
     bool symdebugref;   // insert debug information for all referenced types, too
     bool alwaysframe;   // always emit standard stack frame
     bool optimize;      // run optimizer
@@ -108,31 +127,15 @@ struct Param
     bool isSolaris;     // generate code for Solaris
     bool hasObjectiveC; // target supports Objective-C
     bool mscoff;        // for Win32: write COFF object files instead of OMF
-    // 0: don't allow use of deprecated features
-    // 1: silently allow use of deprecated features
-    // 2: warn about the use of deprecated features
-#if !IN_LLVM
-    char useDeprecated;
-#else
-    ubyte useDeprecated;
-#endif
-    bool useInvariants; // generate class invariant checks
-    bool useIn;         // generate precondition checks
-    bool useOut;        // generate postcondition checks
+    Diagnostic useDeprecated;
     bool stackstomp;    // add stack stomping code
     bool useUnitTests;  // generate unittest code
     bool useInline;     // inline expand functions
     bool useDIP25;      // implement http://wiki.dlang.org/DIP25
+    bool noDIP25;       // revert to pre-DIP25 behavior
     bool release;       // build release version
     bool preservePaths; // true means don't strip path from source file
-    // 0: disable warnings
-    // 1: warnings as errors
-    // 2: informational warnings (no errors)
-#if !IN_LLVM
-    char warnings;
-#else
-    ubyte warnings;
-#endif
+    Diagnostic warnings;
     bool pic;           // generate position-independent-code for shared libs
     bool color;         // use ANSI colors in console output
     bool cov;           // generate code coverage data
@@ -149,33 +152,50 @@ struct Param
     bool bug10378;      // use pre-bugzilla 10378 search strategy
     bool fix16997;      // fix integral promotions for unary + - ~ operators
                         // https://issues.dlang.org/show_bug.cgi?id=16997
+    bool fixAliasThis;  // if the current scope has an alias this, check it before searching upper scopes
     bool vsafe;         // use enhanced @safe checking
     bool ehnogc;        // use @nogc exception handling
     bool dtorFields;        // destruct fields of partially constructed objects
                             // https://issues.dlang.org/show_bug.cgi?id=14246
+    bool fieldwise;         // do struct equality testing field-wise rather than by memcmp()
+    bool rvalueRefParam;    // allow rvalues to be arguments to ref parameters
+    CppStdRevision cplusplus;  // version of C++ name mangling to support
+    bool markdown;          // enable Markdown replacements in Ddoc
+    bool vmarkdown;         // list instances of Markdown replacements in Ddoc
     bool showGaggedErrors;  // print gagged errors anyway
+    bool printErrorContext;  // print errors with the error context (the error line in the source file)
     bool manual;            // open browser on compiler manual
     bool usage;             // print usage and exit
     bool mcpuUsage;         // print help on -mcpu switch
     bool transitionUsage;   // print help on -transition switch
+    bool checkUsage;        // print help on -check switch
+    bool checkActionUsage;  // print help on -checkaction switch
+    bool revertUsage;       // print help on -revert switch
+    bool previewUsage;      // print help on -preview switch
+    bool externStdUsage;    // print help on -extern-std switch
     bool logo;              // print logo;
 
     CPU cpu;                // CPU instruction set to target
 
+    CHECKENABLE useInvariants;     // generate class invariant checks
+    CHECKENABLE useIn;             // generate precondition checks
+    CHECKENABLE useOut;            // generate postcondition checks
     CHECKENABLE useArrayBounds;    // when to generate code for array bounds checks
     CHECKENABLE useAssert;         // when to generate code for assert()'s
     CHECKENABLE useSwitchError;    // check for switches without a default
+    CHECKENABLE boundscheck;       // state of -boundscheck switch
+
     CHECKACTION checkAction;       // action to take when bounds, asserts or switch defaults are violated
 
     unsigned errorLimit;
 
     DArray<const char>  argv0;    // program name
-    Array<const char *> *modFileAliasStrings; // array of char*'s of -I module filename alias strings
+    Array<const char *> modFileAliasStrings; // array of char*'s of -I module filename alias strings
     Array<const char *> *imppath;     // array of char*'s of where to look for import modules
     Array<const char *> *fileImppath; // array of char*'s of where to look for file import modules
-    const char *objdir;   // .obj/.lib file output directory
-    const char *objname;  // .obj file output name
-    const char *libname;  // .lib file output name
+    DArray<const char> objdir;   // .obj/.lib file output directory
+    DArray<const char> objname;  // .obj file output name
+    DArray<const char> libname;  // .lib file output name
 
     bool doDocComments;  // process embedded documentation comments
     const char *docdir;  // write documentation file to docdir directory
@@ -183,13 +203,17 @@ struct Param
     Array<const char *> ddocfiles;  // macro include files for Ddoc
 
     bool doHdrGeneration;  // process embedded documentation comments
-    const char *hdrdir;    // write 'header' file to docdir directory
-    const char *hdrname;   // write 'header' file to docname
+    DArray<const char> hdrdir;    // write 'header' file to docdir directory
+    DArray<const char> hdrname;   // write 'header' file to docname
     bool hdrStripPlainFunctions; // strip the bodies of plain (non-template) functions
 
     bool doJsonGeneration;    // write JSON file
-    const char *jsonfilename; // write JSON file to jsonfilename
+    DArray<const char> jsonfilename; // write JSON file to jsonfilename
     unsigned jsonFieldFlags;  // JSON field flags to include
+
+    OutBuffer *mixinOut;                // write expanded mixins for debugging
+    const char *mixinFile;             // .mixin file output name
+    int mixinLines;                     // Number of lines in writeMixins
 
     unsigned debuglevel;   // debug level
     Array<const char *> *debugids;     // debug identifiers
@@ -197,11 +221,11 @@ struct Param
     unsigned versionlevel; // version level
     Array<const char *> *versionids;   // version identifiers
 
-    const char *defaultlibname; // default library for non-debug builds
-    const char *debuglibname;   // default library for debug builds
-    const char *mscrtlib;       // MS C runtime library
+    DArray<const char> defaultlibname; // default library for non-debug builds
+    DArray<const char> debuglibname;   // default library for debug builds
+    DArray<const char> mscrtlib;       // MS C runtime library
 
-    const char *moduleDepsFile; // filename for deps output
+    DArray<const char> moduleDepsFile; // filename for deps output
     OutBuffer *moduleDeps;      // contents to be written to deps file
 
     // Hidden debug switches
@@ -220,15 +244,15 @@ struct Param
     Array<const char *> linkswitches;
     Array<const char *> libfiles;
     Array<const char *> dllfiles;
-    const char *deffile;
-    const char *resfile;
-    const char *exefile;
-    const char *mapfile;
+    DArray<const char> deffile;
+    DArray<const char> resfile;
+    DArray<const char> exefile;
+    DArray<const char> mapfile;
 
 #if IN_LLVM
     Array<const char *> bitcodeFiles; // LLVM bitcode files passed on cmdline
 
-    uint32_t nestedTmpl; // maximum nested template instantiations
+    unsigned nestedTmpl; // maximum nested template instantiations
 
     // LDC stuff
     OUTPUTFLAG output_ll;
@@ -244,12 +268,13 @@ struct Param
     const char *datafileInstrProf; // Either the input or output file for PGO data
 
     const llvm::Triple *targetTriple;
+    bool isUClibcEnvironment; // not directly supported by LLVM
 
     // Codegen cl options
     bool disableRedZone;
-    uint32_t dwarfVersion;
+    unsigned dwarfVersion;
 
-    uint32_t hashThreshold; // MD5 hash symbols larger than this threshold (0 = no hashing)
+    unsigned hashThreshold; // MD5 hash symbols larger than this threshold (0 = no hashing)
 
     bool outputSourceLocations; // if true, output line tables.
 #endif
@@ -262,35 +287,35 @@ typedef unsigned structalign_t;
 
 struct Global
 {
-    const char *inifilename;
-    const char *mars_ext;
-    const char *obj_ext;
+    DArray<const char> inifilename;
+    const DArray<const char> mars_ext;
+    DArray<const char> obj_ext;
 #if IN_LLVM
-    const char *ll_ext;
-    const char *bc_ext;
-    const char *s_ext;
-    const char *ldc_version;
-    const char *llvm_version;
+    DArray<const char> ll_ext;
+    DArray<const char> bc_ext;
+    DArray<const char> s_ext;
+    DArray<const char> ldc_version;
+    DArray<const char> llvm_version;
 
     bool gaggedForInlining; // Set for functionSemantic3 for external inlining candidates
 #endif
-    const char *lib_ext;
-    const char *dll_ext;
-    const char *doc_ext;        // for Ddoc generated files
-    const char *ddoc_ext;       // for Ddoc macro include files
-    const char *hdr_ext;        // for D 'header' import files
-    const char *json_ext;       // for JSON files
-    const char *map_ext;        // for .map files
+    DArray<const char> lib_ext;
+    DArray<const char> dll_ext;
+    const DArray<const char> doc_ext;  // for Ddoc generated files
+    const DArray<const char> ddoc_ext; // for Ddoc macro include files
+    const DArray<const char> hdr_ext;  // for D 'header' import files
+    const DArray<const char> json_ext; // for JSON files
+    const DArray<const char> map_ext;  // for .map files
     bool run_noext;             // allow -run sources without extensions.
 
-    const char *copyright;
-    const char *written;
-    const char *main_d;         // dummy filename for dummy main()
+
+    const DArray<const char> copyright;
+    const DArray<const char> written;
     Array<const char *> *path;        // Array of char*'s which form the import lookup path
     Array<const char *> *filePath;    // Array of char*'s which form the file import lookup path
 
-    const char *version;     // Compiler version string
-    const char *vendor;      // Compiler backend name
+    DArray<const char> version;     // Compiler version string
+    DArray<const char> vendor;             // Compiler backend name
 
     Param params;
     unsigned errors;         // number of errors reported so far
@@ -377,7 +402,7 @@ struct Loc
     Loc(const char *filename, unsigned linnum, unsigned charnum);
 #endif
 
-    const char *toChars() const;
+    const char *toChars(bool showColumns = global.params.showColumns) const;
     bool equals(const Loc& loc) const;
 };
 

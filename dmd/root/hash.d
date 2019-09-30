@@ -2,7 +2,7 @@
  * Compiler implementation of the D programming language
  * http://dlang.org
  *
- * Copyright: Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright: Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:   Martin Nowak, Walter Bright, http://www.digitalmars.com
  * License:   $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:    $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/root/hash.d, root/_hash.d)
@@ -12,15 +12,19 @@
 
 module dmd.root.hash;
 
+pure:
+nothrow:
+@nogc:
+
 // MurmurHash2 was written by Austin Appleby, and is placed in the public
 // domain. The author hereby disclaims copyright to this source code.
 // https://sites.google.com/site/murmurhash/
-uint calcHash(const(char)* data, size_t len) pure nothrow @nogc
+uint calcHash(const(char)* data, size_t len)
 {
     return calcHash(cast(const(ubyte)*)data, len);
 }
 
-uint calcHash(const(ubyte)* data, size_t len) pure nothrow @nogc
+uint calcHash(const(ubyte)* data, size_t len)
 {
     // 'm' and 'r' are mixing constants generated offline.
     // They're not really 'magic', they just happen to work well.
@@ -63,7 +67,7 @@ uint calcHash(const(ubyte)* data, size_t len) pure nothrow @nogc
 }
 
 // combine and mix two words (boost::hash_combine)
-size_t mixHash(size_t h, size_t k)
+size_t mixHash(size_t h, size_t k) @safe
 {
     return h ^ (k + 0x9e3779b9 + (h << 6) + (h >> 2));
 }

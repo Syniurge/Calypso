@@ -47,8 +47,14 @@ set(LD_FLAGS              ""                                  CACHE STRING "Runt
 set(C_SYSTEM_LIBS         AUTO                                CACHE STRING "C system libraries for linking shared libraries and test runners, separated by ';'")
 set(TARGET_SYSTEM         AUTO                                CACHE STRING "Target OS/toolchain for cross-compilation (e.g., 'Linux;UNIX', 'Darwin;APPLE;UNIX', 'Windows;MSVC')")
 set(LDC_TARGET_PRESET     ""                                  CACHE STRING "Use a preset target configuration for cross-compilation, by passing format OS-arch (e.g., 'Linux-arm', 'Mac-x64', 'Windows-aarch64', 'Android-x86')")
+set(RT_SUPPORT_SANITIZERS OFF                                 CACHE BOOL   "Build runtime libraries with sanitizer support (e.g. for AddressSanitizer)")
 
 set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX})
+
+if (RT_SUPPORT_SANITIZERS)
+    message(STATUS "Building runtime libraries with sanitizer support")
+    set(D_FLAGS "${D_FLAGS};-d-version=SupportSanitizers")
+endif()
 
 # Find gnu make, use specific version first (BSD) and fall back to default 'make' (LINUX)
 find_program(GNU_MAKE_BIN NAMES gmake gnumake make)
@@ -155,15 +161,14 @@ file(GLOB_RECURSE DRUNTIME_D_FREEBSD ${RUNTIME_DIR}/src/core/sys/freebsd/*.d)
 file(GLOB_RECURSE DRUNTIME_D_LINUX   ${RUNTIME_DIR}/src/core/sys/linux/*.d)
 file(GLOB_RECURSE DRUNTIME_D_NETBSD  ${RUNTIME_DIR}/src/core/sys/netbsd/*.d)
 file(GLOB_RECURSE DRUNTIME_D_OPENBSD ${RUNTIME_DIR}/src/core/sys/openbsd/*.d)
-file(GLOB_RECURSE DRUNTIME_D_OSX     ${RUNTIME_DIR}/src/core/sys/osx/*.d)
 file(GLOB_RECURSE DRUNTIME_D_POSIX   ${RUNTIME_DIR}/src/core/sys/posix/*.d)
 file(GLOB_RECURSE DRUNTIME_D_SOLARIS ${RUNTIME_DIR}/src/core/sys/solaris/*.d)
 file(GLOB_RECURSE DRUNTIME_D_WINDOWS ${RUNTIME_DIR}/src/core/sys/windows/*.d)
 list(REMOVE_ITEM DRUNTIME_D
     ${DRUNTIME_D_BIONIC}  ${DRUNTIME_D_DARWIN}  ${DRUNTIME_D_DRAGONFLYBSD}
     ${DRUNTIME_D_FREEBSD} ${DRUNTIME_D_LINUX}   ${DRUNTIME_D_NETBSD}
-    ${DRUNTIME_D_OPENBSD} ${DRUNTIME_D_OSX}     ${DRUNTIME_D_POSIX}
-    ${DRUNTIME_D_SOLARIS} ${DRUNTIME_D_WINDOWS}
+    ${DRUNTIME_D_OPENBSD} ${DRUNTIME_D_POSIX}   ${DRUNTIME_D_SOLARIS}
+    ${DRUNTIME_D_WINDOWS}
 )
 if("${TARGET_SYSTEM}" MATCHES "Windows")
     list(APPEND DRUNTIME_D ${DRUNTIME_D_WINDOWS})
@@ -171,7 +176,6 @@ elseif("${TARGET_SYSTEM}" MATCHES "UNIX")
     list(APPEND DRUNTIME_D ${DRUNTIME_D_POSIX})
     if("${TARGET_SYSTEM}" MATCHES "APPLE")
         list(APPEND DRUNTIME_D ${DRUNTIME_D_DARWIN})
-        list(APPEND DRUNTIME_D ${DRUNTIME_D_OSX})
     elseif("${TARGET_SYSTEM}" MATCHES "DragonFly")
         list(APPEND DRUNTIME_D ${DRUNTIME_D_DRAGONFLYBSD})
     elseif("${TARGET_SYSTEM}" MATCHES "FreeBSD")
@@ -191,9 +195,6 @@ endif()
 # druntime C parts
 file(GLOB_RECURSE DRUNTIME_C ${RUNTIME_DIR}/src/*.c)
 list(REMOVE_ITEM DRUNTIME_C ${RUNTIME_DIR}/src/rt/dylib_fixes.c)
-if(NOT "${TARGET_SYSTEM}" MATCHES "APPLE")
-    list(REMOVE_ITEM DRUNTIME_C ${RUNTIME_DIR}/src/rt/osx_tls.c)
-endif()
 if(NOT "${TARGET_SYSTEM}" MATCHES "MSVC")
     list(REMOVE_ITEM DRUNTIME_C ${RUNTIME_DIR}/src/rt/msvc.c ${RUNTIME_DIR}/src/rt/msvc_math.c)
 endif()
@@ -260,7 +261,11 @@ elseif(${BUILD_SHARED_LIBS} STREQUAL "OFF")
 endif()
 
 if(LDC_WITH_LLD)
-    set(WASM_DEFAULT_LDC_SWITCHES "\n        \"-link-internally\",")
+    set(WASM_DEFAULT_LDC_SWITCHES "${WASM_DEFAULT_LDC_SWITCHES}\n        \"-link-internally\",")
+endif()
+# LLD 8+ requires (new) `--export-dynamic` for WebAssembly (https://github.com/ldc-developers/ldc/issues/3023).
+if(NOT (LDC_LLVM_VER LESS 800))
+    set(WASM_DEFAULT_LDC_SWITCHES "${WASM_DEFAULT_LDC_SWITCHES}\n        \"-L--export-dynamic\",")
 endif()
 
 # Only generate the config files if this CMake project is embedded in the LDC CMake project.
@@ -352,6 +357,8 @@ macro(dc src_files src_basedir d_flags output_basedir emit_bc all_at_once outlis
     )
 
     set(relative_src_files "")
+    set(new_o "")
+    set(new_bc "")
 
     foreach(f ${src_files})
         file(RELATIVE_PATH relative_src_file ${src_basedir} ${f})
@@ -365,9 +372,9 @@ macro(dc src_files src_basedir d_flags output_basedir emit_bc all_at_once outlis
 
         set(output_o  ${output_basedir}/${output_root}${CMAKE_C_OUTPUT_EXTENSION})
         set(output_bc ${output_basedir}/${output_root}.bc${CMAKE_C_OUTPUT_EXTENSION})
-        list(APPEND ${outlist_o} ${output_o})
+        list(APPEND new_o ${output_o})
         if(${emit_bc})
-            list(APPEND ${outlist_bc} ${output_bc})
+            list(APPEND new_bc ${output_bc})
         endif()
 
         if(${all_at_once})
@@ -401,13 +408,16 @@ macro(dc src_files src_basedir d_flags output_basedir emit_bc all_at_once outlis
         endif()
 
         add_custom_command(
-            OUTPUT  ${${outlist_o}} ${${outlist_bc}}
+            OUTPUT  ${new_o} ${new_bc}
             COMMAND ${LDC_EXE_FULL} ${dc_flags} -od=${output_basedir} -op ${relative_src_files}
             COMMAND ${renameCommand}
             WORKING_DIRECTORY ${src_basedir}
             DEPENDS ${src_files} ${dc_deps}
         )
     endif()
+
+    list(APPEND ${outlist_o} ${new_o})
+    list(APPEND ${outlist_bc} ${new_bc})
 endmacro()
 
 # Sets target_suffix to a purely cosmetical suffix for the CMake target names
@@ -444,7 +454,39 @@ endmacro()
 # names of the (bitcode) files to link into the library to outlist_o (outlist_bc).
 macro(compile_phobos2 d_flags lib_suffix path_suffix emit_bc all_at_once outlist_o outlist_bc)
     get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
-    dc("${PHOBOS2_D}"
+
+    # Special case for Windows and emit_bc=ON:
+    # LLVM (as of v7.0) doesn't support naked DMD-style asm when generating bitcode.
+    # For 1 (Win64) / 3 (Win32) remaining modules, compile separately without generating
+    # the bitcode file (and adding the binary object file to outlist_bc instead).
+    set(phobos_src_files ${PHOBOS2_D})
+    if(${emit_bc} AND "${TARGET_SYSTEM}" MATCHES "Windows")
+        set(naked_asm_src_files "${PHOBOS2_DIR}/std/internal/digest/sha_SSSE3.d")
+        if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+            list(APPEND naked_asm_src_files
+                "${PHOBOS2_DIR}/std/internal/math/biguintx86.d"
+                "${PHOBOS2_DIR}/std/internal/math/biguintcore.d"
+            )
+        endif()
+
+        list(REMOVE_ITEM phobos_src_files ${naked_asm_src_files})
+
+        set(naked_asm_o "")
+        dc("${naked_asm_src_files}"
+           "${PHOBOS2_DIR}"
+           "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR}"
+           "${PROJECT_BINARY_DIR}/objects${target_suffix}"
+           "OFF"
+           "${all_at_once}"
+           naked_asm_o
+           naked_asm_o
+        )
+
+        list(APPEND ${outlist_o} ${naked_asm_o})
+        list(APPEND ${outlist_bc} ${naked_asm_o})
+    endif()
+
+    dc("${phobos_src_files}"
        "${PHOBOS2_DIR}"
        "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR}"
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"

@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -24,6 +24,7 @@ class UserAttributeDeclaration;
 struct DocComment;
 struct AA;
 class TemplateInstance;
+class CPPNamespaceDeclaration;
 
 #include "dsymbol.h"
 
@@ -66,7 +67,7 @@ struct Scope
     LabelStatement *slabel;     // enclosing labelled statement
     SwitchStatement *sw;        // enclosing switch statement
     TryFinallyStatement *tf;    // enclosing try finally statement
-    OnScopeStatement *os;       // enclosing scope(xxx) statement
+    ScopeGuardStatement *os;       // enclosing scope(xxx) statement
     Statement *sbreak;          // enclosing statement that supports "break"
     Statement *scontinue;       // enclosing statement that supports "continue"
     ForeachStatement *fes;      // if nested function for ForeachStatement, this is it
@@ -90,6 +91,9 @@ struct Scope
     size_t fieldinit_dim;
 
     AlignDeclaration *aligndecl;    // alignment for struct members
+
+    /// C++ namespace this symbol belongs to
+    CPPNamespaceDeclaration *namespace_;
 
     LINK linkage;               // linkage for external functions
     CPPMANGLE cppmangle;        // C++ mangle type
@@ -146,7 +150,7 @@ struct Scope
 
     structalign_t alignment();
 
-    bool isDeprecated();
+    bool isDeprecated() const;
 
     // CALYPSO
     bool isD();

@@ -88,8 +88,8 @@ void RTTIBuilder::push_void_array(llvm::Constant *CI, Type *valtype,
 
   const LinkageWithCOMDAT lwc(TYPEINFO_LINKAGE_TYPE, supportsCOMDAT());
 
-  auto G = new LLGlobalVariable(gIR->module, CI->getType(), true,
-                                lwc.first, CI, initname.peekString());
+  auto G = new LLGlobalVariable(gIR->module, CI->getType(), true, lwc.first, CI,
+                                initname.peekChars());
   setLinkage(lwc, G);
   G->setAlignment(DtoAlignment(valtype));
 
@@ -114,8 +114,8 @@ void RTTIBuilder::push_array(llvm::Constant *CI, uint64_t dim, Type *valtype,
 
   const LinkageWithCOMDAT lwc(TYPEINFO_LINKAGE_TYPE, supportsCOMDAT());
 
-  auto G = new LLGlobalVariable(gIR->module, CI->getType(), true,
-                                lwc.first, CI, initname.peekString());
+  auto G = new LLGlobalVariable(gIR->module, CI->getType(), true, lwc.first, CI,
+                                initname.peekChars());
   setLinkage(lwc, G);
   G->setAlignment(DtoAlignment(valtype));
 

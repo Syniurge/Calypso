@@ -34,7 +34,11 @@ bool willInline();
 
 bool willCrossModuleInline();
 
+#if LDC_LLVM_VER >= 800
+llvm::FramePointer::FP whichFramePointersToEmit();
+#else
 bool willEliminateFramePointer();
+#endif
 
 unsigned optLevel();
 

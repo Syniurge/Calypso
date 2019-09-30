@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dstruct.d, _dstruct.d)
@@ -53,7 +53,7 @@ extern (C++) FuncDeclaration search_toString(StructDeclaration sd)
         __gshared TypeFunction tftostring;
         if (!tftostring)
         {
-            tftostring = new TypeFunction(null, Type.tstring, 0, LINK.d);
+            tftostring = new TypeFunction(ParameterList(), Type.tstring, LINK.d);
             tftostring = tftostring.merge().toTypeFunction();
         }
         fd = fd.overloadExactMatch(tftostring);
@@ -69,124 +69,6 @@ extern (C++) FuncDeclaration search_toString(StructDeclaration sd)
  */
 extern (C++) void semanticTypeInfo(Scope* sc, Type t)
 {
-    extern (C++) final class FullTypeInfoVisitor : Visitor
-    {
-        alias visit = Visitor.visit;
-    public:
-        Scope* sc;
-
-        override void visit(Type t)
-        {
-            Type tb = t.toBasetype();
-            if (tb != t)
-                tb.accept(this);
-        }
-
-        override void visit(TypeNext t)
-        {
-            if (t.next)
-                t.next.accept(this);
-        }
-
-        override void visit(TypeBasic t)
-        {
-        }
-
-        override void visit(TypeVector t)
-        {
-            t.basetype.accept(this);
-        }
-
-        override void visit(TypeAArray t)
-        {
-            t.index.accept(this);
-            visit(cast(TypeNext)t);
-        }
-
-        override void visit(TypeFunction t)
-        {
-            visit(cast(TypeNext)t);
-            // Currently TypeInfo_Function doesn't store parameter types.
-        }
-
-        override void visit(TypeStruct t)
-        {
-            //printf("semanticTypeInfo.visit(TypeStruct = %s)\n", t.toChars());
-            StructDeclaration sd = t.sym;
-
-            /* Step 1: create TypeInfoDeclaration
-             */
-            if (!sc) // inline may request TypeInfo.
-            {
-                Scope scx;
-                scx._module = sd.getModule();
-                getTypeInfoType(sd.loc, t, &scx);
-                sd.requestTypeInfo = true;
-            }
-            else if (!sc.minst)
-            {
-                // don't yet have to generate TypeInfo instance if
-                // the typeid(T) expression exists in speculative scope.
-            }
-            else
-            {
-                getTypeInfoType(sd.loc, t, sc);
-                sd.requestTypeInfo = true;
-
-                // https://issues.dlang.org/show_bug.cgi?id=15149
-                // if the typeid operand type comes from a
-                // result of auto function, it may be yet speculative.
-                unSpeculative(sc, sd);
-            }
-
-            /* Step 2: If the TypeInfo generation requires sd.semantic3, run it later.
-             * This should be done even if typeid(T) exists in speculative scope.
-             * Because it may appear later in non-speculative scope.
-             */
-            if (!sd.members)
-                return; // opaque struct
-            if (!sd.xeq && !sd.xcmp && !sd.postblit && !sd.dtor && !sd.xhash && !search_toString(sd))
-                return; // none of TypeInfo-specific members
-
-            // If the struct is in a non-root module, run semantic3 to get
-            // correct symbols for the member function.
-            if (sd.semanticRun >= PASS.semantic3)
-            {
-                // semantic3 is already done
-            }
-            else if (TemplateInstance ti = sd.isInstantiated())
-            {
-                if (ti.minst && !ti.minst.isRoot())
-                    Module.addDeferredSemantic3(sd);
-            }
-            else
-            {
-                if (sd.inNonRoot())
-                {
-                    //printf("deferred sem3 for TypeInfo - sd = %s, inNonRoot = %d\n", sd.toChars(), sd.inNonRoot());
-                    Module.addDeferredSemantic3(sd);
-                }
-            }
-        }
-
-        override void visit(TypeClass t)
-        {
-        }
-
-        override void visit(TypeTuple t)
-        {
-            if (t.arguments)
-            {
-                for (size_t i = 0; i < t.arguments.dim; i++)
-                {
-                    Type tprm = (*t.arguments)[i].type;
-                    if (tprm)
-                        tprm.accept(this);
-                }
-            }
-        }
-    }
-
     if (sc)
     {
         if (!sc.func)
@@ -197,9 +79,107 @@ extern (C++) void semanticTypeInfo(Scope* sc, Type t)
             return;
     }
 
-    scope FullTypeInfoVisitor v = new FullTypeInfoVisitor();
-    v.sc = sc;
-    t.accept(v);
+    if (!t)
+        return;
+
+    void visitVector(TypeVector t)
+    {
+        semanticTypeInfo(sc, t.basetype);
+    }
+
+    void visitAArray(TypeAArray t)
+    {
+        semanticTypeInfo(sc, t.index);
+        semanticTypeInfo(sc, t.next);
+    }
+
+    void visitStruct(TypeStruct t)
+    {
+        //printf("semanticTypeInfo.visit(TypeStruct = %s)\n", t.toChars());
+        StructDeclaration sd = t.sym;
+
+        /* Step 1: create TypeInfoDeclaration
+         */
+        if (!sc) // inline may request TypeInfo.
+        {
+            Scope scx;
+            scx._module = sd.getModule();
+            getTypeInfoType(sd.loc, t, &scx);
+            sd.requestTypeInfo = true;
+        }
+        else if (!sc.minst)
+        {
+            // don't yet have to generate TypeInfo instance if
+            // the typeid(T) expression exists in speculative scope.
+        }
+        else
+        {
+            getTypeInfoType(sd.loc, t, sc);
+            sd.requestTypeInfo = true;
+
+            // https://issues.dlang.org/show_bug.cgi?id=15149
+            // if the typeid operand type comes from a
+            // result of auto function, it may be yet speculative.
+            // unSpeculative(sc, sd);
+        }
+
+        /* Step 2: If the TypeInfo generation requires sd.semantic3, run it later.
+         * This should be done even if typeid(T) exists in speculative scope.
+         * Because it may appear later in non-speculative scope.
+         */
+        if (!sd.members)
+            return; // opaque struct
+        if (!sd.xeq && !sd.xcmp && !sd.postblit && !sd.dtor && !sd.xhash && !search_toString(sd))
+            return; // none of TypeInfo-specific members
+
+        // If the struct is in a non-root module, run semantic3 to get
+        // correct symbols for the member function.
+        if (sd.semanticRun >= PASS.semantic3)
+        {
+            // semantic3 is already done
+        }
+        else if (TemplateInstance ti = sd.isInstantiated())
+        {
+            if (ti.minst && !ti.minst.isRoot())
+                Module.addDeferredSemantic3(sd);
+        }
+        else
+        {
+            if (sd.inNonRoot())
+            {
+                //printf("deferred sem3 for TypeInfo - sd = %s, inNonRoot = %d\n", sd.toChars(), sd.inNonRoot());
+                Module.addDeferredSemantic3(sd);
+            }
+        }
+    }
+
+    void visitTuple(TypeTuple t)
+    {
+        if (t.arguments)
+        {
+            foreach (arg; *t.arguments)
+            {
+                semanticTypeInfo(sc, arg.type);
+            }
+        }
+    }
+
+    /* Note structural similarity of this Type walker to that in isSpeculativeType()
+     */
+
+    Type tb = t.toBasetype();
+    switch (tb.ty)
+    {
+        case Tvector:   visitVector(tb.isTypeVector()); break;
+        case Taarray:   visitAArray(tb.isTypeAArray()); break;
+        case Tstruct:   visitStruct(tb.isTypeStruct()); break;
+        case Ttuple:    visitTuple (tb.isTypeTuple());  break;
+
+        case Tclass:
+        case Tenum:     break;
+
+        default:        semanticTypeInfo(sc, tb.nextOf()); break;
+    }
 }
 
 enum StructFlags : int
@@ -225,6 +205,8 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     bool hasNoFields;           // has no fields
     FuncDeclarations postblits; // Array of postblit functions
     FuncDeclaration postblit;   // aggregate postblit
+
+    bool hasCopyCtor;       // copy constructor
 
     FuncDeclaration xeq;        // TypeInfo_Struct.xopEquals
     FuncDeclaration xcmp;       // TypeInfo_Struct.xopCmp
@@ -342,10 +324,16 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         return "struct";
     }
 
-    bool buildLayout() // CALYPSO
+    override final void finalizeSize()
     {
         //printf("StructDeclaration::finalizeSize() %s, sizeok = %d\n", toChars(), sizeok);
         assert(sizeok != Sizeok.done);
+
+        if (sizeok == Sizeok.inProcess)
+        {
+            return;
+        }
+        sizeok = Sizeok.inProcess;
 
         //printf("+StructDeclaration::finalizeSize() %s, fields.dim = %d, sizeok = %d\n", toChars(), fields.dim, sizeok);
 
@@ -360,7 +348,10 @@ extern (C++) class StructDeclaration : AggregateDeclaration
             s.setFieldOffset(this, &offset, isunion);
         }
         if (type.ty == Terror)
-            return false;
+        {
+            errors = true;
+            return;
+        }
 
         // 0 sized struct's are set to 1 byte
         if (structsize == 0)
@@ -378,16 +369,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         else
             structsize = (structsize + alignment - 1) & ~(alignment - 1);
 
-        return true;
-    }
-
-    override void finalizeSize() // CALYPSO (made non final)
-    {
-        //printf("StructDeclaration::finalizeSize() %s\n", toChars());
-        assert(sizeok != Sizeok.done);
-
-        if (!buildLayout()) // CALYPSO
-            return;
         sizeok = Sizeok.done;
 
         //printf("-StructDeclaration::finalizeSize() %s, fields.dim = %d, structsize = %d\n", toChars(), fields.dim, structsize);
@@ -408,6 +389,12 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         {
             if (vd._init)
             {
+                if (vd._init.isVoidInitializer())
+                    /* Treat as 0 for the purposes of putting the initializer
+                     * in the BSS segment, or doing a mass set to 0
+                     */
+                    continue;
+
                 // Zero size fields are zero initialized
                 if (vd.type.size(vd.loc) == 0)
                     continue;
@@ -427,7 +414,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
             }
         }
 
-        auto tt = Target.toArgTypes(type);
+        auto tt = target.toArgTypes(type);
         size_t dim = tt ? tt.arguments.dim : 0;
         if (dim >= 1)
         {
@@ -460,7 +447,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
 
         ispod = StructPOD.yes;
 
-        if (enclosing || postblit || dtor)
+        if (enclosing || postblit || dtor || hasCopyCtor)
             ispod = StructPOD.no;
 
         // Recursively check all fields are POD.

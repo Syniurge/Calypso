@@ -2371,7 +2371,7 @@ struct AsmProcessor {
             }
             OutBuffer buf;
             mangleToBuffer(vd, &buf);
-            insnTemplate << buf.peekString();
+            insnTemplate << buf.peekChars();
             getIrGlobal(vd, true)->nakedUse = true;
             break;
           }
@@ -3048,7 +3048,7 @@ struct AsmProcessor {
               }
               OutBuffer buf;
               mangleToBuffer(decl, &buf);
-              insnTemplate << buf.peekString();
+              insnTemplate << buf.peekChars();
               //              addOperand2("${", ":c}", Arg_Pointer, e,
               //              asmcode);
             } else {
@@ -3094,6 +3094,8 @@ struct AsmProcessor {
         return false;
       }
     }
+
+    mem.addRange(asmcode->args.data(), asmcode->args.size() * sizeof(AsmArg));
 
     asmcode->insnTemplate = insnTemplate.str();
     Logger::cout() << "insnTemplate = " << asmcode->insnTemplate << '\n';
@@ -3662,7 +3664,8 @@ struct AsmProcessor {
         stmt->error("`seg` not supported");
         e = parseAsmExp();
       } else if (token->ident == Id::offset || token->ident == Id::offsetof) {
-        if (token->ident == Id::offset && !global.params.useDeprecated) {
+        if (token->ident == Id::offset &&
+            global.params.useDeprecated == DIAGNOSTICerror) {
           stmt->error("offset deprecated, use `offsetof`");
         }
         nextToken();

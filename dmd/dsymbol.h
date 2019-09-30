@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -11,6 +11,7 @@
 #pragma once
 
 #include "root/port.h"
+#include "ast_node.h"
 #include "globals.h"
 #include "arraytypes.h"
 #include "visitor.h"
@@ -25,6 +26,7 @@
 #endif
 
 
+class CPPNamespaceDeclaration;
 class Identifier;
 struct Scope;
 class DsymbolTable;
@@ -75,6 +77,7 @@ class WithScopeSymbol;
 class ArrayScopeSymbol;
 class SymbolDeclaration;
 class Expression;
+class ExpressionDsymbol;
 class DeleteDeclaration;
 class OverloadSet;
 struct AA;
@@ -151,11 +154,13 @@ enum
 
 typedef int (*Dsymbol_apply_ft_t)(Dsymbol *, void *);
 
-class Dsymbol : public RootObject
+class Dsymbol : public ASTNode
 {
 public:
     Identifier *ident;
     Dsymbol *parent;
+    /// C++ namespace this symbol belongs to
+    CPPNamespaceDeclaration *namespace_;
     Symbol *csym;               // symbol for code generator
     Symbol *isym;               // import version of csym
     const utf8_t *comment;      // documentation comment for this Dsymbol
@@ -179,7 +184,7 @@ public:
     static Dsymbol *create(Identifier *);
     const char *toChars();
     virtual const char *toPrettyCharsHelper(); // helper to print fully qualified (template) arguments
-    Loc& getLoc();
+    Loc getLoc();
     const char *locToChars();
     bool equals(RootObject *o);
     virtual bool isAnonymous();
@@ -194,6 +199,9 @@ public:
     Dsymbol *pastMixin();
     Dsymbol *toParent();
     Dsymbol *toParent2();
+    Dsymbol *toParent3();
+    Dsymbol *toParentDecl();
+    Dsymbol *toParentLocal();
     TemplateInstance *isInstantiated();
     TemplateInstance *isSpeculative();
     Ungag ungagSpeculative() const;
@@ -219,12 +227,14 @@ public:
     virtual AggregateDeclaration *isThis();     // is a 'this' required to access the member
     virtual bool isExport() const;              // is Dsymbol exported?
     virtual bool isImportedSymbol() const;      // is Dsymbol imported?
-    virtual bool isDeprecated();                // is Dsymbol deprecated?
-    virtual bool isOverloadable();
+    virtual bool isDeprecated() const;                // is Dsymbol deprecated?
+    virtual bool isOverloadable() const;
     virtual LabelDsymbol *isLabel();            // is this a LabelDsymbol?
-    AggregateDeclaration *isMember();           // is this a member of an AggregateDeclaration?
-    AggregateDeclaration *isMember2();          // is this a member of an AggregateDeclaration?
-    ClassDeclaration *isClassMember();          // is this a member of a ClassDeclaration?
+    AggregateDeclaration *isMember();           // is toParent() an AggregateDeclaration?
+    AggregateDeclaration *isMember2();          // is toParent2() an AggregateDeclaration?
+    AggregateDeclaration *isMemberDecl();       // is toParentDecl() an AggregateDeclaration?
+    AggregateDeclaration *isMemberLocal();      // is toParentLocal() an AggregateDeclaration?
+    ClassDeclaration *isClassMember();          // isMember() is a ClassDeclaration?
     virtual Type *getType();                    // is this a type?
     virtual bool needThis();                    // need a 'this' pointer?
     virtual Prot prot();
@@ -234,12 +244,16 @@ public:
     virtual bool hasPointers();
     virtual bool hasStaticCtorOrDtor();
     virtual void addLocalClass(ClassDeclarations *) { }
+    virtual void addObjcSymbols(ClassDeclarations *, ClassDeclarations *) { }
     virtual void checkCtorConstInit() { }
 
     virtual void addComment(const utf8_t *comment);
 
     bool inNonRoot();
     bool inNonCodegen(); // CALYPSO
+
+    // CALYPSO
+    virtual LangPlugin *langPlugin() { return NULL; }
 
     // Eliminate need for dynamic_cast
     virtual Package *isPackage() { return NULL; }
@@ -252,6 +266,7 @@ public:
     virtual Nspace *isNspace() { return NULL; }
     virtual Declaration *isDeclaration() { return NULL; }
     virtual StorageClassDeclaration *isStorageClassDeclaration(){ return NULL; }
+    virtual ExpressionDsymbol *isExpressionDsymbol() { return NULL; }
     virtual ThisDeclaration *isThisDeclaration() { return NULL; }
     virtual TypeInfoDeclaration *isTypeInfoDeclaration() { return NULL; }
     virtual TupleDeclaration *isTupleDeclaration() { return NULL; }
@@ -286,12 +301,11 @@ public:
     virtual SymbolDeclaration *isSymbolDeclaration() { return NULL; }
     virtual AttribDeclaration *isAttribDeclaration() { return NULL; }
     virtual AnonDeclaration *isAnonDeclaration() { return NULL; }
+    virtual CPPNamespaceDeclaration *isCPPNamespaceDeclaration() { return NULL; }
     virtual ProtDeclaration *isProtDeclaration() { return NULL; }
     virtual OverloadSet *isOverloadSet() { return NULL; }
-    virtual void accept(Visitor *v) { v->visit(this); }
-
-    // CALYPSO
-    virtual LangPlugin *langPlugin() { return NULL; }
+    virtual CompileDeclaration *isCompileDeclaration() { return NULL; }
+    void accept(Visitor *v) { v->visit(this); }
 };
 
 // Dsymbol that generates a scope
@@ -384,6 +398,13 @@ class ForwardingScopeDsymbol : public ScopeDsymbol
     const char *kind() const;
 
     ForwardingScopeDsymbol *isForwardingScopeDsymbol() { return this; }
+};
+
+class ExpressionDsymbol : public Dsymbol
+{
+    Expression *exp;
+
+    ExpressionDsymbol *isExpressionDsymbol() { return this; }
 };
 
 // Table of Dsymbol's

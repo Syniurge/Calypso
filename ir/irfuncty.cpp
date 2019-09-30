@@ -17,10 +17,14 @@
 #include "gen/logger.h"
 #include "gen/tollvm.h"
 
-IrFuncTyArg::IrFuncTyArg(Type *t, bool bref, AttrBuilder a)
+IrFuncTyArg::IrFuncTyArg(Type *t, bool bref, llvm::AttrBuilder a)
     : type(t),
       ltype(t != Type::tvoid && bref ? DtoType(t->pointerTo()) : DtoType(t)),
-      attrs(std::move(a)), byref(bref) {}
+      attrs(std::move(a)), byref(bref) {
+  mem.addRange(&type, sizeof(type));
+}
+
+IrFuncTyArg::~IrFuncTyArg() { mem.removeRange(&type); }
 
 bool IrFuncTyArg::isInReg() const { return attrs.contains(LLAttribute::InReg); }
 bool IrFuncTyArg::isSRet() const {

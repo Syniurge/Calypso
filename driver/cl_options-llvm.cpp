@@ -23,6 +23,13 @@ static cl::opt<bool>
     DisableRedZone("disable-red-zone", cl::ZeroOrMore,
                    cl::desc("Do not emit code that uses the red zone."));
 
+#if LDC_LLVM_VER >= 800
+// legacy option
+static cl::opt<bool>
+    disableFPElim("disable-fp-elim", cl::ZeroOrMore, cl::ReallyHidden,
+                  cl::desc("Disable frame pointer elimination optimization"));
+#endif
+
 // Now expose the helper functions (with static linkage) via external wrappers
 // in the opts namespace, including some additional helper functions.
 namespace opts {
@@ -37,11 +44,21 @@ Optional<CodeModel::Model> getCodeModel() { return ::getCodeModel(); }
 CodeModel::Model getCodeModel() { return ::CMModel; }
 #endif
 
+#if LDC_LLVM_VER >= 800
+llvm::Optional<llvm::FramePointer::FP> framePointerUsage() {
+  if (::FramePointerUsage.getNumOccurrences() > 0)
+    return ::FramePointerUsage.getValue();
+  if (disableFPElim.getNumOccurrences() > 0)
+    return disableFPElim ? llvm::FramePointer::All : llvm::FramePointer::None;
+  return llvm::None;
+}
+#else
 cl::boolOrDefault disableFPElim() {
   return ::DisableFPElim.getNumOccurrences() == 0
              ? cl::BOU_UNSET
              : ::DisableFPElim ? cl::BOU_TRUE : cl::BOU_FALSE;
 }
+#endif
 
 bool disableRedZone() { return ::DisableRedZone; }
 
@@ -79,6 +96,10 @@ CodeModel::Model GetCodeModelFromCMModel() { return ::CMModel; }
 
 #if LDC_LLVM_VER >= 700
 std::string GetCPUStr() { return ::getCPUStr(); }
+#endif
+
+#if LDC_LLVM_VER >= 800
+std::vector<std::string> GetMAttrs() { return ::MAttrs; }
 #endif
 }
 #endif // LDC_WITH_LLD && LDC_LLVM_VER >= 500

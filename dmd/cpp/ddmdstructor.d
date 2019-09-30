@@ -31,6 +31,8 @@ import dmd.visitor;
 
 import core.stdc.string;
 
+import dmd.utils : toDString;
+
 extern(C++):
 
 RootObject new_RootObject() { return new RootObject(); }
@@ -171,13 +173,12 @@ PrettyFuncInitExp new_PrettyFuncInitExp(const ref Loc loc) { return new PrettyFu
 TypeError new_TypeError() { return new TypeError(); }
 TypeBasic new_TypeBasic(TY ty) { return new TypeBasic(ty); }
 TypeVector new_TypeVector(Type basetype) { return new TypeVector(basetype); }
-TypeArray new_TypeArray(TY ty, Type next) { return new TypeArray(ty, next); }
 TypeSArray new_TypeSArray(Type t, Expression dim) { return new TypeSArray(t, dim); }
 TypeDArray new_TypeDArray(Type t) { return new TypeDArray(t); }
 TypeAArray new_TypeAArray(Type t, Type index) { return new TypeAArray(t, index); }
 TypePointer new_TypePointer(Type t) { return new TypePointer(t); }
 TypeReference new_TypeReference(Type t) { return new TypeReference(t); }
-TypeFunction new_TypeFunction(Parameters *parameters, Type treturn, int varargs, LINK linkage, StorageClass stc) { return new TypeFunction(parameters, treturn, varargs, linkage, stc); }
+TypeFunction new_TypeFunction(ParameterList pl, Type treturn, LINK linkage, StorageClass stc) { return new TypeFunction(pl, treturn, linkage, stc); }
 TypeDelegate new_TypeDelegate(Type t) { return new TypeDelegate(t); }
 TypeIdentifier new_TypeIdentifier(const ref Loc loc, Identifier ident) { return new TypeIdentifier(loc, ident); }
 TypeInstance new_TypeInstance(const ref Loc loc, TemplateInstance tempinst) { return new TypeInstance(loc, tempinst); }
@@ -230,7 +231,6 @@ SharedStaticCtorDeclaration new_SharedStaticCtorDeclaration(const ref Loc loc, c
 StaticDtorDeclaration new_StaticDtorDeclaration(const ref Loc loc, const ref Loc endloc, StorageClass stc) { return new StaticDtorDeclaration(loc, endloc, stc); }
 SharedStaticDtorDeclaration new_SharedStaticDtorDeclaration(const ref Loc loc, const ref Loc endloc, StorageClass stc) { return new SharedStaticDtorDeclaration(loc, endloc, stc); }
 UnitTestDeclaration new_UnitTestDeclaration(const ref Loc loc, const ref Loc endloc, StorageClass stc, char *codedoc) { return new UnitTestDeclaration(loc, endloc, stc, codedoc); }
-NewDeclaration new_NewDeclaration(const ref Loc loc, const ref Loc endloc, StorageClass stc, Parameters *arguments, int varargs) { return new NewDeclaration(loc, endloc, stc, arguments, varargs); }
 DeleteDeclaration new_DeleteDeclaration(const ref Loc loc, const ref Loc endloc, StorageClass stc, Parameters *arguments) { return new DeleteDeclaration(loc, endloc, stc, arguments); }
 StructDeclaration new_StructDeclaration(const ref Loc loc, Identifier id, bool inObject) { return new StructDeclaration(loc, id, inObject); }
 UnionDeclaration new_UnionDeclaration(const ref Loc loc, Identifier id) { return new UnionDeclaration(loc, id); }
@@ -247,8 +247,7 @@ ErrorInitializer new_ErrorInitializer() { return new ErrorInitializer(); }
 StructInitializer new_StructInitializer(const ref Loc loc) { return new StructInitializer(loc); }
 ArrayInitializer new_ArrayInitializer(const ref Loc loc) { return new ArrayInitializer(loc); }
 ExpInitializer new_ExpInitializer(const ref Loc loc, Expression exp) { return new ExpInitializer(loc, exp); }
-Package new_Package(Identifier ident) { return new Package(ident); }
-Module new_Module(const (char) *arg, Identifier ident, int doDocComment, int doHdrGen) { return new Module(arg, ident, doDocComment, doHdrGen); }
+Package new_Package(const ref Loc loc, Identifier ident) { return new Package(loc, ident); }
 ErrorStatement new_ErrorStatement() { return new ErrorStatement(); }
 PeelStatement new_PeelStatement(Statement s) { return new PeelStatement(s); }
 ExpStatement new_ExpStatement(const ref Loc loc, Expression exp) { return new ExpStatement(loc, exp); }
@@ -281,7 +280,6 @@ SynchronizedStatement new_SynchronizedStatement(const ref Loc loc, Expression ex
 TryCatchStatement new_TryCatchStatement(const ref Loc loc, Statement _body, Catches *catches) { return new TryCatchStatement(loc, _body, catches); }
 Catch new_Catch(const ref Loc loc, Type t, Identifier id, Statement handler) { return new Catch(loc, t, id, handler); }
 TryFinallyStatement new_TryFinallyStatement(const ref Loc loc, Statement _body, Statement finalbody) { return new TryFinallyStatement(loc, _body, finalbody); }
-OnScopeStatement new_OnScopeStatement(const ref Loc loc, TOK tok, Statement statement) { return new OnScopeStatement(loc, tok, statement); }
 ThrowStatement new_ThrowStatement(const ref Loc loc, Expression exp) { return new ThrowStatement(loc, exp); }
 DebugStatement new_DebugStatement(const ref Loc loc, Statement statement) { return new DebugStatement(loc, statement); }
 GotoStatement new_GotoStatement(const ref Loc loc, Identifier ident) { return new GotoStatement(loc, ident); }
@@ -407,11 +405,11 @@ void construct_Catch(Catch _this, const ref Loc loc, Type t, Identifier id, Stat
     memcpy(postvtblThis, &Catch.classinfo.m_init[offset], Catch.classinfo.m_init.length - offset);
     _this.__ctor(loc, t, id, handler);
 }
-void construct_Module(Module _this, const (char) *arg, Identifier ident, int doDocComment, int doHdrGen)
+void construct_Module(Module _this, const ref Loc loc, const(char) *filename, Identifier ident, int doDocComment, int doHdrGen)
 {
     auto postvtblThis = &(cast(byte*)_this)[offset];
     memcpy(postvtblThis, &Module.classinfo.m_init[offset], Module.classinfo.m_init.length - offset);
-    _this.__ctor(arg, ident, doDocComment, doHdrGen);
+    _this.__ctor(loc, filename.toDString, ident, doDocComment, doHdrGen);
 }
 void construct_TemplateDeclaration(TemplateDeclaration _this, const ref Loc loc, Identifier id, TemplateParameters *parameters, Expression constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false)
 {

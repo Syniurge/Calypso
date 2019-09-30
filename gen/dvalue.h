@@ -117,6 +117,12 @@ public:
 
 /// Represents a D slice (dynamic array).
 class DSliceValue : public DRValue {
+  llvm::Value *const length = nullptr;
+  llvm::Value *const ptr = nullptr;
+
+  DSliceValue(Type *t, llvm::Value *pair, llvm::Value *length,
+              llvm::Value *ptr);
+
 public:
   DSliceValue(Type *t, llvm::Value *pair);
   DSliceValue(Type *t, llvm::Value *length, llvm::Value *ptr);

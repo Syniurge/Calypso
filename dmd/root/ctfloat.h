@@ -1,5 +1,5 @@
 
-/* Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+/* Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * All Rights Reserved, written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -79,7 +79,6 @@ struct CTFloat
     static real_t minusone;
     static real_t half;
 #if IN_LLVM
-    static real_t initVal;
     static real_t nan;
     static real_t infinity;
 #endif

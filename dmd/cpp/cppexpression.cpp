@@ -6,6 +6,7 @@
 #include "cpp/cpptypes.h"
 #include "cpp/ddmdstructor.h"
 #include "aggregate.h"
+#include "errors.h"
 #include "id.h"
 #include "identifier.h"
 #include "template.h"

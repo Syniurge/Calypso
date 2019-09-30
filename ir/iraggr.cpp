@@ -152,12 +152,12 @@ IrAggr::createInitializerConstant(const VarInitMap &explicitInitializers) {
   if (type->ty == Tclass) {
     // add vtbl
     constants.push_back(getVtblSymbol());
-    offset += Target::ptrsize;
+    offset += target.ptrsize;
 
     // add monitor (except for C++ classes)
     if (!aggrdecl->isClassDeclaration()->isCPPclass()) {
       constants.push_back(getNullValue(getVoidPtrType()));
-      offset += Target::ptrsize;
+      offset += target.ptrsize;
     }
   }
 
@@ -221,7 +221,7 @@ void IrAggr::addFieldInitializers(
     if (cd->vtblInterfaces && cd->vtblInterfaces->dim > 0) {
       // Align interface infos to pointer size.
       unsigned aligned =
-          (offset + Target::ptrsize - 1) & ~(Target::ptrsize - 1);
+          (offset + target.ptrsize - 1) & ~(target.ptrsize - 1);
       if (offset < aligned) {
         add_zeros(constants, offset, aligned);
         offset = aligned;
@@ -230,7 +230,7 @@ void IrAggr::addFieldInitializers(
       size_t inter_idx = interfacesWithVtbls.size();
       for (auto bc : *cd->vtblInterfaces) {
         constants.push_back(getInterfaceVtblSymbol(bc, inter_idx));
-        offset += Target::ptrsize;
+        offset += target.ptrsize;
         inter_idx++;
 
         if (populateInterfacesWithVtbls)

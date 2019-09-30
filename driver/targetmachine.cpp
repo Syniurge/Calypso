@@ -15,7 +15,7 @@
 
 #include "driver/targetmachine.h"
 
-#include "dmd/mars.h"
+#include "dmd/errors.h"
 #include "driver/cl_options.h"
 #include "gen/logger.h"
 #include "llvm/ADT/StringExtras.h"
@@ -402,8 +402,8 @@ createTargetMachine(const std::string targetTriple, const std::string arch,
     features.push_back("+cx16");
   }
 
-#if LDC_LLVM_VER >= 700
-  // FIXME: https://bugs.llvm.org/show_bug.cgi?id=38289
+#if LDC_LLVM_VER >= 700 && LDC_LLVM_VER < 800
+  // https://bugs.llvm.org/show_bug.cgi?id=38289
   if (isOptimizationEnabled() && (cpu == "x86-64" || cpu == "i686") &&
       !hasFeature("ssse3")) {
     features.push_back("+ssse3");
@@ -470,11 +470,12 @@ createTargetMachine(const std::string targetTriple, const std::string arch,
   }
 
   // Right now, we only support linker-level dead code elimination on Linux
-  // using the GNU toolchain (based on ld's --gc-sections flag). The Apple ld
-  // on OS X supports a similar flag (-dead_strip) that doesn't require
-  // emitting the symbols into different sections. The MinGW ld doesn't seem
-  // to support --gc-sections at all, and FreeBSD needs more investigation.
+  // and FreeBSD using GNU or LLD linkers (based on the --gc-sections flag).
+  // The Apple ld on OS X supports a similar flag (-dead_strip) that doesn't
+  // require emitting the symbols into different sections. The MinGW ld doesn't
+  // seem to support --gc-sections at all.
   if (!noLinkerStripDead && (triple.getOS() == llvm::Triple::Linux ||
+                             triple.getOS() == llvm::Triple::FreeBSD ||
                              triple.getOS() == llvm::Triple::Win32)) {
     targetOptions.FunctionSections = true;
     targetOptions.DataSections = true;

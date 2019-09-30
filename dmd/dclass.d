@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dclass.d, _dclass.d)
@@ -234,14 +234,14 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
     final extern (D) this(const ref Loc loc, Identifier id, BaseClasses* baseclasses, Dsymbols* members, bool inObject)
     {
+        objc = ObjcClassDeclaration(this);
+
         if (!id)
         {
-            id = Identifier.generateId("__anonclass");
             isActuallyAnonymous = true;
         }
-        assert(id);
 
-        super(loc, id);
+        super(loc, id ? id : Identifier.generateId("__anonclass"));
 
         __gshared const(char)* msg = "only object.d can define this reserved class name";
 
@@ -255,7 +255,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
 
         this.members = members;
 
-        //printf("ClassDeclaration(%s), dim = %d\n", id.toChars(), this.baseclasses.dim);
+        //printf("ClassDeclaration(%s), dim = %d\n", ident.toChars(), this.baseclasses.dim);
 
         // For forward references
         type = new TypeClass(this);
@@ -441,7 +441,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             /* This enables us to use COM objects under Linux and
              * work with things like XPCOM
              */
-            sc2.linkage = Target.systemLinkage();
+            sc2.linkage = target.systemLinkage();
         }
         return sc2;
     }
@@ -541,7 +541,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         return null;
     }
 
-    bool buildLayout() // CALYPSO
+    final override void finalizeSize()
     {
         assert(sizeok != Sizeok.done);
 
@@ -553,7 +553,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             alignsize = baseClass.alignsize;
             structsize = baseClass.structsize;
             if (baseClass.langPlugin())  // if we're inheriting from a class written in a foreign language, add the D header // CALYPSO
-                structsize += Target.ptrsize*2; // allow room for __vptr and __monitor
+                structsize += target.ptrsize * (hasMonitor() ? 2 : 1); // allow room for __vptr and __monitor
             if (classKind == ClassKind.cpp && global.params.isWindows)
                 structsize = (structsize + alignsize - 1) & ~(alignsize - 1);
         }
@@ -561,16 +561,16 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         {
             if (interfaces.length == 0)
             {
-                alignsize = Target.ptrsize;
-                structsize = Target.ptrsize;      // allow room for __vptr
+                alignsize = target.ptrsize;
+                structsize = target.ptrsize;      // allow room for __vptr
             }
         }
         else
         {
-            alignsize = Target.ptrsize;
-            structsize = Target.ptrsize;      // allow room for __vptr
-            if (classKind != ClassKind.cpp)
-                structsize += Target.ptrsize; // allow room for __monitor
+            alignsize = target.ptrsize;
+            structsize = target.ptrsize;      // allow room for __vptr
+            if (hasMonitor())
+                structsize += target.ptrsize; // allow room for __monitor
         }
 
         //printf("finalizeSize() %s, sizeok = %d\n", toChars(), sizeok);
@@ -600,7 +600,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                 assert(b.sym.sizeok == Sizeok.done);
 
                 if (!b.sym.alignsize)
-                    b.sym.alignsize = Target.ptrsize;
+                    b.sym.alignsize = target.ptrsize;
                 alignmember(b.sym.alignsize, b.sym.alignsize, &offset);
                 assert(bi < vtblInterfaces.dim);
 
@@ -632,7 +632,7 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         if (isInterfaceDeclaration())
         {
             sizeok = Sizeok.done;
-            return true;
+            return;
         }
 
         // FIXME: Currently setFieldOffset functions need to increase fields
@@ -645,20 +645,18 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
             s.setFieldOffset(this, &offset, false);
         }
 
-        return true;
-    }
-
-    final override void finalizeSize()
-    {
-        assert(sizeok != Sizeok.done);
-
-        if (!buildLayout()) // CALYPSO
-            return;
-
         sizeok = Sizeok.done;
 
         // Calculate fields[i].overlapped
         checkOverlappedFields();
+    }
+
+    /**************
+     * Returns: true if there's a __monitor field
+     */
+    final bool hasMonitor()
+    {
+        return classKind == ClassKind.d;
     }
 
     override bool isAnonymous()
@@ -716,6 +714,13 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         FuncDeclaration fdmatch = null;
         FuncDeclaration fdambig = null;
 
+        void updateBestMatch(FuncDeclaration fd)
+        {
+            fdmatch = fd;
+            fdambig = null;
+            //printf("Lfd fdmatch = %s %s [%s]\n", fdmatch.toChars(), fdmatch.type.toChars(), fdmatch.loc.toChars());
+        }
+
         void searchVtbl(ref Dsymbols vtbl)
         {
             foreach (s; vtbl)
@@ -730,49 +735,51 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
                 {
                     //printf("fd.parent.isClassDeclaration() = %p\n", fd.parent.isClassDeclaration());
                     if (!fdmatch)
-                        goto Lfd;
+                    {
+                        updateBestMatch(fd);
+                        continue;
+                    }
                     if (fd == fdmatch)
-                        goto Lfdmatch;
+                        continue;
 
                     {
                     // Function type matching: exact > covariant
                     MATCH m1 = tf.equals(fd.type) ? MATCH.exact : MATCH.nomatch;
                     MATCH m2 = tf.equals(fdmatch.type) ? MATCH.exact : MATCH.nomatch;
                     if (m1 > m2)
-                        goto Lfd;
+                    {
+                        updateBestMatch(fd);
+                        continue;
+                    }
                     else if (m1 < m2)
-                        goto Lfdmatch;
+                        continue;
                     }
                     {
                     MATCH m1 = (tf.mod == fd.type.mod) ? MATCH.exact : MATCH.nomatch;
                     MATCH m2 = (tf.mod == fdmatch.type.mod) ? MATCH.exact : MATCH.nomatch;
                     if (m1 > m2)
-                        goto Lfd;
+                    {
+                        updateBestMatch(fd);
+                        continue;
+                    }
                     else if (m1 < m2)
-                        goto Lfdmatch;
+                        continue;
                     }
                     {
                     // The way of definition: non-mixin > mixin
                     MATCH m1 = fd.parent.isClassDeclaration() ? MATCH.exact : MATCH.nomatch;
                     MATCH m2 = fdmatch.parent.isClassDeclaration() ? MATCH.exact : MATCH.nomatch;
                     if (m1 > m2)
-                        goto Lfd;
+                    {
+                        updateBestMatch(fd);
+                        continue;
+                    }
                     else if (m1 < m2)
-                        goto Lfdmatch;
+                        continue;
                     }
 
                     fdambig = fd;
                     //printf("Lambig fdambig = %s %s [%s]\n", fdambig.toChars(), fdambig.type.toChars(), fdambig.loc.toChars());
-                    continue;
-
-                Lfd:
-                    fdmatch = fd;
-                    fdambig = null;
-                    //printf("Lfd fdmatch = %s %s [%s]\n", fdmatch.toChars(), fdmatch.type.toChars(), fdmatch.loc.toChars());
-                    continue;
-
-                Lfdmatch:
-                    continue;
                 }
                 //else printf("\t\t%d\n", fd.type.covariant(tf));
             }
@@ -933,7 +940,13 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
      */
     override final void addLocalClass(ClassDeclarations* aclasses)
     {
-        aclasses.push(this);
+        if (classKind != ClassKind.objc)
+            aclasses.push(this);
+    }
+
+    override final void addObjcSymbols(ClassDeclarations* classes, ClassDeclarations* categories)
+    {
+        .objc.addSymbols(this, classes, categories);
     }
 
     /****************************************
@@ -941,16 +954,6 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
     override bool byRef() const
     {
         return true;
-    }
-
-    bool allowMultipleInheritance()
-    {
-        return false;
-    }
-
-    bool allowInheritFromStruct()
-    {
-        return false;
     }
 
     bool needsInterfaceSemantic() const
@@ -970,34 +973,6 @@ extern (C++) class ClassDeclaration : AggregateDeclaration
         Declaration d = new SymbolDeclaration(this.loc, this);
         d.type = type;
         return new VarExp(this.loc, d);
-    }
-
-    void initVtbl() // CALYPSO
-    {
-        if (auto bcd = isClassDeclarationOrNull(baseClass))
-        {
-            if (classKind == ClassKind.cpp && bcd.vtbl.dim == 0)
-            {
-                error("C++ base class `%s` needs at least one virtual function", baseClass.toChars());
-            }
-
-            // Copy vtbl[] from base class
-            vtbl.setDim(bcd.vtbl.dim);
-            memcpy(vtbl.tdata(), bcd.vtbl.tdata(), (void*).sizeof * vtbl.dim);
-
-            if (auto lp = bcd.langPlugin())
-                foreach (s; vtbl) // CALYPSO
-                    lp.markSymbolReferenced(s);
-
-            vthis = baseClass.vthis;
-        }
-        else
-        {
-            // No base class, so this is the root of the class hierarchy
-            vtbl.setDim(0);
-            if (vtblOffset())
-                vtbl.push(this); // leave room for classinfo as first member
-        }
     }
 
     void finalizeVtbl()

@@ -825,11 +825,6 @@ Dsymbol *TemplateInstance::syntaxCopy(Dsymbol *s)
     return ::TemplateInstance::syntaxCopy(s);
 }
 
-void TemplateInstance::addMember(Scope *sc, ScopeDsymbol *sds)
-{
-    cppAddMember(this, sc, sds);
-}
-
 // For (deco) mangling we need to retrieve the original arguments for the primary template.
 Identifier *TemplateInstance::getIdent()
 {

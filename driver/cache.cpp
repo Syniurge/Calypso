@@ -209,8 +209,9 @@ public:
 void storeCacheFileName(llvm::StringRef cacheObjectHash,
                         llvm::SmallString<128> &filePath) {
   filePath = opts::cacheDir;
-  llvm::sys::path::append(filePath, llvm::Twine("ircache_") + cacheObjectHash +
-                                        "." + global.obj_ext);
+  llvm::sys::path::append(
+      filePath, llvm::Twine("ircache_") + cacheObjectHash + "." +
+                    llvm::StringRef(global.obj_ext.ptr, global.obj_ext.length));
 }
 
 // Output to `hash_os` all commandline flags, and try to skip the ones that have
@@ -315,7 +316,13 @@ void outputIR2ObjRelevantCmdlineArgs(llvm::raw_ostream &hash_os) {
 #else
   hash_os << opts::getCodeModel();
 #endif
+#if LDC_LLVM_VER >= 800
+  const auto framePointerUsage = opts::framePointerUsage();
+  if (framePointerUsage.hasValue())
+    hash_os << framePointerUsage.getValue();
+#else
   hash_os << opts::disableFPElim();
+#endif
 }
 
 // Output to `hash_os` all environment flags that influence object code output
@@ -332,7 +339,7 @@ void calculateModuleHash(llvm::Module *m, llvm::SmallString<32> &str) {
   raw_hash_ostream hash_os;
 
   // Let hash depend on the compiler version:
-  hash_os << global.ldc_version << global.version << global.llvm_version
+  hash_os << ldc::ldc_version << ldc::dmd_version << ldc::llvm_version
           << ldc::built_with_Dcompiler_version;
 
   // Let hash depend on compile flags that change the outputted obj file,

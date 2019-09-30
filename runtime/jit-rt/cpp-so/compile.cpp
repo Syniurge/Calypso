@@ -343,7 +343,7 @@ void rtCompileProcessImplSoInternal(const RtCompileModuleList *modlist_head,
     interruptPoint(context, "parse IR");
     auto mod = llvm::parseBitcodeFile(*buff, myJit.getContext());
     if (!mod) {
-      fatal(context, "Unable to parse IR");
+      fatal(context, "Unable to parse IR: " + llvm::toString(mod.takeError()));
     } else {
       llvm::Module &module = **mod;
       const auto name = module.getName();
@@ -396,12 +396,12 @@ void rtCompileProcessImplSoInternal(const RtCompileModuleList *modlist_head,
     };
 
     CallbackOstream os(callback);
-    if (myJit.addModule(std::move(finalModule), &os)) {
-      fatal(context, "Can't codegen module");
+    if (auto err = myJit.addModule(std::move(finalModule), &os)) {
+      fatal(context, "Can't codegen module: " + llvm::toString(std::move(err)));
     }
   } else {
-    if (myJit.addModule(std::move(finalModule), nullptr)) {
-      fatal(context, "Can't codegen module");
+    if (auto err = myJit.addModule(std::move(finalModule), nullptr)) {
+      fatal(context, "Can't codegen module: " + llvm::toString(std::move(err)));
     }
   }
 

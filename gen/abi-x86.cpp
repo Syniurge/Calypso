@@ -7,7 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "dmd/mars.h"
 #include "gen/abi-generic.h"
 #include "gen/abi.h"
 #include "gen/dvalue.h"
@@ -37,7 +36,7 @@ struct X86TargetABI : TargetABI {
 
   llvm::CallingConv::ID callingConv(LINK l, TypeFunction *tf = nullptr,
                                     FuncDeclaration *fdecl = nullptr) override {
-    if (tf && tf->varargs == 1)
+    if (tf && tf->parameterList.varargs == VARARGvariadic)
       return llvm::CallingConv::C;
 
     switch (l) {
@@ -88,10 +87,11 @@ struct X86TargetABI : TargetABI {
       return false;
 
     Type *rt = tf->next->toBasetype();
-    const bool externD = (tf->linkage == LINKd && tf->varargs != 1);
+    const bool externD =
+        (tf->linkage == LINKd && tf->parameterList.varargs != VARARGvariadic);
 
-    // non-aggregates and magic C++ structs are returned directly
-    if (!isAggregate(rt) || isMagicCppStruct(rt))
+    // non-aggregates are returned directly
+    if (!isAggregate(rt))
       return false;
 
     // complex numbers
@@ -136,12 +136,13 @@ struct X86TargetABI : TargetABI {
   }
 
   void rewriteFunctionType(IrFuncTy &fty) override {
-    const bool externD = (fty.type->linkage == LINKd && fty.type->varargs != 1);
+    const bool externD = (fty.type->linkage == LINKd &&
+                          fty.type->parameterList.varargs != VARARGvariadic);
 
     // return value:
     if (!fty.ret->byref) {
       Type *rt = fty.type->next->toBasetype(); // for sret, rt == void
-      if (isAggregate(rt) && !isMagicCppStruct(rt) && canRewriteAsInt(rt) &&
+      if (isAggregate(rt) && canRewriteAsInt(rt) &&
           // don't rewrite cfloat for extern(D)
           !(externD && rt->ty == Tcomplex32)) {
         integerRewrite.applyToIfNotObsolete(*fty.ret);
@@ -154,15 +155,16 @@ struct X86TargetABI : TargetABI {
       // try an implicit argument...
       if (fty.arg_this) {
         Logger::println("Putting 'this' in register");
-        fty.arg_this->attrs.add(LLAttribute::InReg);
+        fty.arg_this->attrs.addAttribute(LLAttribute::InReg);
       } else if (fty.arg_nest) {
         Logger::println("Putting context ptr in register");
-        fty.arg_nest->attrs.add(LLAttribute::InReg);
+        fty.arg_nest->attrs.addAttribute(LLAttribute::InReg);
       } else if (IrFuncTyArg *sret = fty.arg_sret) {
         Logger::println("Putting sret ptr in register");
         // sret and inreg are incompatible, but the ABI requires the
         // sret parameter to be in EAX in this situation...
-        sret->attrs.remove(LLAttribute::StructRet).add(LLAttribute::InReg);
+        sret->attrs.removeAttribute(LLAttribute::StructRet);
+        sret->attrs.addAttribute(LLAttribute::InReg);
       }
 
       // ... otherwise try the last argument
@@ -179,7 +181,7 @@ struct X86TargetABI : TargetABI {
 
         if (last->byref && !last->isByVal()) {
           Logger::println("Putting last (byref) parameter in register");
-          last->attrs.add(LLAttribute::InReg);
+          last->attrs.addAttribute(LLAttribute::InReg);
         } else if (!lastTy->isfloating() && (sz == 1 || sz == 2 || sz == 4)) {
           // rewrite aggregates as integers to make inreg work
           if (lastTy->ty == Tstruct || lastTy->ty == Tsarray) {
@@ -188,7 +190,7 @@ struct X86TargetABI : TargetABI {
             last->byref = false;
             last->attrs.clear();
           }
-          last->attrs.add(LLAttribute::InReg);
+          last->attrs.addAttribute(LLAttribute::InReg);
         }
       }
 
@@ -240,7 +242,7 @@ struct X86TargetABI : TargetABI {
     if (isMSVC) {
       for (auto arg : args) {
         if (arg->isByVal())
-          arg->attrs.remove(LLAttribute::Alignment);
+          arg->attrs.removeAttribute(LLAttribute::Alignment);
       }
     }
   }

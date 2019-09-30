@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -29,9 +29,6 @@ class StructDeclaration;
 struct CompiledCtfeFunction;
 struct ObjcSelector;
 struct IntRange;
-#if IN_LLVM
-struct Symbol;
-#endif
 
 #define STCundefined    0LL
 #define STCstatic       1LL
@@ -90,8 +87,9 @@ struct Symbol;
 #define STCscopeinferred 0x2000000000000LL // 'scope' has been inferred and should not be part of mangling
 #define STCfuture        0x4000000000000LL // introducing new base class function
 #define STClocal         0x8000000000000LL // do not forward (see dmd.dsymbol.ForwardingScopeDsymbol).
-#define STCimplicit      0x10000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
-#define STCmove          0x20000000000000LL // for C++ rvalue references // CALYPSO
+#define STCreturninferred 0x10000000000000LL   // 'return' has been inferred and should not be part of mangling
+#define STCimplicit      0x20000000000000LL // enable implicit constructor calls for function arguments // CALYPSO: does this really warrant a new stc bit?
+#define STCmove          0x40000000000000LL // for C++ rvalue references // CALYPSO
 
 void ObjectNotFound(Identifier *id);
 
@@ -129,7 +127,7 @@ public:
     bool isScope() const        { return (storage_class & STCscope) != 0; }
     bool isSynchronized() const { return (storage_class & STCsynchronized) != 0; }
     bool isParameter() const    { return (storage_class & STCparameter) != 0; }
-    bool isDeprecated()         { return (storage_class & STCdeprecated) != 0; }
+    bool isDeprecated() const   { return (storage_class & STCdeprecated) != 0; }
     bool isOverride() const     { return (storage_class & STCoverride) != 0; }
     bool isResult() const       { return (storage_class & STCresult) != 0; }
     bool isField() const        { return (storage_class & STCfield) != 0; }
@@ -164,10 +162,6 @@ public:
 
     TupleDeclaration *isTupleDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
-
-#if IN_LLVM
-    void semantic3(Scope *sc);
-#endif
 };
 
 /**************************************************************/
@@ -187,7 +181,7 @@ public:
     Type *getType();
     Dsymbol *toAlias();
     Dsymbol *toAlias2();
-    bool isOverloadable();
+    bool isOverloadable() const;
 
     AliasDeclaration *isAliasDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -208,7 +202,7 @@ public:
 
     Dsymbol *toAlias();
     Dsymbol *isUnique();
-    bool isOverloadable();
+    bool isOverloadable() const;
 
     OverDeclaration *isOverDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -228,11 +222,15 @@ public:
     bool ctorinit;              // it has been initialized in a ctor
     bool iscatchvar;            // this is the exception object variable in catch() clause
     bool onstack;               // it is a class that was allocated on the stack
+#if IN_LLVM
+    bool onstackWithDtor;       // it is a class that was allocated on the stack and needs destruction
+#endif
     bool mynew;                 // it is a class new'd with custom operator new
     int canassign;              // it can be assigned to
     bool overlapped;            // if it is a field and has overlapping
     bool overlapUnsafe;         // if it is an overlapping field and the overlaps are unsafe
     bool doNotInferScope;       // do not infer 'scope' for this variable
+    bool doNotInferReturn;      // do not infer 'return' for this variable
     unsigned char isdataseg;    // private data for isDataseg
     Dsymbol *aliassym;          // if redone as alias to another symbol
     VarDeclaration *lastVar;    // Linked list of variables for goto-skips-init detection
@@ -244,18 +242,20 @@ public:
     Expression *edtor;          // if !=NULL, does the destruction of the variable
     IntRange *range;            // if !NULL, the variable is known to be within the range
 
-#if IN_LLVM
-    TypeClass *scopeClassType;  // real (dynamic) type if onstack == true (stack-allocated class)
-#endif
-
     VarDeclarations *maybes;    // STCmaybescope variables that are assigned to this STCmaybescope variable
 
+private:
+    bool _isAnonymous;
+
+public:
+    static VarDeclaration *create(Loc loc, Type *t, Identifier *id, Initializer *init, StorageClass storage_class = STCundefined);
     virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     void setFieldOffset(AggregateDeclaration *ad, unsigned *poffset, bool isunion);
     const char *kind() const;
     AggregateDeclaration *isThis();
     bool needThis();
+    bool isAnonymous();
     bool isExport() const;
     bool isImportedSymbol() const;
     bool isDataseg();
@@ -467,7 +467,13 @@ void builtin_init();
 class FuncDeclaration : public Declaration
 {
 public:
-    Types *fthrows;                     // Array of Type's of exceptions (not used)
+    struct HiddenParameters
+    {
+        VarDeclaration *this_;
+        bool isThis2;
+        VarDeclaration *selector;
+    };
+
     Statements *frequires;              // in contracts
     Ensures *fensures;                  // out contracts
     Statement *frequire;                // lowered in contract
@@ -478,14 +484,12 @@ public:
     FuncDeclaration *fdrequire;         // function that does the in contract
     FuncDeclaration *fdensure;          // function that does the out contract
 
+    Expressions *fdrequireParams;       // argument list for __require
+    Expressions *fdensureParams;        // argument list for __ensure
+
     const char *mangleString;           // mangled symbol created from mangleExact()
 
 #if IN_LLVM
-    // Argument lists for the __require/__ensure calls. NULL if not a virtual
-    // function with contracts.
-    Expressions *fdrequireParams;
-    Expressions *fdensureParams;
-
     const char *intrinsicName;
     uint32_t priority;
 
@@ -507,8 +511,11 @@ public:
     // scopes from having the same name
     DsymbolTable *localsymtab;
     VarDeclaration *vthis;              // 'this' parameter (member and nested)
+    bool isThis2;                       // has a dual-context 'this' parameter
     VarDeclaration *v_arguments;        // '_arguments' parameter
-    ObjcSelector* selector;             // Objective-C method selector (member function only)
+    ObjcSelector *selector;             // Objective-C method selector (member function only)
+    VarDeclaration *selectorParameter;  // Objective-C implicit selector parameter
+
     VarDeclaration *v_argptr;           // '_argptr' variable
     VarDeclarations *parameters;        // Array of VarDeclaration's for parameters
     DsymbolTable *labtab;               // statement label symbol table
@@ -519,6 +526,8 @@ public:
     bool naked;                         // true if naked
     bool generated;                     // true if function was generated by the compiler rather than
                                         // supplied by the user
+    unsigned char isCrtCtorDtor;        // has attribute pragma(crt_constructor(1)/crt_destructor(2))
+                                        // not set before the glue layer
     ILS inlineStatusStmt;
     ILS inlineStatusExp;
     PINLINE inlining;
@@ -580,7 +589,7 @@ public:
     bool functionSemantic();
     virtual bool functionSemantic3(); // CALYPSO
     // called from semantic3
-    VarDeclaration *declareThis(Scope *sc, AggregateDeclaration *ad);
+    HiddenParameters declareThis(Scope *sc, AggregateDeclaration *ad);
     bool equals(RootObject *o);
 
     int overrides(FuncDeclaration *fd);
@@ -593,7 +602,8 @@ public:
     bool inUnittest();
     MATCH leastAsSpecialized(FuncDeclaration *g);
     LabelDsymbol *searchLabel(Identifier *ident);
-    int getLevel(const Loc &loc, Scope *sc, FuncDeclaration *fd); // lexical nesting level difference
+    int getLevel(FuncDeclaration *fd, int intypeof); // lexical nesting level difference
+    int getLevelAndCheck(const Loc &loc, Scope *sc, FuncDeclaration *fd);
     const char *toPrettyChars(bool QualifyTypes = false);
     const char *toFullSignature();  // for diagnostics, e.g. 'int foo(int x, int y) pure'
     bool isMain() const;
@@ -603,7 +613,7 @@ public:
     bool isExport() const;
     bool isImportedSymbol() const;
     bool isCodeseg() const;
-    bool isOverloadable();
+    bool isOverloadable() const;
     bool isAbstract();
     PURE isPure();
     PURE isPureBypassingInference();
@@ -620,7 +630,7 @@ public:
     void printGCUsage(const Loc &loc, const char *warn);
     bool isolateReturn();
     bool parametersIntersect(Type *t);
-    virtual bool isNested() const; // CALYPSO (missing const)
+    virtual bool isNested() const;
     AggregateDeclaration *isThis();
     bool needThis();
     bool isVirtualMethod();
@@ -629,18 +639,13 @@ public:
     virtual bool addPreInvariant();
     virtual bool addPostInvariant();
     const char *kind() const;
-    FuncDeclaration *isUnique();
+    bool isUnique();
     bool needsClosure();
     bool hasNestedFrameRefs();
     void buildResultVar(Scope *sc, Type *tret);
-#if IN_LLVM
-    Statement *mergeFrequire(Statement *, Expressions *params = nullptr);
-    Statement *mergeFensure(Statement *, Identifier *oid, Expressions *params = nullptr);
-#else
-    Statement *mergeFrequire(Statement *);
-    Statement *mergeFensure(Statement *, Identifier *oid);
-#endif
-    Parameters *getParameters(int *pvarargs);
+    Statement *mergeFrequire(Statement *, Expressions *);
+    Statement *mergeFensure(Statement *, Identifier *oid, Expressions *);
+    ParameterList getParameterList();
 
     static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, const char *name, StorageClass stc=0);
     static FuncDeclaration *genCfunc(Parameters *args, Type *treturn, Identifier *id, StorageClass stc=0);
@@ -679,7 +684,7 @@ public:
     bool deferToObj;
 
     Dsymbol *syntaxCopy(Dsymbol *);
-    bool isNested() const; // CALYPSO (missing const)
+    bool isNested() const;
     AggregateDeclaration *isThis();
     bool isVirtual() const;
     bool addPreInvariant();
@@ -696,6 +701,7 @@ public:
 class CtorDeclaration : public FuncDeclaration
 {
 public:
+    bool isCpCtor;
     virtual void _key(); // CALYPSO
     Dsymbol *syntaxCopy(Dsymbol *);
     const char *kind() const;
@@ -819,7 +825,7 @@ class NewDeclaration : public FuncDeclaration
 {
 public:
     Parameters *parameters;
-    int varargs;
+    VarArg varargs;
 
     Dsymbol *syntaxCopy(Dsymbol *);
     const char *kind() const;

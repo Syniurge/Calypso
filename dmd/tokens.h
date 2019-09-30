@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -31,7 +31,13 @@ class Identifier;
         ?       &&      ||
  */
 
+#if IN_LLVM
+// https://issues.dlang.org/show_bug.cgi?id=19658
 enum TOK
+#else
+typedef unsigned char TOK;
+enum
+#endif
 {
         TOKreserved,
 
@@ -180,6 +186,7 @@ enum TOK
         TOKshowctfecontext,
 
         TOKobjc_class_reference,
+        TOKvectorarray,
 
         TOKMAX
 };
@@ -224,9 +231,7 @@ struct Token
     int isKeyword();
     const char *toChars() const;
 
-#if IN_LLVM
     static const char *toChars(TOK value);
-#endif
 };
 
 #if defined(__GNUC__)

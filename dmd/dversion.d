@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dversion.d, _dversion.d)
@@ -34,14 +34,13 @@ extern (C++) final class DebugSymbol : Dsymbol
 
     extern (D) this(const ref Loc loc, Identifier ident)
     {
-        super(ident);
-        this.loc = loc;
+        super(loc, ident);
     }
 
     extern (D) this(const ref Loc loc, uint level)
     {
+        super(loc, null);
         this.level = level;
-        this.loc = loc;
     }
 
     override Dsymbol syntaxCopy(Dsymbol s)
@@ -60,7 +59,7 @@ extern (C++) final class DebugSymbol : Dsymbol
         {
             OutBuffer buf;
             buf.print(level);
-            return buf.extractString();
+            return buf.extractChars();
         }
     }
 
@@ -123,14 +122,13 @@ extern (C++) final class VersionSymbol : Dsymbol
 
     extern (D) this(const ref Loc loc, Identifier ident)
     {
-        super(ident);
-        this.loc = loc;
+        super(loc, ident);
     }
 
     extern (D) this(const ref Loc loc, uint level)
     {
+        super(loc, null);
         this.level = level;
-        this.loc = loc;
     }
 
     override Dsymbol syntaxCopy(Dsymbol s)
@@ -149,7 +147,7 @@ extern (C++) final class VersionSymbol : Dsymbol
         {
             OutBuffer buf;
             buf.print(level);
-            return buf.extractString();
+            return buf.extractChars();
         }
     }
 

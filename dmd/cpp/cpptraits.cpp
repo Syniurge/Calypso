@@ -4,6 +4,7 @@
 #include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/ddmdstructor.h"
+#include "errors.h"
 #include "scope.h"
 #include "template.h"
 

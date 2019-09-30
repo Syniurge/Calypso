@@ -3,6 +3,8 @@
 #include "cpp/cppstatement.h"
 #include "cpp/ddmdstructor.h"
 
+#include "errors.h"
+
 namespace cpp
 {
 

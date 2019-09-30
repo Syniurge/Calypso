@@ -31,7 +31,7 @@ FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Objects *tiargs,
         Type *tthis,
         Expressions *arguments,
-        int flags = 0);
+        unsigned char flags = 0);
 Expression *resolveProperties(Scope *sc, Expression *e);
 Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
@@ -447,7 +447,7 @@ template <typename AggTy>
         //      D __monitor
         //      C++ __vptr
         if (!isCPP(cd))
-            *poffset = Target::ptrsize * 2;
+            *poffset = target.ptrsize * 2;
 
         while (!isCPP(cd))
             cd = static_cast<::ClassDeclaration*>(cd->baseClass);
@@ -749,7 +749,8 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
                 */
                 Parameters *parameters = new Parameters;
                 parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL, NULL));
-                tfeqptr = new_TypeFunction(parameters, Type::tbool, 0, LINKcpp);
+                tfeqptr = new_TypeFunction(ParameterList{parameters, VARARGnone},
+                                           Type::tbool, LINKcpp);
                 tfeqptr->mod = MODconst;
                 tfeqptr = (TypeFunction *)typeSemantic(tfeqptr, Loc(), scx);
 

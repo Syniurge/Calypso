@@ -143,6 +143,115 @@ private struct _placeholder
 {
 }
 
+/+
+ + Reference-counted object which wraps ldc.dynamic_compile.bind result
+ +/
+struct BindPtr(F)
+{
+package:
+  static assert(isFunctionPointer!F);
+  alias FuncParams = Parameters!(F);
+  alias Ret = ReturnType!F;
+  alias Payload = BindPayloadBase!(F);
+  import core.memory : pureMalloc;
+  extern(C) private pure nothrow @nogc static
+  {
+    pragma(mangle, "free") void pureFree( void *ptr );
+  }
+
+  Payload* _payload = null;
+
+  static auto make(int[] Index, OF, Args...)(OF func, Args args)
+  {
+    import core.exception : onOutOfMemoryError;
+    import std.conv : emplace;
+    alias PayloadImpl = BindPayload!(OF, F, Index, Args);
+    auto payload = cast(PayloadImpl*) pureMalloc(PayloadImpl.sizeof);
+    if (payload is null)
+    {
+        onOutOfMemoryError();
+    }
+    scope(failure)
+    {
+      pureFree(payload);
+    }
+
+    emplace(payload, func, args);
+    payload.register();
+    BindPtr!F ret;
+    ret._payload = cast(Payload*)payload;
+    return ret;
+  }
+
+  void decPayload()
+  {
+    if (_payload !is null)
+    {
+      auto res = --_payload.counter;
+      assert(res >= 0);
+      if (res == 0)
+      {
+        _payload.dtor(*_payload);
+        pureFree(_payload);
+      }
+      _payload = null;
+    }
+  }
+
+  void incPayload()
+  {
+    if (_payload !is null)
+    {
+      ++_payload.counter;
+    }
+  }
+
+public:
+  this(this)
+  {
+    incPayload();
+  }
+  ~this()
+  {
+    decPayload();
+  }
+
+  void opAssign(typeof(this) rhs)
+  {
+    import std.algorithm.mutation : swap;
+    decPayload();
+    _payload = rhs._payload;
+    incPayload();
+  }
+
+  void opAssign(typeof(null))
+  {
+    decPayload();
+  }
+
+  bool isNull() const
+  {
+    return _payload is null;
+  }
+
+  bool isCallable() const pure nothrow @safe @nogc
+  {
+    return _payload !is null && _payload.func !is null;
+  }
+
+  auto opCall(FuncParams args)
+  {
+    assert(isCallable());
+    return _payload.func(args);
+  }
+
+  @dynamicCompileEmit auto toDelegate() @nogc
+  {
+    assert(_payload !is null);
+    return _payload.toDelegate();
+  }
+}
+
 private:
 auto bindImpl(F, Args...)(F func, Args args)
 {
@@ -263,7 +372,10 @@ struct BindPayload(OF, F, int[] Index, Args...)
   OF originalFunc = null;
   struct ArgStore
   {
-    Args args;
+    import std.meta: staticMap;
+    import std.traits: Unqual;
+    alias UArgs = staticMap!(Unqual, Args);
+    UArgs args;
   }
   ArgStore argStore;
   bool registered = false;
@@ -308,8 +420,8 @@ struct BindPayload(OF, F, int[] Index, Args...)
           const ii = ParametersCount - i - 1; // reverse params
           desc[ii].data = &(argStore.args[ind]);
           desc[ii].size = (argStore.args[ind]).sizeof;
-          alias T = FuncParams[ind];
-          desc[ii].type = (isAggregateType!T || isDelegate!T ? ParamType.Aggregate : ParamType.Simple);
+          alias T = FuncParams[i];
+          desc[ii].type = (isAggregateType!T || isDelegate!T || isStaticArray!T ? ParamType.Aggregate : ParamType.Simple);
         }
       }
     }
@@ -322,102 +434,6 @@ struct BindPayload(OF, F, int[] Index, Args...)
   }
 
   alias toDelegate = base.toDelegate;
-}
-
-struct BindPtr(F)
-{
-package:
-  static assert(isFunctionPointer!F);
-  alias FuncParams = Parameters!(F);
-  alias Ret = ReturnType!F;
-  alias Payload = BindPayloadBase!(F);
-  import core.memory : pureMalloc;
-  extern(C) private pure nothrow @nogc static
-  {
-    pragma(mangle, "free") void pureFree( void *ptr );
-  }
-
-  Payload* _payload = null;
-
-  static auto make(int[] Index, OF, Args...)(OF func, Args args)
-  {
-    import core.exception : onOutOfMemoryError;
-    import std.conv : emplace;
-    alias PayloadImpl = BindPayload!(OF, F, Index, Args);
-    auto payload = cast(PayloadImpl*) pureMalloc(PayloadImpl.sizeof);
-    if (payload is null)
-    {
-        onOutOfMemoryError();
-    }
-    scope(failure)
-    {
-      pureFree(payload);
-    }
-
-    emplace(payload, func, args);
-    payload.register();
-    BindPtr!F ret;
-    ret._payload = cast(Payload*)payload;
-    return ret;
-  }
-
-  void decPayload()
-  {
-    if (_payload !is null)
-    {
-      auto res = --_payload.counter;
-      assert(res >= 0);
-      if (res == 0)
-      {
-        _payload.dtor(*_payload);
-        pureFree(_payload);
-      }
-      _payload = null;
-    }
-  }
-
-  void incPayload()
-  {
-    if (_payload !is null)
-    {
-      ++_payload.counter;
-    }
-  }
-
-public:
-  this(this)
-  {
-    incPayload();
-  }
-  ~this()
-  {
-    decPayload();
-  }
-
-  void opAssign(typeof(this) rhs)
-  {
-    import std.algorithm.mutation : swap;
-    decPayload();
-    _payload = rhs._payload;
-    incPayload();
-  }
-
-  bool isCallable() const pure nothrow @safe @nogc
-  {
-    return _payload !is null && _payload.func !is null;
-  }
-
-  auto opCall(FuncParams args)
-  {
-    assert(isCallable());
-    return _payload.func(args);
-  }
-
-  @dynamicCompileEmit auto toDelegate() @nogc
-  {
-    assert(_payload !is null);
-    return _payload.toDelegate();
-  }
 }
 
 extern(C)

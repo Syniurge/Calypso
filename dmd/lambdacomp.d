@@ -7,7 +7,7 @@
  * The serialization is a string which contains the type of the parameters and the
  * string represantation of the lambda expression.
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/lamdbacomp.d, _lambdacomp.d)
@@ -95,13 +95,13 @@ bool isSameFuncLiteral(FuncLiteralDeclaration l1, FuncLiteralDeclaration l2, Sco
  */
 private string getSerialization(FuncLiteralDeclaration fld, Scope* sc)
 {
-    scope serVisitor = new SerializeVisitor(sc);
+    scope serVisitor = new SerializeVisitor(fld.parent._scope);
     fld.accept(serVisitor);
     const len = serVisitor.buf.offset;
     if (len == 0)
         return null;
 
-    return cast(string)serVisitor.buf.extractString()[0 .. len];
+    return cast(string)serVisitor.buf.extractChars()[0 .. len];
 }
 
 private extern (C++) class SerializeVisitor : SemanticTimeTransitiveVisitor
@@ -134,7 +134,7 @@ public:
             printf("FuncLiteralDeclaration: %s\n", fld.toChars());
 
         TypeFunction tf = cast(TypeFunction)fld.type;
-        uint dim = cast(uint)Parameter.dim(tf.parameters);
+        uint dim = cast(uint)Parameter.dim(tf.parameterList.parameters);
         // Start the serialization by printing the number of
         // arguments the lambda has.
         buf.printf("%d:", dim);
@@ -143,7 +143,7 @@ public:
         // For each argument
         foreach (i; 0 .. dim)
         {
-            auto fparam = Parameter.getNth(tf.parameters, i);
+            auto fparam = tf.parameterList[i];
             if (fparam.ident !is null)
             {
                 // the variable name is introduced into a hashtable
@@ -153,7 +153,7 @@ public:
                 OutBuffer value;
                 value.writestring("arg");
                 value.print(i);
-                arg_hash.insert(&key[0], key.length, value.extractString);
+                arg_hash.insert(key, value.extractChars);
                 // and the type of the variable is serialized.
                 fparam.accept(this);
             }
@@ -263,6 +263,11 @@ public:
                 {
                     buf.reset();
                 }
+            }
+            // If it's an unknown symbol, consider the function incomparable
+            else
+            {
+                buf.reset();
             }
         }
     }
@@ -435,4 +440,54 @@ public:
         else
             visitType(p.type);
     }
+
+    override void visit(StructLiteralExp e) {
+        static if (LOG)
+            printf("StructLiteralExp: %s\n", e.toChars);
+
+        auto ty = cast(TypeStruct)e.stype;
+        if (ty)
+        {
+            writeMangledName(ty.sym);
+            auto dim = e.elements.dim;
+            foreach (i; 0..dim)
+            {
+                auto elem = (*e.elements)[i];
+                if (elem)
+                    elem.accept(this);
+                else
+                    buf.writestring("null_");
+            }
+        }
+        else
+            buf.reset();
+    }
+
+    override void visit(ArrayLiteralExp) { buf.reset(); }
+    override void visit(AssocArrayLiteralExp) { buf.reset(); }
+    override void visit(CompileExp) { buf.reset(); }
+    override void visit(ComplexExp) { buf.reset(); }
+    override void visit(DeclarationExp) { buf.reset(); }
+    override void visit(DefaultInitExp) { buf.reset(); }
+    override void visit(DsymbolExp) { buf.reset(); }
+    override void visit(ErrorExp) { buf.reset(); }
+    override void visit(FuncExp) { buf.reset(); }
+    override void visit(HaltExp) { buf.reset(); }
+    override void visit(IntervalExp) { buf.reset(); }
+    override void visit(IsExp) { buf.reset(); }
+    override void visit(NewAnonClassExp) { buf.reset(); }
+    override void visit(NewExp) { buf.reset(); }
+    override void visit(NullExp) { buf.reset(); }
+    override void visit(ObjcClassReferenceExp) { buf.reset(); }
+    override void visit(OverExp) { buf.reset(); }
+    override void visit(ScopeExp) { buf.reset(); }
+    override void visit(StringExp) { buf.reset(); }
+    override void visit(SymbolExp) { buf.reset(); }
+    override void visit(TemplateExp) { buf.reset(); }
+    override void visit(ThisExp) { buf.reset(); }
+    override void visit(TraitsExp) { buf.reset(); }
+    override void visit(TupleExp) { buf.reset(); }
+    override void visit(TypeExp) { buf.reset(); }
+    override void visit(TypeidExp) { buf.reset(); }
+    override void visit(VoidInitExp) { buf.reset(); }
 }

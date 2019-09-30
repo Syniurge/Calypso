@@ -10,6 +10,7 @@
 #include "cpp/ddmdstructor.h"
 #include "cpp/ddmdvisitor.h"
 #include "driver/cl_options.h"
+#include "errors.h"
 #include "id.h"
 #include "identifier.h"
 #include "module.h"
@@ -56,7 +57,7 @@ public:
 
     bool isTransitive() override { return false; }
 //     bool isMergeable() override { return false; }
-    unsigned short sizeType() override { return sizeof(*this); }
+    unsigned short sizeType() const override { return sizeof(*this); }
 
     virtual bool isIncompleteArray() const { return false; }
 
@@ -92,7 +93,7 @@ public:
         return t;
     }
 
-    unsigned short sizeType() override { return sizeof(*this); }
+    unsigned short sizeType() const override { return sizeof(*this); }
     bool isIncompleteArray() const override { return true; }
 
     void accept(Visitor *v) override
@@ -140,7 +141,7 @@ public:
     bool isRvalRef() const override { return isRvalueRef; }
     bool isTransitive() override { return false; }
 //     bool isMergeable() override { return false; }
-    unsigned short sizeType() override { return sizeof(*this); }
+    unsigned short sizeType() const override { return sizeof(*this); }
 
     void accept(Visitor *v) override
     {
@@ -177,7 +178,7 @@ public:
         construct_TypeBasic(this, ty);
     }
 
-    unsigned short sizeType() override
+    unsigned short sizeType() const override
     {
         return sizeof(*this);
     }
@@ -1532,7 +1533,7 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
     LINK linkage = (FD && FD->isExternC()) ? LINKc : LINKcpp;
         // TODO: inferring the linkage for overriding methods would be nice
 
-    auto tf = new_TypeFunction(params, rt, 0, linkage, stc);
+    auto tf = new_TypeFunction(ParameterList{params, VARARGnone}, rt, linkage, stc);
     tf = static_cast<TypeFunction*>(tf->addSTC(stc));
 
     if (!T->isDependentType())
@@ -1788,8 +1789,8 @@ clang::QualType DeclMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
             auto ResultTy = toType(loc, tf->next, sc, tf->isref ? STCref : 0);
 
             llvm::SmallVector<clang::QualType, 4> Args;
-            if (tf->parameters)
-                for (auto p: *tf->parameters)
+            if (tf->parameterList.parameters)
+                for (auto p: *tf->parameterList.parameters)
                     Args.push_back(toType(loc, p->type, sc, p->storageClass));
 
             clang::FunctionProtoType::ExtProtoInfo EPI;

@@ -17,6 +17,7 @@
 #include "dmd/import.h"
 #include "dmd/init.h"
 #include "dmd/module.h"
+#include "driver/cl_options.h"
 #include "gen/abi.h"
 #include "gen/arrays.h"
 #include "gen/cgforeign.h"
@@ -57,12 +58,12 @@ bool DtoIsReturnInArg(CallExp *ce) {
   return false;
 }
 
-LLAttribute DtoShouldExtend(Type *type) {
+void DtoAddExtendAttr(Type *type, llvm::AttrBuilder &attrs) {
   type = type->toBasetype();
   if (type->isintegral() && type->ty != Tvector && type->size() <= 2) {
-    return type->isunsigned() ? LLAttribute::ZExt : LLAttribute::SExt;
+    attrs.addAttribute(type->isunsigned() ? LLAttribute::ZExt
+                                          : LLAttribute::SExt);
   }
-  return LLAttribute::None;
 }
 
 LLType *DtoType(Type *t) {
@@ -193,17 +194,11 @@ LLType *DtoMemType(Type *t) { return i1ToI8(voidToI8(DtoType(t))); }
 LLPointerType *DtoPtrToType(Type *t) { return DtoMemType(t)->getPointerTo(); }
 
 LLType *voidToI8(LLType *t) {
-  if (t == LLType::getVoidTy(gIR->context())) {
-    return LLType::getInt8Ty(gIR->context());
-  }
-  return t;
+  return t->isVoidTy() ? LLType::getInt8Ty(t->getContext()) : t;
 }
 
 LLType *i1ToI8(LLType *t) {
-  if (t == LLType::getInt1Ty(gIR->context())) {
-    return LLType::getInt8Ty(gIR->context());
-  }
-  return t;
+  return t->isIntegerTy(1) ? LLType::getInt8Ty(t->getContext()) : t;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -255,8 +250,14 @@ void setLinkage(LinkageWithCOMDAT lwc, llvm::GlobalObject *obj) {
     obj->setComdat(gIR->module.getOrInsertComdat(obj->getName()));
 }
 
-void setLinkage(Dsymbol *sym, llvm::GlobalObject *obj) {
+void setLinkageAndVisibility(Dsymbol *sym, llvm::GlobalObject *obj) {
   setLinkage(DtoLinkage(sym), obj);
+  setVisibility(sym, obj);
+}
+
+void setVisibility(Dsymbol *sym, llvm::GlobalObject *obj) {
+  if (opts::defaultToHiddenVisibility && !sym->isExport())
+    obj->setVisibility(LLGlobalValue::HiddenVisibility);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

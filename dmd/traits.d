@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/traits.d, _traits.d)
@@ -23,6 +23,8 @@ import dmd.dclass;
 import dmd.declaration;
 import dmd.dimport;
 import dmd.denum;
+import dmd.dimport;
+import dmd.dmodule;
 import dmd.dscope;
 import dmd.dsymbol;
 import dmd.dsymbolsem;
@@ -50,19 +52,6 @@ import dmd.root.rootobject;
 enum LOGSEMANTIC = false;
 
 /************************ TraitsExp ************************************/
-
-// callback for TypeFunction::attributesApply
-struct PushAttributes
-{
-    Expressions* mods;
-
-    extern (D) static int fp(void* param, string str)
-    {
-        PushAttributes* p = cast(PushAttributes*)param;
-        p.mods.push(new StringExp(Loc.initial, cast(char*)str.ptr, str.length));
-        return 0;
-    }
-}
 
 /**************************************
  * Convert `Expression` or `Type` to corresponding `Dsymbol`, additionally
@@ -122,6 +111,8 @@ shared static this()
         "isFinalFunction",
         "isOverrideFunction",
         "isStaticFunction",
+        "isModule",
+        "isPackage",
         "isRef",
         "isOut",
         "isLazy",
@@ -157,7 +148,7 @@ shared static this()
 
     foreach (s; names)
     {
-        auto sv = traitsStringTable.insert(s.ptr, s.length, cast(void*)s.ptr);
+        auto sv = traitsStringTable.insert(s, cast(void*)s.ptr);
         assert(sv);
     }
 }
@@ -410,10 +401,10 @@ private Expression pointerBitmap(TraitsExp e)
     if (sz == d_uns64.max)
         return new ErrorExp();
 
-    auto exps = new Expressions();
-    exps.push(new IntegerExp(e.loc, sz, Type.tsize_t));
-    foreach (d_uns64 i; 0 .. data.dim)
-        exps.push(new IntegerExp(e.loc, data[cast(size_t)i], Type.tsize_t));
+    auto exps = new Expressions(data.dim + 1);
+    (*exps)[0] = new IntegerExp(e.loc, sz, Type.tsize_t);
+    foreach (size_t i; 1 .. exps.dim)
+        (*exps)[i] = new IntegerExp(e.loc, data[cast(size_t) (i - 1)], Type.tsize_t);
 
     auto ale = new ArrayLiteralExp(e.loc, Type.tsize_t.sarrayOf(data.dim + 1), exps);
     return ale;
@@ -495,7 +486,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         return null;
     }
 
-    IntegerExp isX(T)(bool function(T) fp)
+    IntegerExp isX(T)(bool delegate(T) fp)
     {
         if (!dim)
             return False();
@@ -530,6 +521,14 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
     alias isDeclX = isX!Declaration;
     alias isFuncX = isX!FuncDeclaration;
     alias isEnumMemX = isX!EnumMember;
+
+    Expression isPkgX(bool function(Package) fp)
+    {
+        return isDsymX((Dsymbol sym) {
+            Package p = resolveIsPackage(sym);
+            return (p !is null) && fp(p);
+        });
+    }
 
     if (e.ident == Id.isArithmetic)
     {
@@ -687,6 +686,20 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
 
         return isFuncX(f => !f.needThis() && !f.isNested());
     }
+    if (e.ident == Id.isModule)
+    {
+        if (dim != 1)
+            return dimError(1);
+
+        return isPkgX(p => p.isModule() || p.isPackageMod());
+    }
+    if (e.ident == Id.isPackage)
+    {
+        if (dim != 1)
+            return dimError(1);
+
+        return isPkgX(p => p.isModule() is null);
+    }
     if (e.ident == Id.isRef)
     {
         if (dim != 1)
@@ -751,7 +764,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
             return dimError(1);
 
         Scope* sc2 = sc.push();
-        sc2.flags = sc.flags | SCOPE.noaccesscheck;
+        sc2.flags = sc.flags | SCOPE.noaccesscheck | SCOPE.ignoresymbolvisibility;
         bool ok = TemplateInstance.semanticTiargs(e.loc, sc2, e.args, 1);
         sc2.pop();
         if (!ok)
@@ -796,7 +809,12 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
                     if (auto p = s.toParent())         // `C`'s parent is `C!2`, believe it or not
                     {
                         if (p.isTemplateInstance())    // `C!2` is a template instance
+                        {
                             s = p;                     // `C!2`'s parent is `T1`
+                            auto td = (cast(TemplateInstance)p).tempdecl;
+                            if (td)
+                                s = td;                // get the declaration context just in case there's two contexts
+                        }
                     }
                 }
             }
@@ -829,7 +847,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
                 return ex.expressionSemantic(sc);
             }
         }
-        return resolve(e.loc, sc, s, false);
+        return symbolToExp(s, e.loc, sc, false);
     }
     if (e.ident == Id.hasMember ||
         e.ident == Id.getMember ||
@@ -900,9 +918,9 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
             return new ErrorExp();
         }
 
-        // ignore symbol visibility for these traits, should disable access checks as well
+        // ignore symbol visibility and disable access checks for these traits
         Scope* scx = sc.push();
-        scx.flags |= SCOPE.ignoresymbolvisibility;
+        scx.flags |= SCOPE.ignoresymbolvisibility | SCOPE.noaccesscheck;
         scope (exit) scx.pop();
 
         if (e.ident == Id.hasMember)
@@ -1071,14 +1089,9 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         auto o = (*e.args)[0];
         auto s = getDsymbol(o);
         auto ad = s ? s.isAggregateDeclaration() : null;
-        if (!ad)
-        {
-            e.error("argument is not an aggregate type");
-            return new ErrorExp();
-        }
 
         auto exps = new Expressions();
-        if (ad.aliasthis)
+        if (ad && ad.aliasthis)
             exps.push(new StringExp(e.loc, cast(char*)ad.aliasthis.ident.toChars()));
         Expression ex = new TupleExp(e.loc, exps);
         ex = ex.expressionSemantic(sc);
@@ -1150,10 +1163,13 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         }
 
         auto mods = new Expressions();
-        PushAttributes pa;
-        pa.mods = mods;
-        tf.modifiersApply(&pa, &PushAttributes.fp);
-        tf.attributesApply(&pa, &PushAttributes.fp, TRUSTformatSystem);
+
+        void addToMods(string str)
+        {
+            mods.push(new StringExp(Loc.initial, cast(char*)str.ptr, str.length));
+        }
+        tf.modifiersApply(&addToMods);
+        tf.attributesApply(&addToMods, TRUSTformatSystem);
 
         auto tup = new TupleExp(e.loc, mods);
         return tup.expressionSemantic(sc);
@@ -1176,7 +1192,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
             return new ErrorExp();
         }
 
-        bool value = Target.isReturnOnStack(tf, fd && fd.needThis());
+        bool value = target.isReturnOnStack(tf, fd && fd.needThis());
         return new IntegerExp(e.loc, value, Type.tbool);
     }
     if (e.ident == Id.getFunctionVariadicStyle)
@@ -1192,7 +1208,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
             return dimError(1);
 
         LINK link;
-        int varargs;
+        VarArg varargs;
         auto o = (*e.args)[0];
 
         FuncDeclaration fd;
@@ -1201,7 +1217,7 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         if (tf)
         {
             link = tf.linkage;
-            varargs = tf.varargs;
+            varargs = tf.parameterList.varargs;
         }
         else
         {
@@ -1211,17 +1227,16 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
                 return new ErrorExp();
             }
             link = fd.linkage;
-            fd.getParameters(&varargs);
+            varargs = fd.getParameterList().varargs;
         }
         string style;
-        switch (varargs)
+        final switch (varargs)
         {
-            case 0: style = "none";                       break;
-            case 1: style = (link == LINK.d) ? "argptr"
-                                             : "stdarg";  break;
-            case 2:     style = "typesafe";               break;
-            default:
-                assert(0);
+            case VarArg.none:     style = "none";           break;
+            case VarArg.variadic: style = (link == LINK.d)
+                                             ? "argptr"
+                                             : "stdarg";    break;
+            case VarArg.typesafe: style = "typesafe";       break;
         }
         auto se = new StringExp(e.loc, cast(char*)style);
         return se.expressionSemantic(sc);
@@ -1241,20 +1256,16 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         FuncDeclaration fd;
         TypeFunction tf = toTypeFunction(o, fd);
 
-        Parameters* fparams;
+        ParameterList fparams;
         if (tf)
-        {
-            fparams = tf.parameters;
-        }
+            fparams = tf.parameterList;
+        else if (fd)
+            fparams = fd.getParameterList();
         else
         {
-            if (!fd)
-            {
-                e.error("first argument to `__traits(getParameterStorageClasses, %s, %s)` is not a function",
-                    o.toChars(), o1.toChars());
-                return new ErrorExp();
-            }
-            fparams = fd.getParameters(null);
+            e.error("first argument to `__traits(getParameterStorageClasses, %s, %s)` is not a function",
+                o.toChars(), o1.toChars());
+            return new ErrorExp();
         }
 
         StorageClass stc;
@@ -1269,14 +1280,14 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
         }
         ex = ex.ctfeInterpret();
         auto ii = ex.toUInteger();
-        if (ii >= Parameter.dim(fparams))
+        if (ii >= fparams.length)
         {
-            e.error("parameter index must be in range 0..%u not %s", cast(uint)Parameter.dim(fparams), ex.toChars());
+            e.error("parameter index must be in range 0..%u not %s", cast(uint)fparams.length, ex.toChars());
             return new ErrorExp();
         }
 
         uint n = cast(uint)ii;
-        Parameter p = Parameter.getNth(fparams, n);
+        Parameter p = fparams[n];
         stc = p.storageClass;
 
         // This mirrors hdrgen.visit(Parameter p)
@@ -1601,6 +1612,12 @@ Expression semanticTraits(TraitsExp e, Scope* sc)
                 return True();
         }
 
+        // issue 12001, allow isSame, <BasicType>, <BasicType>
+        Type t1 = isType(o1);
+        Type t2 = isType(o2);
+        if (t1 && t2 && t1.equals(t2))
+            return True();
+
         auto s1 = getDsymbol(o1);
         auto s2 = getDsymbol(o2);
         //printf("isSame: %s, %s\n", o1.toChars(), o2.toChars());
@@ -1711,34 +1728,28 @@ Lnext:
         {
             bool[void*] uniqueUnitTests;
 
-            void collectUnitTests(Dsymbols* a)
+            void symbolDg(Dsymbol s)
             {
-                if (!a)
-                    return;
-                foreach (s; *a)
+                if (auto ad = s.isAttribDeclaration())
                 {
-                    if (auto atd = s.isAttribDeclaration())
-                    {
-                        collectUnitTests(atd.include(null));
-                        continue;
-                    }
-                    if (auto ud = s.isUnitTestDeclaration())
-                    {
-                        if (cast(void*)ud in uniqueUnitTests)
-                            continue;
+                    ad.include(null).foreachDsymbol(&symbolDg);
+                }
+                else if (auto ud = s.isUnitTestDeclaration())
+                {
+                    if (cast(void*)ud in uniqueUnitTests)
+                        return;
 
-                        auto ad = new FuncAliasDeclaration(ud.ident, ud, false);
-                        ad.protection = ud.protection;
+                    uniqueUnitTests[cast(void*)ud] = true;
 
-                        auto e = new DsymbolExp(Loc.initial, ad, false);
-                        exps.push(e);
+                    auto ad = new FuncAliasDeclaration(ud.ident, ud, false);
+                    ad.protection = ud.protection;
 
-                        uniqueUnitTests[cast(void*)ud] = true;
-                    }
+                    auto e = new DsymbolExp(Loc.initial, ad, false);
+                    exps.push(e);
                 }
             }
 
-            collectUnitTests(sds.members);
+            sds.members.foreachDsymbol(&symbolDg);
         }
         auto te = new TupleExp(e.loc, exps);
         return te.expressionSemantic(sc);
@@ -1769,10 +1780,13 @@ Lnext:
     {
         return isTypeX(t => t.isAggregateValue());
     }
+version (IN_LLVM)
+{
     if (Expression ret = semanticTraitsHook(e, sc))
     {
         return ret;
     }
+}
     if (e.ident == Id.isZeroInit)
     {
         if (dim != 1)
@@ -1804,7 +1818,7 @@ Lnext:
         }
         se = se.toUTF8(sc);
 
-        Expression r = Target.getTargetInfo(se.toPtr(), e.loc);
+        Expression r = target.getTargetInfo(se.toPtr(), e.loc);
         if (!r)
         {
             e.error("`getTargetInfo` key `\"%s\"` not supported by this implementation", se.toPtr());
@@ -1817,18 +1831,17 @@ Lnext:
         if (auto result = lp.semanticTraits(e, sc))
             return result;
 
-    extern (D) void* trait_search_fp(const(char)* seed, ref int cost)
+    extern (D) const(char)* trait_search_fp(const(char)[] seed, ref int cost)
     {
         //printf("trait_search_fp('%s')\n", seed);
-        size_t len = strlen(seed);
-        if (!len)
+        if (!seed.length)
             return null;
         cost = 0;
-        StringValue* sv = traitsStringTable.lookup(seed, len);
-        return sv ? sv.ptrvalue : null;
+        StringValue* sv = traitsStringTable.lookup(seed);
+        return sv ? cast(const(char)*)sv.ptrvalue : null;
     }
 
-    if (auto sub = cast(const(char)*)speller(e.ident.toChars(), &trait_search_fp, idchars))
+    if (auto sub = speller!trait_search_fp(e.ident.toString()))
         e.error("unrecognized trait `%s`, did you mean `%s`?", e.ident.toChars(), sub);
     else
         e.error("unrecognized trait `%s`", e.ident.toChars());

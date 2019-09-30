@@ -9,10 +9,9 @@
 
 #include "gen/abi.h"
 
-#include "dmd/mars.h"
+#include "dmd/expression.h"
 #include "dmd/id.h"
 #include "dmd/identifier.h"
-#include "dmd/expression.h"
 #include "gen/abi-aarch64.h"
 #include "gen/abi-arm.h"
 #include "gen/abi-generic.h"
@@ -200,18 +199,6 @@ bool TargetABI::isAggregate(Type *t) {
          /*ty == Tarray ||*/ ty == Tdelegate || t->iscomplex();
 }
 
-bool TargetABI::isMagicCppStruct(Type *t) {
-  t = t->toBasetype();
-  if (t->ty != Tstruct) {
-    return false;
-  }
-
-  Identifier *id = static_cast<TypeStruct *>(t)->sym->ident;
-  return (id == Id::__c_long) || (id == Id::__c_ulong) ||
-         (id == Id::__c_longlong) || (id == Id::__c_ulonglong) ||
-         (id == Id::__c_long_double);
-}
-
 namespace {
 bool hasCtor(StructDeclaration *s) {
   if (s->ctor)
@@ -244,8 +231,9 @@ bool TargetABI::canRewriteAsInt(Type *t, bool include64bit) {
 
 bool TargetABI::reverseExplicitParams(TypeFunction *tf) {
   // Required by druntime for extern(D), except for `, ...`-style variadics.
-  return tf->linkage == LINKd && tf->varargs != 1 &&
-         Parameter::dim(tf->parameters) > 1;
+  return tf->linkage == LINKd &&
+         tf->parameterList.varargs != VARARGvariadic &&
+         tf->parameterList.length() > 1;
 }
 
 //////////////////////////////////////////////////////////////////////////////

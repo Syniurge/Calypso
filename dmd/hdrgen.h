@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Dave Fladebo
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -19,7 +19,7 @@ class Module;
 void genhdrfile(Module *m);
 void moduleToBuffer(OutBuffer *buf, Module *m);
 
-const char *parametersTypeToChars(Parameters *parameters, int varargs);
+const char *parametersTypeToChars(ParameterList pl);
 const char *stcToChars(StorageClass& stc);
 void trustToBuffer(OutBuffer *buf, TRUST trust);
 const char *trustToChars(TRUST trust);

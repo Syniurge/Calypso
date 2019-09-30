@@ -9,7 +9,6 @@
 
 #include "driver/cl_options.h"
 
-#include "dmd/mars.h"
 #include "gen/cl_helpers.h"
 #include "gen/logger.h"
 #include "llvm/IR/DataLayout.h"
@@ -63,15 +62,22 @@ cl::list<std::string> runargs(
 cl::opt<bool> invokedByLDMD("ldmd", cl::desc("Invoked by LDMD?"),
                             cl::ZeroOrMore, cl::ReallyHidden);
 
-static cl::opt<ubyte, true> useDeprecated(
-    cl::desc("Allow deprecated code/language features:"), cl::ZeroOrMore,
-    clEnumValues(clEnumValN(0, "de", "Do not allow deprecated features"),
-                 clEnumValN(1, "d", "Silently allow deprecated features"),
-                 clEnumValN(2, "dw",
-                            "Warn about the use of deprecated features")),
-    cl::location(global.params.useDeprecated), cl::init(2));
+static cl::opt<Diagnostic, true> useDeprecated(
+    cl::desc("Allow deprecated language features and symbols:"), cl::ZeroOrMore,
+    cl::location(global.params.useDeprecated), cl::init(DIAGNOSTICinform),
+    clEnumValues(
+        clEnumValN(DIAGNOSTICoff, "d",
+                   "Silently allow deprecated features and symbols"),
+        clEnumValN(DIAGNOSTICinform, "dw",
+                   "Issue a message when deprecated features or "
+                   "symbols are used (default)"),
+        clEnumValN(
+            DIAGNOSTICerror, "de",
+            "Issue an error when deprecated features or symbols are used "
+            "(halt compilation)")));
 
-cl::opt<bool> compileOnly("c", cl::desc("Do not link"), cl::ZeroOrMore);
+cl::opt<bool> compileOnly("c", cl::desc("Compile only, do not link"),
+                          cl::ZeroOrMore);
 
 static cl::opt<bool, true> createStaticLib("lib", cl::ZeroOrMore,
                                            cl::desc("Create static library"),
@@ -81,7 +87,7 @@ static cl::opt<bool, true>
     createSharedLib("shared", cl::desc("Create shared library (DLL)"),
                     cl::ZeroOrMore, cl::location(global.params.dll));
 
-cl::opt<ubyte> defaultToHiddenVisibility(
+cl::opt<unsigned char> defaultToHiddenVisibility(
     "fvisibility", cl::ZeroOrMore,
     cl::desc("Default visibility of symbols (not relevant for Windows)"),
     clEnumValues(clEnumValN(0, "default", "Export all symbols"),
@@ -118,19 +124,40 @@ static cl::opt<bool, true>
                      cl::desc("Show errors from speculative compiles such as "
                               "__traits(compiles,...)"));
 
-static cl::opt<ubyte, true> warnings(
+static cl::opt<bool, true> printErrorContext(
+    "verrors-context", cl::ZeroOrMore,
+    cl::location(global.params.printErrorContext),
+    cl::desc(
+        "Show error messages with the context of the erroring source line"));
+
+static cl::opt<Diagnostic, true> warnings(
     cl::desc("Warnings:"), cl::ZeroOrMore, cl::location(global.params.warnings),
     clEnumValues(
-        clEnumValN(1, "w", "Enable warnings as errors (compilation will halt)"),
-        clEnumValN(2, "wi",
+        clEnumValN(DIAGNOSTICerror, "w",
+                   "Enable warnings as errors (compilation will halt)"),
+        clEnumValN(DIAGNOSTICinform, "wi",
                    "Enable warnings as messages (compilation will continue)")),
-    cl::init(0));
+    cl::init(DIAGNOSTICoff));
 
 static cl::opt<bool, true> ignoreUnsupportedPragmas(
     "ignore", cl::desc("Ignore unsupported pragmas"), cl::ZeroOrMore,
     cl::location(global.params.ignoreUnsupportedPragmas));
 
-static cl::opt<ubyte, true> debugInfo(
+static cl::opt<CppStdRevision, true> cplusplus(
+    "extern-std", cl::ZeroOrMore,
+    cl::desc("C++ standard for name mangling compatibility"),
+    cl::location(global.params.cplusplus),
+    clEnumValues(
+        clEnumValN(CppStdRevisionCpp98, "c++98",
+                   "Sets `__traits(getTargetInfo, \"cppStd\")` to `199711`"),
+        clEnumValN(CppStdRevisionCpp11, "c++11",
+                   "Sets `__traits(getTargetInfo, \"cppStd\")` to `201103`"),
+        clEnumValN(CppStdRevisionCpp14, "c++14",
+                   "Sets `__traits(getTargetInfo, \"cppStd\")` to `201402`"),
+        clEnumValN(CppStdRevisionCpp17, "c++17",
+                   "Sets `__traits(getTargetInfo, \"cppStd\")` to `201703`")));
+
+static cl::opt<unsigned char, true> debugInfo(
     cl::desc("Generating debug information:"), cl::ZeroOrMore,
     clEnumValues(
         clEnumValN(1, "g", "Add symbolic debug info"),
@@ -218,6 +245,10 @@ cl::opt<bool>
     hdrKeepAllBodies("Hkeep-all-bodies", cl::ZeroOrMore,
                      cl::desc("Keep all function bodies in .di files"));
 
+cl::opt<std::string> mixinFile("mixin", cl::ZeroOrMore,
+                               cl::desc("Expand and save mixins to <filename>"),
+                               cl::value_desc("filename"));
+
 static cl::opt<bool, true> unittest("unittest", cl::ZeroOrMore,
                                     cl::desc("Compile in unit tests"),
                                     cl::location(global.params.useUnitTests));
@@ -239,23 +270,12 @@ static cl::opt<bool, true>
 
 // -d-debug is a bit messy, it has 3 modes:
 // -d-debug=ident, -d-debug=level and -d-debug (without argument)
-// That last of these must be acted upon immediately to ensure proper
-// interaction with other options, so it needs some special handling:
+// The last one represents `-d-debug=1`, so it needs some special handling:
 std::vector<std::string> debugArgs;
 
 struct D_DebugStorage {
   void push_back(const std::string &str) {
-    if (str.empty()) {
-      // Bare "-d-debug" has a special meaning.
-      global.params.useAssert = CHECKENABLEon;
-      global.params.useArrayBounds = CHECKENABLEon;
-      global.params.useInvariants = true;
-      global.params.useIn = true;
-      global.params.useOut = true;
-      debugArgs.push_back("1");
-    } else {
-      debugArgs.push_back(str);
-    }
+    debugArgs.push_back(str.empty() ? "1" : str);
   }
 };
 
@@ -274,9 +294,17 @@ cl::list<std::string> versions(
     cl::desc("Compile in version code >= <level> or identified by <idents>"));
 
 cl::list<std::string> transitions(
-    "transition", cl::CommaSeparated, cl::value_desc("idents"),
-    cl::desc(
-        "Help with language change identified by <idents>, use ? for list"));
+    "transition", cl::CommaSeparated, cl::value_desc("id"),
+    cl::desc("Help with language change identified by <id>, use ? for list"));
+
+cl::list<std::string> previews("preview", cl::CommaSeparated,
+                               cl::value_desc("id"),
+                               cl::desc("Enable an upcoming language change "
+                                        "identified by <id>, use ? for list"));
+
+cl::list<std::string> reverts(
+    "revert", cl::CommaSeparated, cl::value_desc("id"),
+    cl::desc("Revert language change identified by <id>, use ? for list"));
 
 cl::list<std::string>
     linkerSwitches("L", cl::desc("Pass <linkerflag> to the linker"),
@@ -306,8 +334,9 @@ cl::opt<std::string>
     mABI("mabi", cl::ZeroOrMore, cl::Hidden, cl::init(""),
          cl::desc("The name of the ABI to be targeted from the backend"));
 
+static Strings *pModFileAliasStrings = &global.params.modFileAliasStrings;
 static StringsAdapter
-    modFileAliasStringsStore("mv", global.params.modFileAliasStrings);
+    modFileAliasStringsStore("mv", pModFileAliasStrings);
 static cl::list<std::string, StringsAdapter> modFileAliasStrings(
     "mv", cl::desc("Use <filespec> as source file for <package.module>"),
     cl::value_desc("<package.module>=<filespec>"),
@@ -334,17 +363,26 @@ static cl::opt<CHECKENABLE, true> boundsCheck(
                             "Enabled for @safe functions only"),
                  clEnumValN(CHECKENABLEon, "on", "Enabled for all functions")));
 
-static cl::opt<bool, true, FlagParser<bool>>
+static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>> switchErrors(
+    "switch-errors", cl::ZeroOrMore,
+    cl::desc("(*) Enable runtime errors for unhandled switch cases"),
+    cl::location(global.params.useSwitchError), cl::init(CHECKENABLEdefault));
+
+static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>>
     invariants("invariants", cl::ZeroOrMore, cl::desc("(*) Enable invariants"),
-               cl::location(global.params.useInvariants), cl::init(true));
+               cl::location(global.params.useInvariants),
+               cl::init(CHECKENABLEdefault));
 
-static cl::opt<bool, true, FlagParser<bool>> preconditions(
-    "preconditions", cl::ZeroOrMore, cl::location(global.params.useIn),
-    cl::desc("(*) Enable function preconditions"), cl::init(true));
+static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>>
+    preconditions("preconditions", cl::ZeroOrMore,
+                  cl::location(global.params.useIn),
+                  cl::desc("(*) Enable function preconditions"),
+                  cl::init(CHECKENABLEdefault));
 
-static cl::opt<bool, true, FlagParser<bool>>
+static cl::opt<CHECKENABLE, true, FlagParser<CHECKENABLE>>
     postconditions("postconditions", cl::ZeroOrMore,
-                   cl::location(global.params.useOut), cl::init(true),
+                   cl::location(global.params.useOut),
+                   cl::init(CHECKENABLEdefault),
                    cl::desc("(*) Enable function postconditions"));
 
 static MultiSetter ContractsSetter(false, &global.params.useIn,
@@ -353,14 +391,25 @@ static cl::opt<MultiSetter, true, FlagParser<bool>>
     contracts("contracts", cl::ZeroOrMore, cl::location(ContractsSetter),
               cl::desc("(*) Enable function pre- and post-conditions"));
 
-bool invReleaseMode = true;
-static MultiSetter ReleaseSetter(true, &invReleaseMode,
-                                 &global.params.useInvariants,
-                                 &global.params.useOut, &global.params.useIn,
-                                 nullptr);
-static cl::opt<MultiSetter, true, cl::parser<bool>>
-    release("release", cl::ZeroOrMore, cl::location(ReleaseSetter),
-            cl::desc("Disables asserts, invariants, contracts and boundscheck"),
+static cl::opt<CHECKACTION, true> checkAction(
+    "checkaction", cl::ZeroOrMore, cl::location(global.params.checkAction),
+    cl::desc("Action to take when an assert/boundscheck/final-switch fails"),
+    cl::init(CHECKACTION_D),
+    clEnumValues(
+        clEnumValN(CHECKACTION_D, "D",
+                   "Usual D behavior of throwing an AssertError"),
+        clEnumValN(CHECKACTION_C, "C",
+                   "Call the C runtime library assert failure function"),
+        clEnumValN(CHECKACTION_halt, "halt",
+                   "Halt the program execution (very lightweight)"),
+        clEnumValN(CHECKACTION_context, "context",
+                   "Use D assert with context information (when available)")));
+
+static cl::opt<bool, true>
+    release("release", cl::ZeroOrMore, cl::location(global.params.release),
+            cl::desc("Compile release version, defaulting to disabled "
+                     "asserts/contracts/invariants, and bounds checks in @safe "
+                     "functions only"),
             cl::ValueDisallowed);
 
 cl::opt<bool, true>
@@ -405,16 +454,18 @@ cl::opt<unsigned, true> nestedTemplateDepth(
     cl::desc(
         "Set maximum number of nested template instantiations (experimental)"));
 
-cl::opt<bool, true> useDIP25("dip25", cl::ZeroOrMore,
-                             cl::location(global.params.useDIP25),
-                             cl::desc("Implement DIP25 (sealed references)"));
-
-cl::opt<bool> useDIP1000("dip1000", cl::ZeroOrMore,
-                         cl::desc("Implement DIP1000 (scoped pointers)"));
-
-cl::opt<bool, true> useDIP1008("dip1008", cl::ZeroOrMore,
-                               cl::location(global.params.ehnogc),
-                               cl::desc("Implement DIP1008 (@nogc Throwable)"));
+// legacy options superseded by `-preview=dip<N>`
+static cl::opt<bool, true>
+    useDIP25("dip25", cl::ZeroOrMore, cl::location(global.params.useDIP25),
+             cl::desc("Implement DIP25 (sealed references)"), cl::ReallyHidden);
+static cl::opt<bool, true>
+    useDIP1000("dip1000", cl::ZeroOrMore, cl::location(global.params.vsafe),
+               cl::desc("Implement DIP1000 (scoped pointers)"),
+               cl::ReallyHidden);
+static cl::opt<bool, true>
+    useDIP1008("dip1008", cl::ZeroOrMore, cl::location(global.params.ehnogc),
+               cl::desc("Implement DIP1008 (@nogc Throwable)"),
+               cl::ReallyHidden);
 
 cl::opt<bool, true> betterC(
     "betterC", cl::ZeroOrMore, cl::location(global.params.betterC),
@@ -551,7 +602,9 @@ void hideLLVMOptions() {
       "denormal-fp-math", "disable-debug-info-verifier",
       "disable-objc-arc-checkforcfghazards", "disable-spill-fusing",
       "do-counter-promotion", "emulated-tls", "enable-correct-eh-support",
-      "enable-fp-mad", "enable-implicit-null-checks", "enable-load-pre",
+      "enable-cse-in-irtranslator", "enable-cse-in-legalizer",
+      "enable-fp-mad", "enable-gvn-memdep", "enable-implicit-null-checks",
+      "enable-load-pre", "enable-loop-simplifycfg-term-folding",
       "enable-misched", "enable-name-compression", "enable-no-infs-fp-math",
       "enable-no-nans-fp-math", "enable-no-signed-zeros-fp-math",
       "enable-no-trapping-fp-math", "enable-objc-arc-annotations",
@@ -561,8 +614,10 @@ void hideLLVMOptions() {
       "fatal-assembler-warnings", "filter-print-funcs", "gpsize",
       "imp-null-check-page-size", "imp-null-max-insts-to-consider",
       "import-all-index", "incremental-linker-compatible",
+      "instcombine-code-sinking",
       "instcombine-guard-widening-window", "instcombine-max-num-phis",
-      "instcombine-maxarray-size", "internalize-public-api-file",
+      "instcombine-maxarray-size", "instrprof-atomic-counter-update-all",
+      "internalize-public-api-file",
       "internalize-public-api-list", "iterative-counter-promotion",
       "join-liveintervals", "jump-table-type", "limit-float-precision",
       "max-counter-promotions", "max-counter-promotions-per-loop",
@@ -588,7 +643,9 @@ void hideLLVMOptions() {
       "sample-profile-max-propagate-iterations", "shrink-wrap", "simplify-mir",
       "speculative-counter-promotion-max-exiting",
       "speculative-counter-promotion-to-loop", "spiller", "spirv-debug",
-      "spirv-erase-cl-md", "spirv-mem2reg", "spvbool-validate",
+      "spirv-erase-cl-md", "spirv-lower-const-expr", "spirv-mem2reg",
+      "spirv-no-deref-attr", "spirv-text", "spvbool-validate",
+      "spvmemmove-validate",
       "stack-alignment", "stack-size-section", "stack-symbol-ordering",
       "stackmap-version", "static-func-full-module-prefix",
       "static-func-strip-dirname-prefix", "stats", "stats-json", "strip-debug",

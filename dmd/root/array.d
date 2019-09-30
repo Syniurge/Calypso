@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/root/array.d, root/_array.d)
@@ -18,7 +18,7 @@ import dmd.root.rmem;
 
 extern (C++) struct Array(T)
 {
-    size_t dim;
+    size_t length;
     T* data;
 
 private:
@@ -31,69 +31,84 @@ public:
      * Params:
      *  dim = initial length of array
      */
-    this(size_t dim)
+    this(size_t dim) pure nothrow
     {
         reserve(dim);
-        this.dim = dim;
+        this.length = dim;
     }
 
     @disable this(this);
 
-    ~this() nothrow
+    ~this() pure nothrow
     {
         if (data != &smallarray[0])
             mem.xfree(data);
     }
-
-    const(char)* toChars()
+    ///returns elements comma separated in []
+    extern(D) const(char)[] toString()
     {
-        static if (is(typeof(T.init.toChars())))
+        static if (is(typeof(T.init.toString())))
         {
-            const(char)** buf = cast(const(char)**)mem.xmalloc(dim * (char*).sizeof);
-            size_t len = 2;
-            for (size_t u = 0; u < dim; u++)
+            const(char)[][] buf = (cast(const(char)[]*)mem.xcalloc((char[]).sizeof, length))[0 .. length];
+            size_t len = 2; // [ and ]
+            foreach (u; 0 .. length)
             {
-                buf[u] = data[u].toChars();
-                len += strlen(buf[u]) + 1;
+                buf[u] = data[u].toString();
+                len += buf[u].length + 1; //length + ',' or null terminator
             }
-            char* str = cast(char*)mem.xmalloc(len);
+            char[] str = (cast(char*)mem.xmalloc(len))[0..len];
 
             str[0] = '[';
-            char* p = str + 1;
-            for (size_t u = 0; u < dim; u++)
+            char* p = str.ptr + 1;
+            foreach (u; 0 .. length)
             {
                 if (u)
                     *p++ = ',';
-                len = strlen(buf[u]);
-                memcpy(p, buf[u], len);
-                p += len;
+                memcpy(p, buf[u].ptr, buf[u].length);
+                p += buf[u].length;
             }
             *p++ = ']';
             *p = 0;
-            mem.xfree(buf);
-            return str;
+            assert(p - str.ptr == str.length - 1); //null terminator
+            mem.xfree(buf.ptr);
+            return str[0 .. $-1];
         }
         else
         {
             assert(0);
         }
     }
+    ///ditto
+    const(char)* toChars()
+    {
+        return toString.ptr;
+    }
 
-    void push(T ptr) nothrow
+    ref Array push(T ptr) return pure nothrow
     {
         reserve(1);
-        data[dim++] = ptr;
+        data[length++] = ptr;
+        return this;
     }
 
-    void append(typeof(this)* a) nothrow
+    extern (D) ref Array pushSlice(T[] a) return pure nothrow
     {
-        insert(dim, a);
+        const oldLength = length;
+        setDim(oldLength + a.length);
+        memcpy(data + oldLength, a.ptr, a.length * T.sizeof);
+        return this;
     }
 
-    void reserve(size_t nentries) nothrow
+    ref Array append(typeof(this)* a) return pure nothrow
     {
-        //printf("Array::reserve: dim = %d, allocdim = %d, nentries = %d\n", (int)dim, (int)allocdim, (int)nentries);
-        if (allocdim - dim < nentries)
+        insert(length, a);
+        return this;
+    }
+
+    void reserve(size_t nentries) pure nothrow
+    {
+        //printf("Array::reserve: length = %d, allocdim = %d, nentries = %d\n", (int)length, (int)allocdim, (int)nentries);
+        if (allocdim - length < nentries)
         {
             if (allocdim == 0)
             {
@@ -111,58 +126,58 @@ public:
             }
             else if (allocdim == SMALLARRAYCAP)
             {
-                allocdim = dim + nentries;
+                allocdim = length + nentries;
                 data = cast(T*)mem.xmalloc(allocdim * (*data).sizeof);
-                memcpy(data, smallarray.ptr, dim * (*data).sizeof);
+                memcpy(data, smallarray.ptr, length * (*data).sizeof);
             }
             else
             {
                 /* Increase size by 1.5x to avoid excessive memory fragmentation
                  */
-                auto increment = dim / 2;
+                auto increment = length / 2;
                 if (nentries > increment)       // if 1.5 is not enough
                     increment = nentries;
-                allocdim = dim + increment;
+                allocdim = length + increment;
                 data = cast(T*)mem.xrealloc(data, allocdim * (*data).sizeof);
             }
         }
     }
 
-    void remove(size_t i) nothrow
+    void remove(size_t i) pure nothrow @nogc
     {
-        if (dim - i - 1)
-            memmove(data + i, data + i + 1, (dim - i - 1) * (data[0]).sizeof);
-        dim--;
+        if (length - i - 1)
+            memmove(data + i, data + i + 1, (length - i - 1) * (data[0]).sizeof);
+        length--;
     }
 
-    void insert(size_t index, typeof(this)* a) nothrow
+    void insert(size_t index, typeof(this)* a) pure nothrow
     {
         if (a)
         {
-            size_t d = a.dim;
+            size_t d = a.length;
             reserve(d);
-            if (dim != index)
-                memmove(data + index + d, data + index, (dim - index) * (*data).sizeof);
+            if (length != index)
+                memmove(data + index + d, data + index, (length - index) * (*data).sizeof);
             memcpy(data + index, a.data, d * (*data).sizeof);
-            dim += d;
+            length += d;
         }
     }
 
-    void insert(size_t index, T ptr) nothrow
+    void insert(size_t index, T ptr) pure nothrow
     {
         reserve(1);
-        memmove(data + index + 1, data + index, (dim - index) * (*data).sizeof);
+        memmove(data + index + 1, data + index, (length - index) * (*data).sizeof);
         data[index] = ptr;
-        dim++;
+        length++;
     }
 
-    void setDim(size_t newdim) nothrow
+    void setDim(size_t newdim) pure nothrow
     {
-        if (dim < newdim)
+        if (length < newdim)
         {
-            reserve(newdim - dim);
+            reserve(newdim - length);
         }
-        dim = newdim;
+        length = newdim;
     }
 
     ref inout(T) opIndex(size_t i) inout nothrow pure
@@ -170,60 +185,61 @@ public:
         return data[i];
     }
 
-    inout(T)* tdata() inout nothrow
+    inout(T)* tdata() inout pure nothrow @nogc @safe
     {
         return data;
     }
 
-    Array!T* copy() const nothrow
+    Array!T* copy() const pure nothrow
     {
         auto a = new Array!T();
-        a.setDim(dim);
-        memcpy(a.data, data, dim * (void*).sizeof);
+        a.setDim(length);
+        memcpy(a.data, data, length * (void*).sizeof);
         return a;
     }
 
-    void shift(T ptr) nothrow
+    void shift(T ptr) pure nothrow
     {
         reserve(1);
-        memmove(data + 1, data, dim * (*data).sizeof);
+        memmove(data + 1, data, length * (*data).sizeof);
         data[0] = ptr;
-        dim++;
+        length++;
     }
 
-    void zero() nothrow pure
+    void zero() nothrow pure @nogc
     {
-        data[0 .. dim] = T.init;
+        data[0 .. length] = T.init;
     }
 
-    T pop() nothrow pure
+    T pop() nothrow pure @nogc
     {
-        return data[--dim];
+        return data[--length];
     }
 
-    extern (D) inout(T)[] opSlice() inout nothrow pure
+    extern (D) inout(T)[] opSlice() inout nothrow pure @nogc
     {
-        return data[0 .. dim];
+        return data[0 .. length];
     }
 
-    extern (D) inout(T)[] opSlice(size_t a, size_t b) inout nothrow pure
+    extern (D) inout(T)[] opSlice(size_t a, size_t b) inout nothrow pure @nogc
     {
-        assert(a <= b && b <= dim);
+        assert(a <= b && b <= length);
         return data[a .. b];
     }
 
-    alias opDollar = dim;
+    alias opDollar = length;
+    alias dim = length;
 }
 
 struct BitArray
 {
 nothrow:
-    size_t length() const pure
+    size_t length() const pure nothrow @nogc @safe
     {
         return len;
     }
 
-    void length(size_t nlen)
+    void length(size_t nlen) pure nothrow
     {
         immutable obytes = (len + 7) / 8;
         immutable nbytes = (nlen + 7) / 8;
@@ -235,7 +251,7 @@ nothrow:
         len = nlen;
     }
 
-    bool opIndex(size_t idx) const pure
+    bool opIndex(size_t idx) const pure nothrow @nogc
     {
         import core.bitop : bt;
 
@@ -243,7 +259,7 @@ nothrow:
         return !!bt(ptr, idx);
     }
 
-    void opIndexAssign(bool val, size_t idx) pure
+    void opIndexAssign(bool val, size_t idx) pure nothrow @nogc
     {
         import core.bitop : btc, bts;
 
@@ -256,7 +272,7 @@ nothrow:
 
     @disable this(this);
 
-    ~this()
+    ~this() pure nothrow
     {
         mem.xfree(ptr);
     }
@@ -273,9 +289,9 @@ private:
  * Returns:
  *  The given array exposed to a standard D array.
  */
-@property T[] asDArray(T)(ref Array!T array)
+@property inout(T)[] peekSlice(T)(inout(Array!T)* array) pure nothrow @nogc
 {
-    return array.data[0..array.dim];
+    return array ? (*array)[] : null;
 }
 
 /**
@@ -286,12 +302,12 @@ private:
  *  index = the index to split the array from.
  *  length = the number of elements to make room for starting at $(D index).
  */
-void split(T)(ref Array!T array, size_t index, size_t length)
+void split(T)(ref Array!T array, size_t index, size_t length) pure nothrow
 {
     if (length > 0)
     {
-        auto previousDim = array.dim;
-        array.setDim(array.dim + length);
+        auto previousDim = array.length;
+        array.setDim(array.length + length);
         for (size_t i = previousDim; i > index;)
         {
             i--;
@@ -303,25 +319,75 @@ unittest
 {
     auto array = Array!int();
     array.split(0, 0);
-    assert([] == array.asDArray);
-    array.push(1);
-    array.push(3);
+    assert([] == array[]);
+    array.push(1).push(3);
     array.split(1, 1);
     array[1] = 2;
-    assert([1, 2, 3] == array.asDArray);
+    assert([1, 2, 3] == array[]);
     array.split(2, 3);
     array[2] = 8;
     array[3] = 20;
     array[4] = 4;
-    assert([1, 2, 8, 20, 4, 3] == array.asDArray);
+    assert([1, 2, 8, 20, 4, 3] == array[]);
     array.split(0, 0);
-    assert([1, 2, 8, 20, 4, 3] == array.asDArray);
+    assert([1, 2, 8, 20, 4, 3] == array[]);
     array.split(0, 1);
     array[0] = 123;
-    assert([123, 1, 2, 8, 20, 4, 3] == array.asDArray);
+    assert([123, 1, 2, 8, 20, 4, 3] == array[]);
     array.split(0, 3);
     array[0] = 123;
     array[1] = 421;
     array[2] = 910;
-    assert([123, 421, 910, 123, 1, 2, 8, 20, 4, 3] == array.asDArray);
+    assert([123, 421, 910, 123, 1, 2, 8, 20, 4, 3] == (&array).peekSlice());
+}
+
+/**
+ * Reverse an array in-place.
+ * Params:
+ *      a = array
+ * Returns:
+ *      reversed a[]
+ */
+T[] reverse(T)(T[] a) pure nothrow @nogc @safe
+{
+    if (a.length > 1)
+    {
+        const mid = (a.length + 1) >> 1;
+        foreach (i; 0 .. mid)
+        {
+            T e = a[i];
+            a[i] = a[$ - 1 - i];
+            a[$ - 1 - i] = e;
+        }
+    }
+    return a;
+}
+
+unittest
+{
+    int[] a1 = [];
+    assert(reverse(a1) == []);
+    int[] a2 = [2];
+    assert(reverse(a2) == [2]);
+    int[] a3 = [2,3];
+    assert(reverse(a3) == [3,2]);
+    int[] a4 = [2,3,4];
+    assert(reverse(a4) == [4,3,2]);
+    int[] a5 = [2,3,4,5];
+    assert(reverse(a5) == [5,4,3,2]);
+}
+
+unittest
+{
+    //test toString/toChars.  Identifier is a simple object that has a usable .toString
+    import dmd.identifier : Identifier;
+    import core.stdc.string : strcmp;
+
+    auto array = Array!Identifier();
+    array.push(new Identifier("id1"));
+    array.push(new Identifier("id2"));
+
+    string expected = "[id1,id2]";
+    assert(array.toString == expected);
+    assert(strcmp(array.toChars, expected.ptr) == 0);
 }

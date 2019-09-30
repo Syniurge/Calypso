@@ -10,6 +10,7 @@
 #include "dmd/attrib.h"
 #include "dmd/ctfe.h"
 #include "dmd/enum.h"
+#include "dmd/errors.h"
 #include "dmd/hdrgen.h"
 #include "dmd/id.h"
 #include "dmd/identifier.h"
@@ -433,7 +434,7 @@ public:
     if (dtype->ty == Tarray) {
       LLConstant *clen =
           LLConstantInt::get(DtoSize_t(), e->numberOfCodeUnits(), false);
-      result = new DImValue(e->type, DtoConstSlice(clen, arrptr, dtype));
+      result = new DSliceValue(e->type, DtoConstSlice(clen, arrptr, dtype));
     } else if (dtype->ty == Tsarray) {
       LLType *dstType =
           getPtrToType(LLArrayType::get(ct, e->numberOfCodeUnits()));
@@ -774,7 +775,7 @@ public:
 
       // as requested by bearophile, see if it's a C printf call and that it's
       // valid.
-      if (global.params.warnings && checkPrintf) {
+      if (global.params.warnings != DIAGNOSTICoff && checkPrintf) {
         if (fndecl->linkage == LINKc &&
             strcmp(fndecl->ident->toChars(), "printf") == 0) {
           warnInvalidPrintfCall(e->loc, (*e->arguments)[0], e->arguments->dim);
@@ -1073,8 +1074,8 @@ public:
     const auto ident = p->func()->decl->ident;
     if (ident == Id::ensure || ident == Id::require) {
       Logger::println("contract this exp");
-      LLValue *v = DtoBitCast(p->func()->nestArg, DtoType(e->type));
-      result = new DImValue(e->type, v);
+      LLValue *v = p->func()->nestArg; // thisptr lvalue
+      result = new DLValue(e->type, DtoBitCast(v, DtoPtrToType(e->type)));
     } else if (vd->toParent2() != p->func()->decl) {
       Logger::println("nested this exp");
       result = DtoNestedVariable(e->loc, e->type, vd, e->type->ty == Tstruct);
@@ -1635,9 +1636,7 @@ public:
       } else if (e->e1->op == TOKvar) {
         if (auto vd = static_cast<VarExp *>(e->e1)->var->isVarDeclaration()) {
           if (vd->onstack) {
-            assert(vd->scopeClassType);
-            const auto cd = vd->scopeClassType->sym->isClassDeclaration();
-            DtoFinalizeScopeClass(e->loc, DtoRVal(dval), cd);
+            DtoFinalizeScopeClass(e->loc, DtoRVal(dval), vd->onstackWithDtor);
             onstack = true;
           }
         }
@@ -1732,7 +1731,7 @@ public:
     p->scope() = IRScope(passedbb);
 
     // class/struct invariants
-    if (!global.params.useInvariants)
+    if (global.params.useInvariants != CHECKENABLEon)
       return;
     if (condty->ty == Tclass) {
       const auto sym = static_cast<TypeClass *>(condty)->sym;
@@ -2003,6 +2002,10 @@ public:
       assert(lv->getType() == rv->getType());
       eval = (e->op == TOKidentity) ? p->ir->CreateICmpEQ(lv, rv)
                                     : p->ir->CreateICmpNE(lv, rv);
+      if (t1->ty == Tvector) {
+        eval = mergeVectorEquals(eval,
+                                 e->op == TOKidentity ? TOKequal : TOKnotequal);
+      }
     }
     result = new DImValue(e->type, eval);
   }

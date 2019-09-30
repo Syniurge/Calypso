@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/semantic2.d, _semantic2.d)
@@ -412,7 +412,7 @@ extern(C++) final class Semantic2Visitor : Visitor
                     error(f2.loc, "%s `%s%s` cannot be overloaded with %s`extern(%s)` function at %s",
                             f2.kind(),
                             f2.toPrettyChars(),
-                            parametersTypeToChars(tf2.parameters, tf2.varargs),
+                            parametersTypeToChars(tf2.parameterList),
                             (f1.linkage == f2.linkage ? "another " : "").ptr,
                             linkageToChars(f1.linkage), f1.loc.toChars());
                     f2.type = Type.terror;
@@ -423,8 +423,8 @@ extern(C++) final class Semantic2Visitor : Visitor
                 buf2.reset();
                 mangleToFuncSignature(buf2, f2);
 
-                auto s1 = buf1.peekString();
-                auto s2 = buf2.peekString();
+                auto s1 = buf1.peekChars();
+                auto s2 = buf2.peekChars();
 
                 //printf("+%s\n\ts1 = %s\n\ts2 = %s @ [%s]\n", toChars(), s1, s2, f2.loc.toChars());
                 if (strcmp(s1, s2) == 0)
@@ -433,7 +433,7 @@ extern(C++) final class Semantic2Visitor : Visitor
                     error(f2.loc, "%s `%s%s` conflicts with previous declaration at %s",
                             f2.kind(),
                             f2.toPrettyChars(),
-                            parametersTypeToChars(tf2.parameters, tf2.varargs),
+                            parametersTypeToChars(tf2.parameterList),
                             f1.loc.toChars());
                     f2.type = Type.terror;
                     f2.errors = true;
@@ -441,22 +441,14 @@ extern(C++) final class Semantic2Visitor : Visitor
                 return 0;
             });
         }
-        objc.setSelector(fd, sc);
-        objc.validateSelector(fd);
-        if (ClassDeclaration cd = fd.parent.isClassDeclaration())
-        {
-            objc.checkLinkage(fd);
-        }
         if (!fd.type || fd.type.ty != Tfunction)
             return;
         TypeFunction f = cast(TypeFunction) fd.type;
-        if (!f.parameters)
-            return;
-        size_t nparams = Parameter.dim(f.parameters);
+
         //semantic for parameters' UDAs
-        foreach (i; 0..nparams)
+        foreach (i; 0 .. f.parameterList.length)
         {
-            Parameter param = Parameter.getNth(f.parameters, i);
+            Parameter param = f.parameterList[i];
             if (param && param.userAttribDecl)
                 param.userAttribDecl.semantic2(sc);
         }

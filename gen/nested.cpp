@@ -9,6 +9,7 @@
 
 #include "gen/nested.h"
 
+#include "dmd/errors.h"
 #include "dmd/target.h"
 #include "gen/dvalue.h"
 #include "gen/funcgenstate.h"
@@ -84,11 +85,27 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
   IF_LOG { Logger::cout() << "Context: " << *ctx << '\n'; }
 
   DtoCreateNestedContextType(vdparent->isFuncDeclaration());
+
   assert(isIrLocalCreated(vd));
+  IrLocal *const irLocal = getIrLocal(vd);
+
+  // The variable may not actually be nested in a speculative context (e.g.,
+  // with `-allinst`, see https://github.com/ldc-developers/ldc/issues/2932).
+  // Use an invalid null storage in that case, so that accessing the var at
+  // runtime will cause a segfault.
+  if (irLocal->nestedIndex == -1) {
+    Logger::println(
+        "WARNING: isn't actually nested, using invalid null storage");
+    auto llType = DtoPtrToType(astype);
+    if (isSpecialRefVar(vd))
+      llType = llType->getPointerTo();
+    return makeVarDValue(astype, vd, llvm::ConstantPointerNull::get(llType));
+  }
 
   ////////////////////////////////////
   // Extract variable from nested context
 
+  assert(irfunc->frameType);
   const auto frameType = LLPointerType::getUnqual(irfunc->frameType);
   IF_LOG { Logger::cout() << "casting to: " << *irfunc->frameType << '\n'; }
   LLValue *val = DtoBitCast(ctx, frameType);
@@ -108,7 +125,6 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     val = DtoAlignedLoad(val, name);
   };
 
-  IrLocal *const irLocal = getIrLocal(vd);
   const auto vardepth = irLocal->nestedDepth;
   const auto funcdepth = irfunc->depth;
 
@@ -132,10 +148,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     IF_LOG Logger::cout() << "Frame: " << *val << '\n';
   }
 
-  const auto idx = irLocal->nestedIndex;
-  assert(idx != -1 && "Nested context not yet resolved for variable.");
-
-  offsetToNthField(idx, vd->toChars());
+  offsetToNthField(irLocal->nestedIndex, vd->toChars());
   IF_LOG {
     Logger::cout() << "Addr: " << *val << '\n';
     Logger::cout() << "of type: " << *val->getType() << '\n';
@@ -259,18 +272,8 @@ LLValue *DtoNestedContext(Loc &loc, Dsymbol *sym) {
     return llvm::ConstantPointerNull::get(getVoidPtrType());
   }
 
-  FuncDeclaration *frameToPass = nullptr;
-  if (AggregateDeclaration *ad = sym->isAggregateDeclaration()) {
-    // If sym is a nested struct or a nested class, pass the frame
-    // of the function where sym is declared.
-    frameToPass = ad->toParent()->isFuncDeclaration();
-  } else if (FuncDeclaration *symfd = sym->isFuncDeclaration()) {
-    // If sym is a nested function, and its parent context is different
-    // than the one we got, adjust it.
-    frameToPass = getParentFunc(symfd);
-  }
-
-  if (frameToPass) {
+  // The symbol may need a parent context of the current function.
+  if (FuncDeclaration *frameToPass = getParentFunc(sym)) {
     IF_LOG Logger::println("Parent frame is from %s", frameToPass->toChars());
     FuncDeclaration *ctxfd = irFunc.decl;
     IF_LOG Logger::println("Current function is %s", ctxfd->toChars());
@@ -469,7 +472,7 @@ void DtoCreateNestedContext(FuncGenState &funcGen) {
       if (depth > 1) {
         src = DtoBitCast(src, getVoidPtrType());
         LLValue *dst = DtoBitCast(frame, getVoidPtrType());
-        DtoMemCpy(dst, src, DtoConstSize_t((depth - 1) * Target::ptrsize),
+        DtoMemCpy(dst, src, DtoConstSize_t((depth - 1) * target.ptrsize),
                   getABITypeAlign(getVoidPtrType()));
       }
       // Copy nestArg into framelist; the outer frame is not in the list of

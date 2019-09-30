@@ -14,6 +14,7 @@
 #include "aggregate.h"
 #include "cond.h"
 #include "declaration.h"
+#include "errors.h"
 #include "expression.h"
 #include "identifier.h"
 #include "id.h"
@@ -621,7 +622,7 @@ void PCH::add(const char* header, ::Module *from)
         using namespace llvm::sys::path;
 
         auto headerFn = new llvm::SmallString<64>(
-                            parent_path(from->srcfile->name.toChars()));
+                            parent_path(from->srcfile.toChars()));
         append(*headerFn, llvm::StringRef(header));
 
         file_status result;
@@ -955,7 +956,7 @@ void LangPlugin::codegenModules()
         }
 
         m->checkAndAddOutputFile(m->objfile);
-        global.params.objfiles.push(m->objfile->name.toChars());
+        global.params.objfiles.push(m->objfile.toChars());
     }
     ::codegenModules(cpp::Module::amodules_cpp, false);
 }
@@ -965,7 +966,6 @@ bool LangPlugin::needsCodegen(::Module *m)
     assert(isCPP(m));
     auto c_m = static_cast<cpp::Module*>(m);
 
-    auto objName = m->objfile->name.toChars();
     return c_m->needGen;
 }
 
@@ -987,7 +987,7 @@ int LangPlugin::doesHandleImport(const char* lang)
 
 void LangPlugin::dsymbolSemantic(Dsymbol *dsym, Scope *sc)
 {
-    cppSemantic(dsym, sc);
+    assert(false); // FIXME
 }
 
 static bool parseStringExp(Expression *e, const char *&res) {

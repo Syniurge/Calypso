@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/root/ctfloat.d, root/_ctfloat.d)
@@ -30,7 +30,10 @@ private
     version(CRuntime_Microsoft) extern (C++)
     {
         public import dmd.root.longdouble : longdouble_soft, ld_sprint;
-        longdouble_soft strtold_dm(const(char)* p, char** endp);
+version (IN_LLVM) {} else
+{
+        import dmd.root.strtold;
+}
     }
 }
 
@@ -38,13 +41,16 @@ private
 extern (C++) struct CTFloat
 {
   nothrow:
+  @nogc:
+  @safe:
+
     version (GNU)
         enum yl2x_supported = false;
     else
         enum yl2x_supported = __traits(compiles, core.math.yl2x(1.0L, 2.0L));
     enum yl2xp1_supported = yl2x_supported;
 
-    static void yl2x(const real_t* x, const real_t* y, real_t* res)
+    static void yl2x(const real_t* x, const real_t* y, real_t* res) pure
     {
         static if (yl2x_supported)
             *res = core.math.yl2x(*x, *y);
@@ -52,7 +58,7 @@ extern (C++) struct CTFloat
             assert(0);
     }
 
-    static void yl2xp1(const real_t* x, const real_t* y, real_t* res)
+    static void yl2xp1(const real_t* x, const real_t* y, real_t* res) pure
     {
         static if (yl2xp1_supported)
             *res = core.math.yl2xp1(*x, *y);
@@ -71,12 +77,12 @@ extern (C++) struct CTFloat
     }
     else
     {
-        static real_t sin(real_t x) { return core.math.sin(x); }
-        static real_t cos(real_t x) { return core.math.cos(x); }
+        pure static real_t sin(real_t x) { return core.math.sin(x); }
+        pure static real_t cos(real_t x) { return core.math.cos(x); }
         static real_t tan(real_t x) { return core.stdc.math.tanl(x); }
-        static real_t sqrt(real_t x) { return core.math.sqrt(x); }
-        static real_t fabs(real_t x) { return core.math.fabs(x); }
-        static real_t ldexp(real_t n, int exp) { return core.math.ldexp(n, exp); }
+        pure static real_t sqrt(real_t x) { return core.math.sqrt(x); }
+        pure static real_t fabs(real_t x) { return core.math.fabs(x); }
+        pure static real_t ldexp(real_t n, int exp) { return core.math.ldexp(n, exp); }
     }
 
     static if (!is(real_t == real))
@@ -110,9 +116,12 @@ extern (C++) struct CTFloat
         static real_t copysign(real_t x, real_t s) { return core.stdc.math.copysignl(x, s); }
     }
 
+    pure
     static real_t fmin(real_t x, real_t y) { return x < y ? x : y; }
+    pure
     static real_t fmax(real_t x, real_t y) { return x > y ? x : y; }
 
+    pure
     static real_t fma(real_t x, real_t y, real_t z) { return (x * y) + z; }
 
   version (IN_LLVM)
@@ -136,6 +145,7 @@ extern (C++) struct CTFloat
     static bool isFloat64LiteralOutOfRange(const(char)* literal) @nogc;
   }
 
+    pure @trusted
     static bool isIdentical(real_t a, real_t b)
     {
         // don't compare pad bytes in extended precision
@@ -143,6 +153,7 @@ extern (C++) struct CTFloat
         return memcmp(&a, &b, sz) == 0;
     }
 
+    pure @trusted
     static size_t hash(real_t a)
     {
         import dmd.root.hash : calcHash;
@@ -153,6 +164,7 @@ extern (C++) struct CTFloat
         return calcHash(cast(ubyte*) &a, sz);
     }
 
+    pure
     static bool isNaN(real_t r)
     {
         return !(r == r);
@@ -165,6 +177,7 @@ extern (C++) struct CTFloat
   }
   else
   {
+    pure @trusted
     static bool isSNaN(real_t r)
     {
         return isNaN(r) && !(((cast(ubyte*)&r)[7]) & 0x40);
@@ -174,13 +187,14 @@ extern (C++) struct CTFloat
     //  doesn't match with the C++ header.
     // add a wrapper just for isSNaN as this is the only function called from C++
     version(CRuntime_Microsoft) static if (is(real_t == real))
+        pure @trusted
         static bool isSNaN(longdouble_soft ld)
         {
             return isSNaN(cast(real)ld);
         }
   }
 
-    static bool isInfinity(real_t r)
+    static bool isInfinity(real_t r) pure
     {
         return isIdentical(fabs(r), real_t.infinity);
     }
@@ -188,10 +202,12 @@ extern (C++) struct CTFloat
   version (IN_LLVM)
   {
     // implemented in gen/ctfloat.cpp
+    @system
     static real_t parse(const(char)* literal, bool* isOutOfRange = null);
   }
   else
   {
+    @system
     static real_t parse(const(char)* literal, bool* isOutOfRange = null)
     {
         errno = 0;
@@ -213,6 +229,7 @@ extern (C++) struct CTFloat
     }
   }
 
+    @system
     static int sprint(char* str, char fmt, real_t x)
     {
         version(CRuntime_Microsoft)
@@ -246,7 +263,6 @@ extern (C++) struct CTFloat
     __gshared real_t half;
   version (IN_LLVM)
   {
-    __gshared real_t initVal;
     __gshared real_t nan;
     __gshared real_t infinity;
   }
@@ -254,10 +270,12 @@ extern (C++) struct CTFloat
   version (IN_LLVM)
   {
     // implemented in gen/ctfloat.cpp
+    @trusted
     static void initialize();
   }
   else
   {
+    @trusted
     static void initialize()
     {
         zero = real_t(0);

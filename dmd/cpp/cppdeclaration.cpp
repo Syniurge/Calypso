@@ -36,9 +36,10 @@ VarDeclaration::VarDeclaration(Loc loc, Identifier *id,
 VarDeclaration::VarDeclaration(const VarDeclaration& o)
     : VarDeclaration(o.loc, o.ident, o.VD,
                      o.type ? o.type->syntaxCopy() : nullptr,
-                     o._init ? o._init->syntaxCopy() : nullptr)
+                     o._init)
 {
     storage_class = o.storage_class; // workaround for syntaxCopy because base method only assigns storage_class if the arg is null (BUG?)
+    assert(false); // FIXME: temporary, to check if the removal of C++ Initializer::syntaxCopy() makes a difference
 }
 
 bool VarDeclaration::isOverlappedWith(::VarDeclaration* v2)
@@ -117,7 +118,7 @@ DtorDeclaration::DtorDeclaration(Loc loc, StorageClass storage_class,
     construct_DtorDeclaration(this, loc, loc, storage_class, id);
     this->CDD = CDD;
 
-    this->type = new_TypeFunction(nullptr, Type::tvoid, false, LINKcpp, this->storage_class);
+    this->type = new_TypeFunction(ParameterList{nullptr, VARARGnone}, Type::tvoid, LINKcpp, this->storage_class);
 }
 
 DtorDeclaration::DtorDeclaration(const DtorDeclaration& o)

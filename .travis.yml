@@ -1,76 +1,70 @@
-dist: trusty
+dist: xenial
 language: d
-sudo: false
+
+git:
+  depth: 50
 
 matrix:
   include:
-    # FIXME: strange segfaults, possibly due to C++ compiler mismatch
+    - os: linux
+      d: ldc
+      env: LLVM_VERSION=8.0.0 OPTS="-DBUILD_SHARED_LIBS=ON"
+    # FIXME: strange crashes, possibly due to C++ compiler mismatch
     #- os: linux
     #  d: ldc
-    #  env: LLVM_VERSION=7.0.0 OPTS="-DBUILD_SHARED_LIBS=ON"
+    #  env: LLVM_VERSION=7.0.1 OPTS="-DBUILD_SHARED_LIBS=ON"
     - os: linux
       d: ldc-beta
-      env: LLVM_VERSION=5.0.2 OPTS="-DBUILD_SHARED_LIBS=OFF -DLIB_SUFFIX=64"
+      env: LLVM_VERSION=6.0.1 OPTS="-DBUILD_SHARED_LIBS=OFF -DLIB_SUFFIX=64 -DRT_SUPPORT_SANITIZERS=ON"
     - os: linux
       d: ldc
       env: LLVM_VERSION=5.0.2 OPTS="-DBUILD_SHARED_LIBS=ON -DLIB_SUFFIX=64"
     - os: linux
       d: ldc-0.17.6
-      env: LLVM_VERSION=5.0.2 OPTS="-DLIB_SUFFIX=64"
+      env: LLVM_VERSION=4.0.0 OPTS="-DLIB_SUFFIX=64"
     - os: linux
       d: dmd
-      env: LLVM_VERSION=5.0.2 OPTS="-DTEST_COVERAGE=ON"
+      env: LLVM_VERSION=3.9.1
     - os: osx
       osx_image: xcode9.2
       d: dmd
-      env: LLVM_VERSION=5.0.2 OPTS="-DBUILD_SHARED_LIBS=ON"
-    #- os: osx
-      #osx_image: xcode9.2
-      #d: ldc-beta
-      #env: LLVM_VERSION=6.0.0 OPTS="-DBUILD_SHARED_LIBS=OFF" LLVM_SPIRV_AVAILABLE=ON
+      env: LLVM_VERSION=8.0.0 OPTS="-DBUILD_SHARED_LIBS=ON"
+    - os: osx
+      osx_image: xcode9.2
+      d: ldc-beta
+      env: LLVM_VERSION=7.0.0 OPTS="-DBUILD_SHARED_LIBS=OFF"
 
 cache:
   directories:
+    - llvm-8.0.0
+    - llvm-7.0.1
     - llvm-7.0.0
     - llvm-6.0.1
-    - llvm-spirv-6.0.0
     - llvm-5.0.2
-    - llvm-4.0.1
+    - llvm-4.0.0
     - llvm-3.9.1
     - clang-calypso
 
 addons:
   apt:
-    sources:
-    - ubuntu-toolchain-r-test
     packages:
-    - g++-4.9
     - gdb
     - ninja-build
 
+# Download & extract prebuilt vanilla LLVM if not in cache
 before_install:
-  -
-    export LLVM_ROOT_DIR="$PWD/llvm-$LLVM_VERSION";
-    if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then export LLVM_ROOT_DIR="$PWD/llvm-spirv-$LLVM_VERSION"; fi
-  -
+  - export LLVM_ROOT_DIR="$PWD/llvm-$LLVM_VERSION"
+  - |
     if [ ! -e "$LLVM_ROOT_DIR/bin/llvm-config" ]; then
-      if [ -n "${LLVM_SPIRV_AVAILABLE}" ]; then
-        wget -O llvm.tar.bz2 https://github.com/thewilsonator/llvm/releases/download/pre-intrinsics/LLVM-6.0.0-Darwin.tar.bz2;
+      if [ "$TRAVIS_OS_NAME" = "linux" ]; then
+        export LLVM_ARCH="x86_64-linux-gnu-ubuntu-16.04"
       else
-        if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
-          if [ "${LLVM_VERSION}" = "4.0.1" ]; then
-            export LLVM_ARCH="x86_64-linux-gnu-debian8";
-          else
-            export LLVM_ARCH="x86_64-linux-gnu-ubuntu-14.04";
-          fi;
-        else
-          export LLVM_ARCH="x86_64-apple-darwin";
-        fi;
-        wget -O llvm.tar.xz http://releases.llvm.org/$LLVM_VERSION/clang+llvm-$LLVM_VERSION-${LLVM_ARCH}.tar.xz;
-      fi;
-      mkdir -p $LLVM_ROOT_DIR;
-      tar -xf llvm.tar.* --strip 1 -C $LLVM_ROOT_DIR;
-      rm llvm.tar.*;
+        export LLVM_ARCH="x86_64-apple-darwin"
+      fi
+      wget -O llvm.tar.xz http://releases.llvm.org/$LLVM_VERSION/clang+llvm-$LLVM_VERSION-$LLVM_ARCH.tar.xz
+      mkdir -p $LLVM_ROOT_DIR
+      tar -xf llvm.tar.xz --strip 1 -C $LLVM_ROOT_DIR
+      rm llvm.tar.xz
     fi
   -
     if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
@@ -83,56 +77,67 @@ before_install:
     export CLANG_PREBUILT="$(pwd)/clang-calypso";
 
 install:
-  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then export CC="gcc-4.9"; export CXX="g++-4.9"; fi
-  -
-    if [ "${TRAVIS_OS_NAME}" = "osx" ]; then
-      wget -O get-pip.py https://bootstrap.pypa.io/get-pip.py;
-      sudo python get-pip.py;
-      wget -O ninja-mac.zip https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-mac.zip;
-      mkdir ninja;
-      tar -xf ninja-mac.zip -C ninja;
-      export PATH="$PWD/ninja:$PATH";
+  - |
+    if [ "$TRAVIS_OS_NAME" = "osx" ]; then
+      # Install pip
+      wget -O get-pip.py https://bootstrap.pypa.io/get-pip.py
+      sudo python get-pip.py
+      rm get-pip.py
+      # Download & extract Ninja & add to PATH
+      wget -O ninja-mac.zip https://github.com/ninja-build/ninja/releases/download/v1.9.0/ninja-mac.zip
+      mkdir ninja
+      tar -xf ninja-mac.zip -C ninja
+      rm ninja-mac.zip
+      export PATH="$PWD/ninja:$PATH"
     fi
+  # Install lit
   - pip install --user lit
-  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then ld --version; gdb --version; fi
-  - cmake --version
-  - ninja --version
   - python -c "import lit; lit.main();" --version | head -n 1
-  - eval "${DC} --version"
 
 before_script:
   - mkdir build
   - cd build
 
 script:
-  # Invoke CMake to generate the Ninja build files.
-  - cmake -G Ninja -DLLVM_ROOT_DIR=$LLVM_ROOT_DIR -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON -DCLANG_BUILD_FLAGS="-j2" -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" $OPTS ..
-  # Build LDC and defaultlib unittest runners.
-  # [Some unittest modules eat large amounts of memory during compilation => -j2.]
-  - ninja -j2 all runtime/objects-unittest/std/algorithm/searching.o runtime/objects-unittest-debug/std/algorithm/searching.o runtime/objects-unittest/std/range/package.o runtime/objects-unittest-debug/std/range/package.o runtime/objects-unittest/std/regex/internal/tests.o runtime/objects-unittest-debug/std/regex/internal/tests.o
-  - ninja -j3 all-test-runners
-  # Output some environment info, plus make sure we only run the test suite
-  # if we could actually build the executable.
-  - bin/ldc2 -version || exit 1
-  # Build and run LDC D unittests.
-  - ctest --output-on-failure -R "ldc2-unittest"
-  # Run LIT testsuite.
-  - ctest -V -R "lit-tests"
-  # Run DMD testsuite.
-  # Optimized runnable/testconst.d crashes (in _aaInX) with shared libs on Linux -
-  # only for Travis apparently.
-  -
-    if [ "${TRAVIS_OS_NAME}" = "linux" ] && [[ "${OPTS}" == *-DBUILD_SHARED_LIBS?ON* ]]; then
-      rm tests/d2/dmd-testsuite/runnable/testconst.d;
+  - cmake --version
+  - ninja --version
+  - |
+    cmake -G Ninja . \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DLLVM_ROOT_DIR=$LLVM_ROOT_DIR \
+      -DLDC_INSTALL_LTOPLUGIN=ON \
+      -DLDC_INSTALL_LLVM_RUNTIME_LIBS=ON \
+      -DCLANG_BUILD_FLAGS="-j2" \
+      -DCLANG_PREBUILT_DIR="${CLANG_PREBUILT}" \
+      $OPTS
+  # Build LDC & LDC D unittests & defaultlib unittest runners
+  - |
+    numJobs=3
+    # The OSX VM has only 4 GB of memory (Linux: 7.5)
+    if [ "$TRAVIS_OS_NAME" = "osx" ]; then
+      numJobs=2
     fi
-  - DMD_TESTSUITE_MAKE_ARGS=-j3 ctest -V -R "dmd-testsuite"
-  # Run defaultlib unittests & druntime stand-alone tests.
+    ninja -j$numJobs all ldc2-unittest all-test-runners
+  - bin/ldc2 -version || exit 1
+  # Run LDC D unittests
+  - ctest --output-on-failure -R "ldc2-unittest"
+  # Run LIT testsuite
+  - ctest -V -R "lit-tests"
+  # Run DMD testsuite (release only, i.e., no dmd-testsuite-debug, to reduce time-outs)
+  - |
+    # The -lowmem tests don't work with an ltsmaster host compiler
+    if [[ "$($DC --version | head -n 1)" == *0.17.* ]]; then
+      rm tests/d2/dmd-testsuite/runnable/{testptrref,xtest46}_gc.d
+      rm tests/d2/dmd-testsuite/fail_compilation/mixin_gc.d
+    fi
+    DMD_TESTSUITE_MAKE_ARGS=-j3 ctest -V -R "dmd-testsuite" -E "-debug$"
+  # Run defaultlib unittests & druntime stand-alone tests
   - ctest -j3 --output-on-failure -E "dmd-testsuite|lit-tests|ldc2-unittest"
 
 after_success:
-  -
-    if [[ "${OPTS}" == *-DTEST_COVERAGE?ON* ]]; then
-      coveralls -e runtime -e tests -e vcbuild --gcov gcov-4.9 --gcov-options '\-lp' > /dev/null 2>&1;
+  - |
+    if [[ "$OPTS" == *-DTEST_COVERAGE?ON* ]]; then
+      coveralls -e runtime -e tests -e vcbuild --gcov gcov-4.9 --gcov-options '\-lp' > /dev/null 2>&1
     fi
 
 notifications:

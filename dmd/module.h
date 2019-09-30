@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -15,18 +15,15 @@
 struct ModuleDeclaration;
 struct Macro;
 struct Escape;
+struct FileBuffer;
 
 #if IN_LLVM
-#include <cstdint>
-class DValue;
 namespace llvm {
+    class GlobalVariable;
     class LLVMContext;
     class Module;
-    class GlobalVariable;
-    class StructType;
 }
 #endif
-
 
 enum PKG
 {
@@ -73,15 +70,17 @@ public:
     static AggregateDeclaration *moduleinfo;
 
 
-    const char *arg;    // original argument name
+    DArray<const char> arg;    // original argument name
     ModuleDeclaration *md; // if !NULL, the contents of the ModuleDeclaration declaration
-    File *srcfile;      // input source file
-    File *objfile;      // output .obj file
-    File *hdrfile;      // 'header' file
-    File *docfile;      // output documentation file
+    FileName srcfile;   // input source file
+    FileName objfile;   // output .obj file
+    FileName hdrfile;   // 'header' file
+    FileName docfile;   // output documentation file
+    FileBuffer *srcBuffer; // set during load(), free'd in parse()
     unsigned errors;    // if any errors in file
     unsigned numlines;  // number of lines in source file
-    int isDocFile;      // if it is a documentation input file, not D source
+    bool isHdrFile;     // if it is a header (.di) file
+    bool isDocFile;     // if it is a documentation input file, not D source
     bool isPackageFile; // if it is a package.d
     Strings contentImportedFiles;  // array of files whose content was imported
     int needmoduleinfo;
@@ -125,6 +124,7 @@ public:
     static Module *load(Loc loc, Identifiers *packages, Identifier *ident);
 
     const char *kind() const;
+    FileName setOutfilename(const char *name, const char *dir, const char *arg, const char *ext);
     void setDocfile();
     bool read(Loc loc); // read file, returns 'true' if succeed, 'false' otherwise.
     Module *parse();    // syntactic parse
@@ -144,7 +144,6 @@ public:
     int imports(Module *m);
 
     // CALYPSO
-    virtual void addPreambule();
     virtual const char *manglePrefix();
 
     bool isRoot() { return this->importedFrom == this; }
@@ -171,7 +170,7 @@ public:
 #if IN_LLVM
     // LDC
     llvm::Module* genLLVMModule(llvm::LLVMContext& context);
-    void checkAndAddOutputFile(File *file);
+    void checkAndAddOutputFile(const FileName &file);
     void makeObjectFilenameUnique();
 
     bool llvmForceLogging;

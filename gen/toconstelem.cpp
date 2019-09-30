@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "dmd/ctfe.h"
+#include "dmd/errors.h"
 #include "dmd/import.h"
 #include "dmd/template.h"
 #include "gen/arrays.h"
@@ -415,10 +416,10 @@ public:
     if (e->e1->op == TOKstructliteral) {
       StructLiteralExp *se = static_cast<StructLiteralExp *>(e->e1);
 
-      if (se->globalVar) {
+      result = p->getStructLiteralConstant(se);
+      if (result) {
         IF_LOG Logger::cout()
-            << "Returning existing global: " << *se->globalVar << '\n';
-        result = se->globalVar;
+            << "Returning existing global: " << *result << '\n';
         return;
       }
 
@@ -427,11 +428,12 @@ public:
           llvm::GlobalValue::InternalLinkage, nullptr, ".structliteral");
       globalVar->setAlignment(DtoAlignment(se->type));
 
-      se->globalVar = globalVar;
+      p->setStructLiteralConstant(se, globalVar);
       llvm::Constant *constValue = toConstElem(se);
-      se->globalVar = p->setGlobalVarInitializer(globalVar, constValue);
+      constValue = p->setGlobalVarInitializer(globalVar, constValue);
+      p->setStructLiteralConstant(se, constValue);
 
-      result = se->globalVar;
+      result = constValue;
       return;
     }
 
@@ -589,14 +591,14 @@ public:
     DtoResolveClass(origClass);
     StructLiteralExp *value = e->value;
 
-    if (value->globalVar) {
-      IF_LOG Logger::cout()
-          << "Using existing global: " << *value->globalVar << '\n';
+    result = p->getStructLiteralConstant(value);
+    if (result) {
+      IF_LOG Logger::cout() << "Using existing global: " << *result << '\n';
     } else {
       auto globalVar = new llvm::GlobalVariable(
           p->module, origClass->type->ctype->isClass()->getMemoryLLType(),
           false, llvm::GlobalValue::InternalLinkage, nullptr, ".classref");
-      value->globalVar = globalVar;
+      p->setStructLiteralConstant(value, globalVar);
 
       std::map<VarDeclaration *, llvm::Constant *> varInits;
 
@@ -633,11 +635,11 @@ public:
 
       llvm::Constant *constValue =
           getIrAggr(origClass)->createInitializerConstant(varInits);
+      constValue = p->setGlobalVarInitializer(globalVar, constValue);
+      p->setStructLiteralConstant(value, constValue);
 
-      value->globalVar = p->setGlobalVarInitializer(globalVar, constValue);
+      result = constValue;
     }
-
-    result = value->globalVar;
 
     if (e->type->ty == Tclass) {
       ClassDeclaration *targetClass = static_cast<TypeClass *>(e->type)->sym;

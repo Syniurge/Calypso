@@ -4,6 +4,7 @@
 #include "cpp/cppaggregate.h"
 #include "cpp/cpptemplate.h"
 
+#include "errors.h"
 #include "mtype.h"
 #include "target.h"
 #include "gen/dvalue.h"
@@ -720,9 +721,9 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                  MD->getThisType(getASTContext()));
     }
 
-    size_t n = Parameter::dim(tf->parameters);
+    size_t n = tf->parameterList.length();
     for (size_t i = 0; i < n; ++i) {
-        Parameter* fnarg = Parameter::getNth(tf->parameters, i);
+        Parameter* fnarg = Parameter::getNth(tf->parameterList.parameters, i);
         assert(fnarg);
         DValue* argval = toElem((*arguments)[i]);
 
@@ -887,7 +888,7 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
         if (!opts::cppCacheDir.empty())
             filename = opts::cppCacheDir.c_str();
         filename += "/";
-        filename += gIR->dmodule->arg;
+        filename += gIR->dmodule->arg.ptr;
 
         std::fstream symlistfile(filename, std::fstream::out | std::fstream::app);
         if (!symlistfile.is_open())
@@ -1073,7 +1074,7 @@ void LangPlugin::toDefineStruct(::StructDeclaration* decl)
     auto &initZ = ir->getInitSymbol();
     auto initGlobal = llvm::cast<LLGlobalVariable>(initZ);
     assert(initGlobal);
-    setLinkage(decl, initGlobal);
+    setLinkageAndVisibility(decl, initGlobal);
     initZ = gIR->setGlobalVarInitializer(initGlobal, ir->getDefaultInit());
 
     // emit typeinfo

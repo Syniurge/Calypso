@@ -136,10 +136,10 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath,
   }
 
   // .res/.def files
-  if (global.params.resfile)
-    args.push_back(global.params.resfile);
-  if (global.params.deffile)
-    args.push_back(std::string("/DEF:") + global.params.deffile);
+  if (global.params.resfile.length)
+    args.push_back(global.params.resfile.ptr);
+  if (global.params.deffile.length)
+    args.push_back(std::string("/DEF:") + global.params.deffile.ptr);
 
   if (opts::enableDynamicCompile) {
     args.push_back("ldc-jit-rt.lib");
@@ -213,6 +213,11 @@ int linkObjToBinaryMSVC(llvm::StringRef outputPath,
   args.push_back("uuid.lib");
   args.push_back("comdlg32.lib");
   args.push_back("advapi32.lib");
+
+  // these get pulled in by druntime (rt/msvc.c); include explicitly for
+  // -betterC convenience (issue #3035)
+  args.push_back("oldnames.lib");
+  args.push_back("legacy_stdio_definitions.lib");
 
   for (auto lp: langPlugins)
       lp->adjustLinkerArgs(args); // CALYPSO

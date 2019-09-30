@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "dmd/mars.h"
+#include "dmd/globals.h"
 #include "gen/dvalue.h"
 #include "llvm/IR/CallingConv.h"
 #include <vector>
@@ -190,10 +190,6 @@ protected:
   /// * delegate
   /// * complex number
   static bool isAggregate(Type *t);
-
-  /// The frontend uses magic structs to express some primitive C types
-  /// ((unsigned) long (long), long double) for C++ mangling purposes.
-  static bool isMagicCppStruct(Type *t);
 
   /// Returns true if the D type is a Plain-Old-Datatype, optionally excluding
   /// structs with constructors from that definition.

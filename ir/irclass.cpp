@@ -9,6 +9,7 @@
 
 #include "dmd/aggregate.h"
 #include "dmd/declaration.h"
+#include "dmd/errors.h"
 #include "dmd/hdrgen.h" // for parametersTypeToChars()
 #include "dmd/identifier.h"
 #include "dmd/mangle.h"
@@ -23,6 +24,7 @@
 #include "gen/llvmhelpers.h"
 #include "gen/mangling.h"
 #include "gen/metadata.h"
+#include "gen/pragma.h"
 #include "gen/runtime.h"
 #include "gen/tollvm.h"
 #include "ir/iraggr.h"
@@ -56,6 +58,13 @@ LLGlobalVariable *IrAggr::getVtblSymbol() {
                        /*isConstant=*/true);
 
   return vtbl;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+bool IrAggr::suppressTypeInfo() const {
+  return !global.params.useTypeInfo || !Type::dtypeinfo ||
+         aggrdecl->llvmInternal == LLVMno_typeinfo;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -105,7 +114,7 @@ LLGlobalVariable *IrAggr::getClassInfoSymbol() {
       debugName.write(irMangle.data(), irMangle.length());
     }
     llvm::NamedMDNode *node =
-        gIR->module.getOrInsertNamedMetadata(debugName.peekString());
+        gIR->module.getOrInsertNamedMetadata(debugName.peekChars());
     node->addOperand(llvm::MDNode::get(
         gIR->context(), llvm::makeArrayRef(mdVals, CD_NumFields)));
   }
@@ -165,7 +174,7 @@ LLConstant *IrAggr::getVtblInit() {
   // start with the classinfo
   llvm::Constant *c;
   if (!cd->isCPPclass()) {
-    if (global.params.useTypeInfo && Type::dtypeinfo) {
+    if (!suppressTypeInfo()) {
       c = getClassInfoSymbol();
       c = DtoBitCast(c, voidPtrType);
     } else {
@@ -193,6 +202,11 @@ LLConstant *IrAggr::getVtblInit() {
       if (fd->inferRetType && !fd->type->nextOf()) {
         Logger::println("Running late functionSemantic to infer return type.");
         if (!fd->functionSemantic()) {
+          if (fd->semantic3Errors) {
+            Logger::println("functionSemantic failed; using null for vtbl entry.");
+            constants.push_back(getNullValue(voidPtrType));
+            continue;
+          }
           fd->error("failed to infer return type for vtbl initializer");
           fatal();
         }
@@ -222,9 +236,8 @@ LLConstant *IrAggr::getVtblInit() {
               cd->error("use of `%s%s` is hidden by `%s`; use `alias %s = "
                         "%s.%s;` to introduce base class overload set",
                         fd->toPrettyChars(),
-                        parametersTypeToChars(tf->parameters, tf->varargs),
-                        cd->toChars(), fd->toChars(), fd->parent->toChars(),
-                        fd->toChars());
+                        parametersTypeToChars(tf->parameterList), cd->toChars(),
+                        fd->toChars(), fd->parent->toChars(), fd->toChars());
             } else {
               cd->error("use of `%s` is hidden by `%s`", fd->toPrettyChars(),
                         cd->toChars());
@@ -287,7 +300,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtblSymbol(BaseClass *b,
   mangledName.writestring(thunkPrefix);
   mangledName.writestring("6__vtblZ");
 
-  const auto irMangle = getIRMangledVarName(mangledName.peekString(), LINKd);
+  const auto irMangle = getIRMangledVarName(mangledName.peekChars(), LINKd);
 
   LLGlobalVariable *gvar =
       declareGlobal(cd->loc, gIR->module, vtblType, irMangle, /*isConstant=*/true);
@@ -323,7 +336,7 @@ void IrAggr::defineInterfaceVtbl(BaseClass *b, bool new_instance,
   const auto voidPtrTy = getVoidPtrType();
 
   if (!cb->isCPPinterface()) { // skip interface info for CPP interfaces
-    if (global.params.useTypeInfo && Type::dtypeinfo) {
+    if (!suppressTypeInfo()) {
       // index into the interfaces array
       llvm::Constant *idxs[2] = {DtoConstSize_t(0),
                                  DtoConstSize_t(interfaces_index)};
@@ -379,7 +392,7 @@ void IrAggr::defineInterfaceVtbl(BaseClass *b, bool new_instance,
     nameBuf.writestring(mangledTargetName + 2);
 
     const auto thunkIRMangle =
-        getIRMangledFuncName(nameBuf.peekString(), fd->linkage);
+        getIRMangledFuncName(nameBuf.peekChars(), fd->linkage);
 
     llvm::Function *thunk = gIR->module.getFunction(thunkIRMangle);
     if (!thunk) {

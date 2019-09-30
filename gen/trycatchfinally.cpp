@@ -9,6 +9,7 @@
 
 #include "gen/trycatchfinally.h"
 
+#include "dmd/errors.h"
 #include "dmd/expression.h"
 #include "dmd/import.h"
 #include "dmd/mangle.h"
@@ -188,11 +189,11 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
       mangleToBuffer(cd, &wrapperMangleBuf);
       wrapperMangleBuf.printf("%d%s", 18, "_cpp_type_info_ptr");
       const auto wrapperMangle =
-          getIRMangledVarName(wrapperMangleBuf.peekString(), LINKd);
+          getIRMangledVarName(wrapperMangleBuf.peekChars(), LINKd);
 
       ci = irs.module.getGlobalVariable(wrapperMangle);
       if (!ci) {
-        const char *name = Target::cppTypeInfoMangle(cd);
+        const char *name = target.cppTypeInfoMangle(cd);
         auto cpp_ti =
             declareGlobal(cd->loc, irs.module, getVoidPtrType(), name,
                           /*isConstant=*/true);

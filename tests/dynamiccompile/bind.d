@@ -61,6 +61,18 @@ int get6()
   return 6;
 }
 
+@dynamicCompile
+int yyy(int i, int delegate() j)
+{
+  return i + j();
+}
+
+@dynamicCompile
+int ccc(int i, const int j, immutable int k)
+{
+  return i + j + k;
+}
+
 void main(string[] args)
 {
   foreach (i; 0..4)
@@ -72,6 +84,10 @@ void main(string[] args)
     auto f2 = ldc.dynamic_compile.bind(&foo, 1, placeholder, 3);
     auto f3 = ldc.dynamic_compile.bind(&foo, 1, 2, 3);
     auto f4 = f3;
+    assert(!f1.isNull());
+    assert(!f2.isNull());
+    assert(!f3.isNull());
+    assert(!f4.isNull());
 
     int delegate(int,int,int) fd1 = f1.toDelegate();
     int delegate(int)         fd2 = f2.toDelegate();
@@ -101,6 +117,15 @@ void main(string[] args)
     auto yy = ldc.dynamic_compile.bind(&elem.get, 7);
     auto yyd = yy.toDelegate();
 
+    int dget6()
+    {
+      return 6;
+    }
+
+    auto p = ldc.dynamic_compile.bind(&yyy, placeholder, &dget6);
+
+    auto c = ldc.dynamic_compile.bind(&ccc, 1, 10, 100);
+
     compileDynamicCode(settings);
     assert(f1.isCallable());
     assert(f2.isCallable());
@@ -116,6 +141,12 @@ void main(string[] args)
     assert(321 == fd2(2));
     assert(321 == fd3());
     assert(321 == fd4());
+
+    f3 = null;
+    assert(f3.isNull());
+    assert(!f4.isNull());
+    assert(!f3.isCallable());
+    assert(f4.isCallable());
 
     assert(b1.isCallable());
     assert(b2.isCallable());
@@ -142,5 +173,8 @@ void main(string[] args)
     assert(yy.isCallable());
     assert(7531 == yy());
     assert(7531 == yyd());
+
+    assert(10 == p(4));
+    assert(111 == c());
   }
 }

@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -30,6 +30,7 @@ enum Sizeok
 {
     SIZEOKnone,         // size of aggregate is not yet able to compute
     SIZEOKfwd,          // size of aggregate is ready to compute
+    SIZEOKinProcess,    // in the midst of computing the size
     SIZEOKdone          // size of aggregate is set correctly
 };
 
@@ -95,6 +96,7 @@ public:
      */
     Dsymbol *enclosing;
     VarDeclaration *vthis;      // 'this' parameter if this aggregate is nested
+    VarDeclaration *vthis2;     // 'this' parameter if this aggregate is a template and is nested
     // Special member functions
     FuncDeclarations invs;              // Array of invariants
     FuncDeclaration *inv;               // invariant
@@ -124,15 +126,17 @@ public:
     virtual Scope *newScope(Scope *sc);
     void setScope(Scope *sc);
     bool determineFields();
+    size_t nonHiddenFields();
     bool determineSize(Loc loc);
     virtual void finalizeSize() = 0;
     virtual d_uns64 size(const Loc &loc); // CALYPSO
     bool fit(const Loc &loc, Scope *sc, Expressions *elements, Type *stype); // CALYPSO
     bool fill(Loc loc, Expressions *elements, bool ctorinit);
     Type *getType();
-    bool isDeprecated();         // is aggregate deprecated?
-    bool isNested();
+    bool isDeprecated() const;         // is aggregate deprecated?
+    bool isNested() const;
     void makeNested();
+    void makeNested2();
     bool isExport() const;
     Dsymbol *searchCtor();
 
@@ -180,6 +184,8 @@ public: // CALYPSO some of the fields were moved to AggregateDeclaration
     FuncDeclarations postblits; // Array of postblit functions
     FuncDeclaration *postblit;  // aggregate postblit
 
+    bool hasCopyCtor;           // copy constructor
+
     FuncDeclaration *xeq;       // TypeInfo_Struct.xopEquals
     FuncDeclaration *xcmp;      // TypeInfo_Struct.xopCmp
     FuncDeclaration *xhash;     // TypeInfo_Struct.xtoHash
@@ -203,7 +209,6 @@ public: // CALYPSO some of the fields were moved to AggregateDeclaration
     void semanticTypeInfoMembers();
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = SearchLocalsOnly);
     const char *kind() const;
-    virtual bool buildLayout(); // CALYPSO
     void finalizeSize();
     bool isPOD();
 
@@ -313,7 +318,6 @@ public:
     bool isBaseInfoComplete();
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = SearchLocalsOnly);
     ClassDeclaration *searchBase(Identifier *ident);
-    virtual bool buildLayout(); // CALYPSO
     void finalizeSize();
     bool isFuncHidden(FuncDeclaration *fd);
     FuncDeclaration *findFunc(Identifier *ident, TypeFunction *tf);
@@ -326,14 +330,12 @@ public:
     const char *kind() const;
 
     void addLocalClass(ClassDeclarations *);
+    void addObjcSymbols(ClassDeclarations *classes, ClassDeclarations *categories);
 
     // CALYPSO
     virtual bool byRef() const { return true; }
-    virtual bool allowMultipleInheritance(); // will allow more than one non-interface base
-    virtual bool allowInheritFromStruct();  // even though C++ class types are value, we may want to keep mapping POD classes to D structs to keep init lists
     virtual bool needsInterfaceSemantic() const;
     virtual Expression *defaultInit(Loc loc);
-    virtual void initVtbl();
     virtual void finalizeVtbl();
     AggregateDeclaration *foreignBase();
 

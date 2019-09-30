@@ -16,14 +16,12 @@ namespace cpp
 
 Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic)
 {
-    construct_Import(this, loc, packages, id, aliasId, isstatic);
     // add "ℂcpp" as leftmost package to avoid name clashes
-    if (!this->packages)
-        this->packages = new Identifiers;
-    this->packages->shift(calypso.id_Scpp);
+    if (!packages)
+        packages = new Identifiers;
+    packages->shift(calypso.id_Scpp);
 
-    if (!aliasId)
-        setSymIdent();
+    construct_Import(this, loc, packages, id, aliasId, isstatic);
 }
 
 ::Module* Import::loadModule(Scope* sc)

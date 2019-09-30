@@ -57,7 +57,7 @@ public:
   void BeginSourceFile(const LangOptions &LO, const Preprocessor *PP) override;
   void EndSourceFile() override;
   void HandleDiagnostic(DiagnosticsEngine::Level Level,
-                        const Diagnostic &Info) override;
+                        const clang::Diagnostic &Info) override;
 
   // CALYPSO addition
   bool muted = true;

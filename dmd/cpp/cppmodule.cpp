@@ -4,6 +4,7 @@
 #include "attrib.h"
 #include "declaration.h"
 #include "enum.h"
+#include "errors.h"
 #include "expression.h"
 #include "id.h"
 #include "identifier.h"
@@ -47,7 +48,7 @@ using llvm::isa;
 
 /********************************/
 
-File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
+const char* setOutCalypsoFile(const char *path, const char *arg, const char *ext)
 {
     const char *argobj;
     if (global.params.preservePaths)
@@ -64,7 +65,7 @@ File *setOutCalypsoFile(const char *path, const char *arg, const char *ext)
     FileName::ensurePathExists(FileName::path(argobj));
 
     // always append the extension! otherwise hard to make output switches consistent
-    return File::create(FileName::forceExt(argobj, ext));
+    return FileName::forceExt(argobj, ext);
 }
 
 Package *Module::rootPackage;
@@ -73,7 +74,7 @@ Modules Module::amodules_cpp;
 
 void Module::init()
 {
-    rootPackage = new_Package(calypso.id_Scpp);
+    rootPackage = new_Package(Loc(), calypso.id_Scpp);
     rootPackage->symtab = new_DsymbolTable();
 
     modules->insert(rootPackage);
@@ -81,7 +82,7 @@ void Module::init()
 
 Module::Module(const char* filename, Identifier* ident)
 {
-    construct_Module(this, filename, ident, 0, 0);
+    construct_Module(this, Loc(), filename, ident, 0, 0);
 }
 
 void Module::addPreambule()
@@ -120,18 +121,15 @@ inline char *strtok_rs(char *str, const char *delim, char **saveptr)
 
 void Module::loadEmittedSymbolList()
 {
-    auto symlistfile = setOutCalypsoFile(global.params.objdir, arg, "slist");
-    if (symlistfile->read()) {
-        delete_File(symlistfile);
+    auto symlistfilename = setOutCalypsoFile(global.params.objdir.ptr, arg.ptr, "slist");
+    auto readResult = File::read(symlistfilename);
+    if (!readResult.success)
         return;
-    }
 
     char* stateptr;
-    for (auto line = strtok_rs((char*) symlistfile->buffer, "\n", &stateptr); line;
+    for (auto line = strtok_rs((char*) readResult.buffer.data.ptr, "\n", &stateptr); line;
                 line = strtok_rs(nullptr, "\n", &stateptr))
         emittedSymbols.insert(std::string(line));
-
-    delete_File(symlistfile);
 }
 
 void Module::saveEmittedSymbolList()
@@ -147,12 +145,10 @@ void Module::saveEmittedSymbolList()
     os.flush();
     buf.pop_back();
 
-    auto symlistfile = setOutCalypsoFile(global.params.objdir, arg, "slist");
-    symlistfile->setbuffer(const_cast<void*>((const void*) buf.data()), buf.size());
-    if (symlistfile->write())
+    auto symlistfilename = setOutCalypsoFile(global.params.objdir.ptr, arg.ptr, "slist");
+    if (!File::write(symlistfilename,
+                const_cast<void*>((const void*) buf.data()), buf.size()))
         ::error(Loc(), "Writing the symbol list file failed");
-    symlistfile->setbuffer(nullptr, 0);
-    delete_File(symlistfile);
 }
 
 /************************************/
@@ -674,7 +670,7 @@ bool isMapped(const clang::Decl *D)
 
 inline Dsymbol* dummyOnemember(Loc loc, Identifier* ident)
 {
-    auto tf = new_TypeFunction(nullptr, Type::tvoid, 0, LINKd);
+    auto tf = new_TypeFunction(ParameterList{nullptr, VARARGnone}, Type::tvoid, LINKd);
 
     if (ident == Id::ctor)
         return new_CtorDeclaration(loc, loc, 0, tf);
@@ -1243,7 +1239,8 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
             if (auto ctor = sym->isCtorDeclaration())
             {
                 auto tf = static_cast<TypeFunction*>(ctor->type);
-                if (Parameter::dim(tf->parameters) == 0 && tf->varargs == 0)
+                if (tf->parameterList.length() == 0 &&
+                        tf->parameterList.varargs == VARARGnone)
                     ad->defaultCtor = ctor;
             }
         }
@@ -1399,18 +1396,18 @@ Module *DeclMapper::getModule(const clang::Decl* D)
 
         const char* objExt = nullptr;
         if (global.params.output_o)
-            objExt = global.obj_ext;
+            objExt = global.obj_ext.ptr;
         else if (global.params.output_bc)
-            objExt = global.bc_ext;
+            objExt = global.bc_ext.ptr;
         else if (global.params.output_ll)
-            objExt = global.ll_ext;
+            objExt = global.ll_ext.ptr;
         else if (global.params.output_s)
-            objExt = global.s_ext;
+            objExt = global.s_ext.ptr;
 
         if (objExt)
         {
-            m->objfile = setOutCalypsoFile(global.params.objdir, m->arg, objExt);
-            if (!FileName::exists(m->objfile->toChars()))
+            m->objfile.reset(setOutCalypsoFile(global.params.objdir.ptr, m->arg.ptr, objExt));
+            if (!FileName::exists(m->objfile.toChars()))
                 m->needGen = true;
         }
 
@@ -1438,7 +1435,7 @@ Package *DeclMapper::getPackage(const clang::Decl* D)
 
     auto parent = getPackage(Parent);
 
-    auto pkg = new_Package(getIdentifier(NS));
+    auto pkg = new_Package(parent->loc, getIdentifier(NS));
     setDsym(NS, pkg);
     parent->symtab->insert(pkg);
     pkg->parent = parent;

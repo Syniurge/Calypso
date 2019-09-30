@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * http://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -111,7 +111,7 @@ public:
     TemplateDeclaration *isTemplateDeclaration() { return this; }
 
     TemplateTupleParameter *isVariadic();
-    bool isOverloadable();
+    bool isOverloadable() const;
 
     void accept(Visitor *v) { v->visit(this); }
 };
@@ -127,7 +127,7 @@ public:
  * For this-parameter:
  *  template Foo(this ident)
  */
-class TemplateParameter : public RootObject
+class TemplateParameter : public ASTNode
 {
 public:
     Loc loc;
@@ -165,7 +165,7 @@ public:
     /* Create dummy argument based on parameter.
      */
     virtual void *dummyArg() = 0;
-    virtual void accept(Visitor *v) { v->visit(this); }
+    void accept(Visitor *v) { v->visit(this); }
 };
 
 /* Syntax:
@@ -286,6 +286,9 @@ public:
     // [int, char, 100]
     Objects tdtypes;
 
+    // Modules imported by this template instance
+    Modules importedModules;
+
     Dsymbol *tempdecl;                  // referenced by foo.bar.abc
     Dsymbol *enclosing;                 // if referencing local symbols, this is the context
     Dsymbol *aliasdecl;                 // !=NULL if instance is an alias for its sole member
@@ -320,7 +323,6 @@ public:
     const char* toPrettyCharsHelper();
     void printInstantiationTrace();
     virtual Identifier *getIdent(); // CALYPSO made virtual to use the original tiargs for mangling
-    int compare(RootObject *o);
     hash_t toHash();
 
     bool needsCodegen();

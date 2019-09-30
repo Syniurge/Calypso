@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/builtin.d, _builtin.d)
@@ -283,8 +283,8 @@ private Type getTypeOfOverloadedIntrinsic(FuncDeclaration fd)
     {
         assert(fd.type.ty == Tfunction);
         TypeFunction tf = cast(TypeFunction) fd.type;
-        assert(tf.parameters.dim >= 1);
-        return tf.parameters.data[0].type;
+        assert(tf.parameterList.length >= 1);
+        return tf.parameterList.parameters.data[0].type;
     }
 }
 
@@ -649,7 +649,7 @@ version (IN_LLVM)
 }
 else
 {
-    builtins._init(84);
+    builtins._init(65);
 }
     // @safe @nogc pure nothrow real function(real)
     add_builtin("_D4core4math3sinFNaNbNiNfeZe", &eval_sin);
@@ -691,51 +691,26 @@ else
     // @safe @nogc pure nothrow long function(real)
     add_builtin("_D4core4math6rndtolFNaNbNiNfeZl", &eval_unimp);
     // @safe @nogc pure nothrow real function(real)
-    add_builtin("_D3std4math3sinFNaNbNiNfeZe", &eval_sin);
-    add_builtin("_D3std4math3cosFNaNbNiNfeZe", &eval_cos);
     add_builtin("_D3std4math3tanFNaNbNiNfeZe", &eval_tan);
-    add_builtin("_D3std4math4sqrtFNaNbNiNfeZe", &eval_sqrt);
-    add_builtin("_D3std4math4fabsFNaNbNiNfeZe", &eval_fabs);
     add_builtin("_D3std4math5expm1FNaNbNiNfeZe", &eval_unimp);
     // @trusted @nogc pure nothrow real function(real)
-    add_builtin("_D3std4math3sinFNaNbNiNeeZe", &eval_sin);
-    add_builtin("_D3std4math3cosFNaNbNiNeeZe", &eval_cos);
     add_builtin("_D3std4math3tanFNaNbNiNeeZe", &eval_tan);
-    add_builtin("_D3std4math4sqrtFNaNbNiNeeZe", &eval_sqrt);
-    add_builtin("_D3std4math4fabsFNaNbNiNeeZe", &eval_fabs);
     add_builtin("_D3std4math3expFNaNbNiNeeZe", &eval_exp);
     add_builtin("_D3std4math5expm1FNaNbNiNeeZe", &eval_expm1);
     add_builtin("_D3std4math4exp2FNaNbNiNeeZe", &eval_exp2);
-    // @safe @nogc pure nothrow double function(double)
-    add_builtin("_D3std4math4sqrtFNaNbNiNfdZd", &eval_sqrt);
-    // @safe @nogc pure nothrow float function(float)
-    add_builtin("_D3std4math4sqrtFNaNbNiNffZf", &eval_sqrt);
     // @safe @nogc pure nothrow real function(real, real)
     add_builtin("_D3std4math5atan2FNaNbNiNfeeZe", &eval_unimp);
-    if (CTFloat.yl2x_supported)
-    {
-        add_builtin("_D3std4math4yl2xFNaNbNiNfeeZe", &eval_yl2x);
-    }
-    else
-    {
-        add_builtin("_D3std4math4yl2xFNaNbNiNfeeZe", &eval_unimp);
-    }
-    if (CTFloat.yl2xp1_supported)
-    {
-        add_builtin("_D3std4math6yl2xp1FNaNbNiNfeeZe", &eval_yl2xp1);
-    }
-    else
-    {
-        add_builtin("_D3std4math6yl2xp1FNaNbNiNfeeZe", &eval_unimp);
-    }
-    // @safe @nogc pure nothrow long function(real)
-    add_builtin("_D3std4math6rndtolFNaNbNiNfeZl", &eval_unimp);
-
+version (IN_LLVM)
+{
+    // LDC's core.math.ldexp is defined as alias to core.stdc.math.ldexpl
+    add_builtin("ldexpl", &eval_ldexp);
+    add_builtin("ldexp", &eval_ldexp); // required for Windows/MSVC targets
+}
+else
+{
     // @safe @nogc pure nothrow T function(T, int)
     add_builtin("_D4core4math5ldexpFNaNbNiNfeiZe", &eval_ldexp);
-    add_builtin("_D3std4math5ldexpFNaNbNiNfeiZe", &eval_ldexp);
-    add_builtin("_D3std4math5ldexpFNaNbNiNfdiZd", &eval_ldexp);
-    add_builtin("_D3std4math5ldexpFNaNbNiNffiZf", &eval_ldexp);
+}
 
     add_builtin("_D3std4math3logFNaNbNiNfeZe", &eval_log);
 
@@ -967,6 +942,17 @@ version (IN_LLVM)
     // @safe @nogc pure nothrow int function(ulong)
     if (global.params.is64bit)
         add_builtin("_D4core5bitop7_popcntFNaNbNiNfmZi", &eval_popcnt);
+}
+
+/**
+ * Deinitializes the global state of the compiler.
+ *
+ * This can be used to restore the state set by `builtin_init` to its original
+ * state.
+ */
+public void builtinDeinitialize()
+{
+    builtins = builtins.init;
 }
 
 /**********************************

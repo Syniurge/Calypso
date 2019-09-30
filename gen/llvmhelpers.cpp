@@ -10,12 +10,12 @@
 #include "gen/llvmhelpers.h"
 
 #include "dmd/declaration.h"
+#include "dmd/errors.h"
 #include "dmd/expression.h"
 #include "dmd/id.h"
 #include "dmd/identifier.h"
 #include "dmd/import.h"
 #include "dmd/init.h"
-#include "dmd/mars.h"
 #include "dmd/module.h"
 #include "dmd/template.h"
 #include "gen/abi.h"
@@ -65,15 +65,9 @@ llvm::cl::opt<llvm::GlobalVariable::ThreadLocalMode> clThreadModel(
  * Simple Triple helpers for DFE
  * TODO: find better location for this
  ******************************************************************************/
-bool isArchx86_64() {
-  return global.params.targetTriple->getArch() == llvm::Triple::x86_64;
-}
-
 bool isTargetWindowsMSVC() {
   return global.params.targetTriple->isWindowsMSVCEnvironment();
 }
-
-bool isMusl() { return global.params.targetTriple->isMusl(); }
 
 /******************************************************************************
  * Global context
@@ -295,20 +289,21 @@ void DtoAssert(Module *M, Loc &loc, DValue *msg) {
   args.push_back(DtoConstUint(loc.linnum));
 
   // call
-  gIR->funcGen().callOrInvoke(fn, args);
+  gIR->CreateCallOrInvoke(fn, args);
 
   // after assert is always unreachable
   gIR->ir->CreateUnreachable();
 }
 
 void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
+  const auto &triple = *global.params.targetTriple;
   const auto file =
-      DtoConstCString(loc.filename ? loc.filename : M->srcfile->name.toChars());
+      DtoConstCString(loc.filename ? loc.filename : M->srcfile.toChars());
   const auto line = DtoConstUint(loc.linnum);
   const auto fn = getCAssertFunction(loc, gIR->module);
 
   llvm::SmallVector<LLValue *, 4> args;
-  if (global.params.targetTriple->isOSDarwin()) {
+  if (triple.isOSDarwin()) {
     const auto irFunc = gIR->func();
     const auto funcName =
         irFunc && irFunc->decl ? irFunc->decl->toPrettyChars() : "";
@@ -316,7 +311,8 @@ void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
     args.push_back(file);
     args.push_back(line);
     args.push_back(msg);
-  } else if (global.params.targetTriple->isOSSolaris() || isMusl()) {
+  } else if (triple.isOSSolaris() || triple.isMusl() ||
+             global.params.isUClibcEnvironment) {
     const auto irFunc = gIR->func();
     const auto funcName =
         (irFunc && irFunc->decl) ? irFunc->decl->toPrettyChars() : "";
@@ -324,8 +320,7 @@ void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
     args.push_back(file);
     args.push_back(line);
     args.push_back(DtoConstCString(funcName));
-  } else if (global.params.targetTriple->getEnvironment() ==
-             llvm::Triple::Android) {
+  } else if (triple.getEnvironment() == llvm::Triple::Android) {
     args.push_back(file);
     args.push_back(line);
     args.push_back(msg);
@@ -335,7 +330,7 @@ void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
     args.push_back(line);
   }
 
-  gIR->funcGen().callOrInvoke(fn, args);
+  gIR->CreateCallOrInvoke(fn, args);
 
   gIR->ir->CreateUnreachable();
 }
@@ -345,8 +340,7 @@ void DtoCAssert(Module *M, Loc &loc, LLValue *msg) {
  ******************************************************************************/
 
 LLConstant *DtoModuleFileName(Module *M, const Loc &loc) {
-  return DtoConstString(loc.filename ? loc.filename
-                                     : M->srcfile->name.toChars());
+  return DtoConstString(loc.filename ? loc.filename : M->srcfile.toChars());
 }
 
 /******************************************************************************
@@ -555,7 +549,7 @@ DValue *DtoCastPtr(Loc &loc, DValue *val, Type *to) {
   if (adfrom && adto && !adfrom->byRef() /*TODO: cast struct adfrom*/&& adfrom->isClassDeclaration())
     return DtoCastClass(loc, val, to);  // CALYPSO WARNING: this brings C++-style pointer derived <-> base casts to D struct pointers so changes vanilla behavior slightly
 
-  if (totype->ty == Tpointer || totype->ty == Tclass) {
+  if (totype->ty == Tpointer || totype->ty == Tclass || totype->ty == Taarray) {
     LLValue *src = DtoRVal(val);
     IF_LOG {
       Logger::cout() << "src: " << *src << '\n';
@@ -1321,32 +1315,38 @@ static char *DtoOverloadedIntrinsicName(TemplateInstance *ti,
   assert(ti->tdtypes.dim == 1);
   Type *T = static_cast<Type *>(ti->tdtypes.data[0]);
 
-  char prefix = T->isreal() ? 'f' : T->isintegral() ? 'i' : 0;
-  if (!prefix) {
+  char prefix;
+  if (T->isfloating() && !T->iscomplex()) {
+    prefix = 'f';
+  } else if (T->isintegral()) {
+    prefix = 'i';
+  } else {
     ti->error("has invalid template parameter for intrinsic: `%s`",
               T->toChars());
     fatal(); // or LLVM asserts
   }
 
-  llvm::Type *dtype(DtoType(T));
-  char tmp[21]; // probably excessive, but covers a uint64_t
-  sprintf(tmp, "%lu",
-          static_cast<unsigned long>(gDataLayout->getTypeSizeInBits(dtype)));
+  std::string name = td->intrinsicName;
 
-  // replace # in name with bitsize
-  std::string name(td->intrinsicName);
+  // replace `{f,i}#` by `{f,i}<bitsize>` (int: `i32`) or
+  // `v<vector length>{f,i}<vector element bitsize>` (float4: `v4f32`)
+  llvm::Type *dtype = DtoType(T);
+  std::string replacement;
+  if (dtype->isPPC_FP128Ty()) { // special case
+    replacement = "ppcf128";
+  } else if (dtype->isVectorTy()) {
+    llvm::raw_string_ostream stream(replacement);
+    stream << 'v' << dtype->getVectorNumElements() << prefix
+        << gDataLayout->getTypeSizeInBits(dtype->getVectorElementType());
+    stream.flush();
+  } else {
+    replacement = prefix + std::to_string(gDataLayout->getTypeSizeInBits(dtype));
+  }
 
-  std::string needle("#");
   size_t pos;
-  while (std::string::npos != (pos = name.find(needle))) {
+  while (std::string::npos != (pos = name.find('#'))) {
     if (pos > 0 && name[pos - 1] == prefix) {
-      // Check for special PPC128 double
-      if (dtype->isPPC_FP128Ty()) {
-        name.insert(pos - 1, "ppc");
-        pos += 3;
-      }
-      // Properly prefixed, insert bitwidth.
-      name.replace(pos, 1, tmp);
+      name.replace(pos - 1, 2, replacement);
     } else {
       if (pos && (name[pos - 1] == 'i' || name[pos - 1] == 'f')) {
         // Wrong type character.
@@ -1774,14 +1774,20 @@ llvm::GlobalVariable *declareGlobal(const Loc &loc, llvm::Module &module,
     const auto existingType = existing->getType()->getElementType();
     if (existingType != type || existing->isConstant() != isConstant ||
         existing->isThreadLocal() != isThreadLocal) {
-      const auto existingTypeName = llvmTypeToString(existingType);
-      const auto newTypeName = llvmTypeToString(type);
       error(loc,
             "Global variable type does not match previous declaration with "
             "same mangled name: `%s`",
             mangledName.str().c_str());
-      errorSupplemental(loc, "Previous IR type: %s", existingTypeName.c_str());
-      errorSupplemental(loc, "New IR type:      %s", newTypeName.c_str());
+      const auto suppl = [&loc](const char *prefix, LLType *type,
+                                bool isConstant, bool isThreadLocal) {
+        const auto typeName = llvmTypeToString(type);
+        errorSupplemental(loc, "%s %s, %s, %s", prefix, typeName.c_str(),
+                          isConstant ? "const" : "mutable",
+                          isThreadLocal ? "thread-local" : "non-thread-local");
+      };
+      suppl("Previous IR type:", existingType, existing->isConstant(),
+            existing->isThreadLocal());
+      suppl("New IR type:     ", type, isConstant, isThreadLocal);
       fatal();
     }
     return existing;
@@ -1803,12 +1809,12 @@ llvm::GlobalVariable *declareGlobal(const Loc &loc, llvm::Module &module,
 }
 
 void defineGlobal(llvm::GlobalVariable *global, llvm::Constant *init,
-                  Dsymbol *symbolForLinkage) {
+                  Dsymbol *symbolForLinkageAndVisibility) {
   assert(global->isDeclaration() && "Global variable already defined");
   assert(init);
   global->setInitializer(init);
-  if (symbolForLinkage)
-    setLinkage(symbolForLinkage, global);
+  if (symbolForLinkageAndVisibility)
+    setLinkageAndVisibility(symbolForLinkageAndVisibility, global);
 }
 
 llvm::GlobalVariable *defineGlobal(const Loc &loc, llvm::Module &module,

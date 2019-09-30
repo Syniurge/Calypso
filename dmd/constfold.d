@@ -2,7 +2,7 @@
  * Compiler implementation of the
  * $(LINK2 http://www.dlang.org, D programming language).
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/constfold.d, _constfold.d)
@@ -31,10 +31,7 @@ import dmd.target;
 import dmd.tokens;
 import dmd.utf;
 
-version (IN_LLVM)
-{
-    import gen.dpragma;
-}
+version (IN_LLVM) import gen.dpragma;
 
 private enum LOG = false;
 
@@ -409,21 +406,7 @@ UnionExp Div(const ref Loc loc, Type type, Expression e1, Expression e2)
         {
             if (e1.type.isreal())
             {
-                version (all)
-                {
-                    // Work around redundant REX.W prefix breaking Valgrind
-                    // when built with affected versions of DMD.
-                    // https://issues.dlang.org/show_bug.cgi?id=14952
-                    // This can be removed once compiling with DMD 2.068 or
-                    // older is no longer supported.
-                    const r1 = e1.toReal();
-                    const r2 = e2.toReal();
-                    emplaceExp!(RealExp)(&ue, loc, r1 / r2, type);
-                }
-                else
-                {
-                    emplaceExp!(RealExp)(&ue, loc, e1.toReal() / e2.toReal(), type);
-                }
+                emplaceExp!(RealExp)(&ue, loc, e1.toReal() / e2.toReal(), type);
                 return ue;
             }
             const r = e2.toReal();
@@ -623,7 +606,7 @@ UnionExp Pow(const ref Loc loc, Type type, Expression e1, Expression e2)
         // x ^^ y for x < 0 and y not an integer is not defined; so set result as NaN
         if (e1.toReal() < CTFloat.zero)
         {
-            emplaceExp!(RealExp)(&ue, loc, Target.RealProperties.nan, type);
+            emplaceExp!(RealExp)(&ue, loc, target.RealProperties.nan, type);
         }
         else
             cantExp(ue);
@@ -972,17 +955,17 @@ UnionExp Identity(TOK op, const ref Loc loc, Type type, Expression e1, Expressio
     {
         if (e1.type.isreal())
         {
-            cmp = RealEquals(e1.toReal(), e2.toReal());
+            cmp = RealIdentical(e1.toReal(), e2.toReal());
         }
         else if (e1.type.isimaginary())
         {
-            cmp = RealEquals(e1.toImaginary(), e2.toImaginary());
+            cmp = RealIdentical(e1.toImaginary(), e2.toImaginary());
         }
         else if (e1.type.iscomplex())
         {
             complex_t v1 = e1.toComplex();
             complex_t v2 = e2.toComplex();
-            cmp = RealEquals(creall(v1), creall(v2)) && RealEquals(cimagl(v1), cimagl(v1));
+            cmp = RealIdentical(creall(v1), creall(v2)) && RealIdentical(cimagl(v1), cimagl(v1));
         }
         else
         {
@@ -1134,17 +1117,17 @@ UnionExp Cast(const ref Loc loc, Type type, Type to, Expression e1)
                 result = cast(d_uns16)cast(dinteger_t)r;
                 break;
             case Tint32:
-                result = cast(int)r;
+                result = cast(d_int32)r;
                 break;
             case Tdchar:
             case Tuns32:
-                result = cast(uint)r;
+                result = cast(d_uns32)r;
                 break;
             case Tint64:
-                result = cast(long)r;
+                result = cast(d_int64)r;
                 break;
             case Tuns64:
-                result = cast(ulong)r;
+                result = cast(d_uns64)r;
                 break;
             default:
                 assert(0);
@@ -1685,13 +1668,15 @@ UnionExp Cat(Type type, Expression e1, Expression e2)
     }
     else if (e1.op == TOK.int64 && e2.op == TOK.string_)
     {
-        // Concatenate the strings
+        // [w|d]?char ~ string --> string
+        // We assume that we only ever prepend one char of the same type
+        // (wchar,dchar) as the string's characters.
         StringExp es2 = cast(StringExp)e2;
         size_t len = 1 + es2.len;
         ubyte sz = es2.sz;
         dinteger_t v = e1.toInteger();
         void* s = mem.xmalloc(len * sz);
-        memcpy(cast(char*)s, &v, sz);
+        Port.valcpy(cast(char*)s, v, sz);
         memcpy(cast(char*)s + sz, es2.string, es2.len * sz);
         emplaceExp!(StringExp)(&ue, loc, s, len);
         StringExp es = cast(StringExp)ue.exp();

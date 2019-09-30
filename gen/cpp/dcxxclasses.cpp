@@ -101,7 +101,7 @@ static inline llvm::GlobalVariable *getDCXXVTable(::ClassDeclaration *cd,
     mangleToBuffer(cd, &mangledName);
 
     std::string initname("_D");
-    initname.append(mangledName.peekString());
+    initname.append(mangledName.peekChars());
     initname.append("9__VtblCXXZ");
     if (!BaseOffset.isZero())
         initname.append(std::to_string(BaseOffset.getQuantity()));
@@ -207,16 +207,16 @@ ComputeReturnAdjustmentBaseOffset(clang::ASTContext &Context,
     if (auto fd = parent->findFunc(thunkId, calleetf))
         return fd;
 
-    Type *tf = new_TypeFunction(calleetf->parameters,
-                                calleetf->next, 0, LINKcpp, STCfinal);
+    Type *tf = new_TypeFunction(ParameterList{calleetf->parameterList.parameters, VARARGnone},
+                                calleetf->next, LINKcpp, STCfinal);
     auto fthunk = new_FuncDeclaration(loc, loc,
                     thunkId, STCfinal, tf);
     parent->vtblFinal.push(fthunk);
 
     // build arg list
-    auto params = calleetf->parameters;
+    auto params = calleetf->parameterList.parameters;
     auto args = new Expressions;
-    args->reserve(params->dim);
+    args->reserve(calleetf->parameterList.length());
     for (auto *p: *params)
         args->push(new_IdentifierExp(loc, p->ident));
 
@@ -405,8 +405,8 @@ struct DCXXVTableAdjuster
                         continue;
 
                     clang::ThunkInfo NewThunk;
-                    NewThunk.This.NonVirtual = -2 * Target::ptrsize;
-                    NewThunk.Return.NonVirtual = 2 * Target::ptrsize;
+                    NewThunk.This.NonVirtual = -2 * target.ptrsize;
+                    NewThunk.Return.NonVirtual = 2 * target.ptrsize;
 
                     if (MD->getParent()->getCanonicalDecl() != dcxxInfo.MostDerivedBase->getCanonicalDecl())
                     {

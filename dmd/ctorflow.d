@@ -4,7 +4,7 @@
  *
  * Manage flow analysis for constructors.
  *
- * Copyright:   Copyright (C) 1999-2018 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2019 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 http://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/ctorflow.d, _ctorflow.d)
@@ -97,7 +97,7 @@ struct CtorFlow
             {
                 auto fi = &fieldinit[i];
                 fi.csx |= u.csx;
-                if (fi.loc == Loc.init)
+                if (fi.loc is Loc.init)
                     fi.loc = u.loc;
             }
         }

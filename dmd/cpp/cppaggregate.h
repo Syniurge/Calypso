@@ -85,8 +85,6 @@ public:
 
     bool byRef() const override { return false; }
     Expression *defaultInit(Loc loc) override;
-    bool allowMultipleInheritance() override { return true; }
-    bool allowInheritFromStruct() override { return true; }
     bool needsInterfaceSemantic() const override { return false; }
     ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
