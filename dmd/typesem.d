@@ -1265,7 +1265,7 @@ extern(C++) Type typeSemantic(Type t, Loc loc, Scope* sc)
                 {
                     auto tref = cast(TypeReference)fparam.type;
                     fparam.type = fparam.type.nextOf();
-                    fparam.storageClass |= STC.scope_ | STC.ref_;
+                    fparam.storageClass |= STC.ref_;
                     if (tref.isRvalRef())
                         fparam.storageClass |= STC.move;
                 }
@@ -1355,8 +1355,7 @@ extern(C++) Type typeSemantic(Type t, Loc loc, Scope* sc)
                     }
                 }
 
-                if (tf.linkage != LINK.cpp && // CALYPSO HACK? Reference parameters mapped by Calypso are always scope ref, so we need to be able to write extern(C++) functions with scope ref parameters for e.g std:: algorithms (FIXME: scope has changed since the initial implementation, this needs a different STC bit now)
-                    fparam.storageClass & STC.scope_ && !fparam.type.hasPointers() && fparam.type.ty != Ttuple)
+                if (fparam.storageClass & STC.scope_ && !fparam.type.hasPointers() && fparam.type.ty != Ttuple)
                 {
                     /*     X foo(ref return scope X) => Ref-ReturnScope
                      * ref X foo(ref return scope X) => ReturnRef-Scope
@@ -1409,7 +1408,7 @@ extern(C++) Type typeSemantic(Type t, Loc loc, Scope* sc)
 
                     // default arg must be an lvalue
                     if (isRefOrOut && !isAuto
-                            && !(fparam.storageClass & STC.scope_)) // CALYPSO
+                            && !(global.params.rvalueRefParam && !fparam.type.isMutable)) // CALYPSO no need for const/immutable param types
                         e = e.toLvalue(argsc, e);
 
                     fparam.defaultArg = e;

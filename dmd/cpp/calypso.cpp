@@ -1096,6 +1096,8 @@ void LangPlugin::_init()
         fatal();
     }
 
+    global.params.rvalueRefParam = true;
+
     id_cppmap = idPool("cppmap");
 
     id_cpp = idPool("cpp");

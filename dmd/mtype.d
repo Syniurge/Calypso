@@ -4852,7 +4852,7 @@ extern (C++) final class TypeFunction : TypeNext
                     Type tp = tprm;
                     //printf("fparam[%d] ta = %s, tp = %s\n", u, ta.toChars(), tp.toChars());
 
-                    if (m && !(p.storageClass & STC.scope_) && !arg.isLvalue()) // CALYPSO
+                    if (m && !arg.isLvalue())
                     {
                         if (p.storageClass & STC.out_)
                         {
@@ -4886,7 +4886,7 @@ extern (C++) final class TypeFunction : TypeNext
                             if (pMessage) *pMessage = getParamError(arg, p);
                             goto Nomatch;
                         }
-                        else
+                        else if (tp.isMutable) // CALYPSO: no temporary if p is const/immutable
                         {
                             /* in functionParameters() we'll convert this
                              * rvalue into a temporary

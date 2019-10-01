@@ -1946,23 +1946,33 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
                         }
                     }
                     arg = arg.implicitCastTo(sc, tprm);
-                    arg = arg.optimize(WANTvalue, (p.storageClass & (STC.ref_ | STC.out_)) != 0 && !(p.storageClass & STC.scope_)); // CALYPSO
+                    arg = arg.optimize(WANTvalue, (p.storageClass & (STC.ref_ | STC.out_)) != 0);
                 }
             }
             if (p.storageClass & STC.ref_)
             {
-                if (global.params.rvalueRefParam &&
-                    !arg.isLvalue() &&
-                    targ.isCopyable())
-                {   /* allow rvalues to be passed to ref parameters by copying
-                     * them to a temp, then pass the temp as the argument
-                     */
-                    auto v = copyToTemp(0, "__rvalue", arg);
-                    Expression ev = new DeclarationExp(arg.loc, v);
-                    ev = new CommaExp(arg.loc, ev, new VarExp(arg.loc, v));
-                    arg = ev.expressionSemantic(sc);
+                if (global.params.rvalueRefParam) // CALYPSO do not create a temp if p is const/immutable
+                {
+                    if (!p.type.isMutable)
+                    {
+                    }
+                    else
+                    {
+                        if (!arg.isLvalue() && targ.isCopyable())
+                        {
+                            /* allow rvalues to be passed to ref parameters by copying
+                            * them to a temp, then pass the temp as the argument
+                            */
+                            auto v = copyToTemp(0, "__rvalue", arg);
+                            Expression ev = new DeclarationExp(arg.loc, v);
+                            ev = new CommaExp(arg.loc, ev, new VarExp(arg.loc, v));
+                            arg = ev.expressionSemantic(sc);
+                        }
+
+                        arg = arg.toLvalue(sc, arg);
+                    }
                 }
-                if (!(p.storageClass & STC.scope_)) // CALYPSO LDC 1.17 FIXME: _scope needs to be changed, or better than Calypso's hackish implementation, enable the new -preview=rvaluerefparam by default
+                else
                     arg = arg.toLvalue(sc, arg);
 
                 // Look for mutable misaligned pointer, etc., in @safe mode
@@ -2044,7 +2054,7 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
                     }
                 }
             }
-            arg = arg.optimize(WANTvalue, (p.storageClass & (STC.ref_ | STC.out_)) != 0 && !(p.storageClass & STC.scope_)); // CALYPSO
+            arg = arg.optimize(WANTvalue, (p.storageClass & (STC.ref_ | STC.out_)) != 0);
 
             /* Determine if this parameter is the "first reference" parameter through which
              * later "return" arguments can be stored.

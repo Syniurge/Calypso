@@ -1452,7 +1452,7 @@ TypeFunction *DeclMapper::FromType::fromTypeFunction(const clang::FunctionProtoT
         if (at->ty == Treference)
         {
             auto tref = static_cast<TypeReference*>(at);
-            stc |= STCscope | STCref;
+            stc |= /*STCscope | */STCref;
             if (tref->isRvalRef())
                 stc |= STCmove;
             at = at->nextOf();
