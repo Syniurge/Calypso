@@ -1949,7 +1949,7 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
                     arg = arg.optimize(WANTvalue, (p.storageClass & (STC.ref_ | STC.out_)) != 0);
                 }
             }
-            if (p.storageClass & STC.ref_)
+            if ((p.storageClass & (STC.ref_|STC.move)) == STC.ref_) // CALYPSO
             {
                 if (global.params.rvalueRefParam) // CALYPSO do not create a temp if p is const/immutable
                 {
