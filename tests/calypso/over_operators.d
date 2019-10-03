@@ -16,4 +16,8 @@ void main()
 
     writeln("q result = ", q.x, ", ", q.y, ", ", q.z);
     // CHECK: q result = 6, 9, 25
+
+//     Point3D z987 = q - p;
+//     writeln("z987 result = ", z987.x, ", ", z987.y, ", ", z987.z);
+    // CH_CK: q result = 5, 9, 25
 }

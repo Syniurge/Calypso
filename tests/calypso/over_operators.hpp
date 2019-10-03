@@ -17,3 +17,7 @@ struct Point3D
         return *this;
     }
 };
+
+Point3D operator-(Point3D const &a, Point3D const &b) {
+    return Point3D(a.x - a.x, a.y - a.y, a.z - a.z);
+}
