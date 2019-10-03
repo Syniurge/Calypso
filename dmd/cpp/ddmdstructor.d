@@ -411,6 +411,12 @@ void construct_Module(Module _this, const ref Loc loc, const(char) *filename, Id
     memcpy(postvtblThis, &Module.classinfo.m_init[offset], Module.classinfo.m_init.length - offset);
     _this.__ctor(loc, filename.toDString, ident, doDocComment, doHdrGen);
 }
+void construct_Package(Package _this, const ref Loc loc, Identifier ident)
+{
+    auto postvtblThis = &(cast(byte*)_this)[offset];
+    memcpy(postvtblThis, &Package.classinfo.m_init[offset], Package.classinfo.m_init.length - offset);
+    _this.__ctor(loc, ident);
+}
 void construct_TemplateDeclaration(TemplateDeclaration _this, const ref Loc loc, Identifier id, TemplateParameters *parameters, Expression constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false)
 {
     auto postvtblThis = &(cast(byte*)_this)[offset];

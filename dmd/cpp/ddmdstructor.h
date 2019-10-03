@@ -291,6 +291,7 @@ void construct_ClassDeclaration(ClassDeclaration *_this, const Loc& loc, Identif
 void construct_AnonDeclaration(AnonDeclaration *_this, const Loc& loc, bool isunion, Dsymbols *decl);
 void construct_Catch(Catch *_this, const Loc& loc, Type *t, Identifier *id, Statement *handler);
 void construct_Module(Module *_this, const Loc& loc, const char *arg, Identifier *ident, int doDocComment, int doHdrGen);
+void construct_Package(Package *_this, const Loc& loc, Identifier *ident);
 void construct_TemplateDeclaration(TemplateDeclaration *_this, const Loc& loc, Identifier *id, TemplateParameters *parameters, Expression *constraint, Dsymbols *decldefs, bool ismixin = false, bool literal = false);
 void construct_TemplateInstance(TemplateInstance *_this, const Loc& loc, Identifier *ident, Objects* tiargs);
 void construct_TemplateInstance(TemplateInstance *_this, const Loc& loc, TemplateDeclaration *td, Objects *tiargs);

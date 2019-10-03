@@ -985,13 +985,6 @@ int LangPlugin::doesHandleImport(const char* lang)
                 packages, id, aliasId, isstatic);
 }
 
-void LangPlugin::dsymbolSemantic(Dsymbol *dsym, Scope *sc)
-{
-    if (dsym->semanticRun >= PASSsemantic3done)
-        return;
-    assert(false); // FIXME
-}
-
 static bool parseStringExp(Expression *e, const char *&res) {
     e = e->optimize(WANTvalue);
     if (e->op != TOKstring) {
@@ -1023,6 +1016,11 @@ int LangPlugin::getPragma(Scope* sc, PragmaDeclaration* decl)
 
 void LangPlugin::pragmaSemantic(Scope* sc, PragmaDeclaration* decl)
 {
+}
+
+bool LangPlugin::checkAccess(Loc loc, Scope* sc, ::Package* p)
+{
+    return false; // always accessible
 }
 
 void LangPlugin::adjustLinkerArgs(std::vector<std::string>& args)
@@ -1119,7 +1117,6 @@ void LangPlugin::_init()
     id___va_list_tag = idPool("__va_list_tag");
     id___NSConstantString_tag = idPool("__NSConstantString_tag");
 
-    Module::init();
     pch.init();
 
     auto TargetFS = gTargetMachine->getTargetFeatureString();

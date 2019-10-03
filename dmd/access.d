@@ -15,6 +15,7 @@ module dmd.access;
 import dmd.aggregate;
 import dmd.dclass;
 import dmd.declaration;
+import dmd.dimport;
 import dmd.dmodule;
 import dmd.dscope;
 import dmd.dstruct;
@@ -223,6 +224,9 @@ bool checkAccess(Loc loc, Scope* sc, Expression e, Declaration d)
  */
 bool checkAccess(Loc loc, Scope* sc, Package p)
 {
+    if (auto lp = p.langPlugin)
+        return lp.checkAccess(loc, sc, p); // CALYPSO
+
     if (sc._module == p)
         return false;
     for (; sc; sc = sc.enclosing)

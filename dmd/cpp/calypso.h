@@ -148,12 +148,12 @@ public:
         Loc loc, Identifiers *packages, Identifier *id,
         Identifier *aliasId, int isstatic) override;
 
-    void dsymbolSemantic(Dsymbol *dsym, Scope *sc) override;
-
     bool isForeignInstance(::TemplateInstance *ti) override;
 
     int getPragma(Scope* sc, PragmaDeclaration* decl) override;
     void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) override;
+
+    bool checkAccess(Loc loc, Scope* sc, Package* p) override;
 
     bool doesHandleCatch(LINK lang) override;
     ::Catch *createCatch(Loc loc, Type *t, Identifier *id,

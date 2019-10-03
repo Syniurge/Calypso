@@ -3453,14 +3453,18 @@ final class Parser(AST) : Lexer
                 }
                 nextToken();
             }
-            if (token.value != TOK.identifier)
+            Identifier id = token.ident;
+            if (token.value == TOK.mul && lp/+ && lp.hasStarImport+/) // CALYPSO
+            {
+                id = null;
+            }
+            else if (token.value != TOK.identifier)
             {
                 error("identifier expected following `import`");
                 break;
             }
 
             const loc = token.loc;
-            Identifier id = token.ident;
             AST.Identifiers* a = null;
             nextToken();
             if (!aliasid && token.value == TOK.assign)

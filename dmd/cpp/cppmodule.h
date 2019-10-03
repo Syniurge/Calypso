@@ -27,6 +27,17 @@ namespace cpp {
 
 typedef llvm::SmallPtrSet<const clang::Decl*, 2> InstantiatedDeclSet;
 
+class Package : public ::Package
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    const clang::Decl *NamespaceOrTU;
+
+    Package(const Loc& loc, Identifier* ident, const clang::Decl *NamespaceOrTU);
+    static DsymbolTable* tryResolve(const Loc& loc, Identifiers* packages, ::Package** ppkg);
+};
+
 class Module : public ::Module
 {
 public:
@@ -47,12 +58,12 @@ public:
     llvm::StringSet<> emittedSymbols;
     bool needGen = false;
 
-    static Package *rootPackage;    // package to store all C++ packages/modules, avoids name clashes (e.g std)
+    static cpp::Package *rootPackage;    // package to store all C++ packages/modules, avoids name clashes (e.g std)
     static void init();
 
     Module(const char* filename, Identifier* ident);
 
-    static Module *load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef);
+    static ::Module *load(Loc loc, cpp::Package *pkg, Identifier *id, bool& isTypedef);
     void addPreambule();
 
     void importAll(Scope *sc) override {}
@@ -66,9 +77,6 @@ public:
     void saveEmittedSymbolList();
 
 protected:
-    bool searchedInlineNamespaces = false; // NOTE: they may need to get refreshed after a new cppmap
-    std::vector<const clang::NamespaceDecl*> inlineNamespaces;
-
     struct NonMemberOverloadedOperators
     {
         std::vector<const clang::Decl*> OOs;
@@ -76,8 +84,26 @@ protected:
     };
     std::map<clang::OverloadedOperatorKind, NonMemberOverloadedOperators> nonMemberOverloadedOperators;
 
-    void searchInlineNamespaces();
     void searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op); // map non-member overloaded operators and out-of-line friend decls
+};
+
+// *************** //
+
+// Special module akin to "package.d" modules in D, that automatically
+// loads C++ modules containing search'ed symbols
+class FullNamespaceModule : public ::Module
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    const clang::DeclContext *DC;
+
+    FullNamespaceModule(const clang::DeclContext *DC);
+
+    Dsymbol *search(const Loc& loc, Identifier *ident, int flags = IgnoreNone) override;
+    void complete() override;
+
+    static ::Module* get(Package* pkg, const clang::Decl *D);
 };
 
 // *************** //

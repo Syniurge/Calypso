@@ -130,7 +130,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
      * Returns:
      *  true for errors, false for success
      */
-    bool load(Scope* sc)
+    bool load(Scope* sc) // CALYPSO (non-final)
     {
         //printf("Import::load('%s') %p\n", toPrettyChars(), this);
         // See if existing module
@@ -160,7 +160,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
                 {
                     if (p.isPkgMod == PKG.unknown)
                     {
-                        mod = loadModule(sc); // CALYPSO
+                        mod = Module.load(loc, packages, id);
                         if (!mod)
                             p.isPkgMod = PKG.package_;
                         else
@@ -193,7 +193,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         if (!mod)
         {
             // Load module
-            mod = loadModule(sc); // CALYPSO
+            mod = Module.load(loc, packages, id);
             if (mod)
             {
                 // id may be different from mod.ident, if so then insert alias
@@ -306,12 +306,6 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
             return false;
     }
 
-    // CALYPSO
-    Module loadModule(Scope *sc)
-    {
-        return Module.load(loc, packages, id);
-    }
-
     override inout(Import) isImport() inout
     {
         return this;
@@ -349,14 +343,16 @@ public:
 
     // ===== - - - - - ===== //
 
-    void dsymbolSemantic(Dsymbol dsym, Scope *sc);
-
     bool isForeignInstance(TemplateInstance ti);
 
     // ===== - - - - - ===== //
 
     int getPragma(Scope* sc, PragmaDeclaration decl);
     void pragmaSemantic(Scope* sc, PragmaDeclaration decl);
+
+    // ===== - - - - - ===== //
+
+    bool checkAccess(Loc loc, Scope* sc, Package p);
 
     // ===== - - - - - ===== //
 

@@ -44,16 +44,13 @@ public:
     const char *kind() const;
     Prot prot();
     Dsymbol *syntaxCopy(Dsymbol *s);    // copy only syntax trees
-    virtual void load(Scope *sc); // CALYPSO
+    virtual bool load(Scope *sc); // CALYPSO
     void importAll(Scope *sc);
     Dsymbol *toAlias();
     void addMember(Scope *sc, ScopeDsymbol *sds);
     void setScope(Scope* sc);
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = SearchLocalsOnly);
     bool overloadInsert(Dsymbol *s);
-
-    // CALYPSO
-    virtual Module *loadModule(Scope* sc);
 
     Import *isImport() { return this; }
     void accept(Visitor *v) { v->visit(this); }
@@ -79,14 +76,16 @@ public:
 
     // ===== - - - - - ===== //
 
-    virtual void dsymbolSemantic(Dsymbol *dsym, Scope *sc) = 0;
-
     virtual bool isForeignInstance(::TemplateInstance *ti) = 0;
 
     // ===== - - - - - ===== //
 
     virtual int getPragma(Scope* sc, PragmaDeclaration* decl) = 0;
     virtual void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) = 0;
+
+    // ===== - - - - - ===== //
+
+    virtual bool checkAccess(Loc loc, Scope* sc, Package* p) = 0;
 
     // ===== - - - - - ===== //
 

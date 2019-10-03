@@ -72,9 +72,16 @@ Package *Module::rootPackage;
 std::map<const clang::Decl*, Module*> Module::allCppModules;
 Modules Module::amodules_cpp;
 
+Package::Package(const Loc& loc, Identifier* ident, const clang::Decl *NamespaceOrTU)
+{
+    construct_Package(this, loc, ident);
+    this->NamespaceOrTU = NamespaceOrTU;
+}
+
 void Module::init()
 {
-    rootPackage = new_Package(Loc(), calypso.id_Scpp);
+    rootPackage = new cpp::Package(Loc(), calypso.id_Scpp,
+                    calypso.getASTContext().getTranslationUnitDecl());
     rootPackage->symtab = new_DsymbolTable();
 
     modules->insert(rootPackage);
@@ -1430,7 +1437,7 @@ Package *DeclMapper::getPackage(const clang::Decl* D)
     if (isa<clang::TagDecl>(D) || isa<clang::ClassTemplateDecl>(D))
         return getPackage(Parent);
 
-    auto NS = cast<clang::NamespaceDecl>(D);
+    auto NS = cast<clang::NamespaceDecl>(getCanonicalDecl(D));
     if (NS->d) {
         assert(NS->d->sym->isPackage());
         return static_cast<Package*>(NS->d->sym);
@@ -1438,12 +1445,12 @@ Package *DeclMapper::getPackage(const clang::Decl* D)
 
     auto parent = getPackage(Parent);
 
-    auto pkg = new_Package(parent->loc, getIdentifier(NS));
-    setDsym(NS, pkg);
+    auto pkg = new cpp::Package(parent->loc, getIdentifier(NS), D);
     parent->symtab->insert(pkg);
     pkg->parent = parent;
     pkg->symtab = new_DsymbolTable();
 
+    setDsym(NS, pkg);
     return pkg;
 }
 
@@ -1467,14 +1474,12 @@ void loadCppCore()
     semantic3(cpp_core_module, nullptr);
 }
 
-Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTypedef)
+DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Package** ppkg)
 {
     if (!calypso.getASTUnit()) {
         ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\") first");
-        fatal();
+        return nullptr;
     }
-
-    loadCppCore();
 
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
@@ -1484,52 +1489,59 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
     if (!S.TUScope)
         S.TUScope = new clang::Scope(nullptr, clang::Scope::DeclScope, *Diags);
 
-    const clang::DeclContext *DC = Context.getTranslationUnitDecl();
-    Package *pkg = rootPackage;
-
-    for (size_t i = 1; i < packages->dim; i++)
+    Package *pkg = nullptr;
+    if (packages)
     {
-        Identifier *pid = (*packages)[i];
-
-        auto R = DC->lookup(calypso.toDeclarationName(pid));
-        if (R.empty())
+        const clang::DeclContext *DC = Context.getTranslationUnitDecl();
+        for (size_t i = 1; i < packages->dim; i++)
         {
-            ::error(loc, "no C++ package named %s", pid->toChars());
-            fatal();
+            Identifier *pid = (*packages)[i];
+
+            auto R = DC->lookup(calypso.toDeclarationName(pid));
+            if (R.empty())
+            {
+                ::error(loc, "no C++ package named %s", pid->toChars());
+                return nullptr;
+            }
+
+            auto NSN = dyn_cast<clang::NamespaceDecl>(R[0]);
+            if (!NSN || NSN->isInline())
+            {
+                ::error(loc, "only non-inline namespaces can be C++ packages");
+                return nullptr;
+            }
+
+            DC = NSN;
         }
 
-        auto NSN = dyn_cast<clang::NamespaceDecl>(R[0]);
-        if (!NSN || NSN->isInline())
-        {
-            ::error(loc, "only non-inline namespaces can be C++ packages");
-            fatal();
-        }
-
-        pkg = static_cast<Package*>(pkg->symtab->lookup(pid));
+        pkg = DeclMapper(nullptr, nullptr).getPackage(cast<clang::Decl>(DC));
         assert(pkg);
-
-        DC = NSN;
     }
 
+    if (ppkg)
+        *ppkg = pkg;
+    return pkg ? pkg->symtab : ::Module::modules;
+}
+
+::Module *Module::load(Loc loc, cpp::Package *pkg, Identifier *id, bool& isTypedef)
+{
+    loadCppCore();
+
+    auto& Context = calypso.getASTContext();
+
+    const clang::DeclContext *DC = pkg ? cast<clang::DeclContext>(pkg->NamespaceOrTU)
+                                       : Context.getTranslationUnitDecl();
     isTypedef = false;
 
     const clang::Decl *rootDecl = nullptr;
+    bool wantPackageModule = !pkg && id == calypso.id_Scpp;
 
-    if (id == calypso.id__)
+    if (id == calypso.id__ || wantPackageModule)
     {
         rootDecl = cast<clang::Decl>(DC)->getCanonicalDecl();
     }
     else
     {
-        // Lookups can't find the implicit __va_list_tag record
-        if (packages->dim == 1)
-        {
-            if (id == calypso.id___va_list_tag)
-                rootDecl = cast<clang::NamedDecl>(Context.getVaListTagDecl());
-            else if (id == calypso.id___NSConstantString_tag)
-                rootDecl = Context.getCFConstantStringTagDecl(); // FIXME: this isn't satisfying, problem #1: not future-proof, problem #2: platform-dependent
-        }
-
         if (!rootDecl)
         {
             auto R = DC->lookup(calypso.toDeclarationName(id));
@@ -1553,9 +1565,11 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
                     }
                 }
 
-                if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match))
+                if (isa<clang::TagDecl>(Match) || isa<clang::ClassTemplateDecl>(Match) || isa<clang::NamespaceDecl>(Match))
                 {
                     rootDecl = Match;
+                    if (isa<clang::NamespaceDecl>(Match))
+                        wantPackageModule = true;
                     break;
                 }
             }
@@ -1563,21 +1577,26 @@ Module *Module::load(Loc loc, Identifiers *packages, Identifier *id, bool& isTyp
 
         if (!rootDecl)
         {
-            ::error(loc, "C++ modules have to be enums, records (class/struct, template or not), typedefs or _.\n"
+            ::error(loc, "May be imported: non-inline namespaces, enums, records (class/struct, template or not), typedefs, or a special _ or * module.\n"
+                         "NS._ contains functions, global variables, typedefs (template or not), from the namespace NS.\n"
+                         "Importing * imports the translation unit.\n"
                          "Importing a typedef is equivalent to \"import (C++) _ : 'typedef';\"\n"
-                         "(Typedefs are included in the _ module)");
+                         "(Typedefs are included in the _ module)\n");
             fatal();
         }
 
         rootDecl = getCanonicalDecl(rootDecl);
     }
 
-    auto m = DeclMapper(nullptr, nullptr).getModule(rootDecl);
+    DeclMapper mapper(nullptr, nullptr);
 
-    if (id == calypso.id__)
-        m->searchInlineNamespaces();
-
-    return m;
+    if (!wantPackageModule)
+        return mapper.getModule(rootDecl);
+    else
+    {
+        auto pkg = mapper.getPackage(rootDecl);
+        return FullNamespaceModule::get(pkg, rootDecl);
+    }
 }
 
 // ***** //
@@ -1751,20 +1770,6 @@ void Module::complete()
     members = newMembers;
 }
 
-void Module::searchInlineNamespaces()
-{
-    if (searchedInlineNamespaces)
-        return;
-    searchedInlineNamespaces = true;
-
-    auto DC = cast<clang::DeclContext>(rootDecl);
-
-    typedef clang::DeclContext::specific_decl_iterator<clang::NamespaceDecl> Namespace_iterator;
-    for (Namespace_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
-        if ((*I)->isInlineNamespace() && (*I)->isOriginalNamespace())
-            inlineNamespaces.push_back(*I);
-}
-
 bool isRecordMemberInModuleContext(clang::Decl* D)
 {
     auto Friend = dyn_cast<clang::FriendDecl>(D);
@@ -1868,11 +1873,6 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags) // FIXME n
             if (isTopLevelInNamespaceModule(Match))
                 mapper.dsymAndWrapperForDecl(Match);
 
-        for (auto NS: inlineNamespaces)
-            for (auto Match: NS->lookup(Name))
-                if (isTopLevelInNamespaceModule(Match))
-                    mapper.dsymAndWrapperForDecl(Match);
-
         if (isa<clang::TranslationUnitDecl>(rootDecl))
             mapper.dsymForMacro(ident);
     }
@@ -1974,6 +1974,59 @@ void markModuleForGenIfNeeded(Dsymbol *s)
         }
         c_minst->emittedSymbols.insert(MangledName);
     }
+}
+
+/************************************/
+
+FullNamespaceModule::FullNamespaceModule(const clang::DeclContext *DC)
+{
+    construct_Module(this, Loc(), /*filename = */nullptr, /*ident = */nullptr, 0, 0);
+    this->DC = DC->getPrimaryContext();
+
+    setScope(Scope::createGlobal(this));
+    semanticRun = PASSsemantic3done;
+}
+
+Dsymbol* FullNamespaceModule::search(const Loc& loc, Identifier *ident, int flags)
+{
+    DeclMapper mapper(this);
+
+    if (DC->isTranslationUnit())
+        if (auto s = mapper.dsymForMacro(ident))
+            return s;
+
+    auto Name = calypso.toDeclarationName(ident);
+    for (auto Match: DC->lookup(Name))
+    {
+        if (isa<clang::NamespaceDecl>(Match))
+        {
+            auto pkg = mapper.getPackage(Match);
+            return get(pkg, Match);
+        }
+        else
+            return mapper.dsymForDecl(Match);
+    }
+
+    return ScopeDsymbol::search(loc, ident, flags);
+}
+
+void FullNamespaceModule::complete()
+{
+    // TODO
+}
+
+::Module* FullNamespaceModule::get(Package* pkg, const clang::Decl* D)
+{
+    if (!pkg->mod)
+    {
+        auto mod = new FullNamespaceModule(cast<clang::DeclContext>(D));
+        mod->isPackageFile = true;
+        mod->tag = pkg->tag;
+
+        pkg->isPkgMod = PKGmodule;
+        pkg->mod = mod;
+    }
+    return pkg->mod;
 }
 
 }
