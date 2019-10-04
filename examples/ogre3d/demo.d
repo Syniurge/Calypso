@@ -4,7 +4,7 @@
  * Build with:
  *   (Linux)   $ ldc2 -wi -v -cpp-args "-I/usr/local/include/OGRE -I/usr/local/include/OGRE/Bites -I/usr/local/include/OGRE/Overlay -I/usr/local/include/OGRE/RTShaderSystem" -L-L/usr/local/lib -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread demo.d
  *
- *   (Windows) $ ldc2.exe -wi -v -cpp-args -DBOOST_USE_WINDOWS_H -cpp-args -D_MT -cpp-args -D_DLL -cpp-args -fms-extensions -cpp-args -fdelayed-template-parsing -cpp-args -fms-compatibility -cpp-args -fms-compatibility-version=19 -cpp-args -IZ:\boost -cpp-args -IZ:\OGRE-SDK\include -cpp-args  -IZ:\OGRE-SDK\include\OGRE -cpp-args -IZ:\OGRE-SDK\include\OGRE\Overlay -cpp-args -IZ:\OGRE-SDK\include\OIS -L-lOgreOverlay -L-lOgreMain -L-lOIS -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
+ *   (Windows) $ ldc2.exe -wi -v -cpp-args "-DBOOST_USE_WINDOWS_H -D_MT -D_DLL -fms-extensions -fdelayed-template-parsing -fms-compatibility -fms-compatibility-version=19 -IZ:\boost -IZ:\OGRE-SDK\include -IZ:\OGRE-SDK\include\OGRE -IZ:\OGRE-SDK\include\OGRE\Overlay -IZ:\OGRE-SDK\include\OGREOGRE\RTShaderSystem" -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
  */
 
 pragma (cppmap, "OGRE/Ogre.h");
@@ -16,26 +16,7 @@ pragma (cppmap, "OGRE/Bites/OgreTrays.h");
 
 import std.stdio, std.file, std.conv;
 
-import (C++) std._ : cppstring = string;
-
-import (C++) Ogre._, Ogre.Math;
-import (C++) Ogre.Vector3, Ogre.Radian, Ogre.ColourValue;
-import (C++) Ogre.MovableObject, Ogre.Light, Ogre.Billboard,
-        Ogre.BillboardSet, Ogre.RibbonTrail, Ogre.AnimationState,
-        Ogre.HardwareOcclusionQuery, Ogre.Animation, Ogre.Camera,
-        Ogre.Root, Ogre.RenderSystem, Ogre.MaterialManager,
-        Ogre.AutoParamDataSource, Ogre.Pass, Ogre.Renderable,
-        Ogre.FrameEvent, Ogre.ResourceGroupManager, Ogre.SceneManager,
-        Ogre.ℂException, Ogre.LogManager, Ogre.LogMessageLevel,
-        Ogre.RenderObjectListener, Ogre.Node;
-
-import (C++) Ogre.RTShader.ShaderGenerator;
-
-import (C++) OgreBites.ApplicationContext, OgreBites.CameraMan,
-             OgreBites.CameraStyle, OgreBites.MouseMotionEvent,
-             OgreBites.MouseButtonEvent, OgreBites.InputListener,
-             OgreBites.TrayManager, OgreBites.TrayLocation,
-             OgreBites.ApplicationContextBase, OgreBites._;
+import (C++) Ogre, Ogre.RTShader, OgreBites;
 
 immutable ubyte cPriorityMain = 50;
 immutable ubyte cPriorityQuery = 51;
@@ -442,6 +423,12 @@ protected:
                 return true;
 
             mCameraMan.mouseReleased(evt);
+            return true;
+        }
+
+        override bool mouseWheelRolled(ref scope const(MouseWheelEvent) evt)
+        {
+            mCameraMan.mouseWheelRolled(evt);
             return true;
         }
     }

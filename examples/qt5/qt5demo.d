@@ -10,20 +10,9 @@ import moc;
 import core.runtime;
 import std.stdio, std.conv;
 
-// Main Qt imports
+// C++ Qt imports
 pragma (cppmap, "<QtWidgets>");
-import (C++) Qt._;
-import (C++) QCoreApplication, QApplication, QString, QPushButton, QAction, QMainWindow;
-import (C++) QWidget, QLineEdit, QLabel, QLayout, QGridLayout, QTextDocument;
-import (C++) QCloseEvent, QPlainTextEdit, QMenu, QToolBar, QMessageBox, QFlags;
-import (C++) QIcon, QSettings, QPoint, QSize, QVariant, QFile, QIODevice, QMenuBar;
-import (C++) QFileInfo, QMetaMethod, QObject, QByteArray, QKeySequence;
-import (C++) QCursor, QFileDialog, QStatusBar, QTextStream;
-
-// Enums
-import (C++) Qt.AlignmentFlag, Qt.CursorShape, Qt.WindowModality;
-
-alias QS = QString;
+import (C++) Qt, *;
 
 enum HAS_QT_NO_CURSOR = __traits(compiles, QT_NO_CURSOR);
 
@@ -53,7 +42,7 @@ public:
 
         connect2!(QTextDocument.contentsChanged, documentWasModified)(textEdit.document(), this);
 
-        setCurrentFile(QS(""));
+        setCurrentFile("");
         setUnifiedTitleAndToolBarOnMac(true);
     }
 
@@ -75,7 +64,7 @@ public extern(C++)  @slots
         if (maybeSave())
         {
             textEdit.clear();
-            setCurrentFile( QS("") );
+            setCurrentFile("");
         }
 
         testSignalNew(); // emit the 'new' test signal
@@ -114,10 +103,10 @@ public extern(C++)  @slots
 
     void about()
     {
-        QMessageBox.about(this, QS("About Application"),
-                        QS("This <b>Application</b> " ~
+        QMessageBox.about(this, "About Application",
+                        "This <b>Application</b> " ~
                         "example demonstrates how to write modern GUI applications in D " ~
-                        "using QT and Calypso, with a menu bar, toolbars, and a status bar."));
+                        "using QT and Calypso, with a menu bar, toolbars, and a status bar.");
     }
 
     void documentWasModified()
@@ -130,62 +119,62 @@ public extern(C++)  @slots
     {
         alias StandardKey = QKeySequence.StandardKey;
 
-        auto newIcon = QIcon.fromTheme( QS("document-new"), QIcon( QS("images/new.png") ) );
-        newAct = new QAction( newIcon, QS("&New"), this );
+        auto newIcon = QIcon.fromTheme( "document-new", QIcon( "images/new.png" ) );
+        newAct = new QAction( newIcon, "&New", this );
         newAct.setShortcuts( StandardKey.New );
-        newAct.setStatusTip( QS("Create a new File") );
+        newAct.setStatusTip( "Create a new File" );
         connect2!(QAction.triggered, newFile)(newAct, this);
 
-        auto openIcon = QIcon.fromTheme( QS("document-open"), QIcon( QS("images/open.png") ) );
-        openAct = new QAction( openIcon, QS("&Open"), this );
+        auto openIcon = QIcon.fromTheme( "document-open", QIcon( "images/open.png" ) );
+        openAct = new QAction( openIcon, "&Open", this );
         openAct.setShortcuts( StandardKey.Open );
-        openAct.setStatusTip( QS("Open an existing file") );
+        openAct.setStatusTip( "Open an existing file" );
         connect2!(QAction.triggered, open)(openAct, this);
 
-        auto saveIcon = QIcon.fromTheme( QS("document-save"), QIcon( QS("images/save.png") ) );
-        saveAct = new QAction( saveIcon, QS("&Save"), this );
+        auto saveIcon = QIcon.fromTheme( "document-save", QIcon( "images/save.png" ) );
+        saveAct = new QAction( saveIcon, "&Save", this );
         saveAct.setShortcuts( StandardKey.Save );
-        saveAct.setStatusTip( QS("Save the document to disk") );
+        saveAct.setStatusTip( "Save the document to disk" );
         connect2!(QAction.triggered, save)(saveAct, this);
 
-        auto saveAsIcon = QIcon.fromTheme( QS("document-save-as") );
-        saveAsAct = new QAction( saveAsIcon, QS("Save &As..."), this );
+        auto saveAsIcon = QIcon.fromTheme( "document-save-as" );
+        saveAsAct = new QAction( saveAsIcon, "Save &As...", this );
         saveAsAct.setShortcuts( StandardKey.SaveAs );
-        saveAsAct.setStatusTip( QS("Save the document under a new name") );
+        saveAsAct.setStatusTip( "Save the document under a new name" );
         connect2!(QAction.triggered, saveAs)(saveAsAct, this);
 
-        auto exitIcon = QIcon.fromTheme( QS("application-exit") );
-        exitAct = new QAction( exitIcon, QS("E&xit"), this );
+        auto exitIcon = QIcon.fromTheme( "application-exit" );
+        exitAct = new QAction( exitIcon, "E&xit", this );
         exitAct.setShortcuts( StandardKey.Close );
-        exitAct.setStatusTip( QS("Exit application") );
+        exitAct.setStatusTip( "Exit application" );
         connect2!(QAction.triggered, close)(exitAct, this);
 
         // Edit Menu actions
-        auto copyIcon = QIcon.fromTheme( QS("edit-copy"), QIcon( QS("images/copy.png") ) );
-        copyAct = new QAction( copyIcon, QS("&Copy"), this );
+        auto copyIcon = QIcon.fromTheme( "edit-copy", QIcon( "images/copy.png" ) );
+        copyAct = new QAction( copyIcon, "&Copy", this );
         copyAct.setShortcuts( StandardKey.Copy );
-        copyAct.setStatusTip( QS("Copy text and save it to clipboard") );
+        copyAct.setStatusTip( "Copy text and save it to clipboard" );
         connect2!(QAction.triggered, QPlainTextEdit.copy)(copyAct, textEdit);
 
-        auto cutIcon = QIcon.fromTheme( QS("edit-cut"), QIcon( QS("images/cut.png") ) );
-        cutAct = new QAction( cutIcon, QS("&Cut"), this );
+        auto cutIcon = QIcon.fromTheme( "edit-cut", QIcon( "images/cut.png" ) );
+        cutAct = new QAction( cutIcon, "&Cut", this );
         cutAct.setShortcuts(StandardKey.Cut);
-        cutAct.setStatusTip( QS("Cut text and save it to clipboard") );
+        cutAct.setStatusTip( "Cut text and save it to clipboard" );
         connect2!(QAction.triggered, QPlainTextEdit.cut)(cutAct, textEdit);
 
-        auto pasteIcon = QIcon.fromTheme( QS("edit-paste"), QIcon( QS("images/paste.png") ) );
-        pasteAct = new QAction( pasteIcon, QS("&Paste"), this );
+        auto pasteIcon = QIcon.fromTheme( "edit-paste", QIcon( "images/paste.png" ) );
+        pasteAct = new QAction( pasteIcon, "&Paste", this );
         pasteAct.setShortcuts( StandardKey.Paste );
-        pasteAct.setStatusTip( QS("Paste text from clipboard") );
+        pasteAct.setStatusTip( "Paste text from clipboard" );
         connect2!(QAction.triggered, QPlainTextEdit.paste)(pasteAct, textEdit);
 
         // Help Menu actions
-        aboutAct = new QAction( QS("&About"), this );
-        aboutAct.setStatusTip( QS("About the Application") );
+        aboutAct = new QAction( "&About", this );
+        aboutAct.setStatusTip( "About the Application" );
         connect2!(QAction.triggered, about)(aboutAct, this);
 
-        aboutQtAct = new QAction( QS("About &Qt"), this );
-        aboutQtAct.setStatusTip( QS("Show the Qt Library's About Box") );
+        aboutQtAct = new QAction( "About &Qt", this );
+        aboutQtAct.setStatusTip( "Show the Qt Library's About Box" );
         connect2!(QAction.triggered, QApplication.aboutQt)(aboutQtAct, QCoreApplication.instance());
 
         copyAct.setEnabled(false);
@@ -196,7 +185,7 @@ public extern(C++)  @slots
 
     void createMenus()
     {
-        fileMenu = menuBar().addMenu( QS("&File") );
+        fileMenu = menuBar().addMenu( "&File" );
 
         fileMenu.QWidget.addAction(newAct);
         fileMenu.QWidget.addAction(openAct);
@@ -205,27 +194,27 @@ public extern(C++)  @slots
         fileMenu.addSeparator();
         fileMenu.QWidget.addAction(exitAct);
 
-        editMenu = menuBar().addMenu( QS("&Edit") );
+        editMenu = menuBar().addMenu( "&Edit" );
         editMenu.QWidget.addAction(cutAct);
         editMenu.QWidget.addAction(copyAct);
         editMenu.QWidget.addAction(pasteAct);
 
         menuBar.addSeparator();
 
-        helpMenu = menuBar().addMenu( QS("&Help") );
+        helpMenu = menuBar().addMenu( "&Help" );
         helpMenu.QWidget.addAction(aboutAct);
         helpMenu.QWidget.addAction(aboutQtAct);
     }
 
     void createToolBars()
     {
-        fileToolBar = addToolBar( QS("File") );
+        fileToolBar = addToolBar( "File" );
 
         fileToolBar.QWidget.addAction(newAct);
         fileToolBar.QWidget.addAction(openAct);
         fileToolBar.QWidget.addAction(saveAct);
 
-        editToolBar = addToolBar( QS("Edit") );
+        editToolBar = addToolBar( "Edit" );
 
         editToolBar.QWidget.addAction(cutAct);
         editToolBar.QWidget.addAction(copyAct);
@@ -234,31 +223,23 @@ public extern(C++)  @slots
 
     void createStatusBar()
     {
-        statusBar().showMessage( QS("Ready") );
+        statusBar().showMessage( "Ready" );
     }
 
     void readSettings()
     {
-        QSettings settings = QSettings( QS("Trolltech"), QS("Application Example") );
+        QSettings settings = QSettings( "Trolltech", "Application Example" );
 
-        auto PosString = QS("pos"); auto PosPoint = QPoint(200, 200); auto PosPointV = QVariant(PosPoint);
-        auto SizeString = QS("size"); auto SizeSize = QSize(400, 400); auto SizeSizeV = QVariant(SizeSize);
-
-        QPoint pos = settings.value(PosString, PosPointV).toPoint();
-        QSize size = settings.value(SizeString, SizeSizeV).toSize();
+        QPoint pos = settings.value("pos", QPoint(200, 200)).toPoint();
+        QSize size = settings.value("size", QSize(400, 400)).toSize();
         resize(size);
         move(pos);
     }
 
     void writeSettings()
     {
-        QSettings settings = QSettings( QS("Trolltech"), QS("Application Example") );
-
-        auto PosString = QS("pos"); auto Pos = pos(); auto PosV = QVariant(Pos);
-        settings.setValue(PosString, PosV);
-
-        auto SizeString = QS("size"); auto Size = size(); auto SizeV = QVariant(Size);
-        settings.setValue(SizeString, SizeV);
+        QSettings settings = QSettings( "Trolltech", "Application Example" );
+        settings.setValue("size", size());
     }
 
     bool maybeSave()
@@ -269,8 +250,8 @@ public extern(C++)  @slots
             StandardButton ret;
 
             auto flags = QFlags!(QMessageBox.StandardButton)(StandardButton.Save | StandardButton.Discard | StandardButton.Cancel);
-            ret = cast(StandardButton) QMessageBox.warning(this, QS("Application"),
-                                QS("The document has been modified, Do you want to save?"), flags);
+            ret = cast(StandardButton) QMessageBox.warning(this, "Application",
+                                "The document has been modified, Do you want to save?", flags);
 
             if (ret == StandardButton.Save)
                 return save();
@@ -289,16 +270,11 @@ public extern(C++)  @slots
 
         if (!file.open(flags))
         {
-//             auto FileErrorString = file.errorString();
-//             auto WarningString = QS("Cannot read file %1: \n%2").arg(fileName).arg(FileErrorString);
-            // DMD/CALYPSO BUG: QString.arg() cannot be used for now without triggering a forward referencing error.
-            // DMD's Struct/ClassDeclaration.semantic() need to be more solid for complex libraries (both C++ and D,
-            // see https://issues.dlang.org/show_bug.cgi?id=7426 which has never really been fixed)
             auto d_WarningString = "Cannot read file " ~
                     to!string(fileName.toUtf8.data()) ~ ": \n" ~
                     to!string(file.errorString().toUtf8.data());
 
-            QMessageBox.warning( this, QS("Application"), QS(d_WarningString.ptr) );
+            QMessageBox.warning( this, "Application", d_WarningString.ptr );
             return;
         }
 
@@ -317,7 +293,7 @@ public extern(C++)  @slots
             QApplication.restoreOverrideCursor();
 
         setCurrentFile(fileName);
-        statusBar().showMessage( QS("File Loaded"), 2000 );
+        statusBar().showMessage( "File Loaded", 2000 );
     }
 
     bool saveFile(const scope ref QString fileName)
@@ -331,13 +307,11 @@ public extern(C++)  @slots
         auto flags = QFlags!(QIODevice.OpenModeFlag)(omf.WriteOnly | omf.Text);
 
         if (!file.open(flags)) {
-//             auto FileErrorString = file.errorString();
-//             auto WarningString = QS("Cannot write file %1: \n%2").arg(fileName).arg(FileErrorString);
             auto d_WarningString = "Cannot write file " ~
                     to!string(fileName.toUtf8.data) ~ ": \n" ~
                     to!string(file.errorString().toUtf8.data);
 
-            QMessageBox.warning( this, QS("Application"), QS(d_WarningString.ptr) );
+            QMessageBox.warning( this, "Application", d_WarningString.ptr );
             return false;
         }
 
@@ -355,7 +329,7 @@ public extern(C++)  @slots
             QApplication.restoreOverrideCursor();
 
         setCurrentFile(fileName);
-        statusBar().showMessage( QS("File saved"), 2000);
+        statusBar().showMessage( "File saved", 2000);
         return true;
     }
 
@@ -368,7 +342,7 @@ public extern(C++)  @slots
         textEdit.document().setModified(false);
         setWindowModified(false);
 
-        auto showName = QS(*curFile);
+        auto showName = QString(*curFile);
         if (curFile.isEmpty())
             showName = "untitled.txt";
 
@@ -416,8 +390,8 @@ int main()
 
     auto app = new QApplication(Runtime.cArgs.argc, Runtime.cArgs.argv);
 
-    app.setOrganizationName( QS("Calypso") );
-    app.setApplicationName( QS("Example App") );
+    app.setOrganizationName( "Calypso" );
+    app.setApplicationName( "Example App" );
 
     auto mainWin = new MainWindow;
     auto testRecv = new TestReceiver;
