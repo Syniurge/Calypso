@@ -583,7 +583,7 @@ Dsymbols *DeclMapper::VisitRecordDecl(const clang::RecordDecl *D, unsigned flags
 Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
 {
     if (isAnonTagTypedef(D))
-        return nullptr;  // the anon tag will be mapped by VisitRecordDecl to an aggregate named after the typedef identifier
+        return nullptr;  // the anon tag is mapped by VisitRecordDecl to an aggregate named after the typedef identifier
 
     if (isSameNameTagTypedef(D)) // e.g typedef union pthread_attr_t pthread_attr_t needs to be discarded
         return nullptr;
@@ -1996,8 +1996,12 @@ Dsymbol* FullNamespaceModule::search(const Loc& loc, Identifier *ident, int flag
             return s;
 
     auto Name = calypso.toDeclarationName(ident);
-    for (auto Match: DC->lookup(Name))
+    for (const auto* Match: DC->lookup(Name))
     {
+        if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
+            if (auto Tag = isAnonTagTypedef(Typedef))
+                Match = Tag;
+
         if (isa<clang::NamespaceDecl>(Match))
         {
             auto pkg = mapper.getPackage(Match);
