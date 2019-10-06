@@ -1,0 +1,25 @@
+container:
+  dockerfile: ci/ubuntu_1804.Dockerfile
+  cpu: 8
+  memory: 8
+
+task:
+  env:
+    LLVM_VERSION: 9
+
+  submodule_script:
+    - git submodule update --init
+
+  build_script:
+    - mkdir build
+    - cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DD_COMPILER=$(which ldmd2) -DLLVM_CONFIG=$(which llvm-config-$LLVM_VERSION) -DBUILD_SHARED_LIBS=OFF -DCLANG_BUILD_FLAGS=-j8
+    - make -j8
+
+  test_script:
+    - cd build
+    - make -j4 all ldc2-unittest all-test-runners
+    - ctest --output-on-failure -R "ldc2-unittest"
+    - ctest -V -R "lit-tests"
+    - DMD_TESTSUITE_MAKE_ARGS=-j4 ctest -V -R "dmd-testsuite" -E "-debug$"
+    - ctest -j4 --output-on-failure -E "dmd-testsuite|lit-tests|ldc2-unittest"
