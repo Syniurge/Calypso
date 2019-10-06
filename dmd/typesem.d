@@ -1408,7 +1408,7 @@ extern(C++) Type typeSemantic(Type t, Loc loc, Scope* sc)
 
                     // default arg must be an lvalue
                     if (isRefOrOut && !isAuto
-                            && !(global.params.rvalueRefParam && !fparam.type.isMutable)) // CALYPSO no need for const/immutable param types
+                            && !(global.params.rvalueRefParam && fparam.type.isMutable)) // CALYPSO no need for const/immutable param types
                         e = e.toLvalue(argsc, e);
 
                     fparam.defaultArg = e;

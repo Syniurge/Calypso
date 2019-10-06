@@ -488,7 +488,7 @@ macro(compile_phobos2 d_flags lib_suffix path_suffix emit_bc all_at_once outlist
 
     dc("${phobos_src_files}"
        "${PHOBOS2_DIR}"
-       "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR}"
+       "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR};-disableRvalueRefParam" # CALYPSO
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"
        "${emit_bc}"
        "${all_at_once}"

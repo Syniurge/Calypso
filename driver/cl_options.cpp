@@ -533,6 +533,10 @@ cl::opt<std::string> cppCacheDir("cpp-cachedir",
 cl::opt<bool> cppVerboseDiags("cpp-verbosediags",
     cl::desc("Keep Clang diagnostics enabled after the PCH generation. For the time being those are mostly spurious errors from failed instantiations that can be ignored."));
 
+cl::opt<bool> disableRvalueRefParam("disableRvalueRefParam",
+    cl::desc("Disable --preview=disableRvalueRefParam (Phobos build)."),
+    cl::Hidden);
+
 static cl::extrahelp footer(
     "\n"
     "-d-debug can also be specified without options, in which case it enables "

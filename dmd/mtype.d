@@ -4840,7 +4840,7 @@ extern (C++) final class TypeFunction : TypeNext
                     }
                     else if (m > MATCH.nomatch && p.storageClass & STC.move) // CALYPSO is this the proper solution to make DMD aware of C++ rvalue refs?..
                         if (arg.isLvalue())
-                            m = MATCH.nomatch; // FIXME: this isn't enough for C++ overload resolution in some cases, either we add new MATCH values between convert and const, or we switch to Clang overload resolution in CallExp.expressionSemantic(), which IMHO is the most solid solution and would decrease Calypso's DMD intrusions
+                            m = MATCH.nomatch;
                 }
 
                 // Non-lvalues do not match ref or out parameters

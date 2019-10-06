@@ -1094,7 +1094,8 @@ void LangPlugin::_init()
         fatal();
     }
 
-    global.params.rvalueRefParam = true;
+    if (!opts::disableRvalueRefParam)
+        global.params.rvalueRefParam = true;
 
     id_cppmap = idPool("cppmap");
 

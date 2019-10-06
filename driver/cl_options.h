@@ -89,7 +89,9 @@ void setDefaultMathOptions(llvm::TargetOptions &targetOptions);
 // CALYPSO
 extern cl::list<std::string> cppArgs;
 extern cl::opt<std::string> cppCacheDir;
-extern cl::opt<bool> cppVerboseDiags; // mostly diags from failed instantiations that can be ignored
+extern cl::opt<bool> cppVerboseDiags;
+
+extern cl::opt<bool> disableRvalueRefParam; // temporary flag to disable --preview=rvalueRefParam enabled by default by Calypso, in order to build Phobos
 
 // Arguments to -d-debug
 extern std::vector<std::string> debugArgs;
