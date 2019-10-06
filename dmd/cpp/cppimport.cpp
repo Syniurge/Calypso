@@ -30,13 +30,10 @@ Import::Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *alias
     construct_Import(this, loc, packages, id, aliasId, isstatic);
 }
 
-::Module* Import::loadModule(Scope* sc)
+::Module* Import::loadModule(Scope* sc, Package* pparent)
 {
     bool isTypedef;
-
-    assert(!pkg || isCPP(pkg));
-    auto c_pkg = pkg ? static_cast<cpp::Package*>(pkg) : nullptr;
-    ::Module* m = Module::load(loc, c_pkg, id, isTypedef);
+    ::Module* m = Module::load(loc, pparent, id, isTypedef);
 
     if (isTypedef) {
         if (!aliasId)
@@ -75,9 +72,13 @@ bool Import::load(Scope* sc)
     if (!Module::rootPackage)
         Module::init();
 
-    DsymbolTable* dst = Package::tryResolve(loc, packages, &pkg);
+    ::Package* pparent;
+    DsymbolTable* dst = Package::tryResolve(loc, packages, &pparent, &pkg);
     if (!dst)
         return true;
+
+    assert(!pparent || isCPP(pparent));
+    auto c_pparent = pparent ? static_cast<cpp::Package*>(pparent) : nullptr;
 
     Dsymbol* s = dst->lookup(id);
     if (s)
@@ -93,34 +94,17 @@ bool Import::load(Scope* sc)
             else if (auto p = s->isPackage())
             {
                 if (p->isPkgMod == PKGunknown)
-                {
-                    mod = loadModule(sc); // CALYPSO
-                    if (mod)
-                        assert(mod->isPackageFile == (p->isPkgMod == PKGmodule));
-                }
+                    mod = loadModule(sc, c_pparent);
                 else
-                {
                     mod = p->isPackageMod();
-                }
-                if (!mod)
-                {
-                    ::error(loc, "can only import from a module, not from package `%s.%s`", p->toPrettyChars(), id->toChars());
-                }
-            }
-            else if (pkg)
-            {
-                ::error(loc, "can only import from a module, not from package `%s.%s`", pkg->toPrettyChars(), id->toChars());
-            }
-            else
-            {
-                ::error(loc, "can only import from a module, not from package `%s`", id->toChars());
+                assert(mod && mod->isPackageFile == (p->isPkgMod == PKGmodule));
             }
         }
     }
     if (!mod)
     {
         // Load module
-        mod = loadModule(sc);
+        mod = loadModule(sc, c_pparent);
         if (mod)
         {
             // id may be different from mod.ident, if so then insert alias

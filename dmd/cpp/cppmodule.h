@@ -35,7 +35,7 @@ public:
     const clang::Decl *NamespaceOrTU;
 
     Package(const Loc& loc, Identifier* ident, const clang::Decl *NamespaceOrTU);
-    static DsymbolTable* tryResolve(const Loc& loc, Identifiers* packages, ::Package** ppkg);
+    static DsymbolTable* tryResolve(const Loc& loc, Identifiers* packages, ::Package** pparent, ::Package** ppkg);
 };
 
 class Module : public ::Module

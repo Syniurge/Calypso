@@ -15,6 +15,8 @@
 
 namespace cpp {
 
+class Package;
+
 class Import final : public ::Import
 {
 public:
@@ -22,7 +24,7 @@ public:
 
     Import(Loc loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 
-    ::Module *loadModule(Scope* sc);
+    ::Module *loadModule(Scope* sc, Package* pparent);
     bool load(Scope* sc) override;
 };
 

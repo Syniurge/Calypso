@@ -1474,7 +1474,7 @@ void loadCppCore()
     semantic3(cpp_core_module, nullptr);
 }
 
-DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Package** ppkg)
+DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Package** pparent, ::Package** ppkg)
 {
     if (!calypso.getASTUnit()) {
         ::error(loc, "Importing a C++ module without specifying C++ headers with pragma(cppmap, \"...\") first");
@@ -1519,7 +1519,9 @@ DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Packa
     }
 
     if (ppkg)
-        *ppkg = pkg;
+        *ppkg = pkg ? Module::rootPackage : nullptr;
+    if (pparent)
+        *pparent = pkg;
     return pkg ? pkg->symtab : ::Module::modules;
 }
 
