@@ -58,7 +58,7 @@ Expression *LangPlugin::interpret(::FuncDeclaration *fd, InterState *istate, Exp
                                 clang::VK_LValue);
         auto Cast = clang::ImplicitCastExpr::Create(Context, Context.getPointerType(DeclRef->getType()),
                                     clang::CK_FunctionToPointerDecay, DeclRef, nullptr, clang::VK_RValue);
-        auto Call = new (Context) clang::CallExpr(Context, Cast, Args, FD->getReturnType(),
+        auto Call = clang::CallExpr::Create(Context, Cast, Args, FD->getReturnType(),
                                 clang::VK_RValue, clang::SourceLocation());
 
         r = Evaluate(Call);

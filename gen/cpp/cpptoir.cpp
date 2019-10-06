@@ -32,6 +32,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/LangOptions.h"
+#include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Lex/HeaderSearch.h"
@@ -241,20 +242,39 @@ void LangPlugin::updateCGFInsertPoint()
                     gIR->ir->getCurrentDebugLocation());
 }
 
-clangCG::StructorType getStructorType(clangCG::CodeGenModule &CGM, const clang::FunctionDecl *FD)
+clang::CXXCtorType getCXXCtorType(clangCG::CodeGenModule &CGM, const clang::CXXConstructorDecl *CCD)
 {
-    clangCG::StructorType structorType = clangCG::StructorType::Complete;
-    auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
+    clang::CXXCtorType structorType = clang::CXXCtorType::Ctor_Complete;
 
     // Most of the time we only need the complete ***structor, but for abstract classes there simply isn't one
-    if (MD && MD->getParent()->isAbstract())
-        structorType = clangCG::StructorType::Base;
-
-    if (isa<const clang::CXXDestructorDecl>(FD) && CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft
-            && MD->getParent()->getNumVBases() == 0)
-        structorType = clangCG::StructorType::Base; // MSVC doesn't always emit complete dtors (aka "vbase destructor")
+    if (CCD && CCD->getParent()->isAbstract())
+        structorType = clang::CXXCtorType::Ctor_Base;
 
     return structorType;
+}
+
+clang::CXXDtorType getCXXDtorType(clangCG::CodeGenModule &CGM, const clang::CXXDestructorDecl *CDD)
+{
+    clang::CXXDtorType structorType = clang::CXXDtorType::Dtor_Complete;
+
+    // Most of the time we only need the complete ***structor, but for abstract classes there simply isn't one
+    if (CDD && CDD->getParent()->isAbstract())
+        structorType = clang::CXXDtorType::Dtor_Base;
+
+    if (CGM.getTarget().getCXXABI().getKind() == clang::TargetCXXABI::Microsoft
+            && CDD->getParent()->getNumVBases() == 0)
+        structorType = clang::CXXDtorType::Dtor_Base; // MSVC doesn't always emit complete dtors (aka "vbase destructor")
+
+    return structorType;
+}
+static clang::GlobalDecl getGlobalDecl(clangCG::CodeGenModule *CGM, const clang::FunctionDecl *FD)
+{
+    if (auto Ctor = dyn_cast<const clang::CXXConstructorDecl>(FD))
+        return clang::GlobalDecl(Ctor, getCXXCtorType(*CGM, Ctor));
+    else if (auto Dtor = dyn_cast<const clang::CXXDestructorDecl>(FD))
+        return clang::GlobalDecl(Dtor, getCXXDtorType(*CGM, Dtor));
+    else
+        return clang::GlobalDecl(FD);
 }
 
 struct ResolvedFunc
@@ -280,28 +300,27 @@ struct ResolvedFunc
             if (isIncompleteTagType(Param->getType()))
                 return result;
 
+        llvm::Constant *GV = nullptr;
+
         auto MD = dyn_cast<const clang::CXXMethodDecl>(FD);
-        clangCG::StructorType structorType = getStructorType(CGM, FD);
 
         // FIXME(!): in -O1+, Clang may emit internal aliases instead of dtors if a dtor matches its base class' dtor
         //  (both Itanium and MSVC)
 
         if (MD)
         {
-            if (isa<const clang::CXXConstructorDecl>(FD) || isa<const clang::CXXDestructorDecl>(FD))
-                FInfo = &CGM.getTypes().arrangeCXXStructorDeclaration(MD, structorType);
-            else
-                FInfo = &CGM.getTypes().arrangeCXXMethodDeclaration(MD);
+            auto GD = getGlobalDecl(&CGM, MD);
 
+            FInfo = &CGM.getTypes().arrangeGlobalDeclaration(GD);
             result.Ty = CGM.getTypes().GetFunctionType(*FInfo);
+
+            if (isa<clang::CXXConstructorDecl>(MD) || isa<clang::CXXDestructorDecl>(MD))
+                GV = CGM.getAddrOfCXXStructor(GD, FInfo, result.Ty, true);
         }
         else
             result.Ty = CGM.getTypes().GetFunctionType(FD);
 
-        llvm::Constant *GV;
-        if (isa<const clang::CXXConstructorDecl>(FD) || isa<const clang::CXXDestructorDecl>(FD))
-            GV = CGM.getAddrOfCXXStructor(MD, structorType, FInfo, result.Ty, true);
-        else
+        if (!GV)
             GV = CGM.GetAddrOfFunction(FD, result.Ty, false, true); // NOTE: DontDefer needs to be true or else many functions will get wrongly emitted in this module (sometimes causing linking errors)
         result.Func = cast<llvm::Function>(GV);
 
@@ -655,25 +674,6 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     return F.getFunctionPointer();
 }
 
-static const clangCG::CGFunctionInfo &arrangeFunctionCall(
-                    clangCG::CodeGenModule *CGM,
-                    const clang::FunctionDecl *FD,
-                    clang::CodeGen::CallArgList &Args)
-{
-    auto FPT = FD->getType()->castAs<clang::FunctionProtoType>();
-    auto MD = llvm::dyn_cast<const clang::CXXMethodDecl>(FD);
-
-    if (MD && !MD->isStatic())
-    {
-        clangCG::RequiredArgs required =
-            clangCG::RequiredArgs::forPrototypePlus(FPT, Args.size(), FD);
-
-        return CGM->getTypes().arrangeCXXMethodCall(Args, FPT, required, /*numPrefixArgs=*/0); // NOTE: numPrefixArgs is always 0 except during dtor calls that need a VTT
-    }
-    else
-        return CGM->getTypes().arrangeFreeFunctionCall(Args, FPT, false);
-}
-
 DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval, 
                                    Expressions *arguments, llvm::Value *retvar)
 {
@@ -700,8 +700,16 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
     auto Dtor = dyn_cast<clang::CXXDestructorDecl>(FD);
     if (Dtor && Dtor->isVirtual())
     {
+        auto& Context = getASTContext();
+
+        clang::QualType RecordType(Dtor->getParent()->getTypeForDecl(), 0);
+        clang::OpaqueValueExpr OpaqueArg(clang::SourceLocation(),
+                                         Context.getPointerType(RecordType), clang::VK_RValue);
+        clang::CXXDeleteExpr DE(Context.VoidTy, false, false, false, false,
+                                nullptr, &OpaqueArg, clang::SourceLocation());
+
         CGM->getCXXABI().EmitVirtualDestructorCall(*CGF(), Dtor, clang::Dtor_Complete,
-                                        This, nullptr);
+                                        This, &DE);
 
         // EmitVirtualDestructorCall doesn't return the call site instruction, and a non-null return value is
         // expected but unused, so anything should work
@@ -717,8 +725,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
                 *CGF(), MD, This, true);
         }
 
-        Args.add(clangCG::RValue::get(This.getPointer()),
-                 MD->getThisType(getASTContext()));
+        Args.add(clangCG::RValue::get(This.getPointer()), MD->getThisType());
     }
 
     size_t n = tf->parameterList.length();
@@ -793,9 +800,12 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     updateCGFInsertPoint(); // emitLandingPad() may have run the cleanups and call C++ dtors, hence changing the insert point
 
-    auto &FInfo = arrangeFunctionCall(CGM.get(), FD, Args);
-    llvm::Instruction *callOrInvoke;
-    RV = CGF()->EmitCall(FInfo, clangCG::CGCallee(FD, callable), ReturnValue, Args,
+    auto GD = getGlobalDecl(CGM.get(), FD);
+    auto &FInfo = CGM->getTypes().arrangeGlobalDeclaration(GD);
+    clangCG::CGCalleeInfo calleeInfo(FD->getType()->getAs<clang::FunctionProtoType>(), GD);
+
+    llvm::CallBase *callOrInvoke;
+    RV = CGF()->EmitCall(FInfo, clangCG::CGCallee(calleeInfo, callable), ReturnValue, Args,
                             &callOrInvoke, invokeDest, postinvoke);
 
     if (postinvoke)

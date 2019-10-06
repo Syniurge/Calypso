@@ -1844,7 +1844,7 @@ Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
 
     ExprMapper expmap(*this);
 
-    auto loc = fromLoc(E->getLocStart());
+    auto loc = fromLoc(E->getBeginLoc());
     auto e = expmap.fromExpression(E);
     auto ie = new_ExpInitializer(loc, e);
 

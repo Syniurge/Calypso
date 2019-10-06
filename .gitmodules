@@ -10,4 +10,3 @@
 [submodule "deps/clang"]
 	path = deps/clang
 	url = https://github.com/Syniurge/clang.git
-	branch = release_39

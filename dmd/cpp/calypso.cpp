@@ -42,6 +42,7 @@
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTWriter.h"
+#include "clang/Serialization/InMemoryModuleCache.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Host.h"
@@ -674,21 +675,22 @@ void PCH::loadFromHeaders()
     assert(llvm::StringRef(Cmd.getCreator().getName()) == "clang");
 
     // Initialize a compiler invocation object from the clang (-cc1) arguments.
-    const clang::driver::ArgStringList &CCArgs = Cmd.getArguments();
+    const auto &CCArgs = Cmd.getArguments();
     auto CI = std::make_shared<clang::CompilerInvocation>();
     clang::CompilerInvocation::CreateFromArgs(*CI, CCArgs.begin(), CCArgs.end(), *Diags);
 
     // Parse the headers
     DiagClient->muted = false;
 
-    llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
-        new clang::vfs::OverlayFileSystem(clang::vfs::getRealFileSystem()));
+    llvm::IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFileSystem(
+        new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem()));
     auto Files = new clang::FileManager(clang::FileSystemOptions(), OverlayFileSystem);
 
     PCHContainerOps.reset(new clang::PCHContainerOperations);
 
-    AST = clang::ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false, false, false,
-                                              clang::TU_Complete, false, false, false);
+    AST = clang::ASTUnit::LoadFromCompilerInvocation(CI, PCHContainerOps, Diags, Files, false,
+                                                     clang::CaptureDiagsKind::None, false,
+                                                     clang::TU_Complete, false, false, false);
     AST->getSema();
     Diags->getClient()->BeginSourceFile(AST->getLangOpts(), &AST->getPreprocessor());
 
@@ -722,7 +724,7 @@ void PCH::loadFromPCH()
     auto *Reader = PCHContainerOps->getReaderOrNull("raw");
 
     AST = clang::ASTUnit::LoadFromASTFile(pchFilename, *Reader, clang::ASTUnit::LoadEverything,
-                            Diags, FileSystemOpts, false, false, llvm::None, false,
+                            Diags, FileSystemOpts, false, false, llvm::None, clang::CaptureDiagsKind::None,
                             /* AllowPCHWithCompilerErrors = */ true, false/*,
                             &ReadResult*/);
 
@@ -761,17 +763,17 @@ void PCH::loadFromPCH()
         return;
     }
 
-    const clang::DirectoryLookup *CurDir;
-
-    // Check whether every cppmap'd header is present within the AST, otherwise trigger a full reload.
-    // TODO: this isn't strictly necessary and should be made configurable.
-    for (auto header: headers) {
-        auto fileEntry = lookupHeader(header, CurDir);
-        if (!fileEntry || !fileEntry->isInPCH()) {
-            fallbackToHeaders();
-            return;
-        }
-    }
+//     const clang::DirectoryLookup *CurDir;
+//
+//     // Check whether every cppmap'd header is present within the AST, otherwise trigger a full reload.
+//     // TODO: this isn't strictly necessary and should be made configurable.
+//     for (auto header: headers) {
+//         auto fileEntry = lookupHeader(header, CurDir);
+//         if (!fileEntry || !fileEntry->isInPCH()) {
+//             fallbackToHeaders();
+//             return;
+//         }
+//     }
 
     nextHeader = headers.size();
 }
@@ -829,7 +831,7 @@ const clang::FileEntry* PCH::lookupHeader(const char* header, const clang::Direc
     return PP.LookupFile(clang::SourceLocation(),
                   isAngled ? headerStr.slice(1, headerStr.size() - 1) : headerStr,
                   isAngled, nullptr, FromFile, CurDir,
-                  nullptr, nullptr, &SuggestedModule, &IsMapped);
+                  nullptr, nullptr, &SuggestedModule, &IsMapped, /* IsFrameworkFound = */ nullptr);
 }
 
 void PCH::update()
@@ -920,9 +922,10 @@ void PCH::save()
     auto Buffer = std::make_shared<clang::PCHBuffer>();
     auto *Writer = PCHContainerOps->getWriterOrNull("raw");
 
-    auto GenPCH = new clang::PCHGenerator(PP, pchFilename, Sysroot, Buffer,
+    clang::InMemoryModuleCache ModuleCache;
+    auto GenPCH = new clang::PCHGenerator(PP, ModuleCache, pchFilename, Sysroot, Buffer,
                                           llvm::ArrayRef<std::shared_ptr<clang::ModuleFileExtension>>(),
-                                          true);
+                                          /* AllowASTWithErrors = */ true);
     GenPCH->InitializeSema(AST->getSema());
 
     std::vector<std::unique_ptr<clang::ASTConsumer>> Consumers;
@@ -1123,7 +1126,7 @@ void LangPlugin::_init()
 
     auto TargetFS = gTargetMachine->getTargetFeatureString();
     if (!TargetFS.empty()) { // always empty for MSVC
-        llvm::SmallVector<StringRef, 1> AttrFeatures;
+        llvm::SmallVector<llvm::StringRef, 1> AttrFeatures;
         TargetFS.split(AttrFeatures, ",");
 
         for (auto &Feature : AttrFeatures) {

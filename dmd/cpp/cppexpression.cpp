@@ -145,7 +145,7 @@ Expression *ExprMapper::fromUnaExp(clang::SourceLocation Loc,
 
 Expression* ExprMapper::fromUnaExp(const clang::UnaryOperator *E)
 {
-    return fromUnaExp(E->getLocStart(), E->getOpcode(), E->getSubExpr());
+    return fromUnaExp(E->getBeginLoc(), E->getOpcode(), E->getSubExpr());
 }
 
 Expression *ExprMapper::fromBinExp(clang::SourceLocation Loc,
@@ -211,7 +211,7 @@ Expression *ExprMapper::fromBinExp(clang::SourceLocation Loc,
 
 Expression* ExprMapper::fromBinExp(const clang::BinaryOperator* E)
 {
-    return fromBinExp(E->getLocStart(), E->getOpcode(),
+    return fromBinExp(E->getBeginLoc(), E->getOpcode(),
                     E->getLHS(), E->getRHS());
 }
 
@@ -304,7 +304,7 @@ Expression *ExprMapper::fromCastExpr(Loc loc, const clang::CastExpr *E)
 
 Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  // TODO implement interpret properly
 {
-    auto loc = fromLoc(E->getLocStart());
+    auto loc = fromLoc(E->getBeginLoc());
     E = skipIgnored(E);
 
     Expression *e = nullptr;
@@ -548,13 +548,13 @@ Expression* ExprMapper::fromExpression(const clang::Expr *E, bool interpret)  //
             {
                 auto Op = clang::BinaryOperator::getOverloadedOpcode(OO);
                 auto LHS = C->getArg(0), RHS = C->getArg(1);
-                e = fromBinExp(E->getLocStart(), Op, LHS, RHS);
+                e = fromBinExp(E->getBeginLoc(), Op, LHS, RHS);
             }
             else if (C->getNumArgs() == 1 && OO < clang::OO_Call)
             {
                 auto Op = clang::UnaryOperator::getOverloadedOpcode(OO, false); // WARNING: how to determine whether prefix or postfix?
                 auto Sub = C->getArg(0);
-                e = fromUnaExp(E->getLocStart(), Op, Sub);
+                e = fromUnaExp(E->getBeginLoc(), Op, Sub);
             }
         }
 

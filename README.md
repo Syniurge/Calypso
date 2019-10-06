@@ -11,8 +11,8 @@ Calypso introduces a new pragma, **cppmap**, along with the concept of language 
 pragma (cppmap, "cppheader.h");  // tells Clang to parse cppheader.h but do not import anything
 
 import (C++) NamespaceA.Class1;  // imports NamespaceA::Class1
-import (C++) NamespaceA._;       // special module per namespace, imports every global variables,
-                                 // global functions and typedefs whose direct parent is NamespaceA::
+import (C++) NamespaceA;         // imports the full namespace
+import (C++) *;                  // imports the entire translation unit
 ```
 
 The resulting imported symbols are usable like their D counterparts. For more detailed examples see [tests/calypso](tests/calypso) and [examples](examples).
@@ -27,7 +27,7 @@ Refer to the LDC wiki ([Linux and OS X](http://wiki.dlang.org/Building_LDC_from_
 
 There are only a few requirements specific to Calypso:
 - CMake minimum version is 3.4+
-- Clang is tied to its corresponding LLVM version, it's therefore strongly recommended to build Calypso which introduces a Clang 5.0 submodule against LLVM 5.0
+- Clang is tied to its corresponding LLVM version, it's therefore strongly recommended to build Calypso which introduces a Clang 9.0 submodule against LLVM 9.0
 - MSVC (Windows) builds require [Ninja](https://ninja-build.org/)
 
 `cmake -G Ninja` is recommended instead of `make` to take advantage by default of all available CPU cores while building the Clang external module (it's also possible to set `cmake -DCLANG_BUILD_FLAGS="-jX"`).
@@ -36,9 +36,9 @@ Calypso may also have nightly builds in the future.
 
 ## Specific flags
 
-The `-cpp-flags` option was added to LDC to pass arguments to Clang during header parsing, e.g to enable C++11:
+The `-cpp-flags` option was added to LDC to pass arguments to Clang during header parsing, e.g to enable C++14:
 
-    $ ldc2 -cpp-args -std=c++11 main.d
+    $ ldc2 -cpp-args -std=c++14 main.d
 
 ## Missing features
 

@@ -31,7 +31,7 @@ endfunction()
 # Locate LLVM.
 #
 
-find_package(LLVM 7 REQUIRED
+find_package(LLVM 9 REQUIRED
     all-targets analysis asmparser asmprinter bitreader bitwriter codegen core
     debuginfodwarf debuginfomsf debuginfopdb demangle
     instcombine ipo instrumentation irreader libdriver linker lto mc
@@ -583,7 +583,7 @@ include_directories(
     "${CLANG_SOURCE_DIR}/include"
 )
 
-set(CLANG_TARGETS "clang-headers")
+set(CLANG_TARGETS "clang-resource-headers")
 
 macro(add_clang_lib _libname_)
     set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
@@ -599,6 +599,7 @@ add_clang_lib(clangSerialization)
 add_clang_lib(clangSema)
 add_clang_lib(clangEdit)
 add_clang_lib(clangAnalysis)
+add_clang_lib(clangASTMatchers)
 add_clang_lib(clangAST)
 add_clang_lib(clangParse)
 set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_clangSema_LIB})
