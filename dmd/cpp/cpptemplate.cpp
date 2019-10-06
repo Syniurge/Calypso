@@ -435,9 +435,9 @@ static MATCH functionTemplateMatchNonTemplated(TemplateDeclaration* tempdecl, Sc
     size_t argi = 0;
     auto tp = (*tempdecl->parameters)[0];
 
-    MATCH m = tp->matchArg(ti->loc, sc /* HACK-ish, everything is already semantic'd */,
-                            ti->tiargs, 0, &argi /* CALYPSO */,
-                            tempdecl->parameters, &dedtypes, nullptr);
+    MATCH m = matchArg(tp, ti->loc, sc /* HACK-ish, everything is already semantic'd */,
+                       ti->tiargs, 0, &argi /* CALYPSO */,
+                       tempdecl->parameters, &dedtypes, nullptr);
     if (m)
         Inst = const_cast<clang::NamedDecl*>(tempdecl->TempOrSpec);
 
@@ -477,7 +477,7 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
 
             auto tp = (*parameters)[0];
             size_t argi = 0;
-            MATCH m = tp->matchArg(ti->loc, sc, ti->tiargs, 0, &argi, parameters, &dedtypes, nullptr);
+            MATCH m = matchArg(tp, ti->loc, sc, ti->tiargs, 0, &argi, parameters, &dedtypes, nullptr);
 
             if (m == MATCHnomatch)
                 return MATCHnomatch;

@@ -64,7 +64,6 @@ public:
                     Type* type, const clang::FunctionDecl *FD);
     FuncDeclaration(const FuncDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 };
@@ -83,7 +82,6 @@ public:
                     Type* type, const clang::CXXConstructorDecl *CCD);
     CtorDeclaration(const CtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool functionSemantic3() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 };
 
@@ -101,7 +99,6 @@ public:
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
     DtorDeclaration(const DtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool functionSemantic3() override { return true; }
     bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 };

@@ -13,6 +13,7 @@
 #include "dsymbol.h"
 #include "objc.h"
 
+class AliasThis;
 class Identifier;
 class Type;
 class TypeFunction;
@@ -109,7 +110,7 @@ public:
     // it would be stored in TypeInfo_Class.defaultConstructor
     CtorDeclaration *defaultCtor;
 
-    Dsymbol *aliasthis;         // forward unresolved lookups to aliasthis
+    AliasThis *aliasthis;       // forward unresolved lookups to aliasthis
     bool noDefaultCtor;         // no default construction
 
     DtorDeclarations dtors;     // Array of destructors
@@ -135,8 +136,6 @@ public:
     Type *getType();
     bool isDeprecated() const;         // is aggregate deprecated?
     bool isNested() const;
-    void makeNested();
-    void makeNested2();
     bool isExport() const;
     Dsymbol *searchCtor();
 
@@ -244,11 +243,7 @@ struct BaseClass
     DArray<BaseClass> baseInterfaces;   // if BaseClass is an interface, these
                                         // are a copy of the InterfaceDeclaration::interfaces
 
-    BaseClass();
-    BaseClass(Type *type) { this->type = type; } // CALYPSO
-
     bool fillVtbl(ClassDeclaration *cd, FuncDeclarations *vtbl, int newinstance);
-    void copyBaseInterfaces(BaseClasses *);
 };
 
 struct ClassFlags
@@ -319,6 +314,7 @@ public:
     Dsymbol *search(const Loc &loc, Identifier *ident, int flags = SearchLocalsOnly);
     ClassDeclaration *searchBase(Identifier *ident);
     void finalizeSize();
+    bool hasMonitor();
     bool isFuncHidden(FuncDeclaration *fd);
     FuncDeclaration *findFunc(Identifier *ident, TypeFunction *tf);
     bool isCOMclass() const;

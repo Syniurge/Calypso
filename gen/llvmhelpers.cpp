@@ -1668,11 +1668,16 @@ DValue *DtoSymbolAddress(Loc &loc, Type *type, Declaration *decl) {
     Type *sdecltype = sdecl->type->toBasetype();
     IF_LOG Logger::print("Sym: type=%s\n", sdecltype->toChars());
     assert(sdecltype->ty == Tstruct || isClassValue(sdecltype)); // CALYPSO
-    AggregateDeclaration *sym = getAggregateSym(sdecltype);
-    assert(sym);
-    DtoResolveAggregate(sym);
+    AggregateDeclaration *sd = getAggregateSym(sdecltype);
+    assert(sd);
+    DtoResolveAggregate(sd);
 
-    LLValue *initsym = getIrAggr(sym)->getInitSymbol();
+    if (sd->zeroInit) {
+      error(loc, "no init symbol for zero-initialized struct");
+      fatal();
+    }
+
+    LLValue *initsym = getIrAggr(sd)->getInitSymbol();
     initsym = DtoBitCast(initsym, DtoType(sdecltype->pointerTo()));
     return new DLValue(type, initsym);
   }
@@ -1896,12 +1901,12 @@ LLValue *DtoIndexAggregate(LLValue *src, AggregateDeclaration *ad,
   static_cast<IrTypeAggr *>(ad->type->ctype)
       ->getMemberLocation(vd, fieldIndex, byteOffset);
 
-  LLValue *val = DtoGEPi(src, 0, fieldIndex);
+  LLValue *val = DtoGEP(src, 0, fieldIndex);
 
   if (byteOffset) {
     // Cast to void* to apply byte-wise offset.
     val = DtoBitCast(val, getVoidPtrType());
-    val = DtoGEPi1(val, byteOffset);
+    val = DtoGEP1(val, byteOffset);
   }
 
   // Cast the (possibly void*) pointer to the canonical variable type.

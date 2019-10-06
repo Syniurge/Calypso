@@ -750,6 +750,7 @@ void PCH::loadFromPCH()
 //     }
 
     auto fallbackToHeaders = [&] () {
+        C.reset(); // loadFromHeaders currently resets TheDriver, and C holds a reference to it so we have to delete it now
         Diags->Reset();
         loadFromHeaders();
     };

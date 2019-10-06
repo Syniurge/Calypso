@@ -625,7 +625,8 @@ void ClassDeclaration::determineBases()
     for (auto& B: RD->bases())
     {
         auto brt = DeclMapper(this).fromType(B.getType(), loc);
-        auto b = new BaseClass(brt);
+        auto b = new BaseClass;
+        b->type = brt;
         b->sym = getAggregateSym(brt);
         baseclasses->push(b);
 
@@ -737,30 +738,30 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 
 ::FuncDeclaration *LangPlugin::searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc)
 {
-    if (Dsymbol *eq = search_function(sd, Id::eq))
-    {
-        if (::FuncDeclaration *fd = eq->isFuncDeclaration())
-        {
-            TypeFunction *tfeqptr;
-            {
-                Scope* scx = Scope::alloc();
-
-                /* extern(C++) const bool opEquals(scope ref const S s);
-                */
-                Parameters *parameters = new Parameters;
-                parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL, NULL));
-                tfeqptr = new_TypeFunction(ParameterList{parameters, VARARGnone},
-                                           Type::tbool, LINKcpp);
-                tfeqptr->mod = MODconst;
-                tfeqptr = (TypeFunction *)typeSemantic(tfeqptr, Loc(), scx);
-
-                scx->pop();
-            }
-            fd = fd->overloadExactMatch(tfeqptr);
-            if (fd)
-                return fd;
-        }
-    }
+//     if (Dsymbol *eq = search_function(sd, Id::eq))
+//     {
+//         if (::FuncDeclaration *fd = eq->isFuncDeclaration())
+//         {
+//             TypeFunction *tfeqptr;
+//             {
+//                 Scope* scx = Scope::alloc();
+//
+//                 /* extern(C++) const bool opEquals(scope ref const S s);
+//                 */
+//                 Parameters *parameters = new Parameters;
+//                 parameters->push(new_Parameter(STCscope | STCref | STCconst, sd->type, NULL, NULL, NULL));
+//                 tfeqptr = new_TypeFunction(ParameterList{parameters, VARARGnone},
+//                                            Type::tbool, LINKcpp);
+//                 tfeqptr->mod = MODconst;
+//                 tfeqptr = (TypeFunction *)typeSemantic(tfeqptr, Loc(), scx);
+//
+//                 scx->pop();
+//             }
+//             fd = fd->overloadExactMatch(tfeqptr);
+//             if (fd)
+//                 return fd;
+//         }
+//     }
     return nullptr;
 }
 

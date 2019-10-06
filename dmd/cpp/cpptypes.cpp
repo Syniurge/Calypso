@@ -67,7 +67,7 @@ public:
 
         if (v_ti == TI_Mangler) { // mangle
             auto buf = static_cast<Mangler*>(v)->buf;
-            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
+            buf->writeUTF8(2102); // U+2102 = ℂ
             v->visit(this);
         } else
             v->visit(this);
@@ -103,7 +103,7 @@ public:
         if (v_ti == TI_Mangler) { // mangle
             auto buf = static_cast<Mangler*>(v)->buf;
 
-            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
+            buf->writeUTF8(2102); // U+2102 = ℂ
             v->visit(this);
             buf->writeByte('#');
             buf->writeByte('A');
@@ -149,7 +149,7 @@ public:
 
         if (v_ti == TI_Mangler) { // mangle
             auto buf = static_cast<Mangler*>(v)->buf;
-            buf->writeUTF8(*static_cast<const unsigned*>((void*)"ℂ"));
+            buf->writeUTF8(2102); // U+2102 = ℂ
             if (isRvalueRef) {
                 v->visit(static_cast<Type*>(this)); // only 'R'
                 buf->writeByte('#');

@@ -93,7 +93,7 @@ extern (C++) class Import : Dsymbol // CALYPSO (made non final)
         this.protection = Prot.Kind.private_; // default to private
     }
 
-    final void addAlias(Identifier name, Identifier _alias)
+    final void addAlias(Identifier name, Identifier _alias) // CALYPSO
     {
         if (isstatic)
             error("cannot have an import bind list");
