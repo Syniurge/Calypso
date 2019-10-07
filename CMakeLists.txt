@@ -43,6 +43,9 @@ math(EXPR LDC_LLVM_VER ${LLVM_VERSION_MAJOR}*100+${LLVM_VERSION_MINOR})
 string(REGEX MATCH "[^;]*LLVMTableGen[^;]*" LLVM_TABLEGEN_LIBRARY "${LLVM_LIBRARIES}")
 string(REGEX REPLACE "[^;]*LLVMTableGen[^;]*;?" "" LLVM_LIBRARIES "${LLVM_LIBRARIES}")
 
+include("${LLVM_CMAKEDIR}/LLVMConfig.cmake")
+include("${LLVM_CMAKEDIR}/LLVM-Config.cmake")
+
 # Information about which targets LLVM was built to target
 foreach(LLVM_SUPPORTED_TARGET ${LLVM_TARGETS_TO_BUILD})
     add_definitions("-DLDC_LLVM_SUPPORTED_TARGET_${LLVM_SUPPORTED_TARGET}=1")
