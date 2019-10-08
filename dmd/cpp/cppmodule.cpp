@@ -1485,10 +1485,6 @@ DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Packa
     auto& S = calypso.getSema();
     auto& Diags = calypso.pch.Diags;
 
-    S.CurContext = Context.getTranslationUnitDecl();
-    if (!S.TUScope)
-        S.TUScope = new clang::Scope(nullptr, clang::Scope::DeclScope, *Diags);
-
     Package *pkg = nullptr;
     if (packages)
     {

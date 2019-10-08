@@ -105,6 +105,8 @@ public:
             // the array is initialized at the first pragma(cppmap, ...).importAll and kept in sync with a cache file named 'calypso_cache.list'
     size_t nextHeader;
 
+    llvm::SmallVector<llvm::SmallString<96>, 8> headerPaths;
+
     std::unique_ptr<clang::ASTUnit> AST;
     clang::MangleContext *MangleCtx = nullptr;
 
@@ -120,15 +122,26 @@ public:
     bool needSaving = false;
     void save();
 
-    std::string pchHeader;
+    std::string stubHeader;
     std::string pchFilename;
+    std::string pchFileList;
+
+    llvm::StringSet<> pchFileListSet;
 
 protected:
-    void loadFromHeaders();
-    void loadFromPCH();
+    void readPchFileList();
+    void writePchFileList();
+
+    void loadFirstHeaders(bool includePCH);
     void loadNewHeaders();
 
-    const clang::FileEntry* lookupHeader(const char* header, const clang::DirectoryLookup*& CurDir);
+    bool loadHeader(const char* header);
+    const clang::FileEntry* lookupHeader(const char* header);
+
+    void initializeParser();
+    void restoreTUScope();
+
+    clang::FileID stubHeaderFileID;
 };
 
 /***********************/
