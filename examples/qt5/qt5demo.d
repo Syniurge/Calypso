@@ -388,7 +388,7 @@ int main()
 //     writeln("\n=== genMetaCastBody() ===\n", MainWindow.ClassDef.genMetaCastBody(), "\n\n");
 //     writeln("\n=== genMetaCallBody() ===\n", MainWindow.ClassDef.genMetaCallBody(), "\n\n");
 
-    auto app = new QApplication(Runtime.cArgs.argc, Runtime.cArgs.argv);
+    auto app = QApplication(Runtime.cArgs.argc, Runtime.cArgs.argv);
 
     app.setOrganizationName( "Calypso" );
     app.setApplicationName( "Example App" );
