@@ -6075,7 +6075,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
      * Lazily generate identifier for template instance.
      * This is because 75% of the ident's are never needed.
      */
-    override Identifier getIdent() // CALYPSO
+    override final Identifier getIdent()
     {
         if (!ident && inst && !errors)
             ident = genIdent(tiargs); // need an identifier for name mangling purposes.
@@ -7472,11 +7472,6 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         assert(tempdecl && tempdecl.isTemplateDeclaration());
         auto tempdecl = cast(TemplateDeclaration)this.tempdecl;
         return (*tempdecl.parameters)[.correspondingParamIdx(argi, tempdecl, tiargs)];
-    }
-
-    Objects* tiargsForMangling()
-    {
-        return tiargs;
     }
 
     override final inout(TemplateInstance) isTemplateInstance() inout

@@ -47,7 +47,7 @@ public:
 
     MATCH functionTemplateMatch(Scope *sc, ::TemplateInstance *ti, Expressions *fargs, TemplateInstUnion& Inst);
 
-    Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool primaryArgs = true);
+    Objects* tdtypesFromInst(Scope* sc, TemplateInstUnion Inst);
 
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
 
@@ -56,7 +56,6 @@ public:
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);
-    TemplateDeclaration* correctTempDecl(TemplateInstance *ti);
 
     bool isNonTemplateWrapper();
     Dsymbol* wrappedNonTemplateSymbol();
@@ -73,20 +72,16 @@ public:
 
     bool isForeignInst = false;
     TemplateInstUnion Inst;
-    Objects* primTiargs = nullptr;
 
     TemplateInstance(Loc loc, Identifier *ident, Objects *tiargs);
     TemplateInstance(Loc loc, ::TemplateDeclaration *td, Objects *tiargs);
     TemplateInstance(const TemplateInstance&);
     Dsymbol *syntaxCopy(Dsymbol *) override;
-    Identifier *getIdent() override;
     void declareParameters(Scope *sc) override {}
     Dsymbols* appendToModuleMember() override;
     size_t correspondingParamIdx(size_t argi) override;
     TemplateParameter* correspondingParam(size_t argi) override;
-    Objects* tiargsForMangling() override;
 
-    void correctTiargs();
     void markInvalid();
 
     const clang::NamedDecl* getInstantiatedTemplate();

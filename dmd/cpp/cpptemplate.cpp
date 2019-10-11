@@ -308,14 +308,14 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (m == MATCHnomatch || flag == 1) // 1 means it's from TemplateDeclaration::leastAsSpecialized
         return m;
 
-    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst, true));
+    std::unique_ptr<Objects> cpptdtypes(tdtypesFromInst(sc, Inst));
     assert(cpptdtypes->dim == dedtypes->dim);
     memcpy(dedtypes->tdata(), cpptdtypes->tdata(), dedtypes->dim * sizeof(void*));
 
     return m;
 }
 
-Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst, bool primaryArgs)
+Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst)
 {
     auto minst = sc ? sc->minst : nullptr;
     DeclMapper mapper(minst, minst);
@@ -324,14 +324,8 @@ Objects* TemplateDeclaration::tdtypesFromInst(Scope* sc, TemplateInstUnion Inst,
 
     if (!isNonTemplateWrapper())
     {
-        auto InstArgs = primaryArgs ? getTemplateArgs(Inst)
-                                    : getTemplateInstantiationArgs(Inst);
-
-        const clang::TemplateParameterList* ParamList;
-        if (!primaryArgs)
-            ParamList = getTemplateParameters(TempOrSpec);
-        else
-            ParamList = getPrimaryTemplate()->getTemplateParameters();
+        auto InstArgs = getTemplateArgs(Inst);
+        auto ParamList = getPrimaryTemplate()->getTemplateParameters();
 
         cpptdtypes = mapper.fromTemplateArguments<true>(loc, InstArgs, ParamList);
     }
@@ -539,7 +533,7 @@ MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, S
     MATCH matchCall = MATCHexact,
           matchTiargs = MATCHexact;
 
-    auto dedtypes = tdtypesFromInst(sc, Inst, true);
+    auto dedtypes = tdtypesFromInst(sc, Inst);
     ti->tdtypes.dim = dedtypes->dim;
     ti->tdtypes.data = dedtypes->data;
     ti->tiargs = &ti->tdtypes;
@@ -615,57 +609,43 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     assert(!isCPP(tithis));
 
     cpp::TemplateInstance* ti = nullptr;
-    cpp::TemplateDeclaration* tempdecl = nullptr;
 
     auto Inst = getClangInst(sc, &tithis->tdtypes);
     assert(Inst);
 
     if (auto D = Inst.dyn_cast<clang::NamedDecl*>())
         if (D->d && !isNonTemplateWrapper())
-        {  // A TemplateInstance already exists
-            // NOTE: findExistingInstance() looks into the primary TemplateDeclaration's instances,
-            // but when the actual template is a partial or explicit spec, then those primary existing
-            // instances are aliases for the instances added to the true TemplateDeclaration, and the
-            // alias might not have been created yet
-
+        {  // a TemplateInstance already exists (it was speculative)
             auto sym = D->d->sym;
             assert(sym && sym->parent && sym->parent->isTemplateInstance() && isCPP(sym->parent));
 
             ti = static_cast<cpp::TemplateInstance*>(sym->parent);
-            tempdecl = static_cast<cpp::TemplateDeclaration*>(ti->tempdecl);
+            assert(!ti->minst);
 
-            if (!ti->minst)
-            {
-                ti->minst = tithis->minst;
-                ti->tinst = tithis->tinst;
-            }
+            ti->minst = tithis->minst;
+            ti->tinst = tithis->tinst;
         }
 
     if (!ti)
     {
-        ti = new cpp::TemplateInstance(tithis->loc, tithis->name, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
-        ti->semantictiargsdone = true;
+        ti = new cpp::TemplateInstance(tithis->loc, this, tithis->tiargs); // HACK avoid arraySyntaxCopy, which is slow and would require many improvements to be reliable
         ti->isForeignInst = true;
 
         ti->Inst = Inst;
 
-        auto tdtypes = tdtypesFromInst(sc, ti->Inst, false);
+        auto tdtypes = tdtypesFromInst(sc, ti->Inst);
         ti->tdtypes.dim = tdtypes->dim;
         ti->tdtypes.data = tdtypes->data;
-
-        tempdecl = correctTempDecl(ti);
-        ti->havetempdecl = true;
-        ti->correctTiargs();
 
         ti->tinst = tithis->tinst;
         ti->minst = tithis->minst;
 
-        assert(!tempdecl->findExistingInstance(ti, nullptr));
+        assert(!findExistingInstance(ti, nullptr));
 
         ti->inst = ti;
         ti->parent = ti->enclosing ? ti->enclosing : parent; // NOTE: .enclosing is non-null only if one of the template args refer to a local symbol
 
-        ti->members = tempdecl->copySyntaxTree(ti);
+        ti->members = copySyntaxTree(ti);
         ti->symtab = new_DsymbolTable();
 
         for (auto s: *ti->members)
@@ -679,10 +659,11 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 
     if (ti->minst)
     {
-        // force templateInstanceSemantic() to go back to foreignInstance()
+        // only attach the instance to the primary template if it's not speculative
+        // thus, templateInstanceSemantic() is forced to go back to foreignInstance()
         // until ti isn't speculative anymore
         ti->appendToModuleMember();
-        tempdecl->addInstance(ti);
+        addInstance(ti);
     }
 
     return ti;
@@ -753,31 +734,6 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, Objects* tdtypes)
         return TemplateInstUnion();
 }
 
-TemplateDeclaration* TemplateDeclaration::correctTempDecl(TemplateInstance *ti)
-{
-    if (isNonTemplateWrapper())
-    {
-        ti->tempdecl = this;
-        return this;
-    }
-
-    const clang::Decl* RealTemp;
-
-    if (auto SpecDecl = ti->Inst.dyn_cast<clang::NamedDecl*>())
-        RealTemp = getSpecializedDeclOrExplicit(SpecDecl);
-    else
-    {
-        auto TST = ti->Inst.get<const clang::TemplateSpecializationType*>();
-        RealTemp = TST->getTemplateName().getAsTemplateDecl();
-    }
-
-    auto sym = templateForDecl(static_cast<ScopeDsymbol*>(this->parent), RealTemp);
-    assert(sym && sym->isTemplateDeclaration() && isCPP(sym));
-
-    ti->tempdecl = sym;
-    return static_cast<TemplateDeclaration*>(ti->tempdecl);
-}
-
 bool TemplateDeclaration::isNonTemplateWrapper()
 {
     auto FD = dyn_cast<clang::FunctionDecl>(TempOrSpec);
@@ -806,7 +762,6 @@ TemplateInstance::TemplateInstance(const TemplateInstance& o)
 {
     Inst = o.Inst;
     isForeignInst = o.isForeignInst;
-    primTiargs = o.primTiargs;
 }
 
 Dsymbol *TemplateInstance::syntaxCopy(Dsymbol *s)
@@ -819,23 +774,9 @@ Dsymbol *TemplateInstance::syntaxCopy(Dsymbol *s)
         auto ti = static_cast<cpp::TemplateInstance*>(s);
         ti->Inst = Inst;
         ti->isForeignInst = isForeignInst;
-        ti->primTiargs = primTiargs;
     }
 
     return ::TemplateInstance::syntaxCopy(s);
-}
-
-// For (deco) mangling we need to retrieve the original arguments for the primary template.
-Identifier *TemplateInstance::getIdent()
-{
-    auto a = tiargs;
-
-    if (primTiargs)
-        tiargs = primTiargs;
-    auto result = ::TemplateInstance::getIdent();
-    tiargs = a;
-
-    return result;
 }
 
 Dsymbols* TemplateInstance::appendToModuleMember()
@@ -868,32 +809,6 @@ TemplateParameter* TemplateInstance::correspondingParam(size_t argi)
     assert(tempdecl && tempdecl->isTemplateDeclaration() && isCPP(tempdecl));
     auto primtemp = static_cast<cpp::TemplateDeclaration*>(tempdecl)->primaryTemplate();
     return (*primtemp->parameters)[::correspondingParamIdx(argi, primtemp, tiargs)];
-}
-
-Objects* TemplateInstance::tiargsForMangling()
-{
-    return primTiargs ? primTiargs : tiargs;
-}
-
-void TemplateInstance::correctTiargs()
-{
-    auto InstND = Inst.dyn_cast<clang::NamedDecl*>();
-
-    assert(isCPP(tempdecl));
-    auto TempOrSpec = static_cast<cpp::TemplateDeclaration*>(tempdecl)->TempOrSpec;
-
-    // Correction is only needed for instances from partial specs
-    if (auto PartialTempParams = getPartialTemplateSpecParameters(TempOrSpec))
-    {
-        auto Args = getTemplateInstantiationArgs(InstND)->asArray();
-
-        DeclMapper mapper(minst, minst);
-
-        assert(!primTiargs);
-        primTiargs = tiargs;
-        tiargs = DeclMapper::FromType(mapper, loc).fromTemplateArguments(Args.begin(), Args.end(),
-                        PartialTempParams);
-    }
 }
 
 void TemplateInstance::markInvalid()

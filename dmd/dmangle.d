@@ -759,7 +759,7 @@ public:
         buf.printf("__%c", T);
         mangleIdentifier(tempdecl.ident, tempdecl);
 
-        auto args = ti.tiargsForMangling(); // CALYPSO
+        auto args = ti.tiargs;
         size_t nparams = tempdecl.parameters.dim - (tempdecl.isVariadic() ? 1 : 0);
         void processArgs(Objects* args, bool insideTuple = false) // CALYPSO
         {

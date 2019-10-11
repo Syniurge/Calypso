@@ -298,8 +298,8 @@ Dsymbols *DeclMapper::VisitPartialOrWrappedDecl(const clang::Decl *D, unsigned f
 template<typename SpecTy>
 Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decldefs)
 {
-    auto TempDecl = cast<clang::NamedDecl>(getSpecializedDeclOrExplicit(D));
-    auto PrimParams = getTemplateParameters(getPrimaryTemplate(TempDecl));
+    auto TempDecl = getPrimaryTemplate(D);
+    auto PrimParams = getTemplateParameters(TempDecl);
     auto PrimArgs = getTemplateArgs(D);
 
     auto tempdecl = templateForDecl(TempDecl);
@@ -314,13 +314,11 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->Inst = const_cast<SpecTy*>(cast<SpecTy>(getCanonicalDecl(D)));
     ti->minst = minst;
 
-    auto cpptdtypes = c_td->tdtypesFromInst(minst ? minst->_scope : nullptr, ti->Inst, false);
+    auto cpptdtypes = c_td->tdtypesFromInst(minst ? minst->_scope : nullptr, ti->Inst);
         // NOTE: minst may be null for speculative instances, e.g from hasCopyCtor()
     ti->tdtypes.setDim(cpptdtypes->dim);
     memcpy(ti->tdtypes.tdata(), cpptdtypes->tdata(), cpptdtypes->dim * sizeof(void*));
     delete cpptdtypes;
-
-    ti->correctTiargs(); // set ti->primTiargs
 
     ti->parent = tempdecl->parent;
     ti->members = decldefs;
@@ -1482,8 +1480,6 @@ DsymbolTable* Package::tryResolve(const Loc& loc, Identifiers* packages, ::Packa
     }
 
     auto& Context = calypso.getASTContext();
-    auto& S = calypso.getSema();
-    auto& Diags = calypso.pch.Diags;
 
     Package *pkg = nullptr;
     if (packages)
