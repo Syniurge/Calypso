@@ -1152,6 +1152,77 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
 
 /*****/
 
+bool isDispatchingTemplateIdent(Identifier* ident)
+{
+    return ident == Id::opUnary || ident == Id::opBinary || ident == Id::opOpAssign;
+}
+
+cpp::TemplateDeclaration* createDispatchingTemplate(ScopeDsymbol* parent, Identifier* ident)
+{
+    auto loc = parent->loc;
+    auto parameters = new TemplateParameters;
+
+    // HACK: create a dummy TemplateThisParameter to trick needsTypeInference() into returning true
+    parameters->setDim(1);
+    (*parameters)[0] = new_TemplateThisParameter(loc, Id::C, nullptr, nullptr);
+
+    auto td = new cpp::TemplateDeclaration(loc, ident, parameters, nullptr, nullptr);
+    td->isDispatching = true;
+    td->semanticRun = PASSsemantic3done;
+    td->onemember = dummyOnemember(loc, ident);
+    td->addMember(nullptr, parent);
+
+    return td;
+}
+
+bool shouldCreateDispatchingTemplate(const clang::DeclContext* DC, Identifier* ident)
+{
+    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+    bool foundOneOO = false;
+
+    auto searchOperator = [&] (clang::OverloadedOperatorKind Op)
+    {
+        auto Name = DeclarationNames.getCXXOperatorName(Op);
+        if (!DC->lookup(Name).empty())
+        {
+            foundOneOO = true;
+            return true;
+        }
+        return false;
+    };
+
+    if (ident == Id::opUnary)
+    {
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
+                    clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
+                    clang::OO_Arrow, clang::OO_ArrowStar})
+            if (searchOperator(OO))
+                break;
+    }
+    else if (ident == Id::opBinary)
+    {
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
+                    clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
+                    clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
+                    clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+            if (searchOperator(OO))
+                break;
+    }
+    else if (ident == Id::opOpAssign)
+    {
+        for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
+                    clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
+                    clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
+                    clang::OO_GreaterGreaterEqual})
+            if (searchOperator(OO))
+                break;
+    }
+
+    return foundOneOO;
+}
+
+/*****/
+
 template <unsigned flags>
 Dsymbol* DeclMapper::dsymForDecl(const clang::Decl* D)
 {
@@ -1217,25 +1288,35 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
         parent = static_cast<ScopeDsymbol*>(s);
     }
 
+    Dsymbol* sym;
+
     if (!wantPartialOrWrappedDecl)
+    {
         VisitDecl(D, flags | DeclMapper::CreateTemplateInstance);
+
+        if (!D->d || !D->d->sym.getInt())
+            setDsym(D, nullptr);
+
+        sym = D->d->sym.getPointer();
+    }
     else
+    {
         VisitPartialOrWrappedDecl(D, flags);
 
-    if (!D->d || !D->d->sym.getInt())
-    {
-        assert(!wantPartialOrWrappedDecl);
-        setDsym(D, nullptr);
-        return nullptr;
+        if (!D->d || !D->d->wrapper.getInt())
+            setDwrapper(D, nullptr);
+
+        sym = D->d->wrapper.getPointer();
     }
 
-    auto sym = wantPartialOrWrappedDecl ? D->d->wrapper.getPointer()
-                                        : D->d->sym.getPointer();
     if (!sym)
         return nullptr;
 
     if (!sym->parent)
     {
+        if (isDispatchingTemplateIdent(sym->ident) && !parent->symtab->lookup(sym->ident))
+            createDispatchingTemplate(parent, sym->ident);
+
         parent->members->push(sym);
         sym->addMember(nullptr, parent);
 
@@ -1310,33 +1391,13 @@ Dsymbol* templateForDecl(ScopeDsymbol* sds, const clang::Decl* D)
 
 void mapDecls(ScopeDsymbol* sds, const clang::DeclContext* DC, Identifier* ident)
 {
-    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
     DeclMapper mapper(sds);
 
-    auto mapOperator = [&] (clang::OverloadedOperatorKind Op)
+    if (isDispatchingTemplateIdent(ident))
     {
-        auto Name = DeclarationNames.getCXXOperatorName(Op);
-        for (auto Match: DC->lookup(Name))
-            mapper.dsymAndWrapperForDecl(Match);
-    };
-
-    if (ident == Id::opUnary)
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
-                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
-                       clang::OO_Arrow, clang::OO_ArrowStar})
-            mapOperator(OO);
-    else if (ident == Id::opBinary)
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
-                       clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
-                       clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
-                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
-            mapOperator(OO);
-    else if (ident == Id::opOpAssign)
-        for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
-                       clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
-                       clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
-                       clang::OO_GreaterGreaterEqual})
-            mapOperator(OO);
+        if (!sds->symtab->lookup(ident) && shouldCreateDispatchingTemplate(DC, ident))
+            createDispatchingTemplate(sds, ident);
+    }
     else if (ident == Id::cmp)
         /*mapOperator(clang::OO_EqualEqual)*/; // FIXME
         // NOTE: other overloaded operators only map to one DeclarationName so don't require
@@ -1851,11 +1912,72 @@ Dsymbol* DeclMapper::dsymForMacro(Identifier* ident)
     return v;
 }
 
-Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags) // FIXME non member operators call mapDecls
+Dsymbol* Module::getDispatchingTemplate(Identifier* ident)
+{
+    if (!dispatchingTemplates.count(ident))
+    {
+        cpp::TemplateDeclaration* td = nullptr;
+
+        bool foundOneOO = false;
+        auto searchOperator = [&] (clang::OverloadedOperatorKind Op)
+        {
+            if (searchNonMemberOverloadedOperators(Op))
+            {
+                foundOneOO = true;
+                return true;
+            }
+            return false;
+        };
+
+        if (ident == Id::opUnary)
+        {
+            for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
+                        clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
+                        clang::OO_Arrow, clang::OO_ArrowStar})
+                if (searchOperator(OO))
+                    break;
+        }
+        else if (ident == Id::opBinary)
+        {
+            for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
+                        clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
+                        clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
+                        clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+                if (searchOperator(OO))
+                    break;
+        }
+        else if (ident == Id::opOpAssign)
+        {
+            for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
+                        clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
+                        clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
+                        clang::OO_GreaterGreaterEqual})
+                if (searchOperator(OO))
+                    break;
+        }
+
+        if (foundOneOO)
+            td = createDispatchingTemplate(this, ident);
+
+        dispatchingTemplates[ident] = td;
+    }
+
+    return dispatchingTemplates[ident];
+}
+
+Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags)
 {
     if (!(flags & MapOverloads))
+    {
         if (auto s = symtab->lookup(ident))
             return s;
+
+        if (isDispatchingTemplateIdent(ident))
+            return getDispatchingTemplate(ident);
+    }
+
+    if (isDispatchingTemplateIdent(ident))
+        return nullptr;
 
     DeclMapper mapper(this);
 
@@ -1896,19 +2018,20 @@ Dsymbol *Module::search(const Loc& loc, Identifier *ident, int flags) // FIXME n
     return symtab->lookup(ident);
 }
 
-void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op)
+bool Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op)
 {
     if (nonMemberOverloadedOperators[Op].searched)
-        return;
+        return !nonMemberOverloadedOperators[Op].OOs.empty();
     nonMemberOverloadedOperators[Op].searched = true;
 
     if (!isa<clang::RecordDecl>(rootDecl) && !isa<clang::ClassTemplateDecl>(rootDecl))
-        return;
+        return false;
 
     auto& Context = calypso.getASTContext();
 
     auto OpName = Context.DeclarationNames.getCXXOperatorName(
                 static_cast<clang::OverloadedOperatorKind>(Op));
+    bool foundOneOO = false;
 
     for (auto Ctx = rootDecl->getDeclContext(); Ctx; Ctx = Ctx->getLookupParent())
     {
@@ -1924,8 +2047,11 @@ void Module::searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op
 //                 continue; // friend out-of-line decls are already mapped as part as the record
 
             nonMemberOverloadedOperators[Op].OOs.push_back(getCanonicalDecl(OverOp));
+            foundOneOO = true;
         }
     }
+
+    return foundOneOO;
 }
 
 // ===== //
@@ -1980,6 +2106,7 @@ FullNamespaceModule::FullNamespaceModule(const clang::DeclContext *DC)
     this->DC = DC->getPrimaryContext();
 
     setScope(Scope::createGlobal(this));
+    symtab = new_DsymbolTable();
     semanticRun = PASSsemantic3done;
 }
 
@@ -1988,25 +2115,35 @@ Dsymbol* FullNamespaceModule::search(const Loc& loc, Identifier *ident, int flag
     DeclMapper mapper(this);
 
     if (DC->isTranslationUnit())
-        if (auto s = mapper.dsymForMacro(ident))
-            return s;
+        if (auto sym = mapper.dsymForMacro(ident))
+            return sym;
 
-    auto Name = calypso.toDeclarationName(ident);
-    for (const auto* Match: DC->lookup(Name))
+    Dsymbol* s = nullptr;
+    if (isDispatchingTemplateIdent(ident))
     {
-        if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
-            if (auto Tag = isAnonTagTypedef(Typedef))
-                Match = Tag;
-
-        if (isa<clang::NamespaceDecl>(Match))
+        s = getDispatchingTemplate(ident);
+    }
+    else
+    {
+        auto Name = calypso.toDeclarationName(ident);
+        for (const auto* Match: DC->lookup(Name))
         {
-            auto pkg = mapper.getPackage(Match);
-            return get(pkg, Match);
+            if (auto Typedef = dyn_cast<clang::TypedefNameDecl>(Match))
+                if (auto Tag = isAnonTagTypedef(Typedef))
+                    Match = Tag;
+
+            if (isa<clang::NamespaceDecl>(Match))
+            {
+                auto pkg = mapper.getPackage(Match);
+                s = get(pkg, Match);
+            }
+            else
+                s = mapper.dsymForDecl(Match);
         }
-        else
-            return mapper.dsymForDecl(Match);
     }
 
+    if (s)
+        return s;
     return ScopeDsymbol::search(loc, ident, flags);
 }
 
@@ -2027,6 +2164,28 @@ void FullNamespaceModule::complete()
         pkg->mod = mod;
     }
     return pkg->mod;
+}
+
+Dsymbol* FullNamespaceModule::getDispatchingTemplate(Identifier* ident)
+{
+    if (!dispatchingTemplates.count(ident))
+    {
+        cpp::TemplateDeclaration* td = nullptr;
+
+        if (shouldCreateDispatchingTemplate(DC, ident))
+            td = createDispatchingTemplate(this, ident);
+
+        dispatchingTemplates[ident] = td;
+    }
+
+    return dispatchingTemplates[ident];
+}
+
+FullNamespaceModule* isFullNamespaceModule(::Module* m)
+{
+    if (isCPP(m) && !m->ident)
+        return static_cast<FullNamespaceModule*>(m);
+    return nullptr;
 }
 
 }

@@ -1,8 +1,10 @@
 // Contributed by Elie Morisse, same license DMD uses
 
 #include "cpp/cpptemplate.h"
+#include "cpp/cppaggregate.h"
 #include "cpp/cppdeclaration.h"
 #include "cpp/cppexpression.h"
+#include "cpp/cppmodule.h"
 #include "cpp/ddmdstructor.h"
 #include "cpp/ddmdvisitor.h"
 #include "aggregate.h"
@@ -273,6 +275,7 @@ bool TemplateDeclaration::earlyFunctionValidityCheck(::TemplateInstance* ti, Sco
     return evaluateConstraint(ti, sc, nullptr, dedtypes, nullptr);
 }
 
+// TODO: remove prepareBestMatch and firstTempDecl? they shouldn't be necessary if the overroot is the primary template or the dispatching template
 void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Expressions* fargs)
 {
     if (!isa<clang::FunctionTemplateDecl>(TempOrSpec) &&
@@ -287,6 +290,9 @@ void TemplateDeclaration::prepareBestMatch(::TemplateInstance* ti, Scope* sc, Ex
 MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
                                              Objects *dedtypes, Expressions *fargs, int flag)
 {
+    if (isDispatching)
+        return MATCHnomatch;
+
     // Give only the primary template a chance to match if it's not the special case of
     // a wrapped non-templated overloaded operator
     // The "best matching" is done dy Sema, and then foreignInstance corrects ti->tempdecl
@@ -522,9 +528,230 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
     return MATCHexact;
 }
 
+// MATCH TemplateDeclaration::dispatchMatch(Scope *sc, ::TemplateInstance *ti,
+//                                          Expressions *fargs, TemplateInstUnion& Inst)
+// {
+//     if (!ti->tiargs || ti->tiargs->dim < 1)
+//         return MATCHnomatch; // needs at least the spec arg
+//
+//     auto& Context = calypso.getASTContext();
+//     auto& S = calypso.getSema();
+//
+//     clang::SourceLocation Loc;
+//     clang::sema::TemplateDeductionInfo DedInfo(Loc);
+//
+//     bool isConversion = ident == Id::_cast;
+//
+//     DeclMapper mapper(ti->minst, ti->minst);
+//
+//     auto specArg = (*ti->tiargs)[0];
+//
+//     Expression* specExp = nullptr;
+//     if (specArg->dyncast() == DYNCAST_EXPRESSION)
+//         specExp = static_cast<Expression*>(specArg);
+//
+//     if (!specExp || specExp->op != TOKstring)
+//         return MATCHnomatch;
+//
+//     const char* op = static_cast<StringExp*>(specExp)->toStringz();
+//     auto Op = toOverloadedOperator(ident, op);
+//
+//     if (Op == clang::OO_Spaceship)
+//         return MATCHnomatch; // unrecognized spec arg
+//
+//     if (fargs)
+//     {
+//         auto parg = (*fargs)[0]->type;
+//         if (auto agg = getAggregateSym(parg))
+//             if (auto mod = agg->toParent()->isModule())
+//             {
+//                 assert(isCPP(mod));
+//                 auto c_mod = static_cast<cpp::Module*>(mod);
+//                 DeclMapper mapper(c_mod);
+//
+//                 c_mod->searchNonMemberOverloadedOperators(Op);
+//                 auto& OOs = c_mod->nonMemberOverloadedOperators[Op].OOs;
+//
+//                 if (OOs.empty())
+//                     return MATCHnomatch;
+//
+//                 Dsymbol* overroot = nullptr;
+//                 for (auto OO: c_mod->nonMemberOverloadedOperators[Op].OOs)
+//                 {
+//                     auto s = mapper.templateForDecl(OO);
+//                     if (!overroot)
+//                         overroot = s;
+//                 }
+//                 assert(overroot && overroot->isTemplateDeclaration());
+//             }
+//     }
+//
+//     clang::FunctionDecl *Specialization;
+//
+// //     if (isConversion)
+// //     {
+// //         assert(ti->tiargs && ti->tiargs->dim >= 1);
+// //         Type* to = isType((*ti->tiargs)[0]);
+// //         clang::QualType To = mapper.toType(ti->loc, to, /*sc=*/ nullptr);
+// //
+// //         clang::CXXConversionDecl *Conversion;
+// //
+// //         if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+// //                     To, Conversion, DedInfo))
+// //             return MATCHnomatch;
+// //         Specialization = Conversion;
+// //     }
+// //     else  if (fargs) {
+// //         llvm::SmallVector<clang::Expr*, 4> Args;
+// //         for (auto farg: *fargs) {
+// //             // toType won't take dynamic arrays, but anticipate implicit conversions
+// //             auto argty = farg->type;
+// //             if (argty->ty == Tarray)
+// //                 argty = argty->nextOf()->pointerTo();
+// //
+// //             auto ArgTy = mapper.toType(ti->loc, argty, /*sc=*/ nullptr);
+// //             auto DummyExpr = new (Context) clang::OpaqueValueExpr(Loc, ArgTy,
+// //                                         farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
+// //             Args.push_back(DummyExpr);
+// //         }
+// //
+// //         if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+// //                     &ExplicitTemplateArgs, Args, Specialization, DedInfo, false,
+// //                     [](llvm::ArrayRef<clang::QualType>){ return false; }))
+// //             return MATCHnomatch;
+// //     } else if (S.DeduceTemplateArguments(const_cast<clang::FunctionTemplateDecl*>(FunctionTemplate),
+// //                     &ExplicitTemplateArgs, Specialization, DedInfo))
+// //         return MATCHnomatch;
+//
+//     Inst = Specialization;
+//     return MATCHexact;
+// }
+
+Dsymbol *LangPlugin::dispatchFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
+        Objects *tiargs, Type *tthis, Expressions *fargs)
+{
+    if (!tiargs || tiargs->dim < 1)
+        return nullptr; // needs at least the spec arg
+
+    auto td = s->isTemplateDeclaration();
+    if (!td)
+        return nullptr;
+
+    auto c_td = static_cast<cpp::TemplateDeclaration*>(td);
+    if (!c_td->isDispatching)
+        return nullptr;
+
+//     auto& Context = calypso.getASTContext();
+//     auto& S = calypso.getSema();
+
+    clang::SourceLocation Loc;
+    clang::sema::TemplateDeductionInfo DedInfo(Loc);
+
+    bool isBinary = s->ident == Id::opBinary || s->ident == Id::opBinaryRight || s->ident == Id::opOpAssign;
+// //     bool isConversion = s->ident == Id::_cast;
+
+    auto specArg = (*tiargs)[0];
+
+    Expression* specExp = nullptr;
+    if (specArg->dyncast() == DYNCAST_EXPRESSION)
+        specExp = static_cast<Expression*>(specArg);
+    if (!specExp || specExp->op != TOKstring)
+        return nullptr;
+
+    const char* op = static_cast<StringExp*>(specExp)->toStringz();
+    auto Op = toOverloadedOperator(s->ident, op);
+
+    if (Op == clang::OO_Spaceship)
+        return nullptr; // unrecognized spec arg
+
+    assert(c_td->parent);
+    auto agg = c_td->parent->isAggregateDeclaration();
+        // case #1: parent is an aggregate
+
+    cpp::Module* c_mod = nullptr;
+    if (!agg)
+    {
+        auto mod = c_td->parent->isModule();
+        assert(mod && isCPP(mod));
+
+        if (!isFullNamespaceModule(mod))
+            // case #2: parent is a cpp::Module for an aggregate
+            c_mod = static_cast<cpp::Module*>(mod);
+        else
+        {
+            // case #3: parent is a full namespace module
+            if (fargs)
+            {
+                auto parg = (*fargs)[0]->type;
+
+                if (!agg)
+                    agg = getAggregateSym(parg);
+
+                if (!agg && isBinary && fargs->dim >= 2)
+                {
+                    parg = (*fargs)[1]->type;
+                    agg = getAggregateSym(parg);
+                }
+
+                if (!agg)
+                    return nullptr;
+
+                mod = agg->toParent()->isModule();
+                if (mod)
+                {
+                    assert(mod && isCPP(mod) && !isFullNamespaceModule(mod));
+                    c_mod = static_cast<cpp::Module*>(mod);
+                }
+            }
+        }
+    }
+
+    if (c_mod)
+    { // case #2 or #3
+        DeclMapper mapper(c_mod);
+
+        c_mod->searchNonMemberOverloadedOperators(Op);
+        auto& OOs = c_mod->nonMemberOverloadedOperators[Op].OOs;
+
+        if (OOs.empty())
+            return nullptr;
+
+        Dsymbol* sym = nullptr;
+        for (auto OO: c_mod->nonMemberOverloadedOperators[Op].OOs)
+        {
+            auto s = mapper.templateForDecl(OO);
+            if (!sym)
+                sym = s;
+        }
+        assert(sym && sym->isTemplateDeclaration());
+
+        if (auto overroot = static_cast<TemplateDeclaration*>(sym)->overroot)
+            return overroot;
+        else
+            return sym;
+    }
+    else if (agg)
+    { // case #1
+        auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+        auto Name = DeclarationNames.getCXXOperatorName(Op);
+
+        auto RD = getRecordDecl(agg);
+
+        for (auto Match: RD->lookup(Name))
+            templateForDecl(agg, Match);
+
+        return s; // the dispatching template has to be the overroot
+    }
+
+    return nullptr;
+}
+
 MATCH TemplateDeclaration::deduceFunctionTemplateMatch(::TemplateInstance *ti, Scope *sc,
                             ::FuncDeclaration *&fd, Type *tthis, Expressions *fargs)
 {
+    if (isDispatching)
+        return MATCHnomatch;
+
     TemplateInstUnion Inst;
 
     if (functionTemplateMatch(sc, ti, fargs, Inst) != MATCHexact)

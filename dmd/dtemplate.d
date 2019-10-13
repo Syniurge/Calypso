@@ -2658,6 +2658,11 @@ void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc loc, Scope* sc,
 
     int callMatchFlags = (flags & 8) ? 2 : 0; // CALYPSO
 
+    if (!(flags & FuncResolveFlag.noDispatching)) // CALYPSO
+        if (auto lp = dstart.langPlugin())
+            if (auto s2 = lp.dispatchFuncCall(loc, sc, dstart, tiargs, tthis, fargs))
+                dstart = s2;
+
     int applyFunction(FuncDeclaration fd)
     {
         // skip duplicates

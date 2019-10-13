@@ -32,6 +32,10 @@ public:
 
     const clang::NamedDecl *TempOrSpec;
 
+    // Ex. of dispatching templates : opUnary, opBinary templates that map the actual overloaded operators according to the supplied explicit first template argument and the arguments
+    // NOTE: they have to be the overroot
+    bool isDispatching = false;
+
     TemplateDeclaration(Loc loc, Identifier *id, TemplateParameters *parameters,
                         Dsymbols *decldefs, const clang::NamedDecl *TempOrSpec);
     TemplateDeclaration(const TemplateDeclaration&);

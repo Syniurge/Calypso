@@ -2781,6 +2781,7 @@ enum FuncResolveFlag : ubyte
     overloadOnly = 2,   /// only resolve overloads.
     quietOnMultipleMatches = 4, /// do not issue error message on multiple matches, return `null` // CALYPSO
     noImplicitCtor = 8,         /// disable @implicit ctors // CALYPSO
+    noDispatching = 16,         /// no language plugin dispatching hook // CALYPSO
 }
 
 /*******************************************
@@ -2826,8 +2827,12 @@ extern(C++) FuncDeclaration resolveFuncCall(const ref Loc loc, Scope* sc, Dsymbo
         return null;
     }
 
+    if (auto lp = s.langPlugin())
+        if (auto s2 = lp.dispatchFuncCall(loc, sc, s, tiargs, tthis, fargs))
+            s = s2; // CALYPSO
+
     MatchAccumulator m;
-    functionResolve(m, s, loc, sc, tiargs, tthis, fargs, null, flags); // CALYPSO
+    functionResolve(m, s, loc, sc, tiargs, tthis, fargs, null, flags|FuncResolveFlag.noDispatching); // CALYPSO
     auto orig_s = s;
 
     if (m.last > MATCH.nomatch && m.lastf)

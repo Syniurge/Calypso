@@ -91,6 +91,8 @@ Identifier *getExtendedIdentifierOrNull(const clang::NamedDecl *D, DeclMapper &m
 RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
                                DeclMapper &mapper);
 
+clang::OverloadedOperatorKind toOverloadedOperator(Identifier* ident, const char* arg);
+
 const clang::TagDecl *isOverloadedOperatorWithTagOperand(const clang::Decl *D,
                                                            const clang::NamedDecl *SpecificTag = nullptr);
 
@@ -171,6 +173,9 @@ public:
     bool doesHandleCatch(LINK lang) override;
     ::Catch *createCatch(Loc loc, Type *t, Identifier *id,
                                Statement *handler, StorageClass stc) override;
+
+    Dsymbol *dispatchFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
+                Objects *tiargs, Type *tthis, Expressions *fargs) override;
 
     Expression *callCpCtor(Scope *sc, Expression *e) override;
 

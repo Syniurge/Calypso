@@ -363,6 +363,9 @@ public:
 
     // ===== - - - - - ===== //
 
+    Dsymbol dispatchFuncCall(const ref Loc loc, Scope* sc, Dsymbol s,
+                    Objects* tiargs, Type tthis, Expressions* fargs);
+
     Expression callCpCtor(Scope *sc, Expression e);
 
     FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);

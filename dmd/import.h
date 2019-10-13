@@ -96,6 +96,9 @@ public:
 
     // ===== - - - - - ===== //
 
+    virtual Dsymbol *dispatchFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
+                Objects *tiargs, Type *tthis, Expressions *fargs) = 0;
+
     virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;
 
     virtual FuncDeclaration *searchOpEqualsForXopEquals(StructDeclaration *sd, Scope *sc) = 0;

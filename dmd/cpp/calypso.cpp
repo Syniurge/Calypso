@@ -266,6 +266,53 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
     return opIdent;
 }
 
+clang::OverloadedOperatorKind toOverloadedOperator(Identifier* ident, const char* arg)
+{
+    if (ident == Id::opUnary)
+    {
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
+                       clang::OO_Arrow, clang::OO_ArrowStar})
+            if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
+                return OO;
+    }
+    else if (ident == Id::opBinary)
+    {
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
+                       clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
+                       clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
+                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+            if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
+                return OO;
+    }
+    else if (ident == Id::opOpAssign)
+    {
+        for (auto OO: {clang::OO_PlusEqual, clang::OO_MinusEqual, clang::OO_StarEqual,
+                       clang::OO_SlashEqual, clang::OO_PercentEqual, clang::OO_CaretEqual,
+                       clang::OO_AmpEqual, clang::OO_PipeEqual, clang::OO_LessLessEqual,
+                       clang::OO_GreaterGreaterEqual})
+            if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
+                return OO;
+    }
+    else if (ident == Id::cmp)
+        /*mapOperator(clang::OO_EqualEqual)*/; // FIXME
+        // NOTE: other overloaded operators only map to one DeclarationName so don't require
+        // special treatment
+    else if (ident == Id::_cast)
+    {
+//         typedef clang::DeclContext::specific_decl_iterator<clang::CXXConversionDecl> Conv_iterator;
+//         for (Conv_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+//             mapper.dsymAndWrapperForDecl(*I);
+//
+//         typedef clang::DeclContext::specific_decl_iterator<clang::FunctionTemplateDecl> FuncTemp_iterator;
+//         for (FuncTemp_iterator I(DC->decls_begin()), E(DC->decls_end()); I != E; I++)
+//             if ((*I)->getDeclName().getNameKind() == clang::DeclarationName::CXXConversionFunctionName)
+//                 mapper.dsymAndWrapperForDecl(*I);
+    }
+    else
+        return clang::OO_Spaceship; // i.e "false"
+}
+
 static Identifier *fullConversionMapIdent(Identifier *baseIdent,
                 const clang::CXXConversionDecl *D, DeclMapper& mapper)
 {
@@ -497,6 +544,8 @@ RootObject *getIdentOrTempinst(Loc loc, const clang::DeclarationName N,
         return ident;
 }
 
+// ***** //
+
 clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
 {
     auto& II = IIMap[ident];
@@ -506,7 +555,7 @@ clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
         const char prefix[] = u8"ℂ";
         const size_t prefixLength = sizeof(prefix)-1;
 
-        auto& Ctx = calypso.getASTContext();
+        auto& Ctx = getASTContext();
 
         bool prefixed = strncmp(ident->toChars(), prefix, prefixLength) == 0;
 
@@ -523,7 +572,7 @@ clang::IdentifierInfo* LangPlugin::toIdentifierInfo(Identifier* ident)
 
 clang::DeclarationName LangPlugin::toDeclarationName(Identifier* ident, const clang::RecordDecl* RD)
 {
-    auto& DeclarationNames = calypso.getASTContext().DeclarationNames;
+    auto& DeclarationNames = getASTContext().DeclarationNames;
 
     if (ident == Id::call)
         return DeclarationNames.getCXXOperatorName(clang::OO_Call);

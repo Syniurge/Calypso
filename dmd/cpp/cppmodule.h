@@ -76,7 +76,7 @@ public:
     void loadEmittedSymbolList();
     void saveEmittedSymbolList();
 
-protected:
+// protected:
     struct NonMemberOverloadedOperators
     {
         std::vector<const clang::Decl*> OOs;
@@ -84,7 +84,10 @@ protected:
     };
     std::map<clang::OverloadedOperatorKind, NonMemberOverloadedOperators> nonMemberOverloadedOperators;
 
-    void searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op); // map non-member overloaded operators and out-of-line friend decls
+    llvm::DenseMap<Identifier*, Dsymbol*> dispatchingTemplates;
+
+    bool searchNonMemberOverloadedOperators(clang::OverloadedOperatorKind Op); // map non-member overloaded operators and out-of-line friend decls
+    Dsymbol* getDispatchingTemplate(Identifier* ident);
 };
 
 // *************** //
@@ -104,7 +107,12 @@ public:
     void complete() override;
 
     static ::Module* get(Package* pkg, const clang::Decl *D);
+
+    llvm::DenseMap<Identifier*, Dsymbol*> dispatchingTemplates;
+    Dsymbol* getDispatchingTemplate(Identifier* ident);
 };
+
+FullNamespaceModule* isFullNamespaceModule(::Module* m);
 
 // *************** //
 
