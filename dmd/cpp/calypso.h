@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <string>
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/DataLayout.h"
 #include "clang/AST/ASTMutationListener.h"
@@ -56,10 +57,9 @@ namespace clangCG = clang::CodeGen;
 
 struct DData
 {
-    Dsymbol* sym = nullptr;
-    bool hasSym = false; // TODO replace by llvm::PointerIntPair (once Callisto is stable)
+    llvm::PointerIntPair<Dsymbol*, 1, bool> sym;
 
-    Dsymbol* wrapper = nullptr; // template declarations for partial/explicit template specializations or overloaded operators
+    llvm::PointerIntPair<Dsymbol*, 1, bool> wrapper; // template declarations for partial/explicit template specializations or overloaded operators
 
     Dsymbol* instantiatedBy = nullptr; // if the declaration hasn't been mapped but was referenced/instantiated (i.e sym is null), it will get attached to the instantiating module or function
 };

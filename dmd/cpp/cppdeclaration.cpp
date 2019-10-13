@@ -329,7 +329,7 @@ bool DeclReferencer::Reference(const clang::NamedDecl *D)
     if (!D->d)
         const_cast<clang::NamedDecl*>(D)->d = new cpp::DData;
 
-    if (auto sym = D->d->sym)
+    if (auto sym = D->d->sym.getPointer())
         calypso.markSymbolReferenced(sym);
     else if (!D->d->instantiatedBy)
     {

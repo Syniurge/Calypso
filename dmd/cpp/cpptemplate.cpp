@@ -403,7 +403,7 @@ Dsymbols* TemplateDeclaration::copySyntaxTree(::TemplateInstance *ti)
     else
     {
         DeclMapper(ti->minst, ti->minst).VisitDecl(Inst);
-        inst = Inst->d->sym;
+        inst = Inst->d->sym.getPointer();
     }
 
     auto a = new Dsymbols;
@@ -616,7 +616,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     if (auto D = Inst.dyn_cast<clang::NamedDecl*>())
         if (D->d && !isNonTemplateWrapper())
         {  // a TemplateInstance already exists (it was speculative)
-            auto sym = D->d->sym;
+            auto sym = D->d->sym.getPointer();
             assert(sym && sym->parent && sym->parent->isTemplateInstance() && isCPP(sym->parent));
 
             ti = static_cast<cpp::TemplateInstance*>(sym->parent);

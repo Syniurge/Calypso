@@ -192,17 +192,20 @@ inline void setDsym(const clang::NamedDecl* D, Dsymbol* sym)
 
     if (!D->d)
         D_->d = new DData;
-    assert(D->d->sym == nullptr);
-    D_->d->sym = sym;
-    D_->d->hasSym = true;
+    assert(D->d->sym.getPointer() == nullptr);
+    D_->d->sym.setPointer(sym);
+    D_->d->sym.setInt(true);
 }
 
 inline void setDwrapper(const clang::NamedDecl* D, TemplateDeclaration* wrapper)
 {
+    auto D_ = const_cast<clang::NamedDecl*>(D);
+
     if (!D->d)
-        const_cast<clang::NamedDecl*>(D)->d = new DData;
-    assert(D->d->wrapper == nullptr);
-    const_cast<clang::NamedDecl*>(D)->d->wrapper = wrapper;
+        D_->d = new DData;
+    assert(D->d->wrapper.getPointer() == nullptr);
+    D_->d->wrapper.setPointer(wrapper);
+    D_->d->wrapper.setInt(true);
 }
 
 }
@@ -1167,13 +1170,11 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
 
     if (wantPartialOrWrappedDecl)
     {
-        if (!D->d || !D->d->hasSym)
-            dsymForDecl<NoFlag>(D);
-        if (D->d->wrapper)
-            return D->d->wrapper; // NOTE: hence if null because unsupported it will go through dsymForDecl again
+        if (D->d && D->d->wrapper.getInt())
+            return D->d->wrapper.getPointer();
     }
-    else if (D->d && D->d->hasSym)
-        return D->d->sym;
+    else if (D->d && D->d->sym.getInt())
+        return D->d->sym.getPointer();
 
     if (auto NS = dyn_cast<clang::NamespaceDecl>(D))
     {
@@ -1221,14 +1222,15 @@ Dsymbol* DeclMapper::dsymForDecl(const clang::NamedDecl* D)
     else
         VisitPartialOrWrappedDecl(D, flags);
 
-    if (!D->d || !D->d->hasSym)
+    if (!D->d || !D->d->sym.getInt())
     {
         assert(!wantPartialOrWrappedDecl);
         setDsym(D, nullptr);
         return nullptr;
     }
 
-    auto sym = wantPartialOrWrappedDecl ? D->d->wrapper : D->d->sym;
+    auto sym = wantPartialOrWrappedDecl ? D->d->wrapper.getPointer()
+                                        : D->d->sym.getPointer();
     if (!sym)
         return nullptr;
 
@@ -1437,8 +1439,8 @@ Package *DeclMapper::getPackage(const clang::Decl* D)
 
     auto NS = cast<clang::NamespaceDecl>(getCanonicalDecl(D));
     if (NS->d) {
-        assert(NS->d->sym->isPackage());
-        return static_cast<Package*>(NS->d->sym);
+        assert(NS->d->sym.getPointer()->isPackage());
+        return static_cast<Package*>(NS->d->sym.getPointer());
     }
 
     auto parent = getPackage(Parent);

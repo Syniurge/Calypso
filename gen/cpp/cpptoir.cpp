@@ -331,7 +331,7 @@ struct ResolvedFunc
         if (result.Func->isDeclaration() && FD->hasBody(Def) &&
                 FPT->getExceptionSpecType() != clang::EST_Unevaluated)
             if (FD->hasAttr<clang::AlwaysInlineAttr>() && 
-                    FD->d && FD->d->sym && calypso.isSymbolReferenced(FD->d->sym))
+                    FD->d && FD->d->sym.getPointer() && calypso.isSymbolReferenced(FD->d->sym.getPointer()))
                 CGM.EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def));
 
         return result;

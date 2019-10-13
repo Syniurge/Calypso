@@ -129,7 +129,6 @@ inline decltype(AggTy::_Def) ad_Definition(AggTy* ad)
             ad->_Def = ad->RD;
     }
 
-    assert(cast<clang::NamedDecl>(getCanonicalDecl(ad->_Def))->d->sym == ad); // might be completely unnecessary
     return ad->_Def;
 }
 
