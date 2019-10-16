@@ -245,7 +245,7 @@ public:
     virtual const char *kind() const;
     Type *copy() const;
     virtual Type *syntaxCopy();
-    bool equals(RootObject *o) const;
+    bool equals(RootObject *o);
     bool equivalent(Type *t);
     // kludge for template.isType()
     DYNCAST dyncast() const { return DYNCAST_TYPE; }
@@ -423,7 +423,7 @@ public:
     bool iscomplex() /*const*/;
     bool isscalar() /*const*/;
     bool isunsigned() /*const*/;
-    bool ischar() const;
+    bool ischar() /*const*/;
     MATCH implicitConvTo(Type *to);
     bool isZeroInit(const Loc &loc) /*const*/;
 

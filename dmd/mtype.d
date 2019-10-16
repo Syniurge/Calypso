@@ -524,7 +524,7 @@ version (IN_LLVM)
         assert(0);
     }
 
-    override bool equals(RootObject o) const
+    override bool equals(RootObject o)
     {
         Type t = cast(Type)o;
         //printf("Type::equals(%s, %s)\n", toChars(), t.toChars());
@@ -3335,7 +3335,7 @@ extern (C++) class TypeBasic : Type // CALYPSO (final removed)
         return (flags & TFlags.unsigned) != 0;
     }
 
-    override bool ischar() const
+    override bool ischar()
     {
         return (flags & TFlags.char_) != 0;
     }
@@ -6346,7 +6346,7 @@ extern (C++) final class TypeTuple : Type
         return t;
     }
 
-    override bool equals(RootObject o) const
+    override bool equals(RootObject o)
     {
         Type t = cast(Type)o;
         //printf("TypeTuple::equals(%s, %s)\n", toChars(), t.toChars());
@@ -6358,7 +6358,7 @@ extern (C++) final class TypeTuple : Type
             {
                 for (size_t i = 0; i < tt.arguments.dim; i++)
                 {
-                    const Parameter arg1 = (*arguments)[i];
+                    Parameter arg1 = (*arguments)[i];
                     Parameter arg2 = (*tt.arguments)[i];
                     if (!arg1.type.equals(arg2.type))
                         return false;
