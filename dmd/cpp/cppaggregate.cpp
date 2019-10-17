@@ -33,7 +33,6 @@ FuncDeclaration *resolveFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
         Expressions *arguments,
         unsigned char flags = 0);
 Expression *resolveProperties(Scope *sc, Expression *e);
-Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
 namespace cpp
 {
@@ -162,7 +161,7 @@ inline Dsymbol* ad_search(AggTy* ad, const Loc &loc, Identifier *ident, int flag
     {
         auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
 
-        if (CRD && ident == Id::ctor)
+        if (CRD && ident != Id::dtor)
         {
             auto Name = calypso.toDeclarationName(ident, Def);
 
@@ -842,7 +841,10 @@ void MarkAggregateReferenced(::AggregateDeclaration* ad)
 
     auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(getRecordDecl(ad)));
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+    {
         instantiatedDecls(instantiatedBy).erase(CanonDecl);
+        CanonDecl->d->instantiatedBy = nullptr;
+    }
 
     auto D = dyn_cast_or_null<clang::CXXRecordDecl>(
                     const_cast<clang::RecordDecl*>(getDefinition(ad)));

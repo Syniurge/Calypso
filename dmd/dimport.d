@@ -323,6 +323,7 @@ import dmd.dinterpret;
 import dmd.dstruct;
 import dmd.func;
 import dmd.statement;
+import dmd.tokens;
 
 alias ForeignCodeGen = void*;
 
@@ -369,6 +370,10 @@ public:
     Expression callCpCtor(Scope *sc, Expression e);
 
     FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);
+
+    // ===== - - - - - ===== //
+
+    Expression op_overload(Expression e, Scope* sc, TOK* pop = null);
 
     // ===== - - - - - ===== //
 

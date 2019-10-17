@@ -181,6 +181,8 @@ public:
 
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
+    Expression* op_overload(Expression* e, Scope* sc, TOK* pop = nullptr) override;
+
     bool isSymbolReferenced(Dsymbol *s) override;
     void markSymbolReferenced(Dsymbol *s) override;
 
@@ -340,5 +342,7 @@ cpp::ClassDeclaration *isDCXX(Dsymbol *s);
 
 // Use this pattern for all global.params.verbose logging
 void log_verbose(const std::string& header, const std::string& msg);
+
+Dsymbol *search_function(ScopeDsymbol *ad, Identifier *funcid);
 
 #endif /* DMD_CPP_CALYPSO_H */

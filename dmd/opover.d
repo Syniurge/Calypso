@@ -366,7 +366,7 @@ private Identifier opId_r(Expression e)
 /*******************************************
  * Helper function to turn operator into template argument list
  */
-Objects* opToArg(Scope* sc, TOK op)
+extern (C++) Objects* opToArg(Scope* sc, TOK op) // CALYPSO
 {
     /* Remove the = from op=
      */
@@ -615,6 +615,12 @@ Expression op_overload(Expression e, Scope* sc, TOK* pop = null)
             if (ad)
             {
                 Dsymbol fd = null;
+                if (auto lp = ad.langPlugin)
+                    if (auto ex = lp.op_overload(e, sc, pop))
+                    {
+                        result = ex;
+                        return;
+                    }
                 version (all)
                 {
                     // Old way, kept for compatibility with D1
@@ -843,6 +849,25 @@ Expression op_overload(Expression e, Scope* sc, TOK* pop = null)
             int argsset = 0;
             AggregateDeclaration ad1 = isAggregate(e.e1.type);
             AggregateDeclaration ad2 = isAggregate(e.e2.type);
+            // CALYPSO
+            if (ad1 && ad1.langPlugin)
+            {
+                auto lp = ad1.langPlugin();
+                if (auto ex = lp.op_overload(e, sc, pop))
+                {
+                    result = ex;
+                    return;
+                }
+            }
+            else if (ad2 && ad2.langPlugin)
+            {
+                auto lp = ad2.langPlugin();
+                if (auto ex = lp.op_overload(e, sc, pop))
+                {
+                    result = ex;
+                    return;
+                }
+            }
             if (e.op == TOK.assign && ad1 == ad2)
             {
                 StructDeclaration sd = ad1.isStructDeclaration();
@@ -994,6 +1019,7 @@ Expression op_overload(Expression e, Scope* sc, TOK* pop = null)
                 }
                 return;
             }
+
         L1:
             version (all)
             {
@@ -1201,6 +1227,29 @@ Expression op_overload(Expression e, Scope* sc, TOK* pop = null)
             {
                 // Comparing a class with typeof(null) should not call opEquals
                 return;
+            }
+
+            // CALYPSO
+            AggregateDeclaration ad1 = isAggregate(e.e1.type);
+            AggregateDeclaration ad2 = isAggregate(e.e2.type);
+
+            if (ad1 && ad1.langPlugin)
+            {
+                auto lp = ad1.langPlugin();
+                if (auto ex = lp.op_overload(e, sc, pop))
+                {
+                    result = ex;
+                    return;
+                }
+            }
+            else if (ad2 && ad2.langPlugin)
+            {
+                auto lp = ad2.langPlugin();
+                if (auto ex = lp.op_overload(e, sc, pop))
+                {
+                    result = ex;
+                    return;
+                }
             }
 
             /* Check for class equality.
@@ -1499,6 +1548,16 @@ Expression op_overload(Expression e, Scope* sc, TOK* pop = null)
             Expressions args2;
             AggregateDeclaration ad1 = isAggregate(e.e1.type);
             Dsymbol s = null;
+            // CALYPSO
+            if (ad1 && ad1.langPlugin)
+            {
+                auto lp = ad1.langPlugin();
+                if (auto ex = lp.op_overload(e, sc, pop))
+                {
+                    result = ex;
+                    return;
+                }
+            }
             version (all)
             {
                 // the old D1 scheme

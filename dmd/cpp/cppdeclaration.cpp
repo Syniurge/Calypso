@@ -75,7 +75,10 @@ void MarkVarReferenced(::VarDeclaration* vd)
 
     auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(Var));
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+    {
         instantiatedDecls(instantiatedBy).erase(CanonDecl);
+        CanonDecl->d->instantiatedBy = nullptr;
+    }
 
     auto& S = calypso.getSema();
 
@@ -501,7 +504,10 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
 
     auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(getFD(fd)));
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
+    {
         instantiatedDecls(instantiatedBy).erase(CanonDecl);
+        CanonDecl->d->instantiatedBy = nullptr;
+    }
 
 //     // Member *structor calls do not appear in the AST, hence DeclReferencer won't mark them
 //     // referenced and we have to do it here // FIXME: shouldn't be needed, record should be referenced in DeclReferencer

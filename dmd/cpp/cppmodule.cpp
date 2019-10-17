@@ -1193,18 +1193,19 @@ bool shouldCreateDispatchingTemplate(const clang::DeclContext* DC, Identifier* i
 
     if (ident == Id::opUnary)
     {
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
-                    clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
-                    clang::OO_Arrow, clang::OO_ArrowStar})
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Tilde, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Exclaim, clang::OO_Arrow, clang::OO_ArrowStar})
             if (searchOperator(OO))
                 break;
     }
     else if (ident == Id::opBinary)
     {
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
-                    clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
-                    clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
-                    clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+        for (auto OO: {clang::OO_Equal, clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Slash, clang::OO_Percent, clang::OO_Caret, clang::OO_Amp,
+                       clang::OO_Pipe, clang::OO_Tilde, clang::OO_LessLess,
+                       clang::OO_GreaterGreater, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Comma, clang::OO_ExclaimEqual})
             if (searchOperator(OO))
                 break;
     }
@@ -1931,18 +1932,19 @@ Dsymbol* Module::getDispatchingTemplate(Identifier* ident)
 
         if (ident == Id::opUnary)
         {
-            for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
-                        clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
-                        clang::OO_Arrow, clang::OO_ArrowStar})
+            for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Tilde, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Exclaim, clang::OO_Arrow, clang::OO_ArrowStar})
                 if (searchOperator(OO))
                     break;
         }
         else if (ident == Id::opBinary)
         {
-            for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
-                        clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
-                        clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
-                        clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+            for (auto OO: {clang::OO_Equal, clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Slash, clang::OO_Percent, clang::OO_Caret, clang::OO_Amp,
+                       clang::OO_Pipe, clang::OO_Tilde, clang::OO_LessLess,
+                       clang::OO_GreaterGreater, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Comma, clang::OO_ExclaimEqual})
                 if (searchOperator(OO))
                     break;
         }

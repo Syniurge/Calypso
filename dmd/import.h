@@ -11,6 +11,7 @@
 #pragma once
 
 #include "dsymbol.h"
+#include "tokens.h"
 
 class Identifier;
 struct Scope;
@@ -102,6 +103,10 @@ public:
     virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;
 
     virtual FuncDeclaration *searchOpEqualsForXopEquals(StructDeclaration *sd, Scope *sc) = 0;
+
+    // ===== - - - - - ===== //
+
+    virtual Expression* op_overload(Expression* e, Scope* sc, TOK* pop = nullptr) = 0;
 
     // ===== - - - - - ===== //
 

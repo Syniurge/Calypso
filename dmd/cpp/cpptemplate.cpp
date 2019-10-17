@@ -723,12 +723,16 @@ Dsymbol *LangPlugin::dispatchFuncCall(const Loc &loc, Scope *sc, Dsymbol *s,
             if (!sym)
                 sym = s;
         }
-        assert(sym && sym->isTemplateDeclaration());
 
-        if (auto overroot = static_cast<TemplateDeclaration*>(sym)->overroot)
-            return overroot;
-        else
-            return sym;
+        if (sym)
+        {
+            assert(sym->isTemplateDeclaration());
+
+            if (auto overroot = static_cast<TemplateDeclaration*>(sym)->overroot)
+                return overroot;
+            else
+                return sym;
+        }
     }
     else if (agg)
     { // case #1
@@ -841,7 +845,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
     assert(Inst);
 
     if (auto D = Inst.dyn_cast<clang::NamedDecl*>())
-        if (D->d && !isNonTemplateWrapper())
+        if (D->d && D->d->sym.getInt() && !isNonTemplateWrapper())
         {  // a TemplateInstance already exists (it was speculative)
             auto sym = D->d->sym.getPointer();
             assert(sym && sym->parent && sym->parent->isTemplateInstance() && isCPP(sym->parent));

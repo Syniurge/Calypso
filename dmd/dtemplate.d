@@ -2619,7 +2619,7 @@ size_t numParameterPacks(TemplateParameters* parameters) // CALYPSO
  *      pMessage    = address to store error message, or null
  *      flags       = resolveFuncCall flags // CALYPSO
  */
-void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiargs,
+extern (C++) void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc loc, Scope* sc, Objects* tiargs,
     Type tthis, Expressions* fargs, const(char)** pMessage = null, int flags = 0) // CALYPSO
 {
     Expression[] fargs_ = fargs.peekSlice();

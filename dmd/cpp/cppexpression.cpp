@@ -10,10 +10,23 @@
 #include "id.h"
 #include "identifier.h"
 #include "template.h"
+#include "tokens.h"
 
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
+
+struct MatchAccumulator
+{
+    int count = 0;              // number of matches found so far
+    MATCH last = MATCHnomatch; // match level of lastf
+    FuncDeclaration* lastf = nullptr;  // last matching function we found
+    FuncDeclaration* nextf = nullptr;  // if ambiguous match, this is the "other" function
+};
+
+Objects* opToArg(Scope* sc, TOK op);
+void functionResolve(MatchAccumulator& m, Dsymbol* dstart, Loc loc, Scope* sc, Objects* tiargs,
+    Type* tthis, Expressions* fargs, const char** pMessage = nullptr, int flags = 0);
 
 namespace cpp
 {
@@ -1027,6 +1040,254 @@ clang::Expr* ExprMapper::toExpression(Expression* e)
         default:
             llvm::llvm_unreachable_internal("Unhandled D -> Clang expression conversion");
     }
+}
+
+class OpOverloadCpp : public ::Visitor
+{
+public:
+    Scope* sc;
+    Expression* result = nullptr;
+
+    MatchAccumulator m;
+
+    OpOverloadCpp(Scope* sc) : sc(sc) {}
+
+    using Visitor::visit;
+
+    static Expression* build_overload(const Loc& loc, Scope* sc, Expression* ethis,
+                                        Expression* earg, Declaration* decl)
+    {
+        assert(decl);
+
+        auto args = new Expressions;
+        args->push(earg);
+
+        Expression* e = new_DotVarExp(loc, ethis, decl, false);
+        e = new_CallExp(loc, e, args);
+        e = expressionSemantic(e, sc);
+        return e;
+    }
+
+    static Expression* build_nonmember_overload(const Loc& loc, Scope* sc, Expression* eleft,
+                                        Expression* eright, Declaration* decl)
+    {
+        assert(decl);
+
+        auto args = new Expressions;
+        args->push(eleft);
+        if (eright)
+            args->push(eright);
+
+        Expression* e = new_VarExp(loc, decl, false);
+        e = new_CallExp(loc, e, args);
+        e = expressionSemantic(e, sc);
+        return e;
+    }
+
+    static Expression* eright(Expression* e) { return nullptr; }
+    static Expression* eright(BinExp* e) { return e->e2; }
+
+    static bool isMethod(::FuncDeclaration* fd)
+    {
+        return fd->isThis();
+    }
+
+    // Merge m with a new MatchAccumulator
+    void collectMatches(Dsymbol* s, Expression* e, Expression* eleft,
+                        Scope* sc, Objects* tiargs, Type* tthis, Expressions* fargs)
+    {
+        // Since there may be both foo(a, b) and a.foo(b) candidates,
+        // we can't simply use functionResolve's way of disambiguating candidates
+
+        MatchAccumulator m2;
+        functionResolve(m2, s, e->loc, sc, tiargs, nullptr, fargs);
+
+        if (m.last < m2.last)
+            m = m2;
+        else if (m.last == m2.last && m.lastf != m2.lastf)
+        {
+//             ::TemplateDeclaration* td1 = nullptr, *td2 = nullptr;
+//
+//             if (auto ti1 = m.lastf->isTemplateInstance())
+//                 td1 = ti1->tempdecl->isTemplateDeclaration();
+//
+//             if (auto ti2 = m.lastf->isTemplateInstance())
+//                 td2 = ti2->tempdecl->isTemplateDeclaration();
+//
+//             if (td1 && td2)
+//             {
+//                 // Disambiguate by picking the most specialized TemplateDeclaration
+//                 Expressions args1;
+//                 Expressions* fargs1 = fargs;
+//
+//                 if (isMethod(m.lastf) != isMethod(m2.lastf))
+//                 {
+//                     fargs1 = &args1;
+//
+//                     if (isMethod(m2.lastf))
+//                     {
+//                         args1.push_back(eleft);
+//                         args1.append(fargs);
+//                     }
+//                     else
+//                     {
+//                         args1.append(fargs);
+//                         args1.remove(0);
+//                     }
+//                 }
+//
+//                 MATCH c1 = td1->leastAsSpecialized(sc, td2, fargs);
+//                 MATCH c2 = td2->leastAsSpecialized(sc, td1, fargs);
+//             }
+
+            // TODO: this is getting complex, either this needs special versions of leastAsSpecialized functions or we switch to Clang's candidate selection
+        }
+    }
+
+    template<typename ExpTy>
+    void checkMatches(ExpTy* e)
+    {
+        if (m.lastf && (m.lastf->errors || m.lastf->semantic3Errors))
+        {
+            result = new_ErrorExp();
+            return;
+        }
+
+        if (m.count > 1)
+        {
+            // Error, ambiguous
+            e->error("overloads `%s` and `%s` both match argument list for `%s`", m.lastf->type->toChars(), m.nextf->type->toChars(), m.lastf->toChars());
+        }
+        else if (m.last <= MATCHnomatch)
+        {
+            return;
+        }
+
+        if (m.lastf->isThis())
+            result = build_overload(e->loc, sc, e->e1, eright(e), m.lastf);
+        else
+            result = build_nonmember_overload(e->loc, sc, e->e1, eright(e), m.lastf);
+
+        return;
+    }
+
+    void visit(UnaExp* e) override
+    {
+        auto ad1 = isAggregate(e->e1->type);
+
+        if (!ad1 || isCPP(ad1))
+            return;
+
+        if (auto s = search_function(ad1, Id::opUnary))
+        {
+            auto tiargs = opToArg(sc, e->op);
+            functionResolve(m, s, e->loc, sc, tiargs, e->e1->type, nullptr);
+        }
+
+        auto parent = ad1->toParent2();
+        if (parent->isModule())
+        {
+            auto mod1 = static_cast<cpp::Module*>(parent);
+            if (auto s = search_function(mod1, Id::opUnary))
+            {
+                auto tiargs = opToArg(sc, e->op);
+
+                Expressions args1;
+                args1.setDim(1);
+                args1[0] = e->e1;
+                expandTuples(&args1);
+
+                functionResolve(m, s, e->loc, sc, tiargs, nullptr, &args1);
+            }
+        }
+
+        checkMatches(e);
+    }
+
+    static Identifier* binaryOpId(TOK op)
+    {
+        switch (op)
+        {
+            case TOKassign:
+                return Id::assign;
+            case TOKequal:
+                return Id::eq;
+            default:
+                return Id::opBinary;
+        }
+    }
+
+    void visitBinExp(BinExp* e, Identifier* opId = nullptr)
+    {
+        auto ad1 = isAggregate(e->e1->type);
+        auto ad2 = isAggregate(e->e2->type);
+
+        if (!opId)
+            opId = binaryOpId(e->op);
+        bool needsExplicitArg = opId == Id::opBinary || opId == Id::opOpAssign;
+
+        auto tryModuleLevelOverOp = [&] (::Module* mod)
+        {
+            if (auto s = search_function(mod, opId))
+            {
+                auto tiargs = needsExplicitArg ? opToArg(sc, e->op) : nullptr;
+
+                Expressions args2;
+                args2.setDim(2);
+                args2[0] = e->e1;
+                args2[1] = e->e2;
+                expandTuples(&args2);
+
+                functionResolve(m, s, e->loc, sc, tiargs, nullptr, &args2);
+            }
+        };
+
+        if (ad1 && isCPP(ad1))
+        {
+            if (auto s = search_function(ad1, opId))
+            {
+                auto tiargs = needsExplicitArg ? opToArg(sc, e->op) : nullptr;
+
+                Expressions args1;
+                args1.setDim(1);
+                args1[0] = e->e2;
+                expandTuples(&args1);
+
+                functionResolve(m, s, e->loc, sc, tiargs, e->e1->type, &args1);
+            }
+
+            if (auto mod1 = ad1->toParent2()->isModule())
+                tryModuleLevelOverOp(mod1);
+        }
+
+        if (ad2 && isCPP(ad2) && m.last == MATCHnomatch)
+        {
+            if (auto mod2 = ad2->toParent2()->isModule())
+                tryModuleLevelOverOp(mod2);
+        }
+
+        checkMatches(e);
+    }
+
+    void visit(BinExp* e) override
+    {
+        visitBinExp(e);
+    }
+
+    void visit(BinAssignExp* e) override
+    {
+        visitBinExp(e, Id::opOpAssign);
+    }
+};
+
+Expression* LangPlugin::op_overload(Expression* e, Scope* sc, TOK* pop)
+{
+    // NOTE: Simple UFCS cannot be used, the right opBinary specialization needs to be found,
+    // not the first occurrence in the current scope
+
+    OpOverloadCpp v(sc);
+    e->accept(&v);
+    return v.result;
 }
 
 }

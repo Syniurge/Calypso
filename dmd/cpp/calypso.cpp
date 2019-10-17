@@ -181,7 +181,7 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                 case clang::OO_Tilde:
                 case clang::OO_PlusPlus:
                 case clang::OO_MinusMinus:
-                    // operators without D equivalent need to be mapped for linking
+                    // operators without D equivalent
                 case clang::OO_Exclaim:
                 case clang::OO_Arrow:
                 case clang::OO_ArrowStar:
@@ -210,18 +210,15 @@ static Identifier *getOperatorIdentifier(const clang::FunctionDecl *FD,
                 case clang::OO_Tilde:
                 case clang::OO_LessLess:
                 case clang::OO_GreaterGreater:
-                    // operators without D equivalent need to be mapped for linking
+                    // operators without D equivalent
                 case clang::OO_PlusPlus:
                 case clang::OO_MinusMinus:
                 case clang::OO_Comma:
+                case clang::OO_ExclaimEqual:
                     opIdent = Id::opBinary;
                     break;
                 case clang::OO_EqualEqual:
                     opIdent = Id::eq;
-                    wrapInTemp = false;
-                    break;
-                case clang::OO_ExclaimEqual:
-                    opIdent = idPool("opEqualsNot"); // TODO?
                     wrapInTemp = false;
                     break;
                 case clang::OO_Less:
@@ -270,18 +267,19 @@ clang::OverloadedOperatorKind toOverloadedOperator(Identifier* ident, const char
 {
     if (ident == Id::opUnary)
     {
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Tilde,
-                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Exclaim,
-                       clang::OO_Arrow, clang::OO_ArrowStar})
+        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Tilde, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Exclaim, clang::OO_Arrow, clang::OO_ArrowStar})
             if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
                 return OO;
     }
     else if (ident == Id::opBinary)
     {
-        for (auto OO: {clang::OO_Plus, clang::OO_Minus, clang::OO_Star, clang::OO_Slash,
-                       clang::OO_Percent, clang::OO_Caret, clang::OO_Amp, clang::OO_Pipe,
-                       clang::OO_Tilde, clang::OO_LessLess, clang::OO_GreaterGreater,
-                       clang::OO_PlusPlus, clang::OO_MinusMinus, clang::OO_Comma})
+        for (auto OO: {clang::OO_Equal, clang::OO_Plus, clang::OO_Minus, clang::OO_Star,
+                       clang::OO_Slash, clang::OO_Percent, clang::OO_Caret, clang::OO_Amp,
+                       clang::OO_Pipe, clang::OO_Tilde, clang::OO_LessLess,
+                       clang::OO_GreaterGreater, clang::OO_PlusPlus, clang::OO_MinusMinus,
+                       clang::OO_Comma, clang::OO_ExclaimEqual})
             if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
                 return OO;
     }
@@ -293,6 +291,10 @@ clang::OverloadedOperatorKind toOverloadedOperator(Identifier* ident, const char
                        clang::OO_GreaterGreaterEqual})
             if (strcmp(arg, getDOperatorSpelling(OO)) == 0)
                 return OO;
+    }
+    else if (ident == Id::eq)
+    {
+        return clang::OO_EqualEqual;
     }
     else if (ident == Id::cmp)
         /*mapOperator(clang::OO_EqualEqual)*/; // FIXME
@@ -311,6 +313,8 @@ clang::OverloadedOperatorKind toOverloadedOperator(Identifier* ident, const char
     }
     else
         return clang::OO_Spaceship; // i.e "false"
+
+    llvm_unreachable("Unhandled operator");
 }
 
 static Identifier *fullConversionMapIdent(Identifier *baseIdent,
