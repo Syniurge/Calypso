@@ -101,6 +101,7 @@ public:
                 Objects *tiargs, Type *tthis, Expressions *fargs) = 0;
 
     virtual Expression *callCpCtor(Scope *sc, Expression *e) = 0;
+    virtual Expression *constructCtorCall(const Loc& loc, Scope *sc, Expression *e1, Expression* e2) = 0;
 
     virtual FuncDeclaration *searchOpEqualsForXopEquals(StructDeclaration *sd, Scope *sc) = 0;
 

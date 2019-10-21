@@ -178,6 +178,7 @@ public:
                 Objects *tiargs, Type *tthis, Expressions *fargs) override;
 
     Expression *callCpCtor(Scope *sc, Expression *e) override;
+    Expression *constructCtorCall(const Loc& loc, Scope *sc, Expression *e1, Expression* e2) override;
 
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 

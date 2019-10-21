@@ -8626,6 +8626,12 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                             }
                         }
 
+                        if (auto lp = sd.langPlugin) // CALYPSO
+                        {
+                            result = lp.constructCtorCall(exp.loc, sc, e1x, e2x);
+                        }
+                        else
+                        {
                         Expression einit = new BlitExp(exp.loc, e1x, getInitExp(cast(StructDeclaration)sd, exp.loc, sc, t1)); // CALYPSO
                         einit.type = e1x.type;
 
@@ -8635,6 +8641,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                         e = new CommaExp(exp.loc, einit, e);
                         e = e.expressionSemantic(sc);
                         result = e;
+                        }
                         return;
                     }
                     if (search_function(sd, Id.call))

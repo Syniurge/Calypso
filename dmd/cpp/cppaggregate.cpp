@@ -600,6 +600,14 @@ Expression* UnionDeclaration::buildVarInitializer(Scope* sc, ::VarDeclaration* v
     return ad_buildVarInitializer(this, sc, vd, exp);
 }
 
+Expression *LangPlugin::constructCtorCall(const Loc& loc, Scope *sc, Expression *e1, Expression* e2)
+{
+    Expression* e;
+    e = new_DotIdExp(loc, e1, Id::ctor);
+    e = new_CallExp(loc, e, e2);
+    return expressionSemantic(e, sc);
+}
+
 Expression *ClassDeclaration::defaultInit(Loc loc)
 {
     auto arguments = new Expressions;
