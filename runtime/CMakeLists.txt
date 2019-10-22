@@ -445,7 +445,7 @@ macro(compile_druntime d_flags lib_suffix path_suffix emit_bc all_at_once outlis
     get_target_suffix("${lib_suffix}" "${path_suffix}" target_suffix)
     dc("${DRUNTIME_D}"
        "${RUNTIME_DIR}/src"
-       "-conf=;${d_flags};-I${RUNTIME_DIR}/src"
+       "-conf=;${d_flags};-I${RUNTIME_DIR}/src;--disableRvalueRefParam" # CALYPSO
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"
        "${emit_bc}"
        "${all_at_once}"
@@ -492,7 +492,7 @@ macro(compile_phobos2 d_flags lib_suffix path_suffix emit_bc all_at_once outlist
 
     dc("${phobos_src_files}"
        "${PHOBOS2_DIR}"
-       "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR};-disableRvalueRefParam" # CALYPSO
+       "-conf=;${d_flags};-I${RUNTIME_DIR}/src;-I${PHOBOS2_DIR};--disableRvalueRefParam" # CALYPSO
        "${PROJECT_BINARY_DIR}/objects${target_suffix}"
        "${emit_bc}"
        "${all_at_once}"
