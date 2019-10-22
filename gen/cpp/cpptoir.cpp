@@ -813,7 +813,6 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     if (isa<clang::CXXConstructorDecl>(FD))
     {
-        assert(RV.isScalar() && RV.getScalarVal() == nullptr);
         auto calleead = fd->isMember2();
         auto thisTy = calleead->getType();
         if (!calleead->byRef())
