@@ -85,6 +85,23 @@ void Module::init()
     rootPackage->symtab = new_DsymbolTable();
 
     modules->insert(rootPackage);
+
+    if (global.params.targetTriple->isWindowsMSVCEnvironment())
+    {
+        // MSVC link.exe BUG WORKAROUND: Linking directives inside COFF object files
+        //   containing unicode characters aren't handled properly by link.exe.
+        //   LDC and LLVM do everything right, both the symbol name and the /INCLUDE
+        //   linking flag inside the COFF .obj have ℂ correctly encoded.
+        //   Also link.exe is perfectly able to handle symbol names with ℂ and other
+        //   unicode characters, it only chokes on linking directives embedded in COFF
+        //   object files.
+        //   For the time being stick to ASCII identifier for the root package for
+        //   MSVC as a workaround. It was also "aliased" to ℂcpp, so that no
+        //   MSVC-specific user code is required.
+
+        rootPackage->ident = idPool("Ccpp");
+        modules->insert(rootPackage);
+    }
 }
 
 Module::Module(const char* filename, Identifier* ident)
