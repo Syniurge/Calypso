@@ -1439,11 +1439,6 @@ else
         return false;
     }
 
-    const(char) *manglePrefix() // CALYPSO
-    {
-        return null;
-    }
-
     final bool isRoot()
     {
         return this.importedFrom == this;

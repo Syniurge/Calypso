@@ -872,15 +872,6 @@ public:
         buf.writeByte('Z');
     }
 
-    override void visit(Module m) // CALYPSO
-    {
-        mangleParent(m);
-
-        if (auto prefix = m.manglePrefix())
-            buf.writestring(prefix);
-        toBuffer(m.ident.toString(), m);
-    }
-
     override void visit(Dsymbol s)
     {
         version (none)

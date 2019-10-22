@@ -70,7 +70,6 @@ public:
     Dsymbol *search(const Loc& loc, Identifier *ident, int flags = IgnoreNone) override;
     void complete() override;
 
-    const char *manglePrefix() override { return "_Cpp"; }
     bool isCodegen() override { return true; } // §cpp modules aren't root, but they are codegen'd so non-instantiated functions need to be emitted
 
     void loadEmittedSymbolList();

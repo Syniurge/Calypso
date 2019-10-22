@@ -137,9 +137,6 @@ public:
     static void runDeferredSemantic3();
     int imports(Module *m);
 
-    // CALYPSO
-    virtual const char *manglePrefix();
-
     bool isRoot() { return this->importedFrom == this; }
     virtual bool isCodegen(); // CALYPSO
     // true if the module source file is directly
