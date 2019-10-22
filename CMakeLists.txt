@@ -281,6 +281,8 @@ if(MSVC)
     append("/GR- /EHs-c-" CMAKE_CXX_FLAGS)
     append("/D_HAS_EXCEPTIONS=0" CMAKE_CXX_FLAGS)
 
+    append("/utf-8" CMAKE_CXX_FLAGS) # CALYPSO
+
     # disable warning C4201: nonstandard extension used: nameless struct/union
     append("/wd4201" LDC_CXXFLAGS)
 endif()
