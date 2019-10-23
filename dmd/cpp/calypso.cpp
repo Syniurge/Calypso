@@ -631,18 +631,25 @@ void LangPlugin::mangle(const clang::NamedDecl *ND, std::string& str)
 
     llvm::SmallString<128> Buffer;
     llvm::StringRef Str;
-    if (MangleCtx->shouldMangleDeclName(ND)) {
-        llvm::raw_svector_ostream Out(Buffer);
+    llvm::raw_svector_ostream Out(Buffer);
+
+    if (auto RD = dyn_cast<clang::RecordDecl>(ND))
+    {
+        MangleCtx->mangleCXXRTTI(clang::QualType(RD->getTypeForDecl(), 0), Out);
+        Str = Out.str();
+    }
+    else if (MangleCtx->shouldMangleDeclName(ND))
+    {
         if (const auto *D = dyn_cast<clang::CXXConstructorDecl>(ND))
             MangleCtx->mangleCXXCtor(D, clang::Ctor_Complete, Out);
         else if (const auto *D = dyn_cast<clang::CXXDestructorDecl>(ND))
             MangleCtx->mangleCXXDtor(D, clang::Dtor_Complete, Out);
-        else if (auto RD = dyn_cast<clang::RecordDecl>(ND))
-            MangleCtx->mangleCXXRTTI(clang::QualType(RD->getTypeForDecl(), 0), Out);
         else
             MangleCtx->mangleName(ND, Out);
         Str = Out.str();
-    } else {
+    }
+    else
+    {
         auto II = ND->getIdentifier();
         assert(II && "Attempt to mangle unnamed decl.");
         Str = II->getName();
