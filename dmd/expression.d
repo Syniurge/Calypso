@@ -3174,7 +3174,7 @@ version (IN_LLVM)
                     if (auto field = impl(b.sym))
                         return field;
 
-            auto nextI = i + ad.fields.dim - ad.isNested();
+            auto nextI = i + ad.fields.dim;
             if (i <= elemIdx && elemIdx < nextI)
                 return ad.fields[elemIdx - i];
             i = nextI;

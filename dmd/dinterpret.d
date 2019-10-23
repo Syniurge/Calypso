@@ -2930,7 +2930,7 @@ public:
         size_t dim = e.elements ? e.elements.dim : 0;
         auto expsx = e.elements;
 
-        // CALYPSO NOTE about DMD BUG: this isn't consistent with defaultInitLiteral and fill that explicitly skip the nested this fields (but should they really skip it? probably not in my opinion, this creates a parallel system that does't bring any advantage)
+        // CALYPSO NOTE: StructLiteralExp handling was made simpler by always including vthis and vthis2, instead of adding them during interpret()
 //         if (dim != e.sd.fields.dim)
 //         {
 //             // guaranteed by AggregateDeclaration.fill and TypeStruct.defaultInitLiteral

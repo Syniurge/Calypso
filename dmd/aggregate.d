@@ -264,7 +264,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         if (cd && cd.baseclasses)
             foreach (b; *cd.baseclasses)
                 n += b.sym.literalElemDim();
-        n += nonHiddenFields();
+        n += fields.dim; // CALYPSO simplification of struct literal handling: they always come with vthis and vthis2 if those are present in fields
         return n;
     }
 
@@ -435,7 +435,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         if (!elements)
             return true;
 
-        size_t nfields = fields.dim - isNested();
+        size_t nfields = fields.dim; // CALYPSO simplification of struct literal handling: they always come with vthis and vthis2 if those are present in fields
         size_t offset = 0;
         for (size_t i = 0; i < elements.dim; i++)
         {
@@ -446,11 +446,6 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
             e = resolveProperties(sc, e);
             if (i >= nfields)
             {
-//                 if (i <= fields.dim && e.op == TOK.null_) // CALYPSO I won't allow it DMD FIXME: CTFE is right to create null pointers for vthis/vthis2, but the rest of DMD perfer their parallel system where fit() and literals have their vthis stripped
-//                 {
-//                     // CTFE sometimes creates null as hidden pointer; we'll allow this.
-//                     continue;
-//                 }
                 .error(loc, "more initializers than fields (%d) of `%s`", nfields, toChars());
                 return false;
             }
@@ -556,7 +551,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         size_t elemoff;
         void fillAgg(AggregateDeclaration ad)
         {
-            size_t nfields = nonHiddenFields();
+            size_t nfields = ad.fields.dim;
 
             if (auto base = toAggregateBase(ad))
                 fillAgg(base);
@@ -567,7 +562,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                 if ((*elements)[elemoff + i])
                     continue;
 
-                auto vd = fields[i];
+                auto vd = ad.fields[i];
                 auto vx = vd;
                 if (vd._init && vd._init.isVoidInitializer())
                     vx = null;
@@ -578,7 +573,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                 {
                     if (i == j)
                         continue;
-                    auto v2 = fields[j];
+                    auto v2 = ad.fields[j];
                     if (!vd.isOverlappedWith(v2))
                         continue;
 
@@ -1037,7 +1032,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                         return e;
 
             uint offset = 0;
-            auto fieldsDim = ad.nonHiddenFields();
+            auto fieldsDim = ad.fields.dim; // CALYPSO simplification of struct literal handling: they always come with vthis and vthis2 if those are present in fields
             for (size_t j = 0; j < fieldsDim; j++, elem_i++)
             {
                 VarDeclaration vd = ad.fields[j];

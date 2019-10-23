@@ -102,7 +102,7 @@ static void write_struct_literal(Loc loc, LLValue *mem, StructDeclaration *sd,
 
     // the initializer expression may be null for overridden overlapping fields
     Expression *expr = (index < elements->dim ? (*elements)[index] : nullptr);
-    if (expr || field == sd->vthis) {
+    if (expr) {
       // DMD issue #16471:
       // There may be overlapping initializer expressions in some cases.
       // Prefer the last expression in lexical (declaration) order to mimic DMD.
@@ -117,6 +117,9 @@ static void write_struct_literal(Loc loc, LLValue *mem, StructDeclaration *sd,
             });
         data.erase(newEndIt, data.end());
       }
+
+      if (field == sd->vthis || field == sd->vthis2) // CALYPSO
+          expr = nullptr;
 
       data.push_back({field, expr});
     }

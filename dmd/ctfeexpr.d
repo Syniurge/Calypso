@@ -2050,8 +2050,8 @@ UnionExp voidInitLiteral(Type t, VarDeclaration var)
     else if (t.ty == Tstruct)
     {
         TypeStruct ts = cast(TypeStruct)t;
-        auto exps = new Expressions(ts.sym.fields.dim - ts.sym.isNested());
-        foreach (size_t i;  0 .. (ts.sym.fields.dim - ts.sym.isNested())) // CALYPSO DMD BUG: missing -isNested()
+        auto exps = new Expressions(ts.sym.fields.dim);
+        foreach (size_t i;  0 .. ts.sym.fields.dim)
         {
             (*exps)[i] = voidInitLiteral(ts.sym.fields[i].type, ts.sym.fields[i]).copy();
         }
