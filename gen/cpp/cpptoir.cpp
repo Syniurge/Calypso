@@ -890,7 +890,7 @@ void LangPlugin::toDefineFunction(::FuncDeclaration* fdecl)
     if (FD->hasBody(Def) && !Def->isInvalidDecl() && getIrFunc(fdecl)->getLLVMFunc()->isDeclaration())
         CGM->EmitTopLevelDecl(const_cast<clang::FunctionDecl*>(Def)); // TODO remove const_cast
 
-#if 1
+#if 0
     if (!gIR->dmodule->langPlugin())
     { // for debugging purposes
         std::string filename;
