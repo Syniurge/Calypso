@@ -665,7 +665,7 @@ LLValue *LangPlugin::toVirtualFunctionPointer(DValue* inst,
     auto Ty = toFunctionType(fdecl);
     
     auto Dtor = dyn_cast<clang::CXXDestructorDecl>(MD);
-    clang::GlobalDecl GD = Dtor ? clang::GlobalDecl(Dtor, clang::Dtor_Complete) : MD;
+    clang::GlobalDecl GD = Dtor ? clang::GlobalDecl(Dtor, clang::Dtor_Deleting) : MD;
 
     clangCG::Address This(vthis, clang::CharUnits::One());
 
