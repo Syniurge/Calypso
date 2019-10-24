@@ -10,12 +10,12 @@ module _bitset_;
 
 pragma (cppmap, "<bitset>");
 
-import std.stdio;
+import std.stdio, std.conv;
 import (C++) std.bitset;
 
 void main()
 {
-    enum : ulong { A=0, B, C, D, E, F, G, H, numColors };
+    enum : ulong { A=0, B, C, D, E, F, G, H, numColors }
     auto usedColors = new bitset!(numColors);
 
     usedColors.set(A, true);
@@ -67,7 +67,9 @@ void main()
     // CHECK: b{{.*}}={{.*}}1011
     writeln("b as ulong = \t ", b.to_ulong);
     // CHECK: b as ulong{{.*}}={{.*}}13
-    writeln("b =  \t\t", &b);
+    writeln("b = \t\t ", &b);
 
-//    auto d = a & b; // TODO
+    auto d = a & b;
+    writeln("d = \t\t ", d.to_string.c_str.to!string);
+    // CHECK: d{{.*}}={{.*}}0100
 }
