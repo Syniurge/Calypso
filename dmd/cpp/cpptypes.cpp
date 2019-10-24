@@ -20,7 +20,6 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/Type.h"
-#include "clang/Lex/ModuleMap.h"
 #include "clang/Sema/Sema.h"
 
 namespace cpp

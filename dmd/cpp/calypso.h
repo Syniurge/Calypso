@@ -16,13 +16,23 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/Support/CommandLine.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "clang/lib/CodeGen/CodeGenModule.h"
 
-#define USE_CLANG_MODULES
+namespace opts {
+namespace cl = llvm::cl;
+
+extern cl::list<std::string> cppArgs;
+extern cl::opt<bool> cppNoDefaultArgs;
+extern cl::opt<std::string> cppCacheDir;
+extern cl::opt<bool> cppVerboseDiags;
+
+extern cl::opt<bool> disableRvalueRefParam;
+}
 
 class Identifier;
 
@@ -33,7 +43,6 @@ class CodeGenFunction;
 class Sema;
 class ASTUnit;
 class MacroInfo;
-class ModuleMap;
 class PCHContainerOperations;
 class DirectoryLookup;
 namespace driver { class Compilation; class Driver; }
@@ -48,7 +57,6 @@ class TemplateInstance;
 class DeclMapper;
 
 namespace reclang { class DiagnosticPrinter; }
-using clang::ModuleMap;
 using reclang::DiagnosticPrinter;
 
 namespace clangCG = clang::CodeGen;

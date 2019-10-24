@@ -86,13 +86,6 @@ extern bool fFastMath;
 extern llvm::FastMathFlags defaultFMF;
 void setDefaultMathOptions(llvm::TargetOptions &targetOptions);
 
-// CALYPSO
-extern cl::list<std::string> cppArgs;
-extern cl::opt<std::string> cppCacheDir;
-extern cl::opt<bool> cppVerboseDiags;
-
-extern cl::opt<bool> disableRvalueRefParam; // temporary flag to disable --preview=rvalueRefParam enabled by default by Calypso, in order to build Phobos
-
 // Arguments to -d-debug
 extern std::vector<std::string> debugArgs;
 // Arguments to -run

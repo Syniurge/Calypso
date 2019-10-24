@@ -521,22 +521,6 @@ cl::opt<bool> dynamicCompileTlsWorkaround(
     cl::Hidden);
 #endif
 
-// CALYPSO
-cl::list<std::string> cppArgs("cpp-args",
-    cl::desc("Clang arguments (space separated) passed during PCH generation; if starts with '$', interpret as a single argument"));
-
-cl::opt<std::string> cppCacheDir("cpp-cachedir",
-    cl::desc("Write Calypso cache files to <dir>"),
-    cl::value_desc("dir"),
-    cl::init(".calypso_cache"));
-
-cl::opt<bool> cppVerboseDiags("cpp-verbosediags",
-    cl::desc("Keep Clang diagnostics enabled after the PCH generation. For the time being those are mostly spurious errors from failed instantiations that can be ignored."));
-
-cl::opt<bool> disableRvalueRefParam("disableRvalueRefParam",
-    cl::desc("Disable --preview=disableRvalueRefParam (druntime/phobos build and tests)."),
-    cl::Hidden);
-
 static cl::extrahelp footer(
     "\n"
     "-d-debug can also be specified without options, in which case it enables "

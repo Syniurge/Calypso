@@ -21,7 +21,6 @@
 #include "scope.h"
 
 #include "driver/tool.h"
-#include "driver/cl_options.h"
 #include "gen/irstate.h"
 
 #include "clang/AST/DeclTemplate.h"
@@ -63,6 +62,28 @@ void log_verbose(const std::string& header, const std::string& msg) {
     // to look aligned with other -v printed lines
     int prefix_width = 9; // TODO: adjust upwards as needed
     fprintf(stderr, "%-*s %s\n", prefix_width, header.c_str(), msg.c_str());
+}
+
+namespace opts {
+namespace cl = llvm::cl;
+
+cl::list<std::string> cppArgs("cpp-args",
+    cl::desc("Clang arguments (space separated) passed during PCH generation. If the list begins with '$', interpret as a single argument"));
+
+cl::opt<bool> cppNoDefaultArgs("cpp-nodefaultargs",
+    cl::desc("Do not pass default arguments to Clang (by default \"-c -x c++\" in Unix-like environments, and \"--driver-mode=cl /TP\" in MSVC environments)."));
+
+cl::opt<std::string> cppCacheDir("cpp-cachedir",
+    cl::desc("Write Calypso cache files to <dir>"),
+    cl::value_desc("dir"),
+    cl::init(".calypso_cache"));
+
+cl::opt<bool> cppVerboseDiags("cpp-verbosediags",
+    cl::desc("Additional Calypso-specific diagnostics (for the time being they may contain spurious errors from failed instantiations that can be ignored)."));
+
+cl::opt<bool> disableRvalueRefParam("disableRvalueRefParam",
+    cl::desc("Disable --preview=disableRvalueRefParam (druntime/phobos build and tests)."),
+    cl::Hidden);
 }
 
 namespace cpp
@@ -760,10 +781,15 @@ void PCH::loadFirstHeaders(bool includePCH)
     std::unique_ptr<clang::driver::Compilation> C(calypso.buildClangCompilation());
 
     // We use a trick from clang-interpreter to extract -cc1 flags from "puny human" flags
-    // We expect to get back exactly one command job, if we didn't something
-    // failed. Extract that job from the compilation.
+    // We expect to get back at least one command job, if we didn't something
+    // failed. Extract the first job from the compilation.
     const clang::driver::JobList &Jobs = C->getJobs();
-    assert(Jobs.size() == 1 && isa<clang::driver::Command>(*Jobs.begin()));
+
+    if (Jobs.empty() || !isa<clang::driver::Command>(*Jobs.begin())) {
+        ::error(Loc(), "Arguments passed to the C++ compiler with --cpp-args must result in at least one compilation job");
+        fatal();
+    }
+
     const clang::driver::Command &Cmd = cast<clang::driver::Command>(*Jobs.begin());
     assert(llvm::StringRef(Cmd.getCreator().getName()) == "clang");
 
@@ -796,6 +822,10 @@ void PCH::loadFirstHeaders(bool includePCH)
     if (!AST) {
         if (!includePCH)
             fatal();
+
+        if (opts::cppVerboseDiags)
+            log_verbose("calypso", "out-of-date PCH, reparsing every C/C++ header");
+
         return; // PCH may be stale, trigger a reparsing
     }
 
@@ -1272,7 +1302,7 @@ void LangPlugin::_init()
     clangArgv.push_back("clang");
 
     // eg: handle line=" -Ifoo -v " => "-Ifoo", "-v"
-    static std::vector<std::string> args; // FIXME
+    static std::vector<std::string> args;
     for (auto& line: opts::cppArgs) {
         std::string arg;
         if (line.empty())
@@ -1304,28 +1334,39 @@ void LangPlugin::_init()
     for (const auto& argi: args)
         clangArgv.push_back(argi.c_str());
 
-    clangArgv.push_back("-c");
-    clangArgv.push_back("-x");
-    clangArgv.push_back("c++-header");
-    clangArgv.push_back("-");
-
-    // Build a dummy compilation to extract the standard library type
-    std::unique_ptr<clang::driver::Compilation> C(buildClangCompilation());
-    cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(C->getArgs());
-
-    switch (cxxStdlibType)
-    {
-        case clang::driver::ToolChain::CST_Libcxx:
-            VersionCondition::addPredefinedGlobalIdent("CppStdLib_libcxx");
-            break;
-        case clang::driver::ToolChain::CST_Libstdcxx:
-            VersionCondition::addPredefinedGlobalIdent("CppStdLib_libstdcxx");
-            break;
-        default:
-            break;
+    if (!opts::cppNoDefaultArgs)  {
+        if (!global.params.targetTriple->isWindowsMSVCEnvironment()) {
+            clangArgv.push_back("-c");
+            clangArgv.push_back("-x");
+            clangArgv.push_back("c++-header");
+        } else {
+            clangArgv.push_back("--driver-mode=cl");
+            clangArgv.push_back("/TP");
+        }
     }
 
-    clangArgv.pop_back();
+    if (!global.params.targetTriple->isWindowsMSVCEnvironment()) {
+        clangArgv.push_back("-");
+
+        // Build a dummy compilation to extract the standard library type
+        std::unique_ptr<clang::driver::Compilation> C(buildClangCompilation());
+        cxxStdlibType = C->getDefaultToolChain().GetCXXStdlibType(C->getArgs());
+
+        switch (cxxStdlibType)
+        {
+            case clang::driver::ToolChain::CST_Libcxx:
+                VersionCondition::addPredefinedGlobalIdent("CppStdLib_libcxx");
+                break;
+            case clang::driver::ToolChain::CST_Libstdcxx:
+                VersionCondition::addPredefinedGlobalIdent("CppStdLib_libstdcxx");
+                break;
+            default:
+                break;
+        }
+
+        clangArgv.pop_back();
+    }
+
     clangArgv.push_back(pch.stubHeader.c_str());
 
     if (global.params.verbose) {
