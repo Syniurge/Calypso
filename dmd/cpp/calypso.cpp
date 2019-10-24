@@ -811,9 +811,11 @@ void PCH::loadFirstHeaders(bool includePCH)
     initializeParser();
 
     if (includePCH) {
+        const clang::DirectoryLookup *CurDir;
+
         // Check whether every cppmap'd header is present within the PCH
         for (auto header: headers) {
-            auto fileEntry = lookupHeader(header);
+            auto fileEntry = lookupHeader(header, CurDir);
 
             llvm::SmallString<96> RealPath;
             llvm::sys::fs::real_path(fileEntry->tryGetRealPathName(), RealPath);
@@ -851,11 +853,12 @@ void PCH::loadNewHeaders()
 
 bool PCH::loadHeader(const char* header)
 {
-
     // First check whether header is already present within the PCH
     // FIXME: this doesn't support headers that are "configurable" and meant to be included more than once
 
-    auto File = lookupHeader(header);
+    const clang::DirectoryLookup *CurDir;
+
+    auto File = lookupHeader(header, CurDir);
     if (!File) {
         ::error(Loc(), "'%s' file not found", header);
         return false;
@@ -890,7 +893,10 @@ bool PCH::loadHeader(const char* header)
     if (!FID.isValid())
         FID = SrcMgr.createFileID(File, IncludeLoc, FileCharacter);
 
-    if (PP.EnterSourceFile(FID, PP.GetCurDirLookup(), IncludeLoc))
+    ++CurDir; // it is safe to increment CurDir for #include_next directives
+              // CurDir is only used for those, and -frewrite-includes which has no use here
+
+    if (PP.EnterSourceFile(FID, CurDir, IncludeLoc))
         fatal();
     P.ConsumeToken();
 
@@ -917,12 +923,10 @@ bool PCH::loadHeader(const char* header)
     return true;
 }
 
-const clang::FileEntry* PCH::lookupHeader(const char* header)
+const clang::FileEntry* PCH::lookupHeader(const char* header, const clang::DirectoryLookup*& CurDir)
 {
     auto& SrcMgr = AST->getSourceManager();
     auto& PP = AST->getPreprocessor();
-
-    const clang::DirectoryLookup *CurDir;
 
     bool IsMapped;
     llvm::ArrayRef<std::pair<const clang::FileEntry *, const clang::DirectoryEntry *>> Includers;

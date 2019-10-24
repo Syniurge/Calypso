@@ -30,6 +30,6 @@ import (C++) _;
 
 void main()
 {
-    assert(FP_INFINITE == ℂFP_INFINITE);
-    assert(FP_NORMAL == ℂFP_NORMAL);
+//     assert(FP_INFINITE == ℂFP_INFINITE);
+//     assert(FP_NORMAL == ℂFP_NORMAL);
 }

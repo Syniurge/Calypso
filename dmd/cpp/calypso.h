@@ -138,7 +138,8 @@ protected:
     void loadNewHeaders();
 
     bool loadHeader(const char* header);
-    const clang::FileEntry* lookupHeader(const char* header);
+    const clang::FileEntry* lookupHeader(const char* header,
+                                         const clang::DirectoryLookup*& CurDir);
 
     void initializeParser();
     void restoreTUScope();
