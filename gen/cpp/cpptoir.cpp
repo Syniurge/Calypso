@@ -85,6 +85,18 @@ void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
 
     type_infoWrappers.clear();
 
+    if (global.params.targetTriple->isWindowsMSVCEnvironment())
+    {
+        collectPragmaMSComments();
+
+        // Add dependent libraries added through #pragma comment(lib, ...)
+        // and linker directives from #pragma comment(linker, ...)
+        // This is how the proper MSVC C++ runtime library gets automatically
+        // linked when including any C++ standard library header
+        for (auto* PCD: PragmaMSComments)
+            CGM->EmitTopLevelDecl(PCD);
+    }
+
     if (isCPP(m)) {
         auto c_m = static_cast<cpp::Module*>(m);
         EmitInstantiatedDecls(CGM, c_m);
@@ -195,6 +207,28 @@ void LangPlugin::leaveModule(::Module *m, llvm::Module *lm)
 
     CGM->getTypes().swapTypeCache(CGRecordLayouts, RecordDeclTypes, TypeCache); // save the CodeGenTypes state
     CGM.reset();
+}
+
+// Collect MSVC #pragma comment(lib/linker, ...) to add them as depend libraries/linker directives
+// to Calypso object files
+void LangPlugin::collectPragmaMSComments()
+{
+    if (collectedPragmaMSComments)
+        return;
+    collectedPragmaMSComments = true;
+
+    auto* TU = getASTContext().getTranslationUnitDecl();
+    using PragmaComment_iterator = clang::DeclContext::specific_decl_iterator<clang::PragmaCommentDecl>;
+
+    for (PragmaComment_iterator I(TU->decls_begin()), E(TU->decls_end()); I != E; I++)
+    {
+        auto PCD = *I;
+
+        if (PCD->getCommentKind() != clang::PCK_Lib && PCD->getCommentKind() != clang::PCK_Linker)
+            continue;
+
+        PragmaMSComments.push_back(PCD);
+    }
 }
 
 void LangPlugin::enterFunc(::FuncDeclaration *fd)
