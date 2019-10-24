@@ -20,7 +20,7 @@ void main()
 {
 //     cout << /+fixed(cout) << +/setprecision(1);
 
-    auto i1 = complex!double(0, 1);
+    auto i1 = complex!double(0.0, 1.0);
     auto z1 = i1;
     z1 *= i1;
 //     cout << "i * i = " << z1 << '\n';
