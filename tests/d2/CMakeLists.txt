@@ -36,7 +36,7 @@ function(add_testsuite config_name required_flags gdbflags model)
     add_test(NAME clean-${name}
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${outdir})
 
-    set(dflags "-conf=${PROJECT_BINARY_DIR}/bin/${LDC_EXE}.conf ${gdb_dflags}")
+    set(dflags "-conf=${PROJECT_BINARY_DIR}/bin/${LDC_EXE}.conf ${gdb_dflags} -disableRvalueRefParam") # CALYPSO
     add_test(NAME ${name}
         COMMAND ${GNU_MAKE_BIN} -k -C ${workingdir} RESULTS_DIR=${resultsdir}
                      REQUIRED_ARGS=${required_flags} DFLAGS=${dflags}
