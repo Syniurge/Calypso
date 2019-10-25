@@ -905,6 +905,11 @@ Lagain:
     if (auto f = s.isFuncDeclaration())
     {
         f = f.toAliasFunc();
+        if (auto td = f.parent.isTemplateDeclaration()) // CALYPSO FuncAliasDeclaration extended to alias function templates
+        {
+            s = td;
+            goto Lagain;
+        }
         if (!f.functionSemantic())
             return new ErrorExp();
 

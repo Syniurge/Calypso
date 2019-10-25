@@ -64,7 +64,6 @@ public:
                     Type* type, const clang::FunctionDecl *FD);
     FuncDeclaration(const FuncDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool allowFinalOverride() override { return true; }
     bool preferNonTemplateOverloads() override { return false; }
 };
 
@@ -99,7 +98,19 @@ public:
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
     DtorDeclaration(const DtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool allowFinalOverride() override { return true; }
+    bool preferNonTemplateOverloads() override { return false; }
+};
+
+
+class FuncAliasDeclaration : public ::FuncAliasDeclaration
+{
+public:
+    CALYPSO_LANGPLUGIN
+
+    const clang::UsingShadowDecl *UD;
+
+    FuncAliasDeclaration(Identifier* ident, FuncDeclaration* funcalias, bool hasOverloads, const clang::UsingShadowDecl *UD);
+//     Dsymbol *syntaxCopy(Dsymbol *s) override;
     bool preferNonTemplateOverloads() override { return false; }
 };
 
@@ -139,10 +150,12 @@ class AliasDeclaration : public ::AliasDeclaration
 public:
     CALYPSO_LANGPLUGIN
 
-    const clang::TypedefNameDecl *TND;
+    const clang::NamedDecl *D;
 
     AliasDeclaration(Loc loc, Identifier *ident, Type *type,
             const clang::TypedefNameDecl *TND);
+    AliasDeclaration(Loc loc, Identifier *ident, Dsymbol *s,
+            const clang::UsingShadowDecl *UD);
     AliasDeclaration(const AliasDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
     Type *getType() override;

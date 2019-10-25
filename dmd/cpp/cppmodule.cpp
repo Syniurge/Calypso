@@ -278,6 +278,7 @@ Dsymbols *DeclMapper::VisitDecl(const clang::Decl *D, unsigned flags)
     DECLWF(Function)
     DECLWF(Value)
     DECL(RedeclarableTemplate)
+    DECL(UsingShadow)
 
 #undef DECL
 #undef DECLWF
@@ -616,6 +617,42 @@ Dsymbols *DeclMapper::VisitTypedefNameDecl(const clang::TypedefNameDecl* D)
     return oneSymbol(a);
 }
 
+Dsymbols *DeclMapper::VisitUsingShadowDecl(const clang::UsingShadowDecl *D)
+{
+    auto loc = fromLoc(D->getLocation());
+    auto id = fromIdentifier(D->getIdentifier());
+
+    auto Target = D->getTargetDecl();
+    auto sym = dsymForDecl(Target);
+
+    if (!sym)
+        return nullptr;
+
+    if (isa<clang::FunctionTemplateDecl>(Target))
+    {
+        assert(sym->isTemplateDeclaration());
+        auto td = static_cast<TemplateDeclaration*>(sym);
+        sym = td->onemember;
+    }
+
+    if (auto fd = sym->isFuncDeclaration())
+    {
+        auto a = new FuncAliasDeclaration(id, fd, /*hasOverloads=*/false, D);
+        setDsym(D, a);
+        a->semanticRun = PASSsemantic3done;
+        return oneSymbol(a);
+    }
+    else
+    {
+        auto a = new AliasDeclaration(loc, id, sym, D);
+        setDsym(D, a);
+        a->semanticRun = PASSsemantic3done;
+        return oneSymbol(a);
+    }
+
+    return nullptr;
+}
+
 TemplateParameters *initTempParams(Loc loc, SpecValue &spec)
 {
     auto tpl = new TemplateParameters;
@@ -696,14 +733,18 @@ bool isMapped(const clang::Decl *D)
     return true;
 }
 
-inline Dsymbol* dummyOnemember(Loc loc, Identifier* ident)
+inline Dsymbol* dummyOnemember(Loc loc, Identifier* ident, Dsymbol* parent)
 {
     auto tf = new_TypeFunction(ParameterList{nullptr, VARARGnone}, Type::tvoid, LINKd);
+    Dsymbol* s;
 
     if (ident == Id::ctor)
-        return new_CtorDeclaration(loc, loc, 0, tf);
+        s = new_CtorDeclaration(loc, loc, 0, tf);
     else
-        return new_FuncDeclaration(loc, loc, ident, 0, tf);
+        s = new_FuncDeclaration(loc, loc, ident, 0, tf);
+
+    s->parent = parent; // for FuncAliasDeclaration pointing to function templates
+    return s;
 }
 
 Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags)
@@ -783,7 +824,7 @@ Dsymbols *DeclMapper::VisitFunctionDecl(const clang::FunctionDecl *D, unsigned f
         auto td = new TemplateDeclaration(loc, ident, tpl, nullptr, D);
         setDwrapper(D, td);
         td->semanticRun = PASSsemantic3done;
-        td->onemember = dummyOnemember(loc, ident); // HACK: Create a dummy oneMember for functionResolve
+        td->onemember = dummyOnemember(loc, ident, td); // HACK: Create a dummy oneMember for functionResolve
         return oneSymbol(td);
     }
 
@@ -891,7 +932,7 @@ Dsymbols *DeclMapper::VisitRedeclarableTemplateDecl(const clang::RedeclarableTem
 
     // HACK: Create a dummy oneMember for functionResolve
     if (isa<clang::FunctionTemplateDecl>(D))
-        td->onemember = dummyOnemember(loc, id);
+        td->onemember = dummyOnemember(loc, id, td);
 
     auto a = new Dsymbols;
     a->push(td);
@@ -1186,7 +1227,7 @@ cpp::TemplateDeclaration* createDispatchingTemplate(ScopeDsymbol* parent, Identi
     auto td = new cpp::TemplateDeclaration(loc, ident, parameters, nullptr, nullptr);
     td->isDispatching = true;
     td->semanticRun = PASSsemantic3done;
-    td->onemember = dummyOnemember(loc, ident);
+    td->onemember = dummyOnemember(loc, ident, td);
     td->addMember(nullptr, parent);
 
     return td;
@@ -1752,6 +1793,7 @@ static inline bool isTopLevelInNamespaceModule (const clang::Decl *D)
 
     if (!Tag && !Func && !isa<clang::VarDecl>(D) &&
             !isa<clang::TypedefNameDecl>(D) &&
+            !isa<clang::UsingShadowDecl>(D) &&
             !isa<clang::FunctionTemplateDecl>(D) &&
             !isa<clang::VarTemplateDecl>(D) &&
             !isa<clang::TypeAliasTemplateDecl>(D))

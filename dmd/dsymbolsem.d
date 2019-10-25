@@ -3623,7 +3623,7 @@ version (IN_LLVM)
                  */
 
                 // Verify this doesn't override previous final function
-                if (!funcdecl.allowFinalOverride() && cd.baseClass) // CALYPSO
+                if (cd.baseClass)
                 {
                     Dsymbol s = cd.baseClass.search(funcdecl.loc, funcdecl.ident);
                     if (s)
@@ -3978,7 +3978,7 @@ version (IN_LLVM)
                         if (f2)
                         {
                             f2 = f2.overloadExactMatch(funcdecl.type);
-                            if (!funcdecl.allowFinalOverride() && f2 && f2.isFinalFunc() && f2.prot().kind != Prot.Kind.private_)  // CALYPSO
+                            if (f2 && f2.isFinalFunc() && f2.prot().kind != Prot.Kind.private_)
                                 funcdecl.error("cannot override `final` function `%s.%s`", b.sym.toChars(), f2.toPrettyChars());
                         }
                     }

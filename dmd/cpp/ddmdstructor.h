@@ -281,9 +281,11 @@ void construct_VarDeclaration(VarDeclaration *_this, const Loc& loc, Type *t, Id
 void construct_FuncDeclaration(FuncDeclaration *_this, const Loc& loc, const Loc& endloc, Identifier *id, StorageClass storage_class, Type *type);
 void construct_CtorDeclaration(CtorDeclaration *_this, const Loc& loc, const Loc& endloc, StorageClass stc, Type *type);
 void construct_DtorDeclaration(DtorDeclaration *_this, const Loc& loc, const Loc& endloc, StorageClass stc, Identifier *id);
+void construct_FuncAliasDeclaration(FuncAliasDeclaration *_this, Identifier* ident, FuncDeclaration* funcalias, bool hasOverloads);
 void construct_EnumDeclaration(EnumDeclaration *_this, const Loc& loc, Identifier *id, Type *memtype);
 void construct_EnumMember(EnumMember *_this, const Loc& loc, Identifier *id, Expression *value, Type *origType);
 void construct_AliasDeclaration(AliasDeclaration *_this, const Loc& loc, Identifier *ident, Type *type);
+void construct_AliasDeclaration(AliasDeclaration *_this, const Loc& loc, Identifier *ident, Dsymbol *s);
 void construct_Import(Import *_this, const Loc& loc, Identifiers *packages, Identifier *id, Identifier *aliasId, int isstatic);
 void construct_StructDeclaration(StructDeclaration *_this, const Loc& loc, Identifier *id, bool inObject = false);
 void construct_UnionDeclaration(UnionDeclaration *_this, const Loc& loc, Identifier *id);

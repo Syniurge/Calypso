@@ -129,6 +129,14 @@ DtorDeclaration::DtorDeclaration(const DtorDeclaration& o)
 {
 }
 
+FuncAliasDeclaration::FuncAliasDeclaration(Identifier* ident,
+                FuncDeclaration* funcalias, bool hasOverloads,
+                const clang::UsingShadowDecl *UD)
+{
+    construct_FuncAliasDeclaration(this, ident, funcalias, hasOverloads);
+    this->UD = UD;
+}
+
 EnumDeclaration::EnumDeclaration(Loc loc, Identifier* id, Type* memtype,
                                  const clang::EnumDecl* ED)
 {
@@ -221,13 +229,23 @@ AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
                                 Type* type, const clang::TypedefNameDecl* TND)
 {
     construct_AliasDeclaration(this, loc, ident, type);
-    this->TND = TND;
+    this->D = TND;
+}
+
+AliasDeclaration::AliasDeclaration(Loc loc, Identifier* ident,
+                                Dsymbol *s, const clang::UsingShadowDecl* UD)
+{
+    construct_AliasDeclaration(this, loc, ident, s);
+    this->D = UD;
 }
 
 AliasDeclaration::AliasDeclaration(const AliasDeclaration &o)
-    : AliasDeclaration(o.loc, o.ident, o.type->syntaxCopy(), o.TND)
+    : AliasDeclaration(o.loc, o.ident, o.type->syntaxCopy(),
+                       static_cast<const clang::TypedefNameDecl*>(nullptr))
 {
     this->storage_class = o.storage_class;
+    this->aliassym = o.aliassym;
+    this->D = o.D;
 }
 
 Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
@@ -238,8 +256,14 @@ Dsymbol* AliasDeclaration::syntaxCopy(Dsymbol* s)
 
 Type *AliasDeclaration::getType()
 {
+    if (isa<clang::UsingShadowDecl>(D))
+        return aliassym->getType();
+
     if (!type)
+    {
+        auto TND = cast<clang::TypedefNameDecl>(D);
         type = DeclMapper(this).fromType(TND->getUnderlyingType(), loc);
+    }
     return type;
 }
 
@@ -496,6 +520,7 @@ void InstantiateAndTraverseFunctionBody(::FuncDeclaration* fd)
 
 void MarkFunctionReferenced(::FuncDeclaration* fd)
 {
+    fd = fd->toAliasFunc();
     bool& isUsed = getIsUsed(fd);
 
     if (isUsed)

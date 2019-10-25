@@ -2514,12 +2514,6 @@ version (IN_LLVM)
     }
 
     // CALYPSO
-    bool allowFinalOverride()
-    {
-        // D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does so the check has to be disabled
-        return false;
-    }
-
     bool preferNonTemplateOverloads()
     {
         return true;
@@ -2639,7 +2633,12 @@ extern (D) int overloadApply(Dsymbol fstart, scope int delegate(Dsymbol) dg, Sco
             }
             else if (auto fd = fa.toAliasFunc())
             {
-                if (int r = dg(fd))
+                if (auto td = fd.parent.isTemplateDeclaration()) // CALYPSO FuncAliasDeclaration may now also point to templated functions
+                {
+                    if (int r = dg(td))
+                        return r;
+                }
+                else if (int r = dg(fd))
                     return r;
             }
             else

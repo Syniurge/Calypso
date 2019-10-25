@@ -147,6 +147,7 @@ public:
     Dsymbols *VisitValueDecl(const clang::ValueDecl *D, unsigned flags = 0);
     Dsymbols *VisitRecordDecl(const clang::RecordDecl* D, unsigned flags = 0);
     Dsymbols *VisitTypedefNameDecl(const clang::TypedefNameDecl *D);
+    Dsymbols *VisitUsingShadowDecl(const clang::UsingShadowDecl *D);
     Dsymbols *VisitFunctionDecl(const clang::FunctionDecl *D, unsigned flags = 0);
     Dsymbols *VisitRedeclarableTemplateDecl(const clang::RedeclarableTemplateDecl* D);
     Dsymbols *VisitClassTemplateSpecializationDecl(const clang::ClassTemplateSpecializationDecl *D);

@@ -30,6 +30,7 @@ void VarDeclaration::_key() {}
 void FuncDeclaration::_key() {}
 void CtorDeclaration::_key() {}
 void DtorDeclaration::_key() {}
+void FuncAliasDeclaration::_key() {}
 void EnumDeclaration::_key() {}
 void EnumMember::_key() {}
 void AliasDeclaration::_key() {}

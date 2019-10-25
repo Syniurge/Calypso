@@ -351,6 +351,12 @@ void construct_DtorDeclaration(DtorDeclaration _this, const ref Loc loc, const r
     memcpy(postvtblThis, &DtorDeclaration.classinfo.m_init[offset], DtorDeclaration.classinfo.m_init.length - offset);
     _this.__ctor(loc, endloc, stc, id);
 }
+void construct_FuncAliasDeclaration(FuncAliasDeclaration _this, Identifier ident, FuncDeclaration funcalias, bool hasOverloads)
+{
+    auto postvtblThis = &(cast(byte*)_this)[offset];
+    memcpy(postvtblThis, &FuncAliasDeclaration.classinfo.m_init[offset], FuncAliasDeclaration.classinfo.m_init.length - offset);
+    _this.__ctor(ident, funcalias, hasOverloads);
+}
 void construct_EnumDeclaration(EnumDeclaration _this, const ref Loc loc, Identifier id, Type memtype)
 {
     auto postvtblThis = &(cast(byte*)_this)[offset];
@@ -368,6 +374,12 @@ void construct_AliasDeclaration(AliasDeclaration _this, const ref Loc loc, Ident
     auto postvtblThis = &(cast(byte*)_this)[offset];
     memcpy(postvtblThis, &AliasDeclaration.classinfo.m_init[offset], AliasDeclaration.classinfo.m_init.length - offset);
     _this.__ctor(loc, ident, type);
+}
+void construct_AliasDeclaration(AliasDeclaration _this, const ref Loc loc, Identifier ident, Dsymbol s)
+{
+    auto postvtblThis = &(cast(byte*)_this)[offset];
+    memcpy(postvtblThis, &AliasDeclaration.classinfo.m_init[offset], AliasDeclaration.classinfo.m_init.length - offset);
+    _this.__ctor(loc, ident, s);
 }
 void construct_Import(Import _this, const ref Loc loc, Identifiers *packages, Identifier id, Identifier aliasId, int isstatic)
 {

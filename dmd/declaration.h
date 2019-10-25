@@ -638,7 +638,6 @@ public:
     virtual FuncDeclaration *toAliasFunc() { return this; }
 
     // CALYPSO
-    virtual bool allowFinalOverride() { return false; } // D does not allow a derived class to have a method with the same signature than a final method from a base class, C++ does
     virtual bool preferNonTemplateOverloads();
 
     void accept(Visitor *v) { v->visit(this); }
@@ -650,6 +649,7 @@ public:
     FuncDeclaration *funcalias;
     bool hasOverloads;
 
+    virtual void _key(); // CALYPSO
     FuncAliasDeclaration *isFuncAliasDeclaration() { return this; }
     const char *kind() const;
 
