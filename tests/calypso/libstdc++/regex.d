@@ -12,7 +12,7 @@ pragma (cppmap, "<string>");
 
 import std.stdio, std.conv;
 import (C++) std.regex, std.smatch;
-import (C++) regex_constants = std.regex_constants._;
+import (C++) regex_constants = std.regex_constants;
 import (C++) std._ : cppstring = string, regex_search,
                 sregex_iterator, distance, regex_replace;
 
