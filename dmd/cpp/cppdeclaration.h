@@ -64,7 +64,7 @@ public:
                     Type* type, const clang::FunctionDecl *FD);
     FuncDeclaration(const FuncDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool preferNonTemplateOverloads() override { return false; }
+    bool preferNonTemplateOverloads() override { return true; }
 };
 
 class CtorDeclaration : public ::CtorDeclaration
@@ -81,7 +81,7 @@ public:
                     Type* type, const clang::CXXConstructorDecl *CCD);
     CtorDeclaration(const CtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool preferNonTemplateOverloads() override { return false; }
+    bool preferNonTemplateOverloads() override { return true; }
 };
 
 class DtorDeclaration : public ::DtorDeclaration
@@ -98,7 +98,7 @@ public:
                     Identifier *id, const clang::CXXDestructorDecl *CDD);
     DtorDeclaration(const DtorDeclaration&);
     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool preferNonTemplateOverloads() override { return false; }
+    bool preferNonTemplateOverloads() override { return true; }
 };
 
 
@@ -111,7 +111,7 @@ public:
 
     FuncAliasDeclaration(Identifier* ident, FuncDeclaration* funcalias, bool hasOverloads, const clang::UsingShadowDecl *UD);
 //     Dsymbol *syntaxCopy(Dsymbol *s) override;
-    bool preferNonTemplateOverloads() override { return false; }
+    bool preferNonTemplateOverloads() override { return true; }
 };
 
 class EnumDeclaration : public ::EnumDeclaration

@@ -2756,6 +2756,8 @@ extern (C++) void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc lo
                 MATCH c1 = fd.leastAsSpecialized(m.lastf);
                 MATCH c2 = m.lastf.leastAsSpecialized(fd);
                 //printf("c1 = %d, c2 = %d\n", c1, c2);
+                if (c1 == c2 && td_best && fd.preferNonTemplateOverloads()) // CALYPSO
+                    goto LfIsBetter;
                 if (c1 > c2) goto LfIsBetter;
                 if (c1 < c2) goto LlastIsBetter;
             }
@@ -2825,12 +2827,7 @@ extern (C++) void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc lo
         LfIsBetter:
             td_best = null;
             ti_best = null;
-            if (fd.preferNonTemplateOverloads())
-                ta_last = MATCH.exact;
-            else
-                ta_last = (mfa >= MATCH.constant) ? MATCH.exact : mfa; // CALYPSO: If an @implicit ctor is available, callMatch returns MATCHconvert
-                                            // but for C++ functions we do not want a non-template taking precedence over a better matching template function.
-                                            // This should only be enabled for C++ overloads, as it breaks D test cases by picking wrong overloads in some cases.
+            ta_last = MATCH.exact;
             m.last = mfa;
             m.lastf = fd;
             tthis_best = tthis_fd;
@@ -3050,8 +3047,6 @@ extern (C++) void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc lo
                 MATCH c1 = tf1.callMatch(tthis_fd, fargs_, callMatchFlags, null, sc); // CALYPSO
                 MATCH c2 = tf2.callMatch(tthis_best, fargs_, callMatchFlags, null, sc); // CALYPSO
                 //printf("2: c1 = %d, c2 = %d\n", c1, c2);
-                if (c1 == c2 && !td_best) // CALYPSO renew preference for non-template functions over template functions here
-                    c2 = MATCH.exact;
                 if (c1 > c2) goto Ltd;
                 if (c1 < c2) goto Ltd_best;
             }
@@ -3060,6 +3055,8 @@ extern (C++) void functionResolve(ref MatchAccumulator m, Dsymbol dstart, Loc lo
                 MATCH c1 = fd.leastAsSpecialized(m.lastf);
                 MATCH c2 = m.lastf.leastAsSpecialized(fd);
                 //printf("3: c1 = %d, c2 = %d\n", c1, c2);
+                if (c1 == c2 && !td_best && m.lastf.preferNonTemplateOverloads()) // CALYPSO
+                    goto Ltd_best;
                 if (c1 > c2) goto Ltd;
                 if (c1 < c2) goto Ltd_best;
             }

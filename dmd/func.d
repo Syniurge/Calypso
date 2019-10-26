@@ -2516,7 +2516,7 @@ version (IN_LLVM)
     // CALYPSO
     bool preferNonTemplateOverloads()
     {
-        return true;
+        return false;
     }
 
     override void accept(Visitor v)
