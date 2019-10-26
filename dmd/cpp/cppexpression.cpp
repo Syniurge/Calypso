@@ -811,6 +811,9 @@ Expression* ExprMapper::fromAPFloat(Loc loc, const APFloat& Val, Type **pt)
 Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
                                     const clang::NestedNameSpecifier*, TypeQualifiedBuilderOpts tqualOpts)
 {
+    if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
+        return fromExpressionNonTypeTemplateParm(loc, NTTP); // can only happen in dependent contexts
+
     auto sym = mapper.dsymForDecl(D);
     if (sym) {
         if (auto d = sym->isDeclaration()) {
@@ -823,9 +826,6 @@ Expression* ExprMapper::fromExpressionDeclRef(Loc loc, clang::NamedDecl* D,
         else if (auto em = sym->isEnumMember())
             return em->getVarExp(loc, em->_scope);
     }
-
-    if (auto NTTP = dyn_cast<clang::NonTypeTemplateParmDecl>(D))
-        return fromExpressionNonTypeTemplateParm(loc, NTTP);
 
     auto tqual = DeclMapper::FromType(mapper, loc).typeQualifiedFor(D, nullptr, nullptr, tqualOpts);
     assert(tqual && "DeclRefExpr decl without a DeclarationName");
