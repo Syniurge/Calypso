@@ -814,6 +814,18 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
             Args.add(clangCG::RValue::get(val), ArgTy);
     }
 
+    auto GD = getGlobalDecl(CGM.get(), FD);
+    auto& FInfo = CGM->getTypes().arrangeGlobalDeclaration(GD);
+
+    if (retvar && FInfo.getReturnInfo().getKind() == clangCG::ABIArgInfo::Indirect)
+    {
+        assert(isa<llvm::PointerType>(retvar->getType()));
+
+        auto SretTy = DtoAggregateHandleType(fd->type->nextOf());
+        if (retvar->getType() != SretTy)
+            retvar = DtoBitCast(retvar, SretTy);
+    }
+
     clangCG::Address Addr(retvar,
                           CGF()->getNaturalTypeAlignment(FD->getReturnType()));
     clangCG::ReturnValueSlot ReturnValue(Addr, false);
@@ -834,8 +846,6 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
 
     updateCGFInsertPoint(); // emitLandingPad() may have run the cleanups and call C++ dtors, hence changing the insert point
 
-    auto GD = getGlobalDecl(CGM.get(), FD);
-    auto &FInfo = CGM->getTypes().arrangeGlobalDeclaration(GD);
     clangCG::CGCalleeInfo calleeInfo(FD->getType()->getAs<clang::FunctionProtoType>(), GD);
 
     llvm::CallBase *callOrInvoke;
