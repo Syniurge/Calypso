@@ -4626,7 +4626,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
 
                     if (ad != cd)
                     {
-                        ue.e1 = ue.e1.castTo(sc, ad.type.addMod(ue.e1.type.mod));
+                        ue.e1 = castTo(ue.e1, sc, ad.type.addMod(ue.e1.type.mod), true); // CALYPSO isThisCast=true
                         ue.e1 = ue.e1.expressionSemantic(sc);
                     }
                 }

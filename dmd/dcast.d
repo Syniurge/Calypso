@@ -1497,7 +1497,7 @@ private Expression tryAliasThisCast(Expression e, Scope* sc, Type tob, Type t1b,
  * Do an explicit cast.
  * Assume that the 'this' expression does not have any indirections.
  */
-Expression castTo(Expression e, Scope* sc, Type t)
+Expression castTo(Expression e, Scope* sc, Type t, bool isThisCast = false) // CALYPSO
 {
     extern (C++) final class CastTo : Visitor
     {
@@ -1506,11 +1506,13 @@ Expression castTo(Expression e, Scope* sc, Type t)
         Type t;
         Scope* sc;
         Expression result;
+        bool isThisCast;
 
-        extern (D) this(Scope* sc, Type t)
+        extern (D) this(Scope* sc, Type t, bool isThisCast)
         {
             this.sc = sc;
             this.t = t;
+            this.isThisCast = isThisCast;
         }
 
         override void visit(Expression e)
@@ -1558,8 +1560,8 @@ Expression castTo(Expression e, Scope* sc, Type t)
              */
 
             // Fat Value types
-            const(bool) tob_isFV = (tob.ty == Tstruct || tob.ty == Tsarray);
-            const(bool) t1b_isFV = (t1b.ty == Tstruct || t1b.ty == Tsarray);
+            const(bool) tob_isFV = (tob.ty == Tstruct || isClassValue(tob) || tob.ty == Tsarray); // CALYPSO
+            const(bool) t1b_isFV = (t1b.ty == Tstruct || isClassValue(t1b) || t1b.ty == Tsarray);
 
             // Fat Reference types
             const(bool) tob_isFR = (tob.ty == Tarray || tob.ty == Tdelegate);
@@ -1639,6 +1641,19 @@ Expression castTo(Expression e, Scope* sc, Type t)
                         return;
                 }
 
+                if (isThisCast) // CALYPSO casting between aggregate value types is only acceptable for this adjustments
+                {
+                    auto toad = tob.isAggregateValue();
+                    auto t1vcd = t1b.isClassValue();
+                    if (toad && t1vcd && tob.isBaseOf(t1vcd, null)) // downcast
+                        goto Lok;
+
+                    auto t1ad = t1b.isAggregateValue();
+                    auto tovcd = tob.isClassReference();
+                    if (t1ad && tovcd && t1b.isBaseOf(tovcd, null)) // upcast
+                        goto Lok;
+                }
+
                 if (t1b.size(e.loc) == tob.size(e.loc))
                     goto Lok;
 
@@ -1674,6 +1689,18 @@ Expression castTo(Expression e, Scope* sc, Type t)
                     }
                     goto Lok;
                 }
+
+                // CALYPSO
+                auto toad = tob.isAggregateValue();
+                auto t1rcd = t1b.isClassReference();
+                if (toad && t1rcd && tob.isBaseOf(t1rcd, null)) // downcast from DCXX to C++
+                    goto Lok;
+
+                auto t1ad = t1b.isAggregateValue();
+                auto torcd = tob.isClassReference();
+                if (t1ad && torcd && t1b.isBaseOf(torcd, null)) // upcast from C++ to DCXX
+                    goto Lok;
+
                 goto Lfail;
             }
 
@@ -2591,7 +2618,7 @@ Expression castTo(Expression e, Scope* sc, Type t)
         }
     }
 
-    scope CastTo v = new CastTo(sc, t);
+    scope CastTo v = new CastTo(sc, t, isThisCast);
     e.accept(v);
     return v.result;
 }
