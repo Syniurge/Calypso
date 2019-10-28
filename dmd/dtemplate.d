@@ -7857,13 +7857,11 @@ extern (C++) MATCH matchArg(TemplateParameter tp, Loc instLoc, Scope* sc, Object
     {
         RootObject oarg;
 
-        if (*argi < (*tiargs).dim) // CALYPSO
+        if (*argi < tiargs.dim) // CALYPSO
         {
             oarg = (*tiargs)[*argi];
             (*argi)++;
         }
-        if (i < tiargs.dim)
-            oarg = (*tiargs)[i];
         else
         {
             // Get default argument instead
@@ -7904,8 +7902,15 @@ extern (C++) MATCH matchArg(TemplateParameter tp, Loc instLoc, Scope* sc, Object
                 if ((*parameters)[pidx].isTemplateTupleParameter())
                     numPrevPacks++;
             size_t numParamPacks = numParameterPacks(parameters);
-            size_t packDim =
-                    (2*numParamPacks + tiargs.dim - parameters.dim - 1 - numPrevPacks) / numParamPacks;
+            size_t packDim = 0;
+            size_t numPackArgs = (tiargs.dim > (parameters.dim - numParamPacks)) ?
+                                tiargs.dim - (parameters.dim - numParamPacks) : 0;
+            if (numPackArgs >= 1)
+            {
+                packDim = numPackArgs / numParamPacks;
+                if ((numPackArgs % numParamPacks) > numPrevPacks)
+                    ++packDim;
+            }
             if (packDim > 0)
             {
                 //printf("i = %d, tiargs.dim = %d\n", i, tiargs.dim);
