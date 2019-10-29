@@ -137,6 +137,7 @@ public:
     ::Module *minst, *importedFrom;
     DeclMapper(::Module *minst, ::Module *importedFrom) : minst(minst), importedFrom(importedFrom) {}
     DeclMapper(Dsymbol* s) : DeclMapper(s->getInstantiatingModule(), s->getModule()->importedFrom) {}
+    DeclMapper(FullNamespaceModule* nsMod) : DeclMapper(nsMod->importedFrom, nsMod->importedFrom) {}
 
     /*
      * Declarations

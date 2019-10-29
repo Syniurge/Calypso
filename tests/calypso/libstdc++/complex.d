@@ -13,20 +13,21 @@ pragma (cppmap, "<iostream>");
 pragma (cppmap, "<iomanip>");
 
 import std.stdio;
-import (C++) std.complex;
-import (C++) std._ : cout, fixed, setprecision, pow, acos, exp;
+import (C++) std;
 
 void main()
 {
-//     cout << /+fixed(cout) << +/setprecision(1);
+    version (CppRuntime_Microsoft) {} else ios_base.Init(); // initialize std::cout
+
+    cout << /+fixed(cout) << +/setprecision(1);
 
     auto i1 = complex!double(0.0, 1.0);
     auto z1 = i1;
     z1 *= i1;
-//     cout << "i * i = " << z1 << '\n';
+    cout << "i * i = " << z1 << '\n';
 
     complex!float z2 = pow(i1, 2);
-//     cout << "pow(i, 2) = " << z2 << '\n';
+    cout << "pow(i, 2) = " << z2 << '\n';
 
     double PI = acos(-1);
 //     complex!double z3 = exp(1i * PI);
