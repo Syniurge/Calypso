@@ -6996,10 +6996,10 @@ extern (C++) class TemplateInstance : ScopeDsymbol
                 auto tvp = (*td_last.parameters)[pidx].isTemplateValueParameter();
                 auto tup = (*td_last.parameters)[pidx].isTemplateTupleParameter();
 
-                if (tvp || tup)
+                if (tvp || tup || tiargs.dim <= i)
                     addTiarg(tdtypes[pidx]);
                 else
-                    i++; // tdtypes[i] is already normalized to the required type in matchArg
+                    i++;
                          // CALYPSO NOTE/potential DMD BUG: if we'd addTiarg for every parameter,
                          //   VarExp would get replaced by Dsymbol which messes up genIdent,
                          //   ..so what about Tuple containing VarExp?
