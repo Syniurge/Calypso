@@ -64,7 +64,7 @@ private:
       if (isMSVCpp && t->ty == Tstruct) {
         StructDeclaration *sd = static_cast<TypeStruct *>(t)->sym;
         assert(sd);
-        if (sd->postblit || sd->hasCopyCtor)
+        if (sd->postblit || sd->hasCopyCtor()) // CALYPSO
           return true;
       }
     }

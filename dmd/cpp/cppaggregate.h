@@ -46,7 +46,7 @@ public:
     Expression *defaultInit(Loc loc) override;
     bool isBaseOf(::ClassDeclaration* cd, int* poffset) override;
     bool disableDefaultCtor() override { return false; }
-    ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
+    bool hasCopyCtor() override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
     const clang::RecordDecl *Definition();
@@ -86,7 +86,7 @@ public:
     bool byRef() const override { return false; }
     Expression *defaultInit(Loc loc) override;
     bool needsInterfaceSemantic() const override { return false; }
-    ::CtorDeclaration* hasCopyCtor(Scope* sc) override;
+    bool hasCopyCtor() override;
     Expression* buildVarInitializer(Scope* sc, ::VarDeclaration* vd, Expression* exp) override;
 
     const clang::CXXRecordDecl *Definition();

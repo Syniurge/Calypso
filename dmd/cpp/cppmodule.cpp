@@ -336,7 +336,7 @@ Dsymbols* DeclMapper::CreateTemplateInstanceFor(const SpecTy* D, Dsymbols* decld
     ti->minst = minst;
 
     auto cpptdtypes = c_td->tdtypesFromInst(minst ? minst->_scope : nullptr, ti->Inst);
-        // NOTE: minst may be null for speculative instances, e.g from hasCopyCtor()
+        // NOTE: minst may be null for speculative instances, e.g from clone.d
     ti->tdtypes.setDim(cpptdtypes->dim);
     memcpy(ti->tdtypes.tdata(), cpptdtypes->tdata(), cpptdtypes->dim * sizeof(void*));
     delete cpptdtypes;

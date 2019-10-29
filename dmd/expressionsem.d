@@ -1941,7 +1941,7 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
                     ? p.type.substWildTo(wildmatch)
                     : p.type;
 
-                const hasCopyCtor = (arg.type.ty == Tstruct) && (cast(TypeStruct)arg.type).sym.hasCopyCtor;
+                const hasCopyCtor = arg.type.isAggregateValue && arg.type.isAggregate.hasCopyCtor; // CALYPSO
                 const typesMatch = arg.type.mutableOf().unSharedOf().equals(tprm.mutableOf().unSharedOf());
                 if (!((hasCopyCtor && typesMatch) || tprm.equals(arg.type)))
                 {
@@ -8499,8 +8499,7 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
                         result = e;
                         return;
                     }
-                    if ((sd.isStructDeclaration() && (cast(StructDeclaration)sd).postblit)
-                            || sd.hasCopyCtor(sc)) // CALYPSO (not pretty)
+                    if ((sd.isStructDeclaration() && (cast(StructDeclaration)sd).postblit) || sd.hasCopyCtor) // CALYPSO (not pretty)
                     {
                         /* We have a copy constructor for this
                          */
@@ -8519,16 +8518,16 @@ private extern (C++) final class ExpressionSemanticVisitor : Visitor
 
                         if (e2x.isLvalue())
                         {
-                            if (sd.langPlugin() && sd.hasCopyCtor(sc)) // CALYPSO HACK LDC 1.17 FIXME this needs to get merged with DMD's revived copy ctor stuff
+                            if (sd.hasCopyCtor)
                             {
-                                Expression e = callCpCtor(sc, e2x, null); // destinationType FIXME
-                                e = new ConstructExp(exp.loc, e1x, e);
-                                result = e.expressionSemantic(sc);
-                                return;
-                            }
+                                if (auto lp = sd.langPlugin())
+                                {
+                                    Expression e = lp.callCpCtor(sc, e2x);
+                                    e = new ConstructExp(exp.loc, e1x, e);
+                                    result = e.expressionSemantic(sc);
+                                    return;
+                                }
 
-                            if ((cast(StructDeclaration)sd).hasCopyCtor) // CALYPSO FIXME
-                            {
                                 /* Rewrite as:
                                  * e1 = init, e1.copyCtor(e2);
                                  */

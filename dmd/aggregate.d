@@ -1104,9 +1104,9 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
         return null;
     }
 
-    CtorDeclaration hasCopyCtor(Scope* sc)
+    bool hasCopyCtor()
     {
-        return null;
+        return false;
     }
 
     Expression buildVarInitializer(Scope* sc, VarDeclaration vd, Expression exp)

@@ -206,7 +206,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     FuncDeclarations postblits; // Array of postblit functions
     FuncDeclaration postblit;   // aggregate postblit
 
-    bool hasCopyCtor;       // copy constructor
+    bool hasCopyCtor_;      // copy constructor // CALYPSO
 
     FuncDeclaration xeq;        // TypeInfo_Struct.xopEquals
     FuncDeclaration xcmp;       // TypeInfo_Struct.xopCmp
@@ -474,6 +474,11 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         }
 
         return (ispod == StructPOD.yes);
+    }
+
+    override bool hasCopyCtor()
+    {
+        return hasCopyCtor_;
     }
 
     bool disableDefaultCtor() // CALYPSO

@@ -158,7 +158,7 @@ public:
     Expression *defaultInitLiteral(Loc loc);
     size_t literalElemDim(); // returns the total number of fields of an aggregate literal (TODO: better name?)
     CtorDeclaration* hasImplicitCtor(Expression* farg);
-    virtual CtorDeclaration* hasCopyCtor(Scope* sc) { return nullptr; }
+    virtual bool hasCopyCtor() { return false; }
     virtual Expression* buildVarInitializer(Scope* sc, VarDeclaration* vd, Expression* exp) { return NULL; }
 
     AggregateDeclaration *isAggregateDeclaration() { return this; }
@@ -183,7 +183,7 @@ public: // CALYPSO some of the fields were moved to AggregateDeclaration
     FuncDeclarations postblits; // Array of postblit functions
     FuncDeclaration *postblit;  // aggregate postblit
 
-    bool hasCopyCtor;           // copy constructor
+    bool hasCopyCtor_;          // copy constructor
 
     FuncDeclaration *xeq;       // TypeInfo_Struct.xopEquals
     FuncDeclaration *xcmp;      // TypeInfo_Struct.xopCmp

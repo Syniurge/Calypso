@@ -921,7 +921,7 @@ version (IN_LLVM)
                             }
                         }
 
-                        const hasCopyCtor = exp.type.ty == Tstruct && (cast(TypeStruct)exp.type).sym.hasCopyCtor;
+                        const hasCopyCtor = exp.type.isAggregateValue && exp.type.isAggregate.hasCopyCtor; // CALYPSO
                         // if a copy constructor is present, the return type conversion will be handled by it
                         if (!hasCopyCtor)
                             exp = exp.implicitCastTo(sc2, tret);

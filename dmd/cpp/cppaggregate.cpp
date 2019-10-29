@@ -474,42 +474,39 @@ bool ClassDeclaration::isBaseOf(::ClassDeclaration *cd, int *poffset)
 }
 
 template <typename AggTy>
-::CtorDeclaration* ad_hasCopyCtor(AggTy* ad, Scope* sc)
+bool ad_hasCopyCtor(AggTy* ad)
 {
     auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->Definition());
     if (!CRD->isCompleteDefinition())
-        return nullptr;
+        return false;
 
     auto& S = calypso.getSema();
     auto _CRD = const_cast<clang::CXXRecordDecl *>(CRD);
 
     for (int i = 0; i < 2; i++)
         if (auto Ctor = S.LookupCopyingConstructor(_CRD, i ? 0 : clang::Qualifiers::Const))
-            if (auto sym = dsymForDecl(ad, Ctor))
-            {
-                assert(sym->isCtorDeclaration());
-                return static_cast<::CtorDeclaration*>(sym);
-            }
+            if (dsymForDecl(ad, Ctor))
+                return true;
 
-    return nullptr;
+    return false;
 }
 
-::CtorDeclaration* StructDeclaration::hasCopyCtor(Scope* sc)
+bool StructDeclaration::hasCopyCtor()
 {
-    return ad_hasCopyCtor(this, sc);
+    return ad_hasCopyCtor(this);
 }
 
-::CtorDeclaration* ClassDeclaration::hasCopyCtor(Scope* sc)
+bool ClassDeclaration::hasCopyCtor()
 {
-    return ad_hasCopyCtor(this, sc);
+    return ad_hasCopyCtor(this);
 }
 
-inline ::CtorDeclaration* hasCopyCtor(AggregateDeclaration* sym, Scope* sc)
+inline bool hasCopyCtor(AggregateDeclaration* sym)
 {
     assert(isCPP(sym));
     return sym->isClassDeclaration() ?
-            static_cast<cpp::ClassDeclaration*>(sym)->hasCopyCtor(sc) :
-            static_cast<cpp::StructDeclaration*>(sym)->hasCopyCtor(sc);
+            static_cast<cpp::ClassDeclaration*>(sym)->hasCopyCtor() :
+            static_cast<cpp::StructDeclaration*>(sym)->hasCopyCtor();
 }
 
 template <typename AggTy>
@@ -731,9 +728,9 @@ Expression *LangPlugin::callCpCtor(Scope *sc, Expression *e)
 {
     Type* tv = e->type->baseElemOf();
     assert(isAggregateValue(tv));
-    auto sym = getAggregateSym(tv);
+    auto sym = isAggregate(tv);
 
-    if (!hasCopyCtor(sym, sc))
+    if (!hasCopyCtor(sym))
         return nullptr;
 
     auto arguments = new Expressions;

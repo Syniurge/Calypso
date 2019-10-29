@@ -4785,18 +4785,18 @@ extern (C++) final class TypeFunction : TypeNext
                     {
                         const isRef = (p.storageClass & (STC.ref_ | STC.out_)) != 0;
 
-                        StructDeclaration argStruct, prmStruct;
+                        AggregateDeclaration argStruct, prmStruct;
 
                         // first look for a copy constructor
-                        if (arg.isLvalue() && !isRef && targ.ty == Tstruct && tprm.ty == Tstruct)
+                        if (arg.isLvalue() && !isRef && targ.isAggregateValue && tprm.isAggregateValue) // CALYPSO
                         {
                             // if the argument and the parameter are of the same unqualified struct type
-                            argStruct = (cast(TypeStruct)targ).sym;
-                            prmStruct = (cast(TypeStruct)tprm).sym;
+                            argStruct = targ.isAggregate();
+                            prmStruct = tprm.isAggregate();
                         }
 
                         // check if the copy constructor may be called to copy the argument
-                        if (argStruct && argStruct == prmStruct && argStruct.hasCopyCtor)
+                        if (argStruct && argStruct == prmStruct && argStruct.hasCopyCtor && !argStruct.langPlugin) // CALYPSO HACK disable for now (TODO create a hook to skip the temporary creation?)
                         {
                             /* this is done by seeing if a call to the copy constructor can be made:
                              *

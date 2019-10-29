@@ -494,10 +494,10 @@ LcheckFields:
         if (v.overlapped)
             continue;
 
-        auto ts = v.type.baseElemOf().isTypeStruct();
-        if (!ts)
+        auto tb = v.type.baseElemOf(); // CALYPSO
+        if (!tb.isAggregateValue)
             continue;
-        if (ts.sym.hasCopyCtor)
+        if (tb.isAggregate.hasCopyCtor)
         {
             fieldWithCpCtor = v;
             break;
@@ -4788,7 +4788,7 @@ version (IN_LLVM)
         sd.dtor = buildDtor(sd, sc2);
         sd.tidtor = buildExternDDtor(sd, sc2);
         sd.postblit = buildPostBlit(sd, sc2);
-        sd.hasCopyCtor = buildCopyCtor(sd, sc2);
+        sd.hasCopyCtor_ = buildCopyCtor(sd, sc2); // CALYPSO
 
         buildOpAssign(sd, sc2);
         buildOpEquals(sd, sc2);
