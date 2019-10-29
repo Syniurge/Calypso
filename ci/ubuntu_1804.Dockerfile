@@ -17,7 +17,7 @@ RUN apt-get update \
 # RUN add-apt-repository "deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-${LLVM_VERSION}  main" \
 
 RUN add-apt-repository -y ppa:oibaf/graphics-drivers \
- && apt-get install -y build-essential cmake python-pip zlib1g-dev \
+ && apt-get install -y build-essential cmake gdb python-pip zlib1g-dev \
                        llvm-${LLVM_VERSION}-dev llvm-${LLVM_VERSION}-tools \
                        lldb-${LLVM_VERSION} libclang-common-${LLVM_VERSION}-dev # NOTE: shouldn't be necessary, but LLVMExports.cmake complains about missing executables
 
