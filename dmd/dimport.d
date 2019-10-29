@@ -370,6 +370,8 @@ public:
     Expression callCpCtor(Scope *sc, Expression e);
     Expression constructCtorCall(const ref Loc loc, Scope* sc, Expression e1, Expression e2);
 
+    bool mustCallerCallDtorOnArguments();
+
     FuncDeclaration searchOpEqualsForXopEquals(StructDeclaration sd, Scope *sc);
 
     // ===== - - - - - ===== //

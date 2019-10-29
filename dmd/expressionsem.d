@@ -2312,12 +2312,18 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
                     if (!isRef)
                     {
                         arg = doCopyOrMove(sc, arg, parameter ? parameter.type : null);
-                        if (tv.getAggregateSym().langPlugin()) // D20180120T151603 CALYPSO NOTE: in D dtors on value arguments are called in by the callee, in C++ by the caller.
-                                                               // But in order to simplify the code and make calling D functions taking C++ struct or class arguments from C++ possible, D sticks to the C++ way, i.e C++ dtors always get called by the caller
+
+                        // D20180120T151603 CALYPSO NOTE: in D dtors on value arguments are called in
+                        // by the callee, in C++ by the caller.
+                        // But in order to simplify the code and make calling D functions taking
+                        // C++ struct or class arguments from C++ possible, D sticks to the C++ way,
+                        // i.e C++ dtors always get called by the caller.
+                        auto lp = tv.getAggregateSym().langPlugin();
+                        if (lp && lp.mustCallerCallDtorOnArguments())
                             arg = arg.addDtorHook(sc);
                     }
                     else if (!arg.isLvalue())
-                        arg = arg.addDtorHook(sc); // CALYPSO: for an rvalue passed to a scope ref aggregate parameter, the dtor has to get called afterwards // LDC 1.17 FIXME?
+                        arg = arg.addDtorHook(sc); // CALYPSO: for an rvalue passed to a ref aggregate parameter, the dtor has to get called afterwards
                 }
             }
 

@@ -190,6 +190,8 @@ public:
     Expression *callCpCtor(Scope *sc, Expression *e) override;
     Expression *constructCtorCall(const Loc& loc, Scope *sc, Expression *e1, Expression* e2) override;
 
+    bool mustCallerCallDtorOnArguments() override { return true; }
+
     ::FuncDeclaration *searchOpEqualsForXopEquals(::StructDeclaration *sd, Scope *sc) override;
 
     Expression* op_overload(Expression* e, Scope* sc, TOK* pop = nullptr) override;
