@@ -975,10 +975,10 @@ const clang::FileEntry* PCH::lookupHeader(const char* header, const clang::Direc
 
 void PCH::initializeParser()
 {
-    // Recreate a Parser and CurScope if necessary
     auto& PP = AST->getPreprocessor();
     auto& S = AST->getSema();
 
+    // Recreate a Parser and CurScope if necessary
     if (!S.OpaqueParser)
         S.OpaqueParser = new clang::Parser(PP, S, /*SkipFunctionBodies=*/ false);
 
@@ -987,6 +987,10 @@ void PCH::initializeParser()
         P.EnterScope(clang::Scope::DeclScope);
 
 //     PP.enableIncrementalProcessing();
+
+    // MSVC: the simplest way to set LangOpts.IsHeaderFile to true is to do this..
+    // And it needs to be true for #pragma once headers.
+    const_cast<clang::LangOptions&>(PP.getLangOpts()).IsHeaderFile = true;
 }
 
 void PCH::restoreTUScope()
