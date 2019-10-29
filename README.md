@@ -5,7 +5,7 @@ Calypso creates a bridge between DMD/LDC and Clang, both at the AST level (DMD <
 
 It's not a separate tool, but a fork of LDC which enables you to directly import/include a C/C++ header and use the declarations from within D. No intermediate file is necessary, and no binding is involved.
 
-Calypso introduces a new pragma, **cppmap**, along with the concept of language plugins which are queried by DMD's parser when it encounters special « **import** *(ABC)* xxx.yyy; » symbols. Interfacing with C++ declarations comes down to:
+Calypso introduces a new pragma, **cppmap**, and new « **import** *(C++)* xxx.yyy; » imports. Interfacing with C++ declarations comes down to:
 
 ```D
 pragma (cppmap, "cppheader.h");  // tells Clang to parse cppheader.h but do not import anything
@@ -34,11 +34,12 @@ There are only a few requirements specific to Calypso:
 
 Calypso may also have nightly builds in the future.
 
-## Specific flags
+## Passing arguments to Clang
 
 The `-cpp-flags` option was added to LDC to pass arguments to Clang during header parsing, e.g to enable C++14:
 
     $ ldc2 -cpp-args -std=c++14 main.d
+
 
 ## Missing features
 
