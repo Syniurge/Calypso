@@ -6,7 +6,7 @@
 	url = https://github.com/Syniurge/phobos.git
 [submodule "tests/d2/dmd-testsuite"]
 	path = tests/d2/dmd-testsuite
-	url = https://github.com/ldc-developers/dmd-testsuite.git
+	url = https://github.com/Syniurge/dmd-testsuite.git
 [submodule "deps/clang"]
 	path = deps/clang
 	url = https://github.com/Syniurge/clang.git
