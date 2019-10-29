@@ -104,7 +104,7 @@ set(LDC_VERSION "1.18.0") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
 set(DMDFE_PATCH_VERSION   88)
-set(DMDFE_FIX_LEVEL       0)
+set(DMDFE_FIX_LEVEL       1)
 
 set(DMD_VERSION ${DMDFE_MAJOR_VERSION}.${DMDFE_MINOR_VERSION}${DMDFE_PATCH_VERSION})
 if(DEFINED DMDFE_FIX_LEVEL)
@@ -783,7 +783,7 @@ else()
         "${LDC_EXE_FULL}"
         "${LDC_D_SOURCE_FILES}"
         ""
-        "$<TARGET_LINKER_FILE:${LDC_LIB}>;${CLANG_LIBS};${LDC_LINKERFLAG_LIST}"
+        "${LDC_LINKERFLAG_LIST}"
         "${FE_RES}"
         "${LDC_LIB}"
         ${COMPILE_D_MODULES_SEPARATELY}
@@ -826,7 +826,7 @@ build_d_executable(
     "${LDMD_EXE_FULL}"
     "${LDMD_D_SOURCE_FILES}"
     ""
-    "$<TARGET_LINKER_FILE:LDMD_CXX_LIB>;${LDC_LINKERFLAG_LIST}"
+    "${LDC_LINKERFLAG_LIST}"
     ""
     "LDMD_CXX_LIB"
     ${COMPILE_D_MODULES_SEPARATELY}
@@ -985,7 +985,7 @@ build_d_executable(
     "${LDC_UNITTEST_EXE_FULL}"
     "${LDC_D_SOURCE_FILES}"
     "-unittest"
-    "$<TARGET_LINKER_FILE:${LDC_LIB}>;${CLANG_LIBS};${LDC_LINKERFLAG_LIST}"
+    "${LDC_LINKERFLAG_LIST}"
     ""
     "${LDC_LIB}"
     ON # always build separately (faster with parallelization)
