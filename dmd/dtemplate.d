@@ -1721,13 +1721,11 @@ else
                                 (*dedtypes)[i] = xt.tded; // 'unbox'
                             }
                         }
-                        // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
-                        // WARNING: is this appropriate to do it this early? can C++ template functions have default function args which template args get inferred from?
-                        if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
-                            goto Lnomatch;
-                        { size_t argidx = ntargs; // CALYPSO FIXME: this is wrong if there are packs before [ntargs]
+
+                        size_t argidx = ntargs; // CALYPSO
                         for (size_t i = ntargs; i < dedargs.dim; i++)
                         {
+                            bool incrementArgidx = true;
                             TemplateParameter tparam = (*parameters)[i];
 
                             RootObject oarg = (*dedargs)[i];
@@ -1744,6 +1742,7 @@ else
                                         (*dedargs)[i] = oded;
                                         MATCH m2 = tparam.matchArg(instLoc, paramscope, dedargs, i, &argidx /* CALYPSO */, parameters, dedtypes, null);
                                         //printf("m2 = %d\n", m2);
+                                        incrementArgidx = false; // CALYPSO already incremented by matchArg()
                                         if (m2 <= MATCH.nomatch)
                                             goto Lnomatch;
                                         if (m2 < matchTiargs)
@@ -1767,7 +1766,8 @@ else
                                         (*dedargs)[i] = declareParameter(paramscope, tparam, oded);
                                 }
                             }
-                        }
+                            if (incrementArgidx)
+                                argidx++; // CALYPSO
                         }
                     }
                     nfargs2 = argi + 1;
@@ -1905,7 +1905,7 @@ else
                         }
                     }
 
-                    if (m > MATCH.nomatch && (fparam.storageClass & (STC.ref_ | STC.auto_ | STC.scope_)) == STC.ref_) // CALYPSO
+                    if (m > MATCH.nomatch && (fparam.storageClass & (STC.ref_ | STC.auto_)) == STC.ref_)
                     {
                         if (!farg.isLvalue())
                         {
@@ -2093,9 +2093,6 @@ else
                 (*dedtypes)[i] = at.merge2();
             }
         }
-        // CALYPSO early check before adding default template arguments which might be invalid (SFINAE)
-        if (!earlyFunctionValidityCheck(ti, sc, dedtypes))
-            goto Lnomatch;
         for (size_t i = ntargs; i < dedargs.dim; i++)
         {
             size_t argidx = i; // CALYPSO NOTE/WARNING: for some reason dedargs has Tuple(s) unlike tiargs (see the beginning of the function)
