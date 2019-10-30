@@ -593,7 +593,11 @@ set(CLANG_TARGETS "clang-resource-headers")
 macro(add_clang_lib _libname_)
     set(CLANG_${_libname_}_LIB ${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(CLANG_BYPRODUCTS ${CLANG_BYPRODUCTS} ${CLANG_${_libname_}_LIB})
-    set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_${_libname_}_LIB})
+    if(NOT MSVC)
+        set(CLANG_LIBS "${CLANG_LIBS};-l${CLANG_${_libname_}_LIB}")
+    else()
+        set(CLANG_LIBS "${CLANG_LIBS};-l${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${_libname_}")
+    endif()
     set(CLANG_TARGETS ${CLANG_TARGETS} ${_libname_})
 endmacro(add_clang_lib)
 
@@ -607,7 +611,11 @@ add_clang_lib(clangAnalysis)
 add_clang_lib(clangASTMatchers)
 add_clang_lib(clangAST)
 add_clang_lib(clangParse)
-set(CLANG_LIBS ${CLANG_LIBS} ${CLANG_clangSema_LIB})
+if(NOT MSVC)
+    set(CLANG_LIBS "${CLANG_LIBS};-l${CLANG_clangSema_LIB}")
+else()
+    set(CLANG_LIBS "${CLANG_LIBS};-l${CLANG_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}clangSema")
+endif()
 add_clang_lib(clangLex)
 add_clang_lib(clangBasic)
 
@@ -783,7 +791,7 @@ else()
         "${LDC_EXE_FULL}"
         "${LDC_D_SOURCE_FILES}"
         ""
-        "${LDC_LINKERFLAG_LIST}"
+        "${CLANG_LIBS};${LDC_LINKERFLAG_LIST}"
         "${FE_RES}"
         "${LDC_LIB}"
         ${COMPILE_D_MODULES_SEPARATELY}

@@ -518,7 +518,11 @@ endmacro()
 # Define an optional 'D' CMake linker language for the static runtime libs,
 # using LDC as archiver. LDC handles (cross-)archiving internally via LLVM
 # and supports LTO objects.
+if(!MSVC)
 set(CMAKE_D_CREATE_STATIC_LIBRARY "${LDC_EXE_FULL} -lib -of=<TARGET> <OBJECTS> <LINK_FLAGS>")
+else()
+set(CMAKE_D_CREATE_STATIC_LIBRARY "${LDC_EXE_FULL} -lib -of=<TARGET> <OBJECTS>") # CALYPSO HACK default CMake's static LINK_FLAGS in MSVC envs do not work with ldc2
+endif()
 foreach(f ${D_FLAGS})
     append("\"${f}\"" CMAKE_D_CREATE_STATIC_LIBRARY)
 endforeach()

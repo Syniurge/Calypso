@@ -57,9 +57,6 @@ function(build_d_executable target_name output_exe d_src_files compiler_args lin
     # Link to an executable.
     if(LDC_LINK_MANUALLY)
         add_executable(${target_name} ${object_files})
-        if (NOT "${link_deps}" STREQUAL "")
-            add_dependencies(${target_name} ${link_deps}) # CALYPSO
-        endif()
         set_target_properties(${target_name} PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${output_dir}
             LINKER_LANGUAGE          CXX
