@@ -267,6 +267,8 @@ public:
     void toEndCatch(IRState& irs, ::Catch *cj) override;
     llvm::GlobalVariable* toCatchScopeType(IRState& irs, Type *t) override;
 
+    llvm::Constant *getTypeDescriptorMSVC(IRState &irs, Type *t, int& flags) override;
+
     llvm::DIType* DIGetRecordType(AggregateDeclaration* ad) override;
 
     // ==== ==== ====

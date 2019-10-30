@@ -198,6 +198,9 @@ public:
   /// value.
   llvm::AllocaInst *retValSlot = nullptr;
 
+  /// The catchpad funclet being emitted (MSVC)
+  llvm::Instruction *funcletPad = nullptr;
+
   /// Emits a call or invoke to the given callee, depending on whether there
   /// are catches/cleanups active or not.
   llvm::CallSite callOrInvoke(llvm::Value *callee,
@@ -206,4 +209,6 @@ public:
 
 private:
   IRState &irs;
+
+  llvm::SmallVector<llvm::OperandBundleDef, 1> getBundlesForFunclet(llvm::Value *callee);
 };

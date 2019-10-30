@@ -12,6 +12,7 @@
 #include "gen/tollvm.h"
 
 #include "clang/lib/CodeGen/Address.h"
+#include "clang/lib/CodeGen/CGCleanup.h"
 #include "clang/lib/CodeGen/CGCXXABI.h"
 #include "clang/lib/CodeGen/CGException.h"
 #include "clang/lib/CodeGen/CodeGenFunction.h"
@@ -128,6 +129,20 @@ llvm::GlobalVariable *LangPlugin::toCatchScopeType(IRState& irs, Type *t)
     }
 
     return wrapper;
+}
+
+llvm::Constant *LangPlugin::getTypeDescriptorMSVC(IRState &irs, Type *t, int& flags)
+{
+    auto loc = irs.func()->decl->loc;
+    auto ThrowType = DeclMapper(nullptr, nullptr).toType(loc, t, irs.func()->decl->_scope);
+
+    auto CTI = CGM->getCXXABI().getAddrOfCXXCatchHandlerType(ThrowType, /*CatchHandlerType=*/ ThrowType);
+
+    flags = CTI.Flags;
+    if (isAggregate(t))
+        flags |= 8; // by ref
+
+    return CTI.RTTI;
 }
 
 }

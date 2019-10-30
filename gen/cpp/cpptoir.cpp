@@ -844,6 +844,7 @@ DValue* LangPlugin::toCallFunction(Loc& loc, Type* resulttype, DValue* fnval,
             "postinvoke", gIR->topfunc(), invokeDest);
     }
 
+    CGF()->CurrentFuncletPad = gIR->funcGen().funcletPad;
     updateCGFInsertPoint(); // emitLandingPad() may have run the cleanups and call C++ dtors, hence changing the insert point
 
     clangCG::CGCalleeInfo calleeInfo(FD->getType()->getAs<clang::FunctionProtoType>(), GD);

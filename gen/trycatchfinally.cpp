@@ -222,7 +222,7 @@ void TryCatchScope::emitCatchBodies(IRState &irs, llvm::Value *ehPtrSlot) {
 
 namespace {
 void emitBeginCatchMSVC(IRState &irs, Catch *ctch,
-                        llvm::CatchSwitchInst *catchSwitchInst) {
+                        llvm::CatchSwitchInst *catchSwitchInst, llvm::BasicBlock* endbb) {
   VarDeclaration *var = ctch->var;
   // The MSVC/x86 build uses C++ exception handling
   // This needs a series of catch pads to match the exception
@@ -263,25 +263,34 @@ void emitBeginCatchMSVC(IRState &irs, Catch *ctch,
     exnObj = LLConstant::getNullValue(getVoidPtrType());
   }
 
+  int flags = 0;
   bool isCPPclass = false;
   if (ctch->type) {
+    if (auto lp = ctch->langPlugin()) { // CALYPSO
+      typeDesc = lp->codegen()->getTypeDescriptorMSVC(irs, ctch->type, flags);
+    } else {
     ClassDeclaration *cd = ctch->type->toBasetype()->isClassHandle();
     typeDesc = getTypeDescriptor(irs, cd);
     isCPPclass = cd->isCPPclass();
     if (!isCPPclass)
       clssInfo = getIrAggr(cd)->getClassInfoSymbol();
+    else
+      flags = 8; // by ref (for C++ class exceptions created on the stack)
+    }
   } else {
     // catch all
     typeDesc = LLConstant::getNullValue(getVoidPtrType());
     clssInfo = LLConstant::getNullValue(DtoType(getClassInfoType()));
+    flags = 0x40;
   }
 
   // "catchpad within %switch [TypeDescriptor, 0, &caughtObject]" must be
   // first instruction
-  int flags = var ? (isCPPclass ? 8 : 0) : 64; // just mimicking clang here
   LLValue *args[] = {typeDesc, DtoConstUint(flags), exnObj};
   auto catchpad = irs.ir->CreateCatchPad(catchSwitchInst, args, "");
   catchSwitchInst->addHandler(irs.scopebb());
+
+  irs.funcGen().funcletPad = catchpad;
 
   if (cpyObj) {
     // assign the caught exception to the location in the closure
@@ -290,19 +299,22 @@ void emitBeginCatchMSVC(IRState &irs, Catch *ctch,
     exnObj = cpyObj;
   }
 
-  // Exceptions are never rethrown by D code (but thrown again), so
-  // we can leave the catch handler right away and continue execution
-  // outside the catch funclet
-  llvm::BasicBlock *catchhandler = irs.insertBB("catchhandler");
-  llvm::CatchReturnInst::Create(catchpad, catchhandler, irs.scopebb());
-  irs.scope() = IRScope(catchhandler);
   irs.funcGen().pgo.emitCounterIncrement(ctch);
-  if (!isCPPclass) {
+  if (!isCPPclass && !ctch->langPlugin()) { // CALYPSO
     auto enterCatchFn =
         getRuntimeFunction(ctch->loc, irs.module, "_d_eh_enter_catch");
     irs.CreateCallOrInvoke(enterCatchFn, DtoBitCast(exnObj, getVoidPtrType()),
                            clssInfo);
   }
+
+  // Emit handler, if there is one. The handler is zero, for instance,
+  // when building 'catch { debug foo(); }' in non-debug mode.
+  if (ctch->handler)
+    Statement_toIR(ctch->handler, &irs);
+
+  irs.funcGen().funcletPad = nullptr;
+
+  llvm::CatchReturnInst::Create(catchpad, endbb, irs.scopebb());
 }
 }
 
@@ -325,15 +337,8 @@ void TryCatchScope::emitCatchBodiesMSVC(IRState &irs, llvm::Value *) {
     irs.scope() = IRScope(catchBB);
     irs.DBuilder.EmitBlockStart(c->loc);
 
-    emitBeginCatchMSVC(irs, c, catchSwitchInst);
-
-    // Emit handler, if there is one. The handler is zero, for instance,
-    // when building 'catch { debug foo(); }' in non-debug mode.
-    if (c->handler)
-      Statement_toIR(c->handler, &irs);
-
-    if (!irs.scopereturned())
-      irs.ir->CreateBr(endbb);
+    emitBeginCatchMSVC(irs, c, catchSwitchInst, endbb);
+    assert(irs.scopereturned());
 
     irs.DBuilder.EmitBlockEnd();
   }

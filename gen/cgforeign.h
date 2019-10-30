@@ -69,6 +69,8 @@ public:
     virtual void toEndCatch(IRState& irs, Catch *cj) = 0;
     virtual llvm::GlobalVariable* toCatchScopeType(IRState& irs, Type *t) = 0;
 
+    virtual llvm::Constant *getTypeDescriptorMSVC(IRState &irs, Type *t, int& flags) = 0;
+
     // Debug info
     virtual llvm::DIType* DIGetRecordType(AggregateDeclaration* ad) = 0;
 };

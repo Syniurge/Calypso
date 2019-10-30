@@ -71,7 +71,7 @@ cl::list<std::string> cppArgs("cpp-args",
     cl::desc("Clang arguments (space separated) passed during PCH generation. If the list begins with '$', interpret as a single argument"));
 
 cl::opt<bool> cppNoDefaultArgs("cpp-nodefaultargs",
-    cl::desc("Do not pass default arguments to Clang (by default \"-c -x c++\" in Unix-like environments, and \"--driver-mode=cl /TP\" in MSVC environments)."));
+    cl::desc("Do not pass default arguments to Clang (by default \"-c -x c++\" in Unix-like environments, and \"--driver-mode=cl /TP /EHsc\" in MSVC environments)."));
 
 cl::opt<std::string> cppCacheDir("cpp-cachedir",
     cl::desc("Write Calypso cache files to <dir>"),
@@ -1346,6 +1346,7 @@ void LangPlugin::_init()
         } else {
             clangArgv.push_back("--driver-mode=cl");
             clangArgv.push_back("/TP");
+            clangArgv.push_back("/EHsc");
         }
     }
 

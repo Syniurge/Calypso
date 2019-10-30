@@ -103,6 +103,24 @@ FuncGenState::FuncGenState(IrFunction &irFunc, IRState &irs)
     : irFunc(irFunc), scopes(irs), jumpTargets(scopes), switchTargets(),
       irs(irs) {}
 
+llvm::SmallVector<llvm::OperandBundleDef, 1> FuncGenState::getBundlesForFunclet(llvm::Value *callee) {
+  // copy from from clang/.../CGCall.cpp
+  llvm::SmallVector<llvm::OperandBundleDef, 1> BundleList;
+
+  // There is no need for a funclet operand bundle if we aren't inside a
+  // funclet.
+  if (!funcletPad)
+    return BundleList;
+
+  // Skip intrinsics which cannot throw.
+  auto *CalleeFn = llvm::dyn_cast<llvm::Function>(callee->stripPointerCasts());
+  if (CalleeFn && CalleeFn->isIntrinsic() && CalleeFn->doesNotThrow())
+    return BundleList;
+
+  BundleList.emplace_back("funclet", funcletPad);
+  return BundleList;
+}
+
 llvm::CallSite FuncGenState::callOrInvoke(llvm::Value *callee,
                                           llvm::ArrayRef<llvm::Value *> args,
                                           const char *name, bool isNothrow) {
@@ -121,7 +139,8 @@ llvm::CallSite FuncGenState::callOrInvoke(llvm::Value *callee,
       (calleeFn && (calleeFn->isIntrinsic() || calleeFn->doesNotThrow()));
 
   // calls inside a funclet must be annotated with its value
-  llvm::SmallVector<llvm::OperandBundleDef, 2> BundleList;
+  llvm::SmallVector<llvm::OperandBundleDef, 1> BundleList =
+      getBundlesForFunclet(callee);
 
   if (doesNotThrow || scopes.empty()) {
     llvm::CallInst *call = irs.ir->CreateCall(callee, args, BundleList, name);

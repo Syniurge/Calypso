@@ -1072,7 +1072,7 @@ bool validCompareWithMemcmp(DValue *l, DValue *r) {
 }
 
 // Create a call instruction to memcmp.
-llvm::CallInst *callMemcmp(Loc &loc, IRState &irs, LLValue *l_ptr,
+llvm::Instruction *callMemcmp(Loc &loc, IRState &irs, LLValue *l_ptr,
                            LLValue *r_ptr, LLValue *numElements) {
   assert(l_ptr && r_ptr && numElements);
   LLFunction *fn = getRuntimeFunction(loc, gIR->module, "memcmp");
@@ -1085,7 +1085,7 @@ llvm::CallInst *callMemcmp(Loc &loc, IRState &irs, LLValue *l_ptr,
   // Call memcmp.
   LLValue *args[] = {DtoBitCast(l_ptr, getVoidPtrType()),
                      DtoBitCast(r_ptr, getVoidPtrType()), sizeInBytes};
-  return irs.ir->CreateCall(fn, args);
+  return irs.funcGen().callOrInvoke(fn, args, "", true).getInstruction();
 }
 
 /// Compare `l` and `r` using memcmp. No checks are done for validity.

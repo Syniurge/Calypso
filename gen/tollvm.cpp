@@ -387,7 +387,7 @@ LLValue *DtoMemCmp(LLValue *lhs, LLValue *rhs, LLValue *nbytes) {
   lhs = DtoBitCast(lhs, VoidPtrTy);
   rhs = DtoBitCast(rhs, VoidPtrTy);
 
-  return gIR->ir->CreateCall(fn, {lhs, rhs, nbytes});
+  return gIR->CreateCallOrInvoke(fn, {lhs, rhs, nbytes}, "", true).getInstruction();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
