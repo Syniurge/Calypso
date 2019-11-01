@@ -1193,19 +1193,35 @@ Dsymbols *DeclMapper::VisitEnumConstantDecl(const clang::EnumConstantDecl *D)
     auto loc = fromLoc(D->getLocation());
     auto ident = fromIdentifier(D->getIdentifier());
 
-    auto parent = dsymForDecl(cast<clang::Decl>(D->getDeclContext()));
-    assert(parent->isEnumDeclaration());
     auto value = ExprMapper(*this).fromAPInt(loc, D->getInitVal(), clang::QualType());
 
-    auto em = new EnumMember(loc, ident, value, nullptr, D);
-    setDsym(D, em);
+    auto parent = dsymForDecl(cast<clang::Decl>(getDeclContextOpaque(D)));
+    if (auto e = parent->isEnumDeclaration())
+    {
+        auto em = new EnumMember(loc, ident, value, nullptr, D);
+        setDsym(D, em);
 
-    em->ed = static_cast<EnumDeclaration*>(parent);
-    em->storage_class |= STCmanifest;
-    em->type = em->ed->type;
-    em->semanticRun = PASSsemantic3done;
+        em->ed = e;
+        em->storage_class |= STCmanifest;
+        em->type = em->ed->type;
+        em->semanticRun = PASSsemantic3done;
 
-    return oneSymbol(em);
+        return oneSymbol(em);
+    }
+    else
+    {
+        auto AnonEnum = cast<clang::EnumDecl>(D->getDeclContext());
+        auto t = fromType(AnonEnum->getPromotionType(), loc);
+        auto ie = new_ExpInitializer(loc, value);
+
+        auto v = new VarDeclaration(loc, ident, D, t, ie);
+        setDsym(D, v);
+
+        v->storage_class |= STCmanifest;
+        v->semanticRun = PASSsemantic3done;
+
+        return oneSymbol(v);
+    }
 }
 
 /*****/
