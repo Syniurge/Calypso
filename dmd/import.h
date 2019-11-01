@@ -81,6 +81,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    virtual Type* typeForDTemplateArg(Type* t) = 0;
+
+    // ===== - - - - - ===== //
+
     virtual int getPragma(Scope* sc, PragmaDeclaration* decl) = 0;
     virtual void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) = 0;
 

@@ -348,6 +348,10 @@ public:
 
     // ===== - - - - - ===== //
 
+    Type typeForDTemplateArg(Type t);
+
+    // ===== - - - - - ===== //
+
     int getPragma(Scope* sc, PragmaDeclaration decl);
     void pragmaSemantic(Scope* sc, PragmaDeclaration decl);
 

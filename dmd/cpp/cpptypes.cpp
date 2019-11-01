@@ -323,6 +323,21 @@ Type *BuiltinTypes::toInt(clang::TargetInfo::IntType intTy)
     return nullptr;
 }
 
+/*****  *****/
+
+// For D templates it is preferable to revert Calypso-specific basic types to a vanilla basic type
+// It might hold some surprises in some advanced cases, but for most cases there will be less surprising errors, for example isIntegral!() failing because the TypeBasic isn't among the static list of integral types in std.traits.
+Type* LangPlugin::typeForDTemplateArg(Type* t)
+{
+    if (t->isTypeBasic())
+    {
+        auto d_t = Type::basic[t->ty];
+        return d_t->castMod(t->mod);
+    }
+
+    return t;
+}
+
 /***** Clang -> DMD types *****/
 
 bool isNonSupportedType(clang::QualType T)

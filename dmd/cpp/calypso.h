@@ -175,6 +175,8 @@ public:
 
     bool isForeignInstance(::TemplateInstance *ti) override;
 
+    Type* typeForDTemplateArg(Type* t) override;
+
     int getPragma(Scope* sc, PragmaDeclaration* decl) override;
     void pragmaSemantic(Scope* sc, PragmaDeclaration* decl) override;
 

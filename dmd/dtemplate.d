@@ -2197,6 +2197,7 @@ else
                 dedargs.insert(d - 1, &va.objects);
             }
         }
+        ti.normalizeTiargTypes(dedargs); // CALYPSO
         ti.tiargs = dedargs; // update to the normalized template arguments.
 
         // Partially instantiate function for constraint and fd.leastAsSpecialized()
@@ -6572,7 +6573,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
      *      tiargs  array of template arguments
      *      flags   1: replace const variables with their initializers
      *              2: don't devolve Parameter to Type
-     *              CALYPSO 4: handle Tuple (TODO: should become a template parameter after the switch to DDMD)
+     *              4: handle Tuple (CALYPSO)
      * Returns:
      *      false if one or more arguments have errors.
      */
@@ -6834,6 +6835,7 @@ extern (C++) class TemplateInstance : ScopeDsymbol
             return true;
         if (semanticTiargs(loc, sc, tiargs, 0))
         {
+            normalizeTiargTypes(tiargs);
             // cache the result iff semantic analysis succeeded entirely
             semantictiargsdone = 1;
             return true;
@@ -7457,6 +7459,26 @@ extern (C++) class TemplateInstance : ScopeDsymbol
         semantic3(this, sc2);
 
         --nest;
+    }
+
+    // CALYPSO
+    extern (D) final void normalizeTiargTypes(Objects* tiargs)
+    {
+        if (!tiargs)
+            return;
+
+        for (size_t j = 0; j < tiargs.dim; j++)
+        {
+            Type ta = isType((*tiargs)[j]);
+            if (!ta)
+                continue;
+
+            if (auto lp = ta.langPlugin)
+            {
+                ta = lp.typeForDTemplateArg(ta);
+                (*tiargs)[j] = ta.merge2();
+            }
+        }
     }
 
     // CALYPSO variadic template generalization (pretty intrusive...)
