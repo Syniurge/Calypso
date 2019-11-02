@@ -453,9 +453,6 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
     auto& Context = calypso.getASTContext();
     auto& S = calypso.getSema();
 
-    clang::SourceLocation Loc;
-    clang::sema::TemplateDeductionInfo DedInfo(Loc);
-
     bool isConversion = ident == Id::_cast;
 
     DeclMapper mapper(ti->minst, ti->minst);
@@ -488,6 +485,7 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
     }
 
     clang::FunctionDecl *Specialization;
+    clang::sema::TemplateDeductionInfo DedInfo(TempOrSpec->getLocation());
 
     if (isConversion)
     {
@@ -511,7 +509,7 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
                 argty = argty->nextOf()->pointerTo();
 
             auto ArgTy = mapper.toType(ti->loc, argty, /*sc=*/ nullptr);
-            auto DummyExpr = new (Context) clang::OpaqueValueExpr(Loc, ArgTy,
+            auto DummyExpr = new (Context) clang::OpaqueValueExpr(TempOrSpec->getLocation(), ArgTy,
                                         farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
             Args.push_back(DummyExpr);
         }
