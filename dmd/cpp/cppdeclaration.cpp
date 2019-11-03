@@ -300,32 +300,38 @@ void DeclReferencer::Traverse(const clang::FunctionDecl* D)
     {
         TraverseStmt(Def->getBody());
 
-        bool referenceFieldDtors = false;
+        bool referenceParentAggregate = false,
+             referenceFieldDtors = false;
 
         if (auto Ctor = dyn_cast<clang::CXXConstructorDecl>(Def))
         {
             for (auto& Init: Ctor->inits())
                 TraverseStmt(Init->getInit());
 
+            referenceParentAggregate = true;
+
             auto FPT = Ctor->getType()->castAs<clang::FunctionProtoType>();
             if (FPT->canThrow())
                 referenceFieldDtors = true;
         }
         else if (isa<clang::CXXDestructorDecl>(Def))
-            referenceFieldDtors = true;
+            referenceParentAggregate = referenceFieldDtors = true;
 
-        if (referenceFieldDtors)
+        if (referenceParentAggregate)
         {
-            // Reference field destructors, which do not appear in the AST
             auto Record = cast<clang::CXXMethodDecl>(D)->getParent();
-            for (auto Field: Record->fields())
-                if (auto RT = Field->getType()->getAs<clang::RecordType>())
-                {
-                    auto CRD = dyn_cast<clang::CXXRecordDecl>(RT->getDecl());
-                    if (CRD && !CRD->hasTrivialDestructor())
-                        if (auto FieldDtor = CRD->getDestructor())
-                            Reference(FieldDtor);
-                }
+            Reference(Record);
+
+            if (referenceFieldDtors)
+                // Reference field destructors, which do not appear in the AST
+                for (auto Field: Record->fields())
+                    if (auto RT = Field->getType()->getAs<clang::RecordType>())
+                    {
+                        auto CRD = dyn_cast<clang::CXXRecordDecl>(RT->getDecl());
+                        if (CRD && !CRD->hasTrivialDestructor())
+                            if (auto FieldDtor = CRD->getDestructor())
+                                Reference(FieldDtor);
+                    }
         }
     }
 }
