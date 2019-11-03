@@ -16,6 +16,7 @@
 
 #include "clang/AST/Decl.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 
 int overloadApply(Dsymbol *fstart, void *param, int (*fp)(void *, Dsymbol *));
 
@@ -525,7 +526,7 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
 
     if (isUsed)
         return;
-    isUsed = true;
+    isUsed = true; // TODO: reduce the bloat even more, by splitting isUsed into isDeclared and isCalled?
 
     auto CanonDecl = cast<clang::NamedDecl>(getCanonicalDecl(getFD(fd)));
     if (auto instantiatedBy = CanonDecl->d->instantiatedBy)
@@ -540,6 +541,34 @@ void MarkFunctionReferenced(::FuncDeclaration* fd)
         fd->langPlugin()->markSymbolReferenced(fd->parent);
 
     InstantiateAndTraverseFunctionBody(fd);
+
+    auto FD = getFD(fd);
+    if (!FD->hasBody())
+    {
+        auto& S = calypso.getSema();
+        bool hasIncompleteType = false;
+
+        auto requireCompleteType = [&] (clang::QualType T)
+        {
+            if (T->isVoidType())
+                return false;
+            return S.RequireCompleteType(FD->getLocation(), T,
+                                clang::diag::err_incomplete_type);
+        };
+
+        if (requireCompleteType(FD->getReturnType()))
+            hasIncompleteType = true;
+
+        for (auto *Param : FD->parameters())
+            if (requireCompleteType(Param->getType()))
+                hasIncompleteType = true;
+
+        if (hasIncompleteType)
+        {
+            fd->error("return or parameter type is incomplete");
+            fd->errors = true;
+        }
+    }
 
     markModuleForGenIfNeeded(fd);
 }
