@@ -2,9 +2,9 @@
  * Ogre3D D demo based on the Lighting sample. Requires Ogre3D 1.12 or later from the 1.x branch.
  *
  * Build with:
- *   (Linux)   $ ldc2 -wi -v -cpp-args "-I/usr/local/include/OGRE -I/usr/local/include/OGRE/Bites -I/usr/local/include/OGRE/Overlay -I/usr/local/include/OGRE/RTShaderSystem" -L-L/usr/local/lib -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread demo.d
+ *   (Linux)   $ ldc2 -wi -v -cpp-args "-I/usr/local/include/OGRE -I/usr/local/include/OGRE/Bites -I/usr/local/include/OGRE/Overlay -I/usr/local/include/OGRE/RTShaderSystem" -L-L/usr/local/lib -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain demo.d
  *
- *   (Windows) $ ldc2.exe -wi -v -cpp-args "-DBOOST_USE_WINDOWS_H -D_MT -D_DLL -fms-extensions -fdelayed-template-parsing -fms-compatibility -fms-compatibility-version=19 -IZ:\boost -IZ:\OGRE-SDK\include -IZ:\OGRE-SDK\include\OGRE -IZ:\OGRE-SDK\include\OGRE\Overlay -IZ:\OGRE-SDK\include\OGREOGRE\RTShaderSystem" -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreMain -L-lboost_system -L-lboost_thread -L-LZ:\boost\lib -L-LZ:\OGRE-SDK\lib\RelWithDebInfo demo.d
+ *   (Windows) $ ldc2.exe -wi -v -cpp-args "-IZ:\BuildEnv\include -IZ:\BuildEnv\include\OGRE -IZ:\BuildEnv\include\OGRE\Overlay -IZ:\BuildEnv\include\OGRE\RTShaderSystem" -L-lOgreRTShaderSystem -L-lOgreBites -L-lOgreOverlay -L-lOgreMain -L-LZ:\BuildEnv\lib demo.d
  */
 
 pragma (cppmap, "OGRE/Ogre.h");
@@ -129,6 +129,7 @@ protected:
         mTrail.setRenderQueueGroup(cPriorityLights);
 
         // Create the occlusion queries to be used in this sample
+        import (C++) Ogre = Ogre; // for Ogre.Exception
         try {
             RenderSystem* renderSystem = Root.getSingleton().getRenderSystem();
             mLight1QueryArea = renderSystem.createHardwareOcclusionQuery();
@@ -141,7 +142,7 @@ protected:
                 (mLight2QueryArea != null) &&
                 (mLight2QueryVisible != null);
         }
-        catch (C++) (ref ℂException e)
+        catch (C++) (ref Ogre.Exception e)
         {
             mUseOcclusionQuery = false;
         }
