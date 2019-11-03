@@ -62,6 +62,22 @@ extern (C++) class RootObject
         return p[0 .. strlen(p)];
     }
 
+    // CALYPSO HACK: emit toString() mangled as a C++ method to make the vtable generation
+    // possible by C++ compilers. This is the function that ends up in vtables of C++
+    // classes derived from D ones.
+    // It can't be rewritten in a .cpp file as DString toString() because on some platforms (e.g MSVC) the ABI doesn't match
+    version(CRuntime_Microsoft)
+        enum toString_cppmangling = "?toString@RootObject@@UEAA?AUDString@@XZ";
+    else
+        enum toString_cppmangling = "_ZN10RootObject8toStringEv";
+    pragma(mangle, toString_cppmangling)
+    final extern(D) const(char)[] toString_()
+    {
+        import core.stdc.string : strlen;
+        auto p = this.toChars();
+        return p[0 .. strlen(p)];
+    }
+
     DYNCAST dyncast() const nothrow pure @nogc @safe
     {
         return DYNCAST.object;
