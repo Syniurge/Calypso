@@ -56,7 +56,8 @@ void LangPlugin::mangleAnonymousAggregate(::AggregateDeclaration* ad, OutBuffer 
 StructDeclaration::StructDeclaration(Loc loc, Identifier* id,
                                      const clang::RecordDecl* RD)
 {
-    construct_StructDeclaration(this, loc, id);
+    construct_StructDeclaration(this, loc, calypso.id_Scpp);
+    this->ident = id; // bypassed the reserved struct names check
     this->RD = RD;
 }
 
@@ -68,7 +69,8 @@ StructDeclaration::StructDeclaration(const StructDeclaration& o)
 ClassDeclaration::ClassDeclaration(Loc loc, Identifier *id, BaseClasses *baseclasses,
                                    Dsymbols* members, const clang::CXXRecordDecl *RD)
 {
-    construct_ClassDeclaration(this, loc, id, baseclasses, members);
+    construct_ClassDeclaration(this, loc, calypso.id_Scpp, baseclasses, members);
+    this->ident = id; // bypassed the reserved class names check
     this->RD = RD;
 }
 
@@ -80,7 +82,8 @@ ClassDeclaration::ClassDeclaration(const ClassDeclaration& o)
 UnionDeclaration::UnionDeclaration(Loc loc, Identifier* id,
                                      const clang::RecordDecl* RD)
 {
-    construct_UnionDeclaration(this, loc, id);
+    construct_UnionDeclaration(this, loc, calypso.id_Scpp);
+    this->ident = id; // bypassed the reserved struct names check
     this->RD = RD;
 }
 

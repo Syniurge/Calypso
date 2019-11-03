@@ -490,19 +490,6 @@ Identifier *getIdentifierOrNull(const clang::NamedDecl *D, SpecValue *spec, bool
         }
     }
 
-    if (isa<clang::RecordDecl>(D))
-    {
-        // Prefix reserved class names with 'ℂ'
-        if (ident == Id::Object || ident == Id::Throwable || ident == Id::Exception || ident == Id::Error ||
-            ident == Id::TypeInfo || ident == Id::TypeInfo_Class || ident == Id::TypeInfo_Interface ||
-            ident == Id::TypeInfo_Struct || ident == Id::TypeInfo_Pointer ||
-            ident == Id::TypeInfo_Array || ident == Id::TypeInfo_StaticArray || ident == Id::TypeInfo_AssociativeArray ||
-            ident == Id::TypeInfo_Enum || ident == Id::TypeInfo_Function || ident == Id::TypeInfo_Delegate ||
-            ident == Id::TypeInfo_Tuple || ident == Id::TypeInfo_Const || ident == Id::TypeInfo_Invariant ||
-            ident == Id::TypeInfo_Shared || ident == Id::TypeInfo_Wild || ident == Id::TypeInfo_Vector) // thanks C++...
-            needsPrefixing = true;
-    }
-
     if (needsPrefixing)
         ident = prefixConflictingIdentifier(ident);
 
