@@ -1764,6 +1764,9 @@ clang::QualType DeclMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
                 return Context.getMemberPointerType(MemberTy, ClassParent.getTypePtr());
             }
 
+            if (!isCPP(ad))
+                return clang::QualType();
+
             return Context.getRecordType(getRecordDecl(t));
         }
         case Tenum:
@@ -1813,7 +1816,8 @@ clang::QualType DeclMapper::toType(Loc loc, Type* t, Scope *sc, StorageClass stc
         // TODO arrays
     }
 
-    llvm::llvm_unreachable_internal("Unhandled D -> Clang type conversion");
+    return clang::QualType();
+//     llvm::llvm_unreachable_internal("Unhandled D -> Clang type conversion");
 }
 
 /***** *****/

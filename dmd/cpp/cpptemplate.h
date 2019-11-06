@@ -56,7 +56,7 @@ public:
     ::TemplateInstance *foreignInstance(::TemplateInstance *tithis, Scope *sc) override;
 
     TemplateInstUnion hasExistingClangInst(::TemplateInstance* ti);
-    TemplateInstUnion getClangInst(Scope* sc, Objects* tdtypes);
+    TemplateInstUnion getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes);
     clang::RedeclarableTemplateDecl *getPrimaryTemplate();
     TemplateDeclaration *primaryTemplate();
     static bool isForeignInstance(::TemplateInstance *ti);

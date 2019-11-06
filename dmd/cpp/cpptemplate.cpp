@@ -9,6 +9,7 @@
 #include "cpp/ddmdvisitor.h"
 #include "aggregate.h"
 #include "enum.h"
+#include "errors.h"
 #include "id.h"
 #include "scope.h"
 
@@ -60,7 +61,7 @@ TemplateDeclaration::TemplateDeclaration(const TemplateDeclaration &o)
 
 IMPLEMENT_syntaxCopy(TemplateDeclaration, TempOrSpec)
 
-static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
+static bool fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgumentListInfo& Args,
                                 Objects *tiargs, const clang::RedeclarableTemplateDecl *Temp,
                                 DeclMapper& mapper, ExprMapper& expmap)
 {
@@ -69,7 +70,7 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
     SpecValue spec(mapper);
     getIdentifierOrNull(Temp, &spec);
 
-    std::function<void(RootObject* o)>
+    std::function<bool(RootObject* o)>
         addArg = [&] (RootObject* o)
     {
         auto ta = isType(o);
@@ -80,6 +81,11 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
         if (ta)
         {
             auto T = mapper.toType(loc, ta, sc);
+            if (T.isNull())
+            {
+                ::error(loc ,"cannot instantiate a C++ template with arguments containing D structs/classes/enums or other D-specific types (support may come later).");
+                return false;
+            }
             auto DI = Context.getTrivialTypeSourceInfo(T);
 
             clang::TemplateArgumentLoc Loc(clang::TemplateArgument(T), DI);
@@ -109,10 +115,13 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
         else if (tupa)
         {
             for (auto tupobj: tupa->objects)
-                addArg(tupobj);
+                if (!addArg(tupobj))
+                    return false;
         }
         else
             assert(false && "unhandled template arg C++ -> D conversion");
+
+        return true;
     };
 
     // See translateTemplateArgument() in SemaTemplate.cpp
@@ -124,8 +133,11 @@ static void fillTemplateArgumentListInfo(Loc loc, Scope *sc, clang::TemplateArgu
         auto o = (*tiargs)[i];
         if (!o)
             break;
-        addArg(o);
+        if (!addArg(o))
+            return false;
     }
+
+    return true;
 }
 
 const clang::TemplateParameterList *getPartialTemplateSpecParameters(const clang::Decl *D)
@@ -306,7 +318,7 @@ MATCH TemplateDeclaration::matchWithInstance(Scope *sc, ::TemplateInstance *ti,
     if (isa<clang::FunctionTemplateDecl>(TempOrSpec))
         m = functionTemplateMatch(sc, ti, fargs, Inst);
     else {
-        Inst = getClangInst(sc, ti->tiargs);
+        Inst = getClangInst(sc, ti, ti->tiargs);
         if (!Inst)
             m = MATCHnomatch;
     }
@@ -480,8 +492,9 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
                 return MATCHnomatch;
         }
 
-        fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
-                                     FunctionTemplate, mapper, expmap);
+        if (!fillTemplateArgumentListInfo(ti->loc, /*sc=*/ nullptr, ExplicitTemplateArgs, ti->tiargs,
+                                     FunctionTemplate, mapper, expmap))
+            return MATCHnomatch;
     }
 
     clang::FunctionDecl *Specialization;
@@ -492,6 +505,11 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
         assert(ti->tiargs && ti->tiargs->dim >= 1);
         Type* to = isType((*ti->tiargs)[0]);
         clang::QualType To = mapper.toType(ti->loc, to, /*sc=*/ nullptr);
+        if (To.isNull())
+        {
+            ti->error("D-specific types (such as D structs/classes/enums) aren't supported yet during C++ function template argument deduction");
+            return MATCHnomatch;
+        }
 
         clang::CXXConversionDecl *Conversion;
 
@@ -509,6 +527,11 @@ MATCH TemplateDeclaration::functionTemplateMatch(Scope *sc, ::TemplateInstance *
                 argty = argty->nextOf()->pointerTo();
 
             auto ArgTy = mapper.toType(ti->loc, argty, /*sc=*/ nullptr);
+            if (ArgTy.isNull())
+            {
+                ti->error("D-specific types (such as D structs/classes/enums) aren't supported yet during C++ function template argument deduction");
+                return MATCHnomatch;
+            }
             auto DummyExpr = new (Context) clang::OpaqueValueExpr(TempOrSpec->getLocation(), ArgTy,
                                         farg->isLvalue() ? clang::VK_LValue : clang::VK_RValue);
             Args.push_back(DummyExpr);
@@ -839,7 +862,7 @@ TemplateDeclaration* TemplateDeclaration::primaryTemplate()
 
     cpp::TemplateInstance* ti = nullptr;
 
-    auto Inst = getClangInst(sc, &tithis->tdtypes);
+    auto Inst = getClangInst(sc, tithis, &tithis->tdtypes);
     assert(Inst);
 
     if (auto D = Inst.dyn_cast<clang::NamedDecl*>())
@@ -906,7 +929,7 @@ TemplateInstUnion TemplateDeclaration::hasExistingClangInst(::TemplateInstance* 
     return TemplateInstUnion();
 }
 
-TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, Objects* tdtypes)
+TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, ::TemplateInstance* ti, Objects* tdtypes)
 {
     if (isNonTemplateWrapper())
         return const_cast<clang::NamedDecl*>(TempOrSpec);
@@ -918,7 +941,8 @@ TemplateInstUnion TemplateDeclaration::getClangInst(Scope* sc, Objects* tdtypes)
     ExprMapper expmap(mapper);
 
     clang::TemplateArgumentListInfo Args;
-    fillTemplateArgumentListInfo(loc, sc, Args, tdtypes, Temp, mapper, expmap);
+    if (!fillTemplateArgumentListInfo(ti->loc, sc, Args, tdtypes, Temp, mapper, expmap))
+        return TemplateInstUnion();
 
     auto& S = calypso.getSema();
     clang::TemplateName Name(Temp);
