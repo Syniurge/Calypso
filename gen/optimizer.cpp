@@ -46,7 +46,7 @@
 extern llvm::TargetMachine *gTargetMachine;
 using namespace llvm;
 
-static cl::opt<signed char> optimizeLevel(
+cl::opt<signed char> optimizeLevel( // CALYPSO
     cl::desc("Setting the optimization level:"), cl::ZeroOrMore,
     clEnumValues(
         clEnumValN(3, "O", "Equivalent to -O3"),

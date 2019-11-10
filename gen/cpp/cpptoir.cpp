@@ -48,6 +48,8 @@
 #include "driver/cl_options.h"
 #include <fstream>
 
+extern llvm::cl::opt<signed char> optimizeLevel;
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cpp
@@ -74,6 +76,7 @@ void LangPlugin::enterModule(::Module *m, llvm::Module *lm)
     auto Opts = new clang::CodeGenOptions;
     if (global.params.symdebug)
         Opts->setDebugInfo(clang::codegenoptions::FullDebugInfo);
+    Opts->OptimizationLevel = optimizeLevel;
 
     CGM.reset(new clangCG::CodeGenModule(Context,
                             AST->getPreprocessor().getHeaderSearchInfo().getHeaderSearchOpts(),
