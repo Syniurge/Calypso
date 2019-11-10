@@ -792,7 +792,7 @@ else()
         "${LDC_D_SOURCE_FILES}"
         ""
         "${CLANG_LIBS};${LDC_LINKERFLAG_LIST}"
-        "${FE_RES}"
+        "${CLANG_BYPRODUCTS};${FE_RES}"
         "${LDC_LIB}"
         ${COMPILE_D_MODULES_SEPARATELY}
     )
