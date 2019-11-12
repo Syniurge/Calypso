@@ -1,9 +1,9 @@
-container:
-  dockerfile: ci/ubuntu_1804.Dockerfile
-  cpu: 8
-  memory: 8
+linux_task:
+  container:
+    dockerfile: .cirrusci/ubuntu_1804.Dockerfile
+    cpu: 8
+    memory: 8
 
-task:
   env:
     LLVM_VERSION: 9
 
@@ -19,6 +19,41 @@ task:
   test_script:
     - cd build
     - make -j4 all ldc2-unittest all-test-runners
+    - ctest --output-on-failure -R "ldc2-unittest"
+    - ctest -V -R "lit-tests"
+    - DMD_TESTSUITE_MAKE_ARGS=-j4 ctest -V -R "dmd-testsuite" -E "-debug$"
+    - ctest -j4 --output-on-failure -E "dmd-testsuite|lit-tests|ldc2-unittest"
+
+windows_task:
+  windows_container:
+    dockerfile: .cirrusci/win_2019.Dockerfile
+    os_version: 2019
+    #cpu: 8
+    #memory: 8
+
+  env:
+    LLVM_VERSION: 9
+    #CIRRUS_SHELL: powershell
+    #VSINSTALLDIR: C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\
+
+  submodule_script:
+    - git submodule update --init
+
+  findrc_script:
+    - cd "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x64"
+    - dir
+
+  build_script:
+    - mkdir build
+    - cd build
+    - C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=x64
+    - echo %PATH%
+    - cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DD_COMPILER=ldmd2.exe -DLLVM_CONFIG=llvm-config-9.exe -DBUILD_SHARED_LIBS=OFF -DCLANG_BUILD_FLAGS=-j8
+    - ninja -j8
+
+  test_script:
+    - cd build
+    - ninja -j4 all ldc2-unittest all-test-runners
     - ctest --output-on-failure -R "ldc2-unittest"
     - ctest -V -R "lit-tests"
     - DMD_TESTSUITE_MAKE_ARGS=-j4 ctest -V -R "dmd-testsuite" -E "-debug$"

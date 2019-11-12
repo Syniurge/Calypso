@@ -5,11 +5,12 @@ MAINTAINER Elie Morisse <syniurge@gmail.com>
 ENV \
   ARCH=x86_64 \
   LDC_VERSION=1.17.0 \
-  LLVM_VERSION=9
+  LLVM_VERSION=9 \
+  DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
  && apt-get dist-upgrade -y \
- && apt-get install -y curl wget software-properties-common git
+ && apt-get install -y curl wget software-properties-common git unzip tzdata
 
 # NOTE: Official LLVM PPA's llvm-9-tools package is broken
 # RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
