@@ -1039,7 +1039,7 @@ extern (C++) abstract class AggregateDeclaration : ScopeDsymbol
                 Expression e;
                 if (vd.inuse)
                 {
-                    error(loc, "circular reference to `%s`", vd.toPrettyChars());
+                    .error(loc, "circular reference to `%s`", vd.toPrettyChars());
                     return new ErrorExp();
                 }
                 if (vd.offset < offset || vd.type.size() == 0)
