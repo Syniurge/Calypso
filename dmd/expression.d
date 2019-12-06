@@ -5179,6 +5179,14 @@ extern (C++) final class CastExp : UnaExp
         return false;
     }
 
+    override Expression toLvalue(Scope* sc, Expression e) // CALYPSO
+    {
+        if (type.isBaseOf(e1.type, null))
+            return e;
+
+        return super.toLvalue(sc, e);
+    }
+
     override Expression addDtorHook(Scope* sc)
     {
         if (to.toBasetype().ty == Tvoid)        // look past the cast(void)

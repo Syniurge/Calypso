@@ -1961,29 +1961,18 @@ private bool functionParameters(const ref Loc loc, Scope* sc,
             }
             if ((p.storageClass & (STC.ref_|STC.move)) == STC.ref_) // CALYPSO
             {
-                if (global.params.rvalueRefParam) // CALYPSO do not create a temp if p is const/immutable
-                {
-                    if (!p.type.isMutable)
-                    {
-                    }
-                    else
-                    {
-                        if (!arg.isLvalue() && targ.isCopyable())
-                        {
-                            /* allow rvalues to be passed to ref parameters by copying
-                            * them to a temp, then pass the temp as the argument
-                            */
-                            auto v = copyToTemp(0, "__rvalue", arg);
-                            Expression ev = new DeclarationExp(arg.loc, v);
-                            ev = new CommaExp(arg.loc, ev, new VarExp(arg.loc, v));
-                            arg = ev.expressionSemantic(sc);
-                        }
-
-                        arg = arg.toLvalue(sc, arg);
-                    }
+                if (global.params.rvalueRefParam &&
+                    !arg.isLvalue() &&
+                    targ.isCopyable())
+                {   /* allow rvalues to be passed to ref parameters by copying
+                     * them to a temp, then pass the temp as the argument
+                     */
+                    auto v = copyToTemp(0, "__rvalue", arg);
+                    Expression ev = new DeclarationExp(arg.loc, v);
+                    ev = new CommaExp(arg.loc, ev, new VarExp(arg.loc, v));
+                    arg = ev.expressionSemantic(sc);
                 }
-                else
-                    arg = arg.toLvalue(sc, arg);
+                arg = arg.toLvalue(sc, arg);
 
                 // Look for mutable misaligned pointer, etc., in @safe mode
                 err |= checkUnsafeAccess(sc, arg, false, true);

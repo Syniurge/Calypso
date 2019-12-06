@@ -4891,7 +4891,7 @@ extern (C++) final class TypeFunction : TypeNext
                             if (pMessage) *pMessage = getParamError(arg, p);
                             goto Nomatch;
                         }
-                        else if (tp.isMutable) // CALYPSO: no temporary if p is const/immutable
+                        else
                         {
                             /* in functionParameters() we'll convert this
                              * rvalue into a temporary
