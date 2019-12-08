@@ -25,7 +25,7 @@ Catch::Catch(Loc loc, Type *t, Identifier *id, Statement *handler, StorageClass 
     return c;
 }
 
-VarDeclaration *Catch::createVar()
+VarDeclaration *Catch::createVar(Identifier* id, StorageClass)
 {
     if (stc & ~STCref)
     {
@@ -33,7 +33,13 @@ VarDeclaration *Catch::createVar()
         return nullptr;
     }
 
-    auto vd = ::Catch::createVar();
+    if (!(stc & STCref) && isAggregateValue(type))
+    {
+        error(loc, "Aggregate types in catch (C++) must be caught by ref (for the time being)");
+        return nullptr;
+    }
+
+    auto vd = ::Catch::createVar(id, stc);
     vd->storage_class |= stc | STCforeach /* HACK */;
     return vd;
 }

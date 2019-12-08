@@ -655,7 +655,7 @@ public:
 
     virtual void _key(); // CALYPSO
     virtual Catch *syntaxCopy(); // CALYPSO
-    virtual VarDeclaration *createVar(); // CALYPSO
+    virtual VarDeclaration *createVar(Identifier* id, StorageClass stc); // CALYPSO
     virtual bool onlyCatchThrowableOrCppClass() { return true; } // CALYPSO
     virtual LangPlugin *langPlugin() { return NULL; } // CALYPSO
 };

@@ -4419,9 +4419,14 @@ void catchSemantic(Catch c, Scope* sc)
         }
         }
 
-        if (c.ident)
+        // DIP1008 requires destruction of the Throwable, even if the user didn't specify an identifier
+        auto ident = c.ident;
+        if (!ident && global.params.ehnogc)
+            ident = Identifier.anonymous();
+
+        if (ident)
         {
-            c.var = c.createVar(/+stc+/); // CALYPSO /* LDC 1.8 NOTE/FIXME: stc was a new argument in the vanilla ctor call, needs createVar update (btw next line was also new) */
+            c.var = c.createVar(ident, stc); // CALYPSO
             c.var.iscatchvar = true;
             c.var.dsymbolSemantic(sc);
             sc.insert(c.var);

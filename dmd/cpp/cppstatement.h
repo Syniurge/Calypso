@@ -23,9 +23,9 @@ public:
     StorageClass stc;
 
     Catch(Loc loc, Type *t, Identifier *id, Statement *handler, StorageClass stc);
-    VarDeclaration *createVar() override;
+    VarDeclaration *createVar(Identifier* id, StorageClass stc) override;
     ::Catch *syntaxCopy() override;
-    
+
     bool onlyCatchThrowableOrCppClass() override { return false; }
 
     IrCatch *ir = nullptr;

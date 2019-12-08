@@ -2065,9 +2065,9 @@ extern (C++) class Catch : RootObject // CALYPSO (made non final)
     }
 
     // CALYPSO
-    VarDeclaration createVar()
+    VarDeclaration createVar(Identifier id, StorageClass stc)
     {
-        return new VarDeclaration(loc, type, ident, null);
+        return new VarDeclaration(loc, type, id, null, stc);
     }
 
     bool onlyCatchThrowableOrCppClass()
