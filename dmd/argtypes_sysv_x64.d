@@ -257,9 +257,12 @@ extern (C++) final class ToClassesVisitor : Visitor
         return one(Class.integer);
     }
 
-    override void visit(TypeClass)
+    override void visit(TypeClass t)
     {
-        return one(Class.integer);
+        if (t.byRef())
+            return one(Class.integer);
+        else
+            return memory(); // CALYPSO NOTE: for both Itanium and Microsoft ABI, dynamic classes are never passed through registers
     }
 
     override void visit(TypeDArray)

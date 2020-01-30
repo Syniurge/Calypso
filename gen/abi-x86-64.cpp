@@ -97,7 +97,7 @@ LLType *getAbiType(Type *ty) {
 }
 
 bool passByVal(Type *ty) {
-  TypeTuple *argTypes = target.toArgTypes(ty);
+  TypeTuple *argTypes = target.toArgTypes(ty); // CALYPSO NOTE: this is done for every function type without caching, shouldn't StructDeclaration.arg1type be used instead?
   if (!argTypes) {
     return false;
   }
@@ -263,7 +263,7 @@ bool X86_64TargetABI::returnInArg(TypeFunction *tf, bool) {
 
 bool X86_64TargetABI::passByVal(TypeFunction *tf, Type *t) {
   // indirectly by-value for extern(C++) functions and non-POD args
-  if (tf->linkage == LINKcpp && !isPOD(t))
+  if (/*tf->linkage == LINKcpp && */!isPOD(t)) // CALYPSO TODO this was fixed in LDC 1.19
     return false;
 
   return ::passByVal(t->toBasetype());
@@ -279,7 +279,7 @@ void X86_64TargetABI::rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg,
   Type *t = arg.type->toBasetype();
 
   // indirectly by-value for extern(C++) functions and non-POD args
-  if (fty.type->linkage == LINKcpp && !isPOD(t)) {
+  if (/*fty.type->linkage == LINKcpp && */!isPOD(t)) { // CALYPSO TODO see https://github.com/ldc-developers/ldc/commit/18a460683ff37b78a0fa027e2f1f8ac633fa7c00
     indirectByvalRewrite.applyTo(arg);
     if (regCount.int_regs > 0) {
       regCount.int_regs--;
