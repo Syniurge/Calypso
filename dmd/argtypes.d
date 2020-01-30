@@ -515,10 +515,10 @@ extern (C++) TypeTuple toArgTypes(Type t)
 
         override void visit(TypeClass t)
         {
-            if (t.byRef()) // CALYPSO
+            if (t.byRef())
                 result = new TypeTuple(Type.tvoidptr);
             else
-                result = new TypeTuple(); // pass on stack (TODO: follow the struct ways..)
+                result = new TypeTuple(); // CALYPSO NOTE: for both Itanium and Microsoft ABI, dynamic classes are never passed through registers
         }
     }
 

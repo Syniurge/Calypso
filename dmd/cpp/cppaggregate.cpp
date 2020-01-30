@@ -378,6 +378,19 @@ void ad_determineSize(AggTy *ad)
     auto CRD = dyn_cast<clang::CXXRecordDecl>(ad->RD);
     if (!CRD || (CRD->ctor_begin() == CRD->ctor_end() && !CRD->hasNonTrivialDefaultConstructor()))
         ad->zeroInit = true;
+
+    if (auto sd = ad->isStructDeclaration())
+    {
+        auto tt = target.toArgTypes(sd->type);
+        size_t dim = tt ? tt->arguments->dim : 0;
+        if (dim >= 1)
+        {
+            assert(dim <= 2);
+            sd->arg1type = (*tt->arguments)[0]->type;
+            if (dim == 2)
+                sd->arg2type = (*tt->arguments)[1]->type;
+        }
+    }
 }
 
 // NOTE: size() gets called to "determine fields", but shouldn't the two be separate?

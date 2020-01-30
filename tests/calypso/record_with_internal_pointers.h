@@ -1,6 +1,5 @@
 #pragma once
 
-// #include <iostream>
 #include "assert.h"
 
 struct B {
@@ -16,6 +15,23 @@ struct B {
     assert(false); // ensures that the test case isn't calling the move ctor
   }
 
+  B(int x) { initialize(x); }
+
+  ~B() {}
+
+  void release() {
+  }
+
+  void initialize(int x) {
+    this->x = x;
+    this->y = &this->x;
+    test();
+  }
+
+  void test() {
+    assert(&x == y);
+  }
+
   B &operator=(const B &a) {
     initialize(a.x);
     return *this;
@@ -27,25 +43,6 @@ struct B {
     initialize(a.x);
     a.release();
     return *this;
-  }
-
-  B(int x) { initialize(x); }
-
-  ~B() {}
-
-  void release() {
-    // could release owned resources here
-  }
-
-  void initialize(int x) {
-    this->x = x;
-    this->y = &this->x;
-    test();
-  }
-
-  void test() {
-//     std::cout << x << " " << y << " " << &x << " " << (&x == y) << std::endl;
-    assert(&x == y);
   }
 };
 
